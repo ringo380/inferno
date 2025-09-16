@@ -33,6 +33,7 @@ Inferno is a **production-ready AI inference server** that runs entirely on your
 - **REST & WebSocket**: Standard APIs plus real-time streaming
 - **Multiple Languages**: Python, JavaScript, Rust, cURL examples
 - **Docker Ready**: One-command deployment
+- **Smart CLI**: Typo detection, helpful error messages, setup guidance
 
 ## 🚀 Quick Start
 
@@ -49,39 +50,91 @@ cargo build --release
 ./target/release/inferno serve
 ```
 
-### Your First AI Request
+### **📦 Package Manager - Install Models Like Software**
+
+Inferno includes a comprehensive package manager that makes AI model management as easy as `apt` or `yum`:
 
 ```bash
-# Start Inferno
-inferno serve
+# Install popular models with one command
+inferno install microsoft/DialoGPT-medium
+inferno install google/flan-t5-base
+inferno install meta-llama/Llama-2-7b-chat-hf
 
-# Download a model (one-time setup)
-inferno models download llama-2-7b-chat
+# Search across multiple repositories
+inferno search "language model"
+inferno search "code generation" --repo huggingface
 
-# Ask your AI a question
-curl -X POST http://localhost:8080/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "llama-2-7b-chat",
-    "messages": [{"role": "user", "content": "What is the capital of France?"}],
-    "max_tokens": 100
-  }'
+# List and manage installed models
+inferno list
+inferno remove old-model
+inferno package upgrade  # Update all models
+
+# Repository management
+inferno repo list
+inferno repo add company-models https://models.company.com
+```
+
+**Supported Repositories (Pre-configured):**
+- **🤗 Hugging Face**: 500K+ models (LLMs, vision, audio)
+- **🦙 Ollama**: Optimized models for local inference
+- **📊 ONNX Model Zoo**: Official computer vision and NLP models
+- **🔥 PyTorch Hub**: Research and production PyTorch models
+- **🧠 TensorFlow Hub**: Pre-trained TensorFlow models
+
+### **🎯 Zero-to-AI in 30 Seconds**
+
+```bash
+# Install a model (handles everything automatically)
+inferno install microsoft/DialoGPT-medium
+
+# Start chatting immediately
+inferno run --model DialoGPT-medium --prompt "Hello! How are you?"
+
+# Or start the server for API access
+inferno serve --model DialoGPT-medium
 ```
 
 **That's it!** You now have a private AI assistant running locally.
+
+### **🤖 Intelligent CLI Experience**
+
+Inferno's CLI is designed to be helpful and user-friendly:
+
+```bash
+# Typo? No problem - get helpful suggestions
+$ inferno instal gpt2
+💡 Did you mean 'install'?
+
+# Confused? Get context-aware help
+$ inferno package
+💡 Package management commands:
+   • inferno package install <model>
+   • inferno package search <query>
+   • inferno package list
+
+# Errors are actionable
+$ inferno install nonexistent-model
+❌ Package 'nonexistent-model' not found
+💡 Try these alternatives:
+   • inferno search nonexistent-model
+   • inferno search "language model" --repo huggingface
+```
 
 ## 💡 Real-World Use Cases
 
 ### **For Individuals**
 ```bash
-# Private coding assistant
-inferno run --model codellama-13b --prompt "Write a Python function to sort a list"
+# Install and use a coding assistant
+inferno install microsoft/codebert-base
+inferno run --model codebert-base --prompt "Write a Python function to sort a list"
 
 # Document summarization (keeping data private)
-inferno run --model llama-2-7b --input documents/ --batch
+inferno install facebook/bart-large-cnn
+inferno run --model bart-large-cnn --input documents/ --batch
 
 # Creative writing helper
-inferno run --model mistral-7b --prompt "Write a story about..." --stream
+inferno install mistralai/Mistral-7B-v0.1
+inferno run --model Mistral-7B-v0.1 --prompt "Write a story about..." --stream
 ```
 
 ### **For Developers**
@@ -100,11 +153,12 @@ response = client.chat.completions.create(
 
 ### **For Businesses**
 ```bash
-# Convert proprietary model to GGUF for deployment
-inferno convert your-pytorch-model.bin --output optimized.gguf --quantization q4_0
+# Set up enterprise model repository
+inferno repo add enterprise https://models.company.com --priority 1 --verify
+inferno install company/custom-llm-v2 --auto-update
 
 # Deploy with monitoring and security
-inferno serve --auth --metrics --audit-logs
+inferno serve --model custom-llm-v2 --auth --metrics --audit-logs
 
 # Batch process customer data (stays private)
 inferno batch --input customer_queries.jsonl --output responses.jsonl
@@ -117,6 +171,14 @@ inferno batch --input customer_queries.jsonl --output responses.jsonl
 - ✅ **Real ONNX Support**: Production ONNX Runtime with GPU acceleration
 - ✅ **Model Conversion**: Real-time format conversion with optimization
 - ✅ **Quantization**: Q4_0, Q4_1, Q5_0, Q5_1, Q8_0, F16, F32 support
+
+### **📦 Package Management**
+- ✅ **apt/yum-style Commands**: `install`, `remove`, `search`, `list`, `upgrade`
+- ✅ **Multi-Repository Support**: HuggingFace, Ollama, ONNX, PyTorch Hub, TensorFlow Hub
+- ✅ **Dependency Resolution**: Automatic dependency handling and conflict resolution
+- ✅ **Repository Management**: Add custom repositories, priority system, authentication
+- ✅ **Smart CLI**: Typo detection, helpful errors, setup guidance
+- ✅ **Package Database**: Track installations, usage, auto-updates
 
 ### **🏢 Enterprise Features**
 - ✅ **Authentication**: JWT tokens, API keys, role-based access
@@ -135,15 +197,34 @@ inferno batch --input customer_queries.jsonl --output responses.jsonl
 
 ## 🛠️ Common Commands
 
+### **Package Management (Recommended)**
 ```bash
-# Model management
+# Install models like software packages
+inferno install microsoft/DialoGPT-medium     # Install from HuggingFace
+inferno install ollama/llama2:7b              # Install from Ollama
+inferno search "language model" --limit 10    # Search across repositories
+inferno list --detailed                       # List installed models
+inferno remove old-model                      # Remove models
+inferno package upgrade                       # Update all models
+
+# Repository management
+inferno repo list                             # Show configured repositories
+inferno repo add custom https://models.co     # Add custom repository
+inferno repo update --force                   # Refresh repository metadata
+```
+
+### **Legacy Model Management**
+```bash
+# Direct model management (for advanced users)
 inferno models list                           # See available models
 inferno models download llama-2-7b            # Download from Hugging Face
 inferno models info llama-2-7b                # Show model details
 inferno models convert input.pt output.gguf   # Convert between formats
+```
 
-# Running inference
-inferno run --model llama-2-7b --prompt "Hello AI!"
+### **Running Inference**
+```bash
+inferno run --model DialoGPT-medium --prompt "Hello AI!"
 inferno run --model llama-2-7b --input file.txt --output response.txt
 inferno run --model llama-2-7b --batch --input batch.jsonl
 
