@@ -1,0 +1,40 @@
+# Rust
+/target/
+Cargo.lock
+**/*.rs.bk
+*.pdb
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+*.log
+/logs/
+
+# Local configuration
+.env
+.env.local
+
+# Model files (too large for git)
+/models/*.gguf
+/models/*.onnx
+/test_models/*.gguf
+/test_models/*.onnx
+
+# Runtime files
+*.pid
+*.seed
+*.sock
