@@ -1,0 +1,11 @@
+models_dir = "test_models"
+log_level = "info"
+
+[backend_config]
+gpu_enabled = false
+context_size = 2048
+batch_size = 32
+
+[security]
+verify_checksums = false
+max_model_size_gb = 10.0
