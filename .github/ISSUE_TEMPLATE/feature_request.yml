@@ -1,0 +1,135 @@
+name: Feature Request
+description: Suggest an idea for Inferno
+title: "[Feature]: "
+labels: ["enhancement", "triage"]
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting a feature! Please fill out the sections below to help us understand your request.
+
+  - type: dropdown
+    id: feature-type
+    attributes:
+      label: Feature Type
+      description: What type of feature are you requesting?
+      options:
+        - New AI backend support
+        - API enhancement
+        - CLI improvement
+        - Performance optimization
+        - Security feature
+        - Documentation
+        - Development tooling
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      description: How important is this feature to you?
+      options:
+        - Low - Nice to have
+        - Medium - Would improve my workflow
+        - High - Needed for my use case
+        - Critical - Blocking my adoption
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem Statement
+      description: Is your feature request related to a problem? Please describe.
+      placeholder: I'm always frustrated when...
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Solution
+      description: Describe the solution you'd like to see.
+      placeholder: I would like Inferno to...
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: Describe any alternative solutions or features you've considered.
+      placeholder: I've considered...
+
+  - type: textarea
+    id: use-case
+    attributes:
+      label: Use Case
+      description: Describe your specific use case and how this feature would help.
+      placeholder: |
+        I want to use Inferno for...
+        This feature would help by...
+    validations:
+      required: true
+
+  - type: dropdown
+    id: implementation
+    attributes:
+      label: Implementation Willingness
+      description: Would you be willing to contribute to implementing this feature?
+      options:
+        - "Yes, I can implement this"
+        - "Yes, I can help with implementation"
+        - "Yes, I can help with testing"
+        - "Yes, I can help with documentation"
+        - "No, but I can provide feedback"
+        - "No, I cannot contribute"
+
+  - type: textarea
+    id: api-design
+    attributes:
+      label: API Design (if applicable)
+      description: If this involves API changes, please provide examples of how it should work.
+      render: rust
+      placeholder: |
+        // Example usage
+        inferno convert --input model.pt --output model.gguf --format new-format
+
+        // Or API endpoint
+        POST /v1/models/convert
+        {
+          "input_format": "pytorch",
+          "output_format": "new-format"
+        }
+
+  - type: checkboxes
+    id: requirements
+    attributes:
+      label: Requirements
+      description: Please check all that apply
+      options:
+        - label: This feature should maintain backward compatibility
+        - label: This feature requires new dependencies
+        - label: This feature affects performance
+        - label: This feature requires documentation updates
+        - label: This feature requires new tests
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional Context
+      description: Add any other context, mockups, or examples about the feature request here.
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist
+      description: Please confirm the following
+      options:
+        - label: I have searched existing issues to make sure this feature hasn't been requested
+          required: true
+        - label: I have considered if this fits with Inferno's goals as a local AI inference platform
+          required: true
+        - label: I have provided enough detail for the maintainers to understand the request
+          required: true

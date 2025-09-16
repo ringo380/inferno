@@ -1,0 +1,120 @@
+name: Documentation Issue
+description: Report missing, unclear, or incorrect documentation
+title: "[Docs]: "
+labels: ["documentation", "triage"]
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve our documentation! Please describe what needs to be fixed or added.
+
+  - type: dropdown
+    id: doc-type
+    attributes:
+      label: Documentation Type
+      description: What type of documentation issue is this?
+      options:
+        - API documentation
+        - Installation guide
+        - Configuration guide
+        - Usage examples
+        - Troubleshooting
+        - Contributing guide
+        - README
+        - Code comments
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: issue-type
+    attributes:
+      label: Issue Type
+      description: What kind of documentation issue is this?
+      options:
+        - Missing documentation
+        - Incorrect information
+        - Unclear explanation
+        - Outdated content
+        - Broken links
+        - Typo/grammar
+        - Formatting issue
+        - Missing examples
+    validations:
+      required: true
+
+  - type: input
+    id: location
+    attributes:
+      label: Documentation Location
+      description: Where is this documentation located? (URL, file path, etc.)
+      placeholder: e.g., README.md, docs/installation.md, https://docs.inferno.ai/...
+
+  - type: textarea
+    id: current-content
+    attributes:
+      label: Current Content
+      description: If applicable, quote the current documentation that needs improvement.
+      render: markdown
+
+  - type: textarea
+    id: issue-description
+    attributes:
+      label: Issue Description
+      description: Describe what's wrong or missing with the current documentation.
+      placeholder: The documentation doesn't explain...
+    validations:
+      required: true
+
+  - type: textarea
+    id: suggested-improvement
+    attributes:
+      label: Suggested Improvement
+      description: How should the documentation be improved?
+      placeholder: The documentation should...
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional Context
+      description: |
+        What were you trying to accomplish when you found this issue?
+        Any additional context that would help us understand the problem?
+      placeholder: I was trying to...
+
+  - type: dropdown
+    id: user-type
+    attributes:
+      label: User Type
+      description: Which best describes you?
+      options:
+        - New user
+        - Experienced user
+        - Developer/Contributor
+        - Documentation writer
+        - Other
+
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Contribution
+      description: Would you like to help improve this documentation?
+      options:
+        - label: I can help write the improved documentation
+        - label: I can help review proposed changes
+        - label: I can provide examples or use cases
+        - label: I cannot contribute but can provide feedback
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist
+      description: Please confirm the following
+      options:
+        - label: I have searched existing issues to make sure this hasn't been reported
+          required: true
+        - label: I have checked that this documentation issue still exists in the latest version
+          required: true

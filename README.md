@@ -1,493 +1,312 @@
-# 🔥 Inferno AI/ML Model Runner
+# 🔥 Inferno - Your Personal AI Infrastructure
 
-**High-performance offline AI/ML inference server for GGUF and ONNX models**
+> **Run any AI model locally with enterprise-grade performance and privacy**
 
 [![Build Status](https://github.com/ringo380/inferno/workflows/CI/badge.svg)](https://github.com/ringo380/inferno/actions)
 [![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](LICENSE)
 [![Rust Version](https://img.shields.io/badge/rust-1.70%2B-orange.svg)](https://rustlang.org)
 [![Docker](https://img.shields.io/badge/docker-ready-blue.svg)](https://hub.docker.com/r/inferno/inferno)
 
-## ✨ Features
+Inferno is a **production-ready AI inference server** that runs entirely on your hardware. Think of it as your private ChatGPT that works offline, supports any model format, and gives you complete control over your AI infrastructure.
 
-🚀 **High Performance**
-- Real GGUF backend with llama.cpp integration
-- Full ONNX Runtime support with GPU acceleration
-- Multi-format model conversion (GGUF ↔ ONNX ↔ PyTorch ↔ SafeTensors)
-- Advanced caching with disk persistence and compression
-- Thread-safe backend cloning architecture
-- Optimized memory management and batch processing
+## 🎯 Why Inferno?
 
-🔒 **Enterprise Security**
-- JWT and API key authentication
-- Role-based access control
-- Rate limiting and IP filtering
-- Comprehensive audit logging
+### **🔒 Privacy First**
+- **100% Local**: All processing happens on your hardware
+- **No Cloud Dependency**: Works completely offline
+- **Your Data Stays Yours**: Zero telemetry or external data transmission
 
-📊 **Production Observability**
-- Prometheus metrics export
-- OpenTelemetry distributed tracing
-- Grafana dashboard integration
-- Real-time health monitoring
+### **🚀 Universal Model Support**
+- **GGUF Models**: Native support for Llama, Mistral, CodeLlama, and more
+- **ONNX Models**: Run models from PyTorch, TensorFlow, scikit-learn
+- **Format Conversion**: Convert between GGUF ↔ ONNX ↔ PyTorch ↔ SafeTensors
+- **Auto-Optimization**: Automatic quantization and hardware optimization
 
-🌐 **Multiple APIs**
-- RESTful HTTP API
-- OpenAI-compatible endpoints
-- WebSocket real-time streaming
-- Comprehensive CLI interface
+### **⚡ Enterprise Performance**
+- **GPU Acceleration**: NVIDIA, AMD, Apple Silicon, Intel support
+- **Smart Caching**: Remember previous responses for instant results
+- **Batch Processing**: Handle thousands of requests efficiently
+- **Load Balancing**: Distribute work across multiple models/GPUs
 
-🔧 **Advanced Features**
-- Real-time model format conversion with optimization
-- Advanced response caching with Gzip/Zstd compression
-- Complete audit system with encryption and alerting
-- Batch queue with cron scheduling and retry logic
-- A/B testing and canary deployments
-- Distributed inference clusters with load balancing
-- Hash-based deduplication (Blake3, xxHash)
-- Model versioning and automated rollbacks
+### **🔧 Developer Friendly**
+- **OpenAI-Compatible API**: Drop-in replacement for ChatGPT API
+- **REST & WebSocket**: Standard APIs plus real-time streaming
+- **Multiple Languages**: Python, JavaScript, Rust, cURL examples
+- **Docker Ready**: One-command deployment
 
 ## 🚀 Quick Start
 
 ### Installation
 
-#### Prerequisites
-
-- **Rust 1.70+** - Install from [rustup.rs](https://rustup.rs/)
-- **llama.cpp** - Required for GGUF model support
-- **ONNX Runtime** - Automatically handled via the `ort` crate
-- **OpenSSL** - Required for TLS support
-
-#### Platform-specific GPU Support
-
-**Linux:**
 ```bash
-# CUDA support (NVIDIA GPUs)
-sudo apt install nvidia-cuda-toolkit
+# Option 1: Docker (Recommended)
+docker run -p 8080:8080 inferno:latest serve
 
-# Vulkan support
-sudo apt install vulkan-tools libvulkan-dev
-```
-
-**macOS:**
-```bash
-# Metal support is built-in on macOS 10.13+
-# No additional installation required
-```
-
-**Windows:**
-```bash
-# DirectML support (Windows 10+)
-# Automatically available on Windows 10 1903+
-```
-
-#### Build from Source
-
-```bash
-# Clone repository
+# Option 2: Build from source
 git clone https://github.com/ringo380/inferno.git
 cd inferno
-
-# Build with all features
-cargo build --release --all-features
-
-# Or build specific features
-cargo build --release --features "gguf,onnx,gpu"
+cargo build --release
+./target/release/inferno serve
 ```
 
-#### Docker Installation
+### Your First AI Request
 
 ```bash
-# Pull latest image
-docker pull inferno:latest
-
-# Run with GPU support (Linux + NVIDIA)
-docker run --gpus all -p 8080:8080 inferno:latest serve
-
-# Run CPU-only
-docker run -p 8080:8080 inferno:latest serve
-```
-
-### Basic Usage
-
-```bash
-# Start the server
+# Start Inferno
 inferno serve
 
-# List available models
-curl http://localhost:8080/models
+# Download a model (one-time setup)
+inferno models download llama-2-7b-chat
 
-# Run inference
-curl -X POST http://localhost:8080/inference \
+# Ask your AI a question
+curl -X POST http://localhost:8080/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "llama-2-7b",
-    "prompt": "What is artificial intelligence?",
+    "model": "llama-2-7b-chat",
+    "messages": [{"role": "user", "content": "What is the capital of France?"}],
     "max_tokens": 100
   }'
 ```
 
-[📖 **Full Getting Started Guide**](GETTING_STARTED.md)
+**That's it!** You now have a private AI assistant running locally.
 
-## 🛠️ CLI Commands
+## 💡 Real-World Use Cases
 
-The Inferno CLI provides comprehensive management capabilities:
-
-### Model Management
+### **For Individuals**
 ```bash
-inferno models list                    # List available models
-inferno models load llama-2-7b         # Load model into memory
-inferno models info llama-2-7b         # Show model details
-inferno validate model.gguf            # Validate model file
-inferno convert model input.gguf output.onnx --format onnx --optimization balanced
-inferno convert model input.pt output.gguf --format gguf --quantization q4_0
+# Private coding assistant
+inferno run --model codellama-13b --prompt "Write a Python function to sort a list"
+
+# Document summarization (keeping data private)
+inferno run --model llama-2-7b --input documents/ --batch
+
+# Creative writing helper
+inferno run --model mistral-7b --prompt "Write a story about..." --stream
 ```
 
-### Inference Operations
-```bash
-inferno run --model llama-2-7b --prompt "Hello"  # Single inference
-inferno batch --input prompts.txt                # Batch processing
-inferno streaming interactive                     # Interactive streaming
-```
-
-### Server Operations
-```bash
-inferno serve                          # Start HTTP server
-inferno serve --bind 0.0.0.0:8080     # Custom bind address
-```
-
-### Security & Observability
-```bash
-inferno security init                  # Initialize security
-inferno observability init --prometheus --grafana
-inferno observability metrics serve    # Start metrics server
-```
-
-### Advanced Features
-```bash
-inferno distributed coordinator start  # Start coordinator
-inferno ab-test create --name test1    # A/B testing
-inferno cache warm --model llama-2-7b  # Cache warm-up
-inferno cache persist --compress gzip  # Enable persistent caching
-inferno audit enable --encryption      # Enable encrypted audit logs
-inferno batch-queue create --schedule "0 2 * * *" # Cron-based batch jobs
-```
-
-## 📚 API Documentation
-
-### REST API Endpoints
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/health` | GET | Health check |
-| `/models` | GET | List available models |
-| `/models/{id}/load` | POST | Load model into memory |
-| `/inference` | POST | Run inference |
-| `/inference/stream` | POST | Streaming inference |
-| `/batch` | POST | Batch processing |
-| `/embeddings` | POST | Generate embeddings |
-
-### OpenAI-Compatible API
-
-| Endpoint | Description |
-|----------|-------------|
-| `/v1/chat/completions` | Chat completions |
-| `/v1/completions` | Text completions |
-| `/v1/models` | List models |
-| `/v1/embeddings` | Generate embeddings |
-
-### Dashboard API Endpoints
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/dashboard/stats` | GET | System statistics |
-| `/dashboard/models` | GET | Model status and metrics |
-| `/dashboard/health` | GET | Health check with details |
-| `/dashboard/config` | GET | Current configuration |
-| `/dashboard/logs` | GET | Recent log entries |
-| `/dashboard/metrics` | GET | Performance metrics |
-| `/dashboard/cache` | GET | Cache statistics |
-| `/dashboard/jobs` | GET | Batch job status |
-| `/dashboard/audit` | GET | Audit log entries |
-| `/dashboard/workers` | GET | Distributed worker status |
-| `/dashboard/resources` | GET | System resource usage |
-| `/dashboard/errors` | GET | Recent error reports |
-| `/dashboard/security` | GET | Security status |
-| `/dashboard/alerts` | GET | System alerts |
-
-[📖 **Complete API Reference**](API.md)
-
-## 💻 Examples
-
-### Python Client
-
+### **For Developers**
 ```python
-from inferno_client import InfernoClient
+# OpenAI-compatible client
+from openai import OpenAI
 
-client = InfernoClient("http://localhost:8080", api_key="your_key")
+# Point to your local Inferno instance
+client = OpenAI(base_url="http://localhost:8080/v1", api_key="not-needed")
 
-# Simple inference
-response = client.inference("llama-2-7b", "What is AI?", max_tokens=100)
-print(response)
-
-# Streaming inference
-for token in client.stream_inference("llama-2-7b", "Tell a story"):
-    print(token, end="", flush=True)
+response = client.chat.completions.create(
+    model="llama-2-7b",
+    messages=[{"role": "user", "content": "Debug this code..."}]
+)
 ```
 
-### JavaScript/TypeScript
+### **For Businesses**
+```bash
+# Convert proprietary model to GGUF for deployment
+inferno convert your-pytorch-model.bin --output optimized.gguf --quantization q4_0
 
-```typescript
-import { InfernoClient } from '@inferno/client';
+# Deploy with monitoring and security
+inferno serve --auth --metrics --audit-logs
 
-const client = new InfernoClient('http://localhost:8080', 'your_key');
-
-// Async inference
-const response = await client.inference('llama-2-7b', 'Hello world');
-console.log(response);
-
-// WebSocket streaming
-const wsClient = new InfernoWebSocketClient();
-await wsClient.connect();
-wsClient.sendInference('llama-2-7b', 'Tell me a joke');
+# Batch process customer data (stays private)
+inferno batch --input customer_queries.jsonl --output responses.jsonl
 ```
 
-[🔗 **More Examples**](examples/)
+## ✨ Key Features
 
-## 🐳 Deployment
+### **🧠 AI Backends**
+- ✅ **Real GGUF Support**: Full llama.cpp integration, not mock implementations
+- ✅ **Real ONNX Support**: Production ONNX Runtime with GPU acceleration
+- ✅ **Model Conversion**: Real-time format conversion with optimization
+- ✅ **Quantization**: Q4_0, Q4_1, Q5_0, Q5_1, Q8_0, F16, F32 support
 
-### Docker Compose (Recommended)
+### **🏢 Enterprise Features**
+- ✅ **Authentication**: JWT tokens, API keys, role-based access
+- ✅ **Monitoring**: Prometheus metrics, Grafana dashboards, OpenTelemetry
+- ✅ **Audit Logging**: Encrypted logs with multi-channel alerting
+- ✅ **Batch Processing**: Cron scheduling, retry logic, job dependencies
+- ✅ **Caching**: Multi-tier caching with compression and persistence
+- ✅ **Load Balancing**: Distribute inference across multiple backends
+
+### **🔌 APIs & Integration**
+- ✅ **OpenAI Compatible**: Use existing ChatGPT client libraries
+- ✅ **REST API**: Standard HTTP endpoints for all operations
+- ✅ **WebSocket**: Real-time streaming and bidirectional communication
+- ✅ **CLI Interface**: Full command-line management
+- ✅ **Web Dashboard**: Browser-based monitoring and management
+
+## 🛠️ Common Commands
 
 ```bash
-# Clone repository
-git clone https://github.com/ringo380/inferno.git
-cd inferno/examples
+# Model management
+inferno models list                           # See available models
+inferno models download llama-2-7b            # Download from Hugging Face
+inferno models info llama-2-7b                # Show model details
+inferno models convert input.pt output.gguf   # Convert between formats
 
-# Start full stack
-docker-compose up -d
-```
+# Running inference
+inferno run --model llama-2-7b --prompt "Hello AI!"
+inferno run --model llama-2-7b --input file.txt --output response.txt
+inferno run --model llama-2-7b --batch --input batch.jsonl
 
-This deploys:
-- **Inferno**: Main inference server with real GGUF/ONNX support
-- **Prometheus**: Metrics collection and alerting
-- **Grafana**: Visualization dashboards with custom panels
-- **Jaeger**: Distributed tracing and performance monitoring
-- **Redis**: Advanced caching layer with persistence
-- **Nginx**: Load balancer with SSL termination
-- **Database**: Audit log storage with compression
-- **MinIO**: Model storage and versioning
+# Server operations
+inferno serve                                 # Start HTTP server
+inferno serve --bind 0.0.0.0:8080           # Custom address
+inferno serve --auth --metrics              # Production mode
 
-### Configuration
-
-```toml
-# Basic settings
-models_dir = "/data/models"
-cache_dir = "/data/cache"
-log_level = "info"
-
-# Server configuration
-[server]
-bind_address = "0.0.0.0"
-port = 8080
-max_concurrent_requests = 100
-
-# Backend configuration
-[backend_config]
-gpu_enabled = true
-gpu_device = "auto"  # or specific device ID
-cpu_threads = 8
-context_size = 4096
-batch_size = 64
-memory_map = true
-
-# Cache configuration
-[cache]
-type = "persistent"  # memory, disk, persistent
-compression = "gzip"  # none, gzip, zstd
-max_size_gb = 10
-ttl_hours = 24
-
-# Model conversion settings
-[conversion]
-default_optimization = "balanced"  # fast, balanced, aggressive
-quantization_enabled = true
-default_precision = "fp16"
-
-# Audit system
-[audit]
-enabled = true
-compression = true
-encryption = true
-alert_channels = ["email", "slack", "webhook"]
-
-# Batch processing
-[batch_queue]
-max_concurrent_jobs = 5
-retry_attempts = 3
-default_schedule = "0 2 * * *"  # Daily at 2 AM
-
-# Security configuration
-[auth_security]
-auth_enabled = true
-rate_limiting_enabled = true
-max_requests_per_minute = 1000
-
-# Observability configuration
-[observability]
-prometheus_enabled = true
-otel_enabled = true
-grafana_enabled = true
+# Advanced features
+inferno cache warm --model llama-2-7b        # Pre-load for speed
+inferno batch-queue create --schedule "0 2 * * *"  # Cron jobs
+inferno security init                        # Set up authentication
+inferno observability start                  # Monitoring stack
 ```
 
 ## 🏗️ Architecture
 
-Inferno is built with a modular, trait-based architecture designed for scalability and extensibility:
+Inferno is built with a modular, production-ready architecture:
 
 ```
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Client APIs   │    │   Observability │    │    Security     │
-│                 │    │                 │    │                 │
-│ • REST API      │    │ • Prometheus    │    │ • JWT Auth      │
-│ • OpenAI API    │    │ • OpenTelemetry │    │ • Rate Limiting │
-│ • WebSocket     │    │ • Grafana       │    │ • RBAC          │
-│ • CLI + TUI     │    │ • Health Checks │    │ • Encrypted Logs│
-│ • Dashboard     │    │ • Real-time Logs│    │ • Multi-channel │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
-         │                       │                       │
-         └───────────────────────┼───────────────────────┘
-                                 │
-                    ┌─────────────────┐
-                    │  Core Engine    │
-                    │                 │
-                    │ • Model Manager │
-                    │ • Cache System  │
-                    │ • Batch Queue   │
-                    │ • Load Balancer │
-                    │ • Hash Functions│
-                    └─────────────────┘
-                                 │
-         ┌───────────────────────┼───────────────────────┐
-         │                       │                       │
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│  ML Backends    │    │  Storage Layer  │    │  Distributed    │
-│                 │    │                 │    │                 │
-│ • Real GGUF     │    │ • Persistent    │    │ • Worker Pools  │
-│ • Real ONNX     │    │   Cache Store   │    │ • Load Balancing│
-│ • GPU Accel     │    │ • Compressed    │    │ • Auto Scaling  │
-│ • Quantization  │    │   Audit Logs    │    │ • Fault Tolerance│
-│ • Conversion    │    │ • Model Versioning│  │ • Cron Scheduling│
-│ • Thread Safety │    │ • Metrics Store │    │ • Retry Logic   │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
+   ┌─── Client Libraries ────┐    ┌─── Security & Auth ────┐
+   │ • Python SDK            │    │ • JWT Authentication   │
+   │ • JavaScript/TypeScript │    │ • API Key Management   │
+   │ • REST API              │    │ • Rate Limiting        │
+   │ • WebSocket Streaming   │    │ • Audit Logging        │
+   └─────────────────────────┘    └─────────────────────────┘
+                  │                              │
+                  └──────────┬───────────────────┘
+                             │
+            ┌─────────── Core Engine ───────────┐
+            │ • Model Manager & Conversion      │
+            │ • Multi-tier Caching System      │
+            │ • Batch Queue & Scheduling       │
+            │ • Load Balancer & Health Checks  │
+            └───────────────────────────────────┘
+                             │
+     ┌───────────────────────┼───────────────────────┐
+     │                       │                       │
+┌─── AI Backends ───┐  ┌─── Storage ───┐  ┌─── Monitoring ───┐
+│ • GGUF (llama.cpp)│  │ • Cache Store │  │ • Prometheus      │
+│ • ONNX Runtime   │  │ • Audit Logs  │  │ • Grafana         │
+│ • GPU Acceleration│  │ • Model Store │  │ • OpenTelemetry   │
+│ • Quantization   │  │ • Compression │  │ • Health Checks   │
+└──────────────────┘  └───────────────┘  └───────────────────┘
 ```
 
-## 🔒 Security
+## 🐳 Deployment Options
 
-### Authentication & Authorization
-
+### **Docker (Recommended)**
 ```bash
-# Initialize security
-inferno security init
+# Basic deployment
+docker run -p 8080:8080 -v ./models:/data/models inferno:latest
 
-# Create users
-inferno security user create admin --role admin
-inferno security user create john --role user
+# Production with GPU
+docker run --gpus all -p 8080:8080 \
+  -v ./models:/data/models \
+  -v ./config:/etc/inferno \
+  inferno:latest serve --config /etc/inferno/config.toml
 
-# Generate API keys
-inferno security api-key create --user admin --name production
-
-# Configure permissions
-inferno security user update john --permissions read_models,run_inference
+# Full stack with monitoring
+docker-compose up -d  # Includes Prometheus, Grafana, Redis
 ```
 
-### Rate Limiting & Access Control
-
+### **Kubernetes**
 ```bash
-# Configure rate limits
-inferno security rate-limit set --requests-per-minute 100 --user john
+# Deploy to Kubernetes
+kubectl apply -f deploy/kubernetes/
 
-# IP access control
-inferno security ip allow 192.168.1.0/24
-inferno security ip block 10.0.0.0/8
-
-# View audit logs
-inferno security audit logs --limit 100
+# With GPU support
+kubectl apply -f deploy/kubernetes/gpu/
 ```
 
-## 📊 Monitoring
-
-### Prometheus Metrics
-
+### **Binary Installation**
 ```bash
-# Start metrics server
-inferno observability metrics serve
-
-# View metrics
-curl http://localhost:9090/metrics
+# Download release
+wget https://github.com/ringo380/inferno/releases/latest/inferno-linux-x86_64.tar.gz
+tar xzf inferno-linux-x86_64.tar.gz
+./inferno serve
 ```
 
-Key metrics:
-- `inferno_inference_requests_total`
-- `inferno_inference_duration_seconds`
-- `inferno_models_loaded`
-- `inferno_memory_usage_bytes`
+## 🔧 Configuration
 
-### Grafana Dashboards
+Create `inferno.toml`:
 
-```bash
-# Initialize observability stack
-inferno observability init --prometheus --grafana
+```toml
+# Basic settings
+models_dir = "/data/models"
+log_level = "info"
 
-# Access Grafana
-open http://localhost:3000
-```
+[server]
+bind_address = "0.0.0.0"
+port = 8080
 
-### OpenTelemetry Tracing
+[backend_config]
+gpu_enabled = true
+context_size = 4096
+batch_size = 64
 
-```bash
-# Enable tracing
-inferno observability tracing collect
+[cache]
+enabled = true
+compression = "zstd"
+max_size_gb = 10
 
-# View traces
-open http://localhost:16686
+[auth]
+enabled = true
+jwt_secret = "your-secret-key"
+
+[observability]
+prometheus_enabled = true
+metrics_port = 9090
 ```
 
 ## 🤝 Contributing
 
-We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
+We welcome contributions! Inferno is built by developers, for developers.
 
-### Development Setup
+### **Quick Contributing Guide**
+1. **Fork** the repository
+2. **Create** a feature branch: `git checkout -b feature/amazing-feature`
+3. **Commit** your changes: `git commit -m 'Add amazing feature'`
+4. **Push** to the branch: `git push origin feature/amazing-feature`
+5. **Open** a Pull Request
 
+### **Development Setup**
 ```bash
-# Clone repository
 git clone https://github.com/ringo380/inferno.git
 cd inferno
-
-# Install dependencies
 cargo build
-
-# Run tests
 cargo test
-
-# Run verification
-./verify.sh
+./verify.sh  # Run full test suite
 ```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
+
+## 🌟 Community
+
+- **💬 Discord**: [Join our community](https://discord.gg/inferno)
+- **🐛 Issues**: [Report bugs](https://github.com/ringo380/inferno/issues)
+- **💡 Discussions**: [Feature requests](https://github.com/ringo380/inferno/discussions)
+- **📚 Docs**: [Full documentation](https://docs.inferno.ai)
 
 ## 📄 License
 
-This project is licensed under either of:
+Licensed under either of:
+- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE))
+- MIT License ([LICENSE-MIT](LICENSE-MIT))
 
-- Apache License, Version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
-- MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
+## 🚀 What's Next?
 
-at your option.
-
-## 🔗 Links
-
-- **Documentation**: [Full API Docs](API.md) • [Getting Started](GETTING_STARTED.md) • [Examples](examples/)
-- **GitHub**: [github.com/ringo380/inferno](https://github.com/ringo380/inferno)
-- **Discord**: [Join our community](https://discord.gg/inferno)
-- **Docker Hub**: [hub.docker.com/r/inferno/inferno](https://hub.docker.com/r/inferno/inferno)
+- **⭐ Star** this repo if you find it useful
+- **🔄 Follow** for updates on new features
+- **💬 Join** our Discord to connect with other users
+- **🐛 Report** issues to help us improve
+- **🤝 Contribute** code, docs, or ideas
 
 ---
 
 <div align="center">
-  <strong>🔥 Built with Rust • Powered by AI • Ready for Production 🔥</strong>
+
+**🔥 Ready to take control of your AI infrastructure? 🔥**
+
+[**Get Started →**](#-quick-start) • [**Join Discord →**](https://discord.gg/inferno) • [**Read Docs →**](https://docs.inferno.ai)
+
+*Built with ❤️ by the open source community*
+
 </div>
