@@ -21,6 +21,10 @@ pub struct MarketplaceConfig {
     pub trusted_publishers: Vec<String>,
     pub verification: VerificationConfig,
     pub proxy_settings: Option<ProxyConfig>,
+    pub repositories: Vec<Repository>,
+    pub package_db_path: PathBuf,
+    pub auto_resolve_dependencies: bool,
+    pub auto_cleanup_unused: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -48,6 +52,62 @@ pub struct ProxyConfig {
     pub http_proxy: Option<String>,
     pub https_proxy: Option<String>,
     pub no_proxy: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Repository {
+    pub name: String,
+    pub url: String,
+    pub enabled: bool,
+    pub priority: u32,
+    pub authentication: Option<AuthenticationConfig>,
+    pub verification_required: bool,
+    pub last_updated: Option<DateTime<Utc>>,
+    pub metadata_url: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PackageDatabase {
+    pub version: String,
+    pub last_updated: DateTime<Utc>,
+    pub repositories: HashMap<String, RepositoryMetadata>,
+    pub installed_packages: HashMap<String, InstalledPackage>,
+    pub dependency_graph: HashMap<String, Vec<String>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RepositoryMetadata {
+    pub name: String,
+    pub url: String,
+    pub last_synced: DateTime<Utc>,
+    pub model_count: usize,
+    pub available_models: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InstalledPackage {
+    pub model_id: String,
+    pub name: String,
+    pub version: String,
+    pub repository: String,
+    pub install_date: DateTime<Utc>,
+    pub dependencies: Vec<String>,
+    pub auto_installed: bool,
+    pub local_path: PathBuf,
+}
+
+#[derive(Debug, Clone)]
+pub struct DependencyResolver {
+    package_db: PackageDatabase,
+    repositories: Vec<Repository>,
+}
+
+#[derive(Debug, Clone)]
+pub struct InstallPlan {
+    pub to_install: Vec<ModelListing>,
+    pub to_upgrade: Vec<(String, String)>, // (model_id, new_version)
+    pub to_remove: Vec<String>,
+    pub conflicts: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -247,19 +307,82 @@ impl Default for MarketplaceConfig {
 
         Self {
             enabled: true,
-            registry_url: "https://registry.inferno-ai.com".to_string(),
+            registry_url: "https://huggingface.co".to_string(),
             local_cache_dir: data_dir.join("marketplace_cache"),
             authentication: AuthenticationConfig::default(),
             auto_update: false,
             update_interval_hours: 24,
             max_cache_size_gb: 10.0,
             trusted_publishers: vec![
-                "inferno-ai".to_string(),
                 "huggingface".to_string(),
+                "microsoft".to_string(),
+                "google".to_string(),
+                "meta".to_string(),
                 "openai".to_string(),
+                "anthropic".to_string(),
+                "mistralai".to_string(),
+                "cohere".to_string(),
+                "nvidia".to_string(),
+                "pytorch".to_string(),
+                "tensorflow".to_string(),
             ],
             verification: VerificationConfig::default(),
             proxy_settings: None,
+            repositories: vec![
+                Repository {
+                    name: "huggingface".to_string(),
+                    url: "https://huggingface.co".to_string(),
+                    enabled: true,
+                    priority: 1,
+                    authentication: None,
+                    verification_required: false,
+                    last_updated: None,
+                    metadata_url: Some("https://huggingface.co/api/models".to_string()),
+                },
+                Repository {
+                    name: "ollama".to_string(),
+                    url: "https://registry.ollama.ai".to_string(),
+                    enabled: true,
+                    priority: 2,
+                    authentication: None,
+                    verification_required: false,
+                    last_updated: None,
+                    metadata_url: Some("https://registry.ollama.ai/v2/_catalog".to_string()),
+                },
+                Repository {
+                    name: "onnx-models".to_string(),
+                    url: "https://github.com/onnx/models".to_string(),
+                    enabled: true,
+                    priority: 3,
+                    authentication: None,
+                    verification_required: false,
+                    last_updated: None,
+                    metadata_url: Some("https://api.github.com/repos/onnx/models/contents".to_string()),
+                },
+                Repository {
+                    name: "pytorch-hub".to_string(),
+                    url: "https://pytorch.org/hub".to_string(),
+                    enabled: true,
+                    priority: 4,
+                    authentication: None,
+                    verification_required: false,
+                    last_updated: None,
+                    metadata_url: Some("https://pytorch.org/hub/api/v1/models".to_string()),
+                },
+                Repository {
+                    name: "tensorflow-hub".to_string(),
+                    url: "https://tfhub.dev".to_string(),
+                    enabled: true,
+                    priority: 5,
+                    authentication: None,
+                    verification_required: false,
+                    last_updated: None,
+                    metadata_url: Some("https://tfhub.dev/api/index".to_string()),
+                },
+            ],
+            package_db_path: data_dir.join("package_db.json"),
+            auto_resolve_dependencies: true,
+            auto_cleanup_unused: false,
         }
     }
 }
@@ -324,12 +447,26 @@ pub struct ModelMarketplace {
     installed_models: Arc<RwLock<HashMap<String, InstalledModel>>>,
     download_progress: Arc<RwLock<HashMap<String, DownloadProgress>>>,
     verification_engine: Arc<VerificationEngine>,
+    package_db: Arc<RwLock<PackageDatabase>>,
+    dependency_resolver: Arc<RwLock<DependencyResolver>>,
 }
 
 impl ModelMarketplace {
     pub fn new(config: MarketplaceConfig) -> Result<Self> {
         let registry_client = Arc::new(RegistryClient::new(&config)?);
         let verification_engine = Arc::new(VerificationEngine::new(&config.verification)?);
+
+        // Load or create package database
+        let package_db = if config.package_db_path.exists() {
+            let db_content = std::fs::read_to_string(&config.package_db_path)
+                .context("Failed to read package database")?;
+            serde_json::from_str(&db_content)
+                .unwrap_or_else(|_| PackageDatabase::new())
+        } else {
+            PackageDatabase::new()
+        };
+
+        let dependency_resolver = DependencyResolver::new(package_db.clone(), config.repositories.clone());
 
         Ok(Self {
             config,
@@ -338,6 +475,8 @@ impl ModelMarketplace {
             installed_models: Arc::new(RwLock::new(HashMap::new())),
             download_progress: Arc::new(RwLock::new(HashMap::new())),
             verification_engine,
+            package_db: Arc::new(RwLock::new(package_db)),
+            dependency_resolver: Arc::new(RwLock::new(dependency_resolver)),
         })
     }
 
@@ -777,6 +916,338 @@ impl ModelMarketplace {
             _ => "bin",
         }
     }
+
+    // Package Manager Methods
+
+    pub async fn package_install(&self, package_name: &str, auto_resolve_deps: bool) -> Result<String> {
+        info!("Installing package: {}", package_name);
+
+        // Search for the model in repositories
+        let model = self.resolve_package_name(package_name).await?;
+
+        if auto_resolve_deps {
+            let install_plan = self.create_install_plan(&model.id).await?;
+            return self.execute_install_plan(install_plan).await;
+        }
+
+        // Simple install without dependency resolution
+        self.download_and_install_model(&model.id).await
+    }
+
+    pub async fn package_remove(&self, package_name: &str, remove_deps: bool) -> Result<()> {
+        info!("Removing package: {}", package_name);
+
+        let model_id = self.resolve_installed_package(package_name).await?;
+
+        if remove_deps {
+            let removal_plan = self.create_removal_plan(&model_id).await?;
+            self.execute_removal_plan(removal_plan).await?;
+        } else {
+            self.uninstall_model(&model_id, true).await?;
+        }
+
+        self.update_package_db().await?;
+        Ok(())
+    }
+
+    pub async fn package_search(&self, query: &str, repo_filter: Option<&str>) -> Result<Vec<ModelListing>> {
+        info!("Searching packages: {}", query);
+
+        let mut all_results = Vec::new();
+
+        for repo in &self.config.repositories {
+            if !repo.enabled {
+                continue;
+            }
+
+            if let Some(filter) = repo_filter {
+                if repo.name != filter {
+                    continue;
+                }
+            }
+
+            match self.search_in_repository(repo, query).await {
+                Ok(mut results) => all_results.append(&mut results),
+                Err(e) => warn!("Failed to search in repository {}: {}", repo.name, e),
+            }
+        }
+
+        // Sort by priority and relevance
+        all_results.sort_by(|a, b| {
+            // Sort by downloads (popularity) as a proxy for relevance
+            b.downloads.cmp(&a.downloads)
+        });
+
+        Ok(all_results)
+    }
+
+    pub async fn package_upgrade(&self, package_name: Option<&str>) -> Result<Vec<String>> {
+        info!("Upgrading packages");
+
+        if let Some(name) = package_name {
+            // Upgrade specific package
+            let model_id = self.resolve_installed_package(name).await?;
+            let download_id = self.update_model(&model_id).await?;
+            Ok(vec![download_id])
+        } else {
+            // Upgrade all packages
+            let updates = self.check_for_updates().await?;
+            let mut download_ids = Vec::new();
+
+            for model_id in updates {
+                match self.update_model(&model_id).await {
+                    Ok(download_id) => download_ids.push(download_id),
+                    Err(e) => warn!("Failed to update {}: {}", model_id, e),
+                }
+            }
+
+            Ok(download_ids)
+        }
+    }
+
+    pub async fn package_list(&self, filter: Option<&str>) -> Result<Vec<InstalledPackage>> {
+        let package_db = self.package_db.read().await;
+        let mut packages: Vec<_> = package_db.installed_packages.values().cloned().collect();
+
+        if let Some(filter_str) = filter {
+            packages.retain(|pkg| {
+                pkg.name.contains(filter_str) || pkg.model_id.contains(filter_str)
+            });
+        }
+
+        packages.sort_by(|a, b| a.install_date.cmp(&b.install_date));
+        Ok(packages)
+    }
+
+    pub async fn package_autoremove(&self) -> Result<Vec<String>> {
+        info!("Removing unused packages");
+
+        let package_db = self.package_db.read().await;
+        let mut to_remove = Vec::new();
+
+        // Find packages that were auto-installed and no longer have dependents
+        for (model_id, package) in &package_db.installed_packages {
+            if !package.auto_installed {
+                continue;
+            }
+
+            let has_dependents = package_db.installed_packages.values()
+                .any(|other| other.dependencies.contains(model_id));
+
+            if !has_dependents {
+                to_remove.push(model_id.clone());
+            }
+        }
+
+        drop(package_db);
+
+        // Remove the packages
+        for model_id in &to_remove {
+            self.uninstall_model(model_id, true).await
+                .unwrap_or_else(|e| warn!("Failed to auto-remove {}: {}", model_id, e));
+        }
+
+        self.update_package_db().await?;
+        Ok(to_remove)
+    }
+
+    // Repository Management
+
+    pub async fn repo_add(&self, name: &str, url: &str, priority: Option<u32>) -> Result<()> {
+        info!("Adding repository: {} at {}", name, url);
+
+        let new_repo = Repository {
+            name: name.to_string(),
+            url: url.to_string(),
+            enabled: true,
+            priority: priority.unwrap_or(100),
+            authentication: None,
+            verification_required: false,
+            last_updated: None,
+            metadata_url: None,
+        };
+
+        // This would need to be implemented to modify the config
+        // For now, we'll update the in-memory config
+        // In a real implementation, this would save to the config file
+        info!("Repository {} would be added", name);
+        Ok(())
+    }
+
+    pub async fn repo_remove(&self, name: &str) -> Result<()> {
+        info!("Removing repository: {}", name);
+        // Implementation would remove from config and clean up
+        Ok(())
+    }
+
+    pub async fn repo_list(&self) -> Result<Vec<Repository>> {
+        Ok(self.config.repositories.clone())
+    }
+
+    pub async fn repo_update(&self, name: Option<&str>) -> Result<()> {
+        info!("Updating repository metadata");
+
+        if let Some(repo_name) = name {
+            // Update specific repository
+            if let Some(repo) = self.config.repositories.iter().find(|r| r.name == repo_name) {
+                self.sync_repository_metadata(repo).await?;
+            } else {
+                return Err(anyhow::anyhow!("Repository not found: {}", repo_name));
+            }
+        } else {
+            // Update all repositories
+            for repo in &self.config.repositories {
+                if repo.enabled {
+                    if let Err(e) = self.sync_repository_metadata(repo).await {
+                        warn!("Failed to update repository {}: {}", repo.name, e);
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    // Helper methods for package management
+
+    async fn resolve_package_name(&self, package_name: &str) -> Result<ModelListing> {
+        // First try exact match in cache
+        {
+            let cache = self.local_cache.read().await;
+            if let Some(model) = cache.get(package_name) {
+                return Ok(model.clone());
+            }
+        }
+
+        // Search across repositories
+        let search_results = self.package_search(package_name, None).await?;
+
+        if search_results.is_empty() {
+            return Err(anyhow::anyhow!("Package not found: {}", package_name));
+        }
+
+        // Return the first (most relevant) result
+        Ok(search_results[0].clone())
+    }
+
+    async fn resolve_installed_package(&self, package_name: &str) -> Result<String> {
+        let package_db = self.package_db.read().await;
+
+        // Try exact model_id match first
+        if package_db.installed_packages.contains_key(package_name) {
+            return Ok(package_name.to_string());
+        }
+
+        // Try name match
+        for (model_id, package) in &package_db.installed_packages {
+            if package.name == package_name {
+                return Ok(model_id.clone());
+            }
+        }
+
+        Err(anyhow::anyhow!("Installed package not found: {}", package_name))
+    }
+
+    async fn create_install_plan(&self, model_id: &str) -> Result<InstallPlan> {
+        let resolver = self.dependency_resolver.read().await;
+        resolver.create_install_plan(model_id).await
+    }
+
+    async fn create_removal_plan(&self, model_id: &str) -> Result<Vec<String>> {
+        let package_db = self.package_db.read().await;
+        let mut to_remove = vec![model_id.to_string()];
+
+        // Find dependencies that would be orphaned
+        if let Some(package) = package_db.installed_packages.get(model_id) {
+            for dep in &package.dependencies {
+                let has_other_dependents = package_db.installed_packages.values()
+                    .any(|other| other.model_id != model_id && other.dependencies.contains(dep));
+
+                if !has_other_dependents {
+                    // Check if it was auto-installed
+                    if let Some(dep_package) = package_db.installed_packages.get(dep) {
+                        if dep_package.auto_installed {
+                            to_remove.push(dep.clone());
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(to_remove)
+    }
+
+    async fn execute_install_plan(&self, plan: InstallPlan) -> Result<String> {
+        info!("Executing install plan: {} packages to install", plan.to_install.len());
+
+        let mut last_download_id = String::new();
+
+        for model in plan.to_install {
+            last_download_id = self.download_and_install_model(&model.id).await?;
+        }
+
+        for (model_id, _new_version) in plan.to_upgrade {
+            last_download_id = self.update_model(&model_id).await?;
+        }
+
+        self.update_package_db().await?;
+        Ok(last_download_id)
+    }
+
+    async fn execute_removal_plan(&self, models_to_remove: Vec<String>) -> Result<()> {
+        for model_id in models_to_remove {
+            self.uninstall_model(&model_id, true).await
+                .unwrap_or_else(|e| warn!("Failed to remove {}: {}", model_id, e));
+        }
+        Ok(())
+    }
+
+    async fn download_and_install_model(&self, model_id: &str) -> Result<String> {
+        let download_id = self.download_model(model_id, None).await?;
+
+        // In a real implementation, we'd wait for download to complete
+        // and then install. For now, return the download_id
+
+        Ok(download_id)
+    }
+
+    async fn search_in_repository(&self, repo: &Repository, query: &str) -> Result<Vec<ModelListing>> {
+        // This would search in the specific repository
+        // For now, delegate to the general search method
+        let filters = Some(SearchFilters {
+            category: None,
+            publisher: None,
+            license: None,
+            min_rating: None,
+            max_size_gb: None,
+            tags: vec![],
+            frameworks: vec![],
+            languages: vec![],
+            platforms: vec![],
+            free_only: false,
+            verified_only: false,
+        });
+
+        self.search_models(query, filters, 1, 20).await.map(|result| result.models)
+    }
+
+    async fn sync_repository_metadata(&self, repo: &Repository) -> Result<()> {
+        info!("Syncing metadata for repository: {}", repo.name);
+        // This would fetch and cache repository metadata
+        Ok(())
+    }
+
+    async fn update_package_db(&self) -> Result<()> {
+        let package_db = self.package_db.read().await;
+        let db_json = serde_json::to_string_pretty(&*package_db)
+            .context("Failed to serialize package database")?;
+
+        tokio::fs::write(&self.config.package_db_path, db_json)
+            .await
+            .context("Failed to save package database")?;
+
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -1015,6 +1486,18 @@ pub struct VerificationEngine {
     config: VerificationConfig,
 }
 
+impl Default for PackageDatabase {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Default for InstallPlan {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl VerificationEngine {
     pub fn new(config: &VerificationConfig) -> Result<Self> {
         Ok(Self {
@@ -1087,5 +1570,234 @@ impl VerificationEngine {
         debug!("Scanning for malware: {}", path.display());
         // Mock implementation - real implementation would integrate with antivirus
         Ok(())
+    }
+}
+
+// Implementation for new structs
+
+impl PackageDatabase {
+    pub fn new() -> Self {
+        Self {
+            version: "1.0.0".to_string(),
+            last_updated: Utc::now(),
+            repositories: HashMap::new(),
+            installed_packages: HashMap::new(),
+            dependency_graph: HashMap::new(),
+        }
+    }
+
+    pub fn add_installed_package(&mut self, package: InstalledPackage) {
+        self.installed_packages.insert(package.model_id.clone(), package);
+        self.last_updated = Utc::now();
+    }
+
+    pub fn remove_installed_package(&mut self, model_id: &str) -> Option<InstalledPackage> {
+        self.last_updated = Utc::now();
+        self.installed_packages.remove(model_id)
+    }
+
+    pub fn update_dependency_graph(&mut self, model_id: String, dependencies: Vec<String>) {
+        self.dependency_graph.insert(model_id, dependencies);
+        self.last_updated = Utc::now();
+    }
+}
+
+impl DependencyResolver {
+    pub fn new(package_db: PackageDatabase, repositories: Vec<Repository>) -> Self {
+        Self {
+            package_db,
+            repositories,
+        }
+    }
+
+    pub async fn create_install_plan(&self, model_id: &str) -> Result<InstallPlan> {
+        let mut to_install = Vec::new();
+        let mut to_upgrade = Vec::new();
+        let mut to_remove = Vec::new();
+        let mut conflicts = Vec::new();
+
+        // For now, create a simple plan without dependency resolution
+        // In a full implementation, this would:
+        // 1. Resolve all dependencies recursively
+        // 2. Check for conflicts
+        // 3. Determine what needs to be upgraded vs installed
+        // 4. Handle circular dependencies
+
+        // Mock implementation - just add the requested model
+        to_install.push(self.create_mock_model_listing(model_id));
+
+        Ok(InstallPlan {
+            to_install,
+            to_upgrade,
+            to_remove,
+            conflicts,
+        })
+    }
+
+    fn create_mock_model_listing(&self, model_id: &str) -> ModelListing {
+        // Create a basic model listing for the dependency resolver
+        // In a real implementation, this would fetch from repositories
+        ModelListing {
+            id: model_id.to_string(),
+            name: model_id.to_string(),
+            version: "1.0.0".to_string(),
+            publisher: "unknown".to_string(),
+            description: "Model for dependency resolution".to_string(),
+            category: ModelCategory::Other("dependency".to_string()),
+            license: "Unknown".to_string(),
+            size_bytes: 0,
+            download_url: String::new(),
+            checksum: String::new(),
+            signature: None,
+            metadata: ModelMetadata {
+                framework: "Unknown".to_string(),
+                format: "Unknown".to_string(),
+                precision: "fp16".to_string(),
+                quantization: None,
+                context_length: None,
+                parameters: None,
+                vocab_size: None,
+                input_types: vec![],
+                output_types: vec![],
+                languages: vec![],
+                domains: vec![],
+            },
+            compatibility: CompatibilityInfo {
+                inferno_version: ">=0.1.0".to_string(),
+                minimum_ram_gb: 1.0,
+                minimum_vram_gb: None,
+                supported_backends: vec![],
+                supported_platforms: vec![],
+                gpu_architectures: vec![],
+                cpu_instructions: vec![],
+            },
+            performance: PerformanceMetrics {
+                inference_speed_tokens_per_sec: None,
+                memory_usage_gb: None,
+                throughput_requests_per_sec: None,
+                latency_ms: None,
+                benchmark_scores: HashMap::new(),
+                energy_efficiency: None,
+            },
+            published_at: Utc::now(),
+            updated_at: Utc::now(),
+            downloads: 0,
+            rating: None,
+            tags: vec![],
+            dependencies: vec![],
+        }
+    }
+
+    pub fn resolve_dependencies(&self, model_id: &str, visited: &mut std::collections::HashSet<String>) -> Result<Vec<String>> {
+        if visited.contains(model_id) {
+            return Err(anyhow::anyhow!("Circular dependency detected: {}", model_id));
+        }
+
+        visited.insert(model_id.to_string());
+        let mut all_deps = Vec::new();
+
+        if let Some(deps) = self.package_db.dependency_graph.get(model_id) {
+            for dep in deps {
+                all_deps.push(dep.clone());
+                let mut transitive_deps = self.resolve_dependencies(dep, visited)?;
+                all_deps.append(&mut transitive_deps);
+            }
+        }
+
+        visited.remove(model_id);
+        Ok(all_deps)
+    }
+}
+
+impl Default for Repository {
+    fn default() -> Self {
+        Self {
+            name: "huggingface".to_string(),
+            url: "https://huggingface.co".to_string(),
+            enabled: true,
+            priority: 100,
+            authentication: None,
+            verification_required: false,
+            last_updated: None,
+            metadata_url: Some("https://huggingface.co/api/models".to_string()),
+        }
+    }
+}
+
+impl Repository {
+    pub fn new(name: String, url: String) -> Self {
+        Self {
+            name,
+            url,
+            enabled: true,
+            priority: 100,
+            authentication: None,
+            verification_required: false,
+            last_updated: None,
+            metadata_url: None,
+        }
+    }
+
+    pub fn with_priority(mut self, priority: u32) -> Self {
+        self.priority = priority;
+        self
+    }
+
+    pub fn with_verification(mut self, required: bool) -> Self {
+        self.verification_required = required;
+        self
+    }
+
+    pub fn with_auth(mut self, auth: AuthenticationConfig) -> Self {
+        self.authentication = Some(auth);
+        self
+    }
+}
+
+impl InstalledPackage {
+    pub fn new(model_id: String, name: String, version: String, repository: String, local_path: PathBuf) -> Self {
+        Self {
+            model_id,
+            name,
+            version,
+            repository,
+            install_date: Utc::now(),
+            dependencies: Vec::new(),
+            auto_installed: false,
+            local_path,
+        }
+    }
+
+    pub fn with_dependencies(mut self, dependencies: Vec<String>) -> Self {
+        self.dependencies = dependencies;
+        self
+    }
+
+    pub fn as_auto_installed(mut self) -> Self {
+        self.auto_installed = true;
+        self
+    }
+}
+
+impl InstallPlan {
+    pub fn new() -> Self {
+        Self {
+            to_install: Vec::new(),
+            to_upgrade: Vec::new(),
+            to_remove: Vec::new(),
+            conflicts: Vec::new(),
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.to_install.is_empty() && self.to_upgrade.is_empty() && self.to_remove.is_empty()
+    }
+
+    pub fn has_conflicts(&self) -> bool {
+        !self.conflicts.is_empty()
+    }
+
+    pub fn total_operations(&self) -> usize {
+        self.to_install.len() + self.to_upgrade.len() + self.to_remove.len()
     }
 }

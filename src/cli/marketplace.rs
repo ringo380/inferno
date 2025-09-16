@@ -9,7 +9,7 @@ use serde_json;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use tracing::{error, info, warn};
-use tokio::time::{Duration, interval};
+use tokio::time::{Duration, interval as tokio_interval};
 
 #[derive(Args)]
 pub struct MarketplaceArgs {
@@ -861,9 +861,9 @@ async fn handle_progress(
 ) -> Result<()> {
     if let Some(id) = download_id {
         if watch {
-            let mut interval = interval(Duration::from_secs(interval));
+            let mut timer = tokio_interval(Duration::from_secs(interval));
             loop {
-                interval.tick().await;
+                timer.tick().await;
 
                 match marketplace.get_download_progress(&id).await {
                     Ok(progress) => {

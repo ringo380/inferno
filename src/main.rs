@@ -1,16 +1,27 @@
 use anyhow::Result;
 use clap::Parser;
 use inferno::{
-    cli::{Cli, Commands},
+    cli::{Cli, Commands, enhanced_parser::EnhancedCliParser, help::HelpSystem},
     config::Config,
     setup_logging,
 };
 use std::env;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let cli = Cli::parse();
+    // Use enhanced parser for better error handling and suggestions
+    let cli = match EnhancedCliParser::try_parse() {
+        Ok(cli) => cli,
+        Err(e) => {
+            // Handle clap errors with helpful suggestions
+            eprintln!("{}", e);
+            eprintln!("\n💡 For help with commands, try:");
+            eprintln!("   inferno --help");
+            eprintln!("   inferno [command] --help");
+            std::process::exit(1);
+        }
+    };
 
     let config = Config::load().unwrap_or_else(|e| {
         eprintln!("Warning: Failed to load config: {}", e);
@@ -47,6 +58,14 @@ async fn main() -> Result<()> {
         Commands::MultiModal(args) => inferno::cli::multimodal::handle_multimodal_command(args).await.map_err(|e| anyhow::anyhow!(e)),
         Commands::Deployment(args) => inferno::cli::deployment::handle_deployment_command(args).await,
         Commands::Marketplace(args) => inferno::cli::marketplace::handle_marketplace_command(args).await,
+        Commands::Package(args) => inferno::cli::package::handle_package_command(args).await,
+
+        // Simplified package manager aliases
+        Commands::Install(args) => inferno::cli::package::handle_install_simple(args).await,
+        Commands::Remove(args) => inferno::cli::package::handle_remove_simple(args).await,
+        Commands::Search(args) => inferno::cli::package::handle_search_simple(args).await,
+        Commands::List(args) => inferno::cli::package::handle_list_simple(args).await,
+        Commands::Repo(args) => inferno::cli::repo::handle_repo_command(args).await,
         Commands::Federated(args) => inferno::cli::federated::handle_federated_command(args).await,
         Commands::Dashboard(args) => inferno::cli::dashboard::handle_dashboard_command(args).await,
         Commands::AdvancedMonitoring(args) => inferno::cli::advanced_monitoring::execute(args, &config).await,
@@ -63,7 +82,13 @@ async fn main() -> Result<()> {
     };
 
     if let Err(e) = result {
+        // Provide user-friendly error handling
+        let helpful_message = HelpSystem::handle_error(&e);
+        eprintln!("{}", helpful_message);
+
+        // Log the technical error for debugging
         error!("Command failed: {}", e);
+
         std::process::exit(1);
     }
 

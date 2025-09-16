@@ -19,11 +19,16 @@ pub mod monitoring;
 pub mod multimodal;
 pub mod observability;
 pub mod optimization;
+pub mod package;
 pub mod performance_optimization;
+pub mod repo;
 pub mod deployment;
 pub mod marketplace;
 pub mod model_versioning;
 pub mod federated;
+pub mod enhanced_parser;
+pub mod fuzzy;
+pub mod help;
 pub mod multi_tenancy;
 pub mod advanced_cache;
 pub mod dashboard;
@@ -130,6 +135,25 @@ pub enum Commands {
 
     #[command(about = "Model marketplace and registry management")]
     Marketplace(marketplace::MarketplaceArgs),
+
+    #[command(about = "Package manager for models (install, remove, search, etc.)")]
+    Package(package::PackageArgs),
+
+    // Simplified package manager aliases
+    #[command(about = "Install a model package")]
+    Install(package::InstallArgs),
+
+    #[command(about = "Remove a model package")]
+    Remove(package::RemoveArgs),
+
+    #[command(about = "Search for model packages")]
+    Search(package::SearchArgs),
+
+    #[command(about = "List installed model packages")]
+    List(package::ListArgs),
+
+    #[command(about = "Manage model repositories")]
+    Repo(repo::RepoArgs),
 
     #[command(about = "Federated learning and edge deployment")]
     Federated(federated::FederatedArgs),
