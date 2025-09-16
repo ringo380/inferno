@@ -2,7 +2,7 @@
 
 **High-performance offline AI/ML inference server for GGUF and ONNX models**
 
-[![Build Status](https://github.com/inferno-ai/inferno/workflows/CI/badge.svg)](https://github.com/inferno-ai/inferno/actions)
+[![Build Status](https://github.com/ringo380/inferno/workflows/CI/badge.svg)](https://github.com/ringo380/inferno/actions)
 [![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](LICENSE)
 [![Rust Version](https://img.shields.io/badge/rust-1.70%2B-orange.svg)](https://rustlang.org)
 [![Docker](https://img.shields.io/badge/docker-ready-blue.svg)](https://hub.docker.com/r/inferno/inferno)
@@ -45,7 +45,7 @@
 
 ```bash
 # Build from source
-git clone https://github.com/inferno-ai/inferno.git
+git clone https://github.com/ringo380/inferno.git
 cd inferno
 cargo build --release
 
@@ -181,7 +181,7 @@ wsClient.sendInference('llama-2-7b', 'Tell me a joke');
 
 ```bash
 # Clone repository
-git clone https://github.com/inferno-ai/inferno.git
+git clone https://github.com/ringo380/inferno.git
 cd inferno/examples
 
 # Start full stack
@@ -339,7 +339,7 @@ We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) f
 
 ```bash
 # Clone repository
-git clone https://github.com/inferno-ai/inferno.git
+git clone https://github.com/ringo380/inferno.git
 cd inferno
 
 # Install dependencies
@@ -364,7 +364,7 @@ at your option.
 ## 🔗 Links
 
 - **Documentation**: [Full API Docs](API.md) • [Getting Started](GETTING_STARTED.md) • [Examples](examples/)
-- **GitHub**: [github.com/inferno-ai/inferno](https://github.com/inferno-ai/inferno)
+- **GitHub**: [github.com/ringo380/inferno](https://github.com/ringo380/inferno)
 - **Discord**: [Join our community](https://discord.gg/inferno)
 - **Docker Hub**: [hub.docker.com/r/inferno/inferno](https://hub.docker.com/r/inferno/inferno)
 
