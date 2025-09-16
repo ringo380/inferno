@@ -280,10 +280,10 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
 
 ## 🌟 Community
 
-- **💬 Discord**: [Join our community](https://discord.gg/inferno)
 - **🐛 Issues**: [Report bugs](https://github.com/ringo380/inferno/issues)
-- **💡 Discussions**: [Feature requests](https://github.com/ringo380/inferno/discussions)
-- **📚 Docs**: [Full documentation](https://docs.inferno.ai)
+- **💡 Discussions**: [Feature requests and community help](https://github.com/ringo380/inferno/discussions)
+- **📚 Wiki**: [Full documentation](https://github.com/ringo380/inferno/wiki)
+- **🏢 Enterprise**: Contact maintainer for specialized installation assistance (information and pricing available)
 
 ## 📄 License
 
@@ -295,7 +295,7 @@ Licensed under either of:
 
 - **⭐ Star** this repo if you find it useful
 - **🔄 Follow** for updates on new features
-- **💬 Join** our Discord to connect with other users
+- **💬 Join** GitHub Discussions to connect with other users
 - **🐛 Report** issues to help us improve
 - **🤝 Contribute** code, docs, or ideas
 
@@ -305,7 +305,7 @@ Licensed under either of:
 
 **🔥 Ready to take control of your AI infrastructure? 🔥**
 
-[**Get Started →**](#-quick-start) • [**Join Discord →**](https://discord.gg/inferno) • [**Read Docs →**](https://docs.inferno.ai)
+[**Get Started →**](#-quick-start) • [**Community →**](https://github.com/ringo380/inferno/discussions) • [**Wiki →**](https://github.com/ringo380/inferno/wiki)
 
 *Built with ❤️ by the open source community*
 

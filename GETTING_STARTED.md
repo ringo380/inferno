@@ -483,9 +483,9 @@ fi
 
 ### Community
 
-- **GitHub**: [Issues and discussions](https://github.com/inferno-ai/inferno)
-- **Discord**: [Join our community](https://discord.gg/inferno)
-- **Documentation**: [docs.inferno.ai](https://docs.inferno.ai)
+- **GitHub**: [Issues and discussions](https://github.com/ringo380/inferno)
+- **GitHub Discussions**: [Community help](https://github.com/ringo380/inferno/discussions)
+- **Documentation**: [Wiki](https://github.com/ringo380/inferno/wiki)
 
 ## 🔧 Troubleshooting
 

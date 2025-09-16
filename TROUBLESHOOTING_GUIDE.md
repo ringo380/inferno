@@ -848,7 +848,7 @@ inferno diagnostics performance-profile --duration 300s
 ### Support Channels
 
 1. **GitHub Issues**: Report bugs with debug information
-2. **Discord Community**: Real-time help from users and developers
+2. **GitHub Discussions**: Community help from users and developers
 3. **Documentation**: Check latest docs for updates
 4. **Stack Overflow**: Tag questions with `inferno-ai`
 
