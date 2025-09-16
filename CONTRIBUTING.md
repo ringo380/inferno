@@ -255,8 +255,7 @@ We use these labels to organize issues and PRs:
 
 ## 🤔 Questions?
 
-- **Discord**: [Join our community](https://discord.gg/inferno)
-- **Discussions**: [GitHub Discussions](https://github.com/ringo380/inferno/discussions)
+- **GitHub Discussions**: [Community help and questions](https://github.com/ringo380/inferno/discussions)
 - **Issues**: [Report bugs or request features](https://github.com/ringo380/inferno/issues)
 
 Thank you for contributing to Inferno! 🔥

@@ -497,8 +497,7 @@ export INFERNO_GPU_MEMORY_FRACTION=0.8
 
 - **GitHub Issues**: [Report bugs or request features](https://github.com/inferno-ai/inferno/issues)
 - **Discussions**: [Community discussions](https://github.com/inferno-ai/inferno/discussions)
-- **Discord**: [Join our community](https://discord.gg/inferno)
-- **Email**: support@inferno.ai
+- **Enterprise**: Contact maintainer for specialized installation assistance (information and pricing available)
 
 ## 📄 License
 

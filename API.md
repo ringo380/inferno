@@ -897,7 +897,7 @@ The API follows semantic versioning:
 
 ## Support
 
-- Documentation: https://docs.inferno.ai
-- GitHub Issues: https://github.com/inferno-ai/inferno/issues
-- Discord: https://discord.gg/inferno
-- Email: support@inferno.ai
+- Documentation: https://github.com/ringo380/inferno/wiki
+- GitHub Issues: https://github.com/ringo380/inferno/issues
+- GitHub Discussions: https://github.com/ringo380/inferno/discussions
+- Enterprise: Contact maintainer for specialized installation assistance (information and pricing available)

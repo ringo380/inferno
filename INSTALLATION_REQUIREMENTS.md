@@ -726,5 +726,5 @@ ORT_STRATEGY=download cargo build --release
 
 - **Documentation**: Check the comprehensive guides in this repository
 - **GitHub Issues**: Report bugs and request features
-- **Community Discord**: Join our community for support
+- **GitHub Discussions**: Community help and support
 - **Stack Overflow**: Tag questions with `inferno-ai`
