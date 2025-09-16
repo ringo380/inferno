@@ -1,0 +1,157 @@
+[package]
+name = "inferno"
+version = "0.1.0"
+edition = "2021"
+authors = ["Inferno Developers"]
+description = "An offline AI/ML model runner for GGUF and ONNX models"
+readme = "README.md"
+homepage = "https://github.com/inferno-ai/inferno"
+repository = "https://github.com/inferno-ai/inferno"
+license = "MIT OR Apache-2.0"
+keywords = ["ai", "ml", "gguf", "onnx", "inference"]
+categories = ["command-line-utilities", "science"]
+exclude = [
+    "/.github/",
+    "/target/",
+    "/scripts/",
+    "*.log"
+]
+
+[[bin]]
+name = "inferno"
+path = "src/main.rs"
+
+[dependencies]
+# CLI and argument parsing
+clap = { version = "4.4", features = ["derive", "env"] }
+
+# Configuration
+serde = { version = "1.0", features = ["derive"] }
+toml = "0.8"
+figment = { version = "0.10", features = ["toml", "env"] }
+
+# Async runtime
+tokio = { version = "1.0", features = ["full"] }
+futures = "0.3"
+
+# TUI
+ratatui = "0.24"
+crossterm = "0.27"
+
+# Logging and tracing
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+tracing-appender = "0.2"
+
+# Error handling
+anyhow = "1.0"
+thiserror = "1.0"
+
+# File I/O and serialization
+serde_json = "1.0"
+
+# Image processing
+image = { version = "0.24", features = ["png", "jpeg"] }
+
+# Audio processing
+hound = "3.5"
+
+# ML backend support - using mock implementations for stability
+# In production, these would be:
+# llama-cpp-2 = "0.1.67"  # for GGUF support
+# ort = "2.0.0-rc.10"     # for ONNX support
+
+# System info and platform detection
+sysinfo = "0.29"
+
+# Hashing for model verification
+sha2 = "0.10"
+hex = "0.4"
+
+# Path utilities
+dirs = "5.0"
+
+# Progress bars and indicators
+indicatif = "0.17"
+
+# HTTP client and server
+reqwest = { version = "0.11", features = ["json", "stream"], optional = true }
+axum = { version = "0.7", features = ["ws"] }
+tower = "0.4"
+tower-http = { version = "0.5", features = ["cors", "trace"] }
+hyper = "1.0"
+
+# Compression
+flate2 = "1.0"
+tar = "0.4"
+
+# Async traits
+async-trait = "0.1"
+
+# Box futures
+futures-util = "0.3"
+
+# Date and time
+chrono = { version = "0.4", features = ["serde"] }
+
+# CSV processing for batch operations
+csv = "1.3"
+
+# Random number generation for resilience patterns
+rand = "0.8"
+
+# Human-readable time formatting
+humantime = "2.1"
+
+# UUID generation for OpenAI API compatibility
+uuid = { version = "1.6", features = ["v4"] }
+
+# Async streaming for OpenAI API
+async-stream = "0.3"
+
+# CPU detection for distributed inference
+num_cpus = "1.16"
+
+# Async stream utilities for distributed inference
+tokio-stream = { version = "0.1", features = ["net"] }
+
+# YAML serialization for cache config export
+serde_yaml = "0.9"
+
+# WebSocket support for real-time streaming
+tokio-tungstenite = "0.20"
+axum-tungstenite = "0.1"
+
+# Security and authentication
+base64 = "0.21"
+regex = "1.10"
+
+[dev-dependencies]
+tempfile = "3.8"
+assert_cmd = "2.0"
+predicates = "3.0"
+criterion = { version = "0.5", features = ["html_reports"] }
+
+[features]
+default = []
+download = ["reqwest"]
+gpu-metal = []
+gpu-vulkan = []
+gpu-directml = []
+
+[profile.release]
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
+
+[profile.dev]
+opt-level = 1
+
+[[bench]]
+name = "inference_benchmark"
+harness = false
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
