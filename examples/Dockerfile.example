@@ -1,0 +1,87 @@
+# Multi-stage Dockerfile for Inferno AI/ML inference server
+# This is an example Dockerfile - adjust paths and dependencies as needed
+
+# Stage 1: Build stage
+FROM rust:1.75-slim as builder
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    pkg-config \
+    libssl-dev \
+    libclang-dev \
+    build-essential \
+    cmake \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set working directory
+WORKDIR /app
+
+# Copy dependency files
+COPY Cargo.toml Cargo.lock ./
+
+# Create a dummy main.rs to cache dependencies
+RUN mkdir src && echo "fn main() {}" > src/main.rs
+
+# Build dependencies (this layer will be cached)
+RUN cargo build --release && rm src/main.rs
+
+# Copy source code
+COPY src ./src
+
+# Build the application
+RUN cargo build --release
+
+# Stage 2: Runtime stage
+FROM debian:bookworm-slim
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    curl \
+    libssl3 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user
+RUN useradd -m -u 1001 -s /bin/bash inferno
+
+# Set working directory
+WORKDIR /app
+
+# Copy binary from builder stage
+COPY --from=builder /app/target/release/inferno /usr/local/bin/inferno
+
+# Copy configuration files
+COPY --chown=inferno:inferno examples/config/ ./config/
+
+# Create directories
+RUN mkdir -p /app/models /app/cache /app/logs && \
+    chown -R inferno:inferno /app
+
+# Switch to non-root user
+USER inferno
+
+# Environment variables
+ENV INFERNO_MODELS_DIR=/app/models
+ENV INFERNO_CACHE_DIR=/app/cache
+ENV INFERNO_LOG_LEVEL=info
+ENV INFERNO_BIND_ADDRESS=0.0.0.0
+ENV INFERNO_PORT=8080
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD curl -f http://localhost:8080/health || exit 1
+
+# Expose ports
+EXPOSE 8080 9090
+
+# Default command
+CMD ["inferno", "serve"]
+
+# Labels for metadata
+LABEL org.opencontainers.image.title="Inferno AI/ML Inference Server"
+LABEL org.opencontainers.image.description="High-performance offline AI/ML model runner"
+LABEL org.opencontainers.image.version="0.1.0"
+LABEL org.opencontainers.image.authors="Inferno Developers"
+LABEL org.opencontainers.image.url="https://github.com/inferno-ai/inferno"
+LABEL org.opencontainers.image.source="https://github.com/inferno-ai/inferno"
+LABEL org.opencontainers.image.licenses="MIT OR Apache-2.0"
