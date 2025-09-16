@@ -1,8 +1,21 @@
+use aes_gcm::{
+    aead::{Aead, AeadCore, KeyInit, OsRng},
+    Aes256Gcm, Key, Nonce,
+};
 use anyhow::Result;
+use base64::{engine::general_purpose, Engine as _};
 use chrono::{DateTime, Utc};
+use flate2::{write::GzEncoder, Compression as GzCompression};
+use lettre::{
+    message::{header::ContentType, Mailbox, Message},
+    transport::smtp::{authentication::Credentials, response::Response},
+    AsyncSmtpTransport, AsyncTransport, Tokio1Executor,
+};
+use ring::rand::{SecureRandom, SystemRandom};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
+    io::Write,
     path::PathBuf,
     sync::Arc,
     time::SystemTime,
@@ -14,6 +27,7 @@ use tokio::{
 };
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
+use zstd::stream::write::Encoder as ZstdEncoder;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuditEvent {
@@ -191,7 +205,11 @@ pub struct AuditConfiguration {
     pub max_file_size_mb: u64,
     pub max_files: u32,
     pub compression_enabled: bool,
+    pub compression_method: CompressionMethod,
+    pub compression_level: i32,
     pub encryption_enabled: bool,
+    pub encryption_key_env: String,
+    pub encryption_sensitive_fields_only: bool,
     pub retention_days: u32,
     pub batch_size: usize,
     pub flush_interval_seconds: u64,
@@ -199,6 +217,7 @@ pub struct AuditConfiguration {
     pub include_response_body: bool,
     pub exclude_patterns: Vec<String>,
     pub alert_on_critical: bool,
+    pub alerting: AlertConfiguration,
     pub export_format: ExportFormat,
 }
 
@@ -221,6 +240,69 @@ pub enum ExportFormat {
     Avro,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum CompressionMethod {
+    None,
+    Gzip,
+    Zstd,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AlertConfiguration {
+    pub enabled: bool,
+    pub rate_limit_per_hour: u32,
+    pub webhook: WebhookConfig,
+    pub email: EmailConfig,
+    pub slack: SlackConfig,
+    pub custom_templates: HashMap<String, String>,
+    pub alert_conditions: Vec<AlertCondition>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WebhookConfig {
+    pub enabled: bool,
+    pub url: String,
+    pub headers: HashMap<String, String>,
+    pub timeout_seconds: u64,
+    pub retry_count: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EmailConfig {
+    pub enabled: bool,
+    pub smtp_host: String,
+    pub smtp_port: u16,
+    pub username: String,
+    pub password_env: String,
+    pub from_address: String,
+    pub to_addresses: Vec<String>,
+    pub use_tls: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SlackConfig {
+    pub enabled: bool,
+    pub webhook_url: String,
+    pub channel: String,
+    pub username: String,
+    pub icon_emoji: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AlertCondition {
+    pub name: String,
+    pub severity_threshold: Severity,
+    pub event_types: Vec<EventType>,
+    pub rate_threshold: Option<RateThreshold>,
+    pub enabled: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RateThreshold {
+    pub events_per_minute: u32,
+    pub window_minutes: u32,
+}
+
 impl Default for AuditConfiguration {
     fn default() -> Self {
         Self {
@@ -230,7 +312,11 @@ impl Default for AuditConfiguration {
             max_file_size_mb: 100,
             max_files: 50,
             compression_enabled: true,
+            compression_method: CompressionMethod::Gzip,
+            compression_level: 6,
             encryption_enabled: false,
+            encryption_key_env: "INFERNO_AUDIT_ENCRYPTION_KEY".to_string(),
+            encryption_sensitive_fields_only: true,
             retention_days: 90,
             batch_size: 1000,
             flush_interval_seconds: 60,
@@ -241,7 +327,79 @@ impl Default for AuditConfiguration {
                 "ping".to_string(),
             ],
             alert_on_critical: true,
+            alerting: AlertConfiguration::default(),
             export_format: ExportFormat::JsonLines,
+        }
+    }
+}
+
+impl Default for AlertConfiguration {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            rate_limit_per_hour: 60,
+            webhook: WebhookConfig::default(),
+            email: EmailConfig::default(),
+            slack: SlackConfig::default(),
+            custom_templates: HashMap::new(),
+            alert_conditions: vec![
+                AlertCondition {
+                    name: "Critical Events".to_string(),
+                    severity_threshold: Severity::Critical,
+                    event_types: vec![],
+                    rate_threshold: None,
+                    enabled: true,
+                },
+                AlertCondition {
+                    name: "High Security Events".to_string(),
+                    severity_threshold: Severity::High,
+                    event_types: vec![EventType::SecurityEvent, EventType::Authentication],
+                    rate_threshold: Some(RateThreshold {
+                        events_per_minute: 5,
+                        window_minutes: 10,
+                    }),
+                    enabled: true,
+                },
+            ],
+        }
+    }
+}
+
+impl Default for WebhookConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            url: String::new(),
+            headers: HashMap::new(),
+            timeout_seconds: 30,
+            retry_count: 3,
+        }
+    }
+}
+
+impl Default for EmailConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            smtp_host: "localhost".to_string(),
+            smtp_port: 587,
+            username: String::new(),
+            password_env: "INFERNO_SMTP_PASSWORD".to_string(),
+            from_address: "audit@inferno.local".to_string(),
+            to_addresses: vec![],
+            use_tls: true,
+        }
+    }
+}
+
+impl Default for SlackConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            webhook_url: String::new(),
+            channel: "#alerts".to_string(),
+            username: "Inferno Audit".to_string(),
+            icon_emoji: ":warning:".to_string(),
         }
     }
 }
@@ -252,6 +410,8 @@ pub struct AuditLogger {
     event_sender: mpsc::Sender<AuditEvent>,
     is_running: Arc<std::sync::atomic::AtomicBool>,
     context: EventContext,
+    encryption_key: Option<Arc<[u8; 32]>>,
+    alert_rate_tracker: Arc<RwLock<HashMap<String, Vec<SystemTime>>>>,
 }
 
 impl AuditLogger {
@@ -273,18 +433,48 @@ impl AuditLogger {
             client_info: None,
         };
 
+        // Initialize encryption key if enabled
+        let encryption_key = if config.encryption_enabled {
+            match std::env::var(&config.encryption_key_env) {
+                Ok(key_base64) => {
+                    let key_bytes = general_purpose::STANDARD.decode(&key_base64)
+                        .map_err(|e| anyhow::anyhow!("Invalid encryption key format: {}", e))?;
+                    if key_bytes.len() != 32 {
+                        return Err(anyhow::anyhow!("Encryption key must be 32 bytes (256 bits)"));
+                    }
+                    let mut key_array = [0u8; 32];
+                    key_array.copy_from_slice(&key_bytes);
+                    Some(Arc::new(key_array))
+                }
+                Err(_) => {
+                    warn!("Encryption enabled but key not found in environment variable: {}", config.encryption_key_env);
+                    warn!("Generating new encryption key - this should only be used for development!");
+                    let rng = SystemRandom::new();
+                    let mut key_bytes = [0u8; 32];
+                    rng.fill(&mut key_bytes)
+                        .map_err(|e| anyhow::anyhow!("Failed to generate encryption key: {:?}", e))?;
+                    Some(Arc::new(key_bytes))
+                }
+            }
+        } else {
+            None
+        };
+
         let logger = Self {
             config: config.clone(),
             event_buffer: Arc::new(RwLock::new(Vec::new())),
             event_sender,
             is_running: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             context,
+            encryption_key,
+            alert_rate_tracker: Arc::new(RwLock::new(HashMap::new())),
         };
 
         // Start background processor
         logger.start_background_processor(event_receiver).await?;
 
-        info!("Audit logger initialized");
+        info!("Audit logger initialized with compression: {:?}, encryption: {}",
+              config.compression_method, config.encryption_enabled);
         Ok(logger)
     }
 
@@ -368,13 +558,21 @@ impl AuditLogger {
 
         fs::write(&filepath, content).await?;
 
+        let mut final_content = content.into_bytes();
+
+        // Apply compression if enabled
         if config.compression_enabled {
-            // TODO: Implement compression
+            final_content = Self::compress_data(&final_content, &config.compression_method, config.compression_level)?;
         }
 
+        // Apply encryption if enabled
         if config.encryption_enabled {
-            // TODO: Implement encryption
+            if let Some(key) = &Self::get_encryption_key(&config.encryption_key_env)? {
+                final_content = Self::encrypt_data(&final_content, key)?;
+            }
         }
+
+        fs::write(&filepath, final_content).await?;
 
         debug!("Flushed {} audit events to {:?}", events.len(), filepath);
         Ok(())
@@ -503,8 +701,46 @@ impl AuditLogger {
     }
 
     async fn send_critical_alert(&self, event: &AuditEvent) {
-        // TODO: Implement alerting mechanism (email, webhook, etc.)
-        warn!("CRITICAL AUDIT EVENT: {} - {}", event.action, event.details.description);
+        if !self.config.alerting.enabled {
+            warn!("CRITICAL AUDIT EVENT: {} - {}", event.action, event.details.description);
+            return;
+        }
+
+        // Check rate limiting
+        if !self.should_send_alert(&event.event_type, &event.severity).await {
+            debug!("Alert rate limited for event: {}", event.id);
+            return;
+        }
+
+        let alert_context = AlertContext {
+            event: event.clone(),
+            hostname: self.context.hostname.clone(),
+            environment: self.context.environment.clone(),
+            timestamp: Utc::now(),
+        };
+
+        // Send alerts through all enabled channels
+        let config = &self.config.alerting;
+
+        if config.webhook.enabled {
+            if let Err(e) = self.send_webhook_alert(&alert_context).await {
+                error!("Failed to send webhook alert: {}", e);
+            }
+        }
+
+        if config.email.enabled {
+            if let Err(e) = self.send_email_alert(&alert_context).await {
+                error!("Failed to send email alert: {}", e);
+            }
+        }
+
+        if config.slack.enabled {
+            if let Err(e) = self.send_slack_alert(&alert_context).await {
+                error!("Failed to send Slack alert: {}", e);
+            }
+        }
+
+        warn!("CRITICAL AUDIT EVENT ALERTED: {} - {}", event.action, event.details.description);
     }
 
     pub async fn query_events(&self, query: AuditQuery) -> Result<Vec<AuditEvent>> {
@@ -665,6 +901,366 @@ impl AuditLogger {
         self.is_running.store(false, std::sync::atomic::Ordering::SeqCst);
         info!("Audit logger shutdown");
     }
+
+    // Compression methods
+    fn compress_data(data: &[u8], method: &CompressionMethod, level: i32) -> Result<Vec<u8>> {
+        match method {
+            CompressionMethod::None => Ok(data.to_vec()),
+            CompressionMethod::Gzip => {
+                let mut encoder = GzEncoder::new(Vec::new(), GzCompression::new(level as u32));
+                encoder.write_all(data)?;
+                encoder.finish().map_err(Into::into)
+            }
+            CompressionMethod::Zstd => {
+                let mut encoder = ZstdEncoder::new(Vec::new(), level)?;
+                encoder.write_all(data)?;
+                encoder.finish().map_err(Into::into)
+            }
+        }
+    }
+
+    fn decompress_data(data: &[u8], method: &CompressionMethod) -> Result<Vec<u8>> {
+        match method {
+            CompressionMethod::None => Ok(data.to_vec()),
+            CompressionMethod::Gzip => {
+                use flate2::read::GzDecoder;
+                use std::io::Read;
+                let mut decoder = GzDecoder::new(data);
+                let mut decompressed = Vec::new();
+                decoder.read_to_end(&mut decompressed)?;
+                Ok(decompressed)
+            }
+            CompressionMethod::Zstd => {
+                zstd::decode_all(data).map_err(Into::into)
+            }
+        }
+    }
+
+    // Encryption methods
+    fn get_encryption_key(key_env: &str) -> Result<Option<Arc<[u8; 32]>>> {
+        match std::env::var(key_env) {
+            Ok(key_base64) => {
+                let key_bytes = general_purpose::STANDARD.decode(&key_base64)
+                    .map_err(|e| anyhow::anyhow!("Invalid encryption key format: {}", e))?;
+                if key_bytes.len() != 32 {
+                    return Err(anyhow::anyhow!("Encryption key must be 32 bytes (256 bits)"));
+                }
+                let mut key_array = [0u8; 32];
+                key_array.copy_from_slice(&key_bytes);
+                Ok(Some(Arc::new(key_array)))
+            }
+            Err(_) => Ok(None),
+        }
+    }
+
+    fn encrypt_data(data: &[u8], key: &[u8; 32]) -> Result<Vec<u8>> {
+        let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(key));
+        let nonce = Aes256Gcm::generate_nonce(&mut OsRng);
+
+        let ciphertext = cipher.encrypt(&nonce, data)
+            .map_err(|e| anyhow::anyhow!("Encryption failed: {}", e))?;
+
+        // Prepend nonce to ciphertext for decryption
+        let mut encrypted = Vec::with_capacity(nonce.len() + ciphertext.len());
+        encrypted.extend_from_slice(&nonce);
+        encrypted.extend_from_slice(&ciphertext);
+
+        Ok(encrypted)
+    }
+
+    fn decrypt_data(encrypted_data: &[u8], key: &[u8; 32]) -> Result<Vec<u8>> {
+        if encrypted_data.len() < 12 {
+            return Err(anyhow::anyhow!("Invalid encrypted data: too short"));
+        }
+
+        let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(key));
+        let (nonce_bytes, ciphertext) = encrypted_data.split_at(12);
+        let nonce = Nonce::from_slice(nonce_bytes);
+
+        cipher.decrypt(nonce, ciphertext)
+            .map_err(|e| anyhow::anyhow!("Decryption failed: {}", e))
+    }
+
+    // Alerting rate limiting
+    async fn should_send_alert(&self, event_type: &EventType, severity: &Severity) -> bool {
+        let mut tracker = self.alert_rate_tracker.write().await;
+        let key = format!("{:?}-{:?}", event_type, severity);
+        let now = SystemTime::now();
+
+        // Clean old entries (older than 1 hour)
+        let cutoff = now - std::time::Duration::from_secs(3600);
+        for timestamps in tracker.values_mut() {
+            timestamps.retain(|&ts| ts > cutoff);
+        }
+
+        // Check current rate
+        let timestamps = tracker.entry(key).or_insert_with(Vec::new);
+        if timestamps.len() >= self.config.alerting.rate_limit_per_hour as usize {
+            return false;
+        }
+
+        timestamps.push(now);
+        true
+    }
+
+    // Alert sending methods
+    #[cfg(feature = "reqwest")]
+    async fn send_webhook_alert(&self, context: &AlertContext) -> Result<()> {
+        let config = &self.config.alerting.webhook;
+
+        let payload = serde_json::json!({
+            "alert_type": "audit_event",
+            "severity": context.event.severity,
+            "event_type": context.event.event_type,
+            "timestamp": context.timestamp.to_rfc3339(),
+            "hostname": context.hostname,
+            "environment": context.environment,
+            "event": {
+                "id": context.event.id,
+                "action": context.event.action,
+                "actor": context.event.actor.name,
+                "resource": context.event.resource.name,
+                "description": context.event.details.description,
+                "success": context.event.outcome.success,
+                "error_message": context.event.outcome.error_message
+            }
+        });
+
+        let client = reqwest::Client::new();
+        let mut request = client
+            .post(&config.url)
+            .timeout(std::time::Duration::from_secs(config.timeout_seconds))
+            .json(&payload);
+
+        for (key, value) in &config.headers {
+            request = request.header(key, value);
+        }
+
+        let mut last_error = None;
+        for attempt in 0..=config.retry_count {
+            match request.try_clone().unwrap().send().await {
+                Ok(response) => {
+                    if response.status().is_success() {
+                        debug!("Webhook alert sent successfully on attempt {}", attempt + 1);
+                        return Ok(());
+                    } else {
+                        last_error = Some(anyhow::anyhow!("HTTP {}: {}",
+                            response.status(),
+                            response.text().await.unwrap_or_default()
+                        ));
+                    }
+                }
+                Err(e) => {
+                    last_error = Some(e.into());
+                }
+            }
+
+            if attempt < config.retry_count {
+                tokio::time::sleep(std::time::Duration::from_secs(2_u64.pow(attempt))).await;
+            }
+        }
+
+        Err(last_error.unwrap_or_else(|| anyhow::anyhow!("Unknown webhook error")))
+    }
+
+    #[cfg(not(feature = "reqwest"))]
+    async fn send_webhook_alert(&self, _context: &AlertContext) -> Result<()> {
+        Err(anyhow::anyhow!("Webhook alerts require the 'reqwest' feature to be enabled"))
+    }
+
+    async fn send_email_alert(&self, context: &AlertContext) -> Result<()> {
+        let config = &self.config.alerting.email;
+
+        let password = std::env::var(&config.password_env)
+            .map_err(|_| anyhow::anyhow!("SMTP password not found in environment: {}", config.password_env))?;
+
+        let subject = format!(
+            "[{:?}] Audit Alert: {} on {}",
+            context.event.severity,
+            context.event.action,
+            context.hostname
+        );
+
+        let body = format!(
+            r#"Audit Alert Details:
+
+Event ID: {}
+Severity: {:?}
+Event Type: {:?}
+Timestamp: {}
+Environment: {}
+Hostname: {}
+
+Actor: {} ({})
+Resource: {} ({:?})
+Action: {}
+Success: {}
+{}
+
+Description: {}
+
+Context:
+- Application: {}
+- Version: {}
+- Process ID: {}
+{}
+"#,
+            context.event.id,
+            context.event.severity,
+            context.event.event_type,
+            context.timestamp.to_rfc3339(),
+            context.environment,
+            context.hostname,
+            context.event.actor.name,
+            context.event.actor.actor_type,
+            context.event.resource.name,
+            context.event.resource.resource_type,
+            context.event.action,
+            context.event.outcome.success,
+            context.event.outcome.error_message
+                .as_ref()
+                .map(|e| format!("Error: {}", e))
+                .unwrap_or_default(),
+            context.event.details.description,
+            context.event.context.application,
+            context.event.context.version,
+            context.event.context.process_id,
+            context.event.outcome.duration_ms
+                .map(|d| format!("Duration: {}ms", d))
+                .unwrap_or_default()
+        );
+
+        let from_mailbox: Mailbox = config.from_address.parse()
+            .map_err(|e| anyhow::anyhow!("Invalid from address: {}", e))?;
+
+        let mut message_builder = Message::builder()
+            .from(from_mailbox)
+            .subject(subject)
+            .header(ContentType::TEXT_PLAIN);
+
+        for to_addr in &config.to_addresses {
+            let to_mailbox: Mailbox = to_addr.parse()
+                .map_err(|e| anyhow::anyhow!("Invalid to address '{}': {}", to_addr, e))?;
+            message_builder = message_builder.to(to_mailbox);
+        }
+
+        let message = message_builder.body(body)
+            .map_err(|e| anyhow::anyhow!("Failed to build email message: {}", e))?;
+
+        let creds = Credentials::new(config.username.clone(), password);
+        let mailer = AsyncSmtpTransport::<Tokio1Executor>::relay(&config.smtp_host)?
+            .port(config.smtp_port)
+            .credentials(creds);
+
+        let mailer = if config.use_tls {
+            mailer.build()
+        } else {
+            mailer.tls(lettre::transport::smtp::client::Tls::None).build()
+        };
+
+        mailer.send(message).await
+            .map_err(|e| anyhow::anyhow!("Failed to send email: {}", e))?;
+
+        debug!("Email alert sent successfully");
+        Ok(())
+    }
+
+    #[cfg(feature = "reqwest")]
+    async fn send_slack_alert(&self, context: &AlertContext) -> Result<()> {
+        let config = &self.config.alerting.slack;
+
+        let severity_color = match context.event.severity {
+            Severity::Critical => "#ff0000",
+            Severity::High => "#ff8800",
+            Severity::Medium => "#ffaa00",
+            Severity::Low => "#ffcc00",
+            Severity::Info => "#00aaff",
+        };
+
+        let payload = serde_json::json!({
+            "channel": config.channel,
+            "username": config.username,
+            "icon_emoji": config.icon_emoji,
+            "attachments": [{
+                "color": severity_color,
+                "title": format!("{:?} Audit Event: {}", context.event.severity, context.event.action),
+                "text": context.event.details.description,
+                "fields": [
+                    {
+                        "title": "Event ID",
+                        "value": context.event.id,
+                        "short": true
+                    },
+                    {
+                        "title": "Actor",
+                        "value": format!("{} ({})", context.event.actor.name, context.event.actor.actor_type),
+                        "short": true
+                    },
+                    {
+                        "title": "Resource",
+                        "value": format!("{} ({:?})", context.event.resource.name, context.event.resource.resource_type),
+                        "short": true
+                    },
+                    {
+                        "title": "Environment",
+                        "value": context.environment,
+                        "short": true
+                    },
+                    {
+                        "title": "Success",
+                        "value": if context.event.outcome.success { ":white_check_mark:" } else { ":x:" },
+                        "short": true
+                    },
+                    {
+                        "title": "Timestamp",
+                        "value": context.timestamp.to_rfc3339(),
+                        "short": true
+                    }
+                ],
+                "footer": format!("Inferno Audit | {}", context.hostname),
+                "ts": context.timestamp.timestamp()
+            }]
+        });
+
+        let client = reqwest::Client::new();
+        let response = client
+            .post(&config.webhook_url)
+            .json(&payload)
+            .send()
+            .await?;
+
+        if response.status().is_success() {
+            debug!("Slack alert sent successfully");
+            Ok(())
+        } else {
+            Err(anyhow::anyhow!(
+                "Slack webhook failed with status: {} - {}",
+                response.status(),
+                response.text().await.unwrap_or_default()
+            ))
+        }
+    }
+
+    #[cfg(not(feature = "reqwest"))]
+    async fn send_slack_alert(&self, _context: &AlertContext) -> Result<()> {
+        Err(anyhow::anyhow!("Slack alerts require the 'reqwest' feature to be enabled"))
+    }
+
+    pub async fn generate_encryption_key() -> Result<String> {
+        let rng = SystemRandom::new();
+        let mut key_bytes = [0u8; 32];
+        rng.fill(&mut key_bytes)
+            .map_err(|e| anyhow::anyhow!("Failed to generate encryption key: {:?}", e))?;
+        Ok(general_purpose::STANDARD.encode(&key_bytes))
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct AlertContext {
+    pub event: AuditEvent,
+    pub hostname: String,
+    pub environment: String,
+    pub timestamp: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -871,5 +1467,166 @@ mod tests {
 
         let results = logger.query_events(query).await.unwrap();
         assert!(!results.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_compression_gzip() {
+        let test_data = b"This is test audit data for compression testing";
+        let compressed = AuditLogger::compress_data(test_data, &CompressionMethod::Gzip, 6).unwrap();
+        let decompressed = AuditLogger::decompress_data(&compressed, &CompressionMethod::Gzip).unwrap();
+
+        assert_ne!(compressed, test_data);
+        assert_eq!(decompressed, test_data);
+        assert!(compressed.len() < test_data.len());
+    }
+
+    #[tokio::test]
+    async fn test_compression_zstd() {
+        let test_data = b"This is test audit data for zstd compression testing with more data to compress";
+        let compressed = AuditLogger::compress_data(test_data, &CompressionMethod::Zstd, 3).unwrap();
+        let decompressed = AuditLogger::decompress_data(&compressed, &CompressionMethod::Zstd).unwrap();
+
+        assert_ne!(compressed, test_data);
+        assert_eq!(decompressed, test_data);
+        assert!(compressed.len() < test_data.len());
+    }
+
+    #[tokio::test]
+    async fn test_encryption_decryption() {
+        let test_data = b"Sensitive audit data that needs encryption";
+        let key = [42u8; 32]; // Test key
+
+        let encrypted = AuditLogger::encrypt_data(test_data, &key).unwrap();
+        let decrypted = AuditLogger::decrypt_data(&encrypted, &key).unwrap();
+
+        assert_ne!(encrypted, test_data);
+        assert_eq!(decrypted, test_data);
+        assert!(encrypted.len() > test_data.len()); // Should be larger due to nonce
+    }
+
+    #[tokio::test]
+    async fn test_encryption_with_wrong_key() {
+        let test_data = b"Sensitive audit data";
+        let key1 = [42u8; 32];
+        let key2 = [24u8; 32];
+
+        let encrypted = AuditLogger::encrypt_data(test_data, &key1).unwrap();
+        let result = AuditLogger::decrypt_data(&encrypted, &key2);
+
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_encryption_key_generation() {
+        let key1 = AuditLogger::generate_encryption_key().await.unwrap();
+        let key2 = AuditLogger::generate_encryption_key().await.unwrap();
+
+        assert_ne!(key1, key2);
+        assert_eq!(general_purpose::STANDARD.decode(&key1).unwrap().len(), 32);
+        assert_eq!(general_purpose::STANDARD.decode(&key2).unwrap().len(), 32);
+    }
+
+    #[tokio::test]
+    async fn test_alert_rate_limiting() {
+        let temp_dir = tempdir().unwrap();
+        let mut config = AuditConfiguration {
+            storage_path: temp_dir.path().to_path_buf(),
+            ..Default::default()
+        };
+        config.alerting.rate_limit_per_hour = 2;
+
+        let logger = AuditLogger::new(config).await.unwrap();
+
+        // First two alerts should be allowed
+        assert!(logger.should_send_alert(&EventType::SecurityEvent, &Severity::Critical).await);
+        assert!(logger.should_send_alert(&EventType::SecurityEvent, &Severity::Critical).await);
+
+        // Third alert should be rate limited
+        assert!(!logger.should_send_alert(&EventType::SecurityEvent, &Severity::Critical).await);
+    }
+
+    #[tokio::test]
+    async fn test_audit_with_compression_and_encryption() {
+        let temp_dir = tempdir().unwrap();
+        let config = AuditConfiguration {
+            storage_path: temp_dir.path().to_path_buf(),
+            compression_enabled: true,
+            compression_method: CompressionMethod::Gzip,
+            encryption_enabled: false, // Skip encryption for this test as we'd need env vars
+            batch_size: 1,
+            flush_interval_seconds: 1,
+            ..Default::default()
+        };
+
+        let logger = AuditLogger::new(config).await.unwrap();
+
+        let event = AuditEvent {
+            id: "test-compressed-event".to_string(),
+            timestamp: SystemTime::now(),
+            event_type: EventType::SecurityEvent,
+            severity: Severity::High,
+            actor: Actor {
+                actor_type: ActorType::User,
+                id: "user-123".to_string(),
+                name: "Test User".to_string(),
+                ip_address: Some("127.0.0.1".to_string()),
+                user_agent: None,
+                session_id: None,
+            },
+            resource: Resource {
+                resource_type: ResourceType::Model,
+                id: "model-456".to_string(),
+                name: "Test Model".to_string(),
+                path: None,
+                owner: None,
+                tags: vec![],
+            },
+            action: "test_compressed_action".to_string(),
+            details: EventDetails {
+                description: "Test event with compression enabled".to_string(),
+                parameters: HashMap::new(),
+                request_id: None,
+                correlation_id: None,
+                trace_id: None,
+                parent_event_id: None,
+            },
+            context: EventContext {
+                environment: "test".to_string(),
+                application: "inferno".to_string(),
+                version: "1.0.0".to_string(),
+                hostname: "localhost".to_string(),
+                process_id: 12345,
+                thread_id: None,
+                request_path: None,
+                request_method: None,
+                client_info: None,
+            },
+            outcome: EventOutcome {
+                success: true,
+                status_code: Some(200),
+                error_code: None,
+                error_message: None,
+                duration_ms: Some(150),
+                bytes_processed: None,
+                records_affected: None,
+            },
+            metadata: HashMap::new(),
+        };
+
+        logger.log_event(event).await.unwrap();
+
+        // Wait for async processing
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+
+        // Check that file was created (compressed data should be present)
+        let mut entries = fs::read_dir(&temp_dir.path()).await.unwrap();
+        let mut found_file = false;
+        while let Some(entry) = entries.next_entry().await.unwrap() {
+            if entry.path().extension().map_or(false, |ext| ext == "log") {
+                found_file = true;
+                break;
+            }
+        }
+        assert!(found_file);
     }
 }

@@ -1,5 +1,5 @@
 use crate::{
-    backends::{Backend, InferenceParams, BackendType},
+    backends::{BackendHandle, InferenceParams, BackendType},
     cli::serve::ServerState,
 };
 use axum::{
@@ -334,8 +334,8 @@ pub async fn embeddings(
     let mut total_tokens = 0u32;
 
     for (index, input) in inputs.iter().enumerate() {
-        let mut backend_guard = backend.lock().await;
-        match backend_guard.get_embeddings(input).await {
+        // BackendHandle already provides async methods, no need for explicit locking
+        match backend.get_embeddings(input).await {
             Ok(embedding) => {
                 embeddings_data.push(EmbeddingData {
                     object: "embedding".to_string(),
@@ -419,7 +419,7 @@ pub async fn list_models(
 async fn get_or_load_backend(
     state: &Arc<ServerState>,
     model_name: &str,
-) -> anyhow::Result<Arc<Mutex<Backend>>> {
+) -> anyhow::Result<BackendHandle> {
     // If distributed inference is available, we don't need a direct backend
     // This function should not be called when using distributed inference
     if state.distributed.is_some() {
@@ -439,10 +439,10 @@ async fn get_or_load_backend(
     // In a more sophisticated implementation, we'd cache multiple backends
     let model_info = state.model_manager.resolve_model(model_name).await?;
     let backend_type = BackendType::from_model_path(&model_info.path);
-    let mut backend = Backend::new(backend_type, &state.config.backend_config)?;
-    backend.load_model(&model_info).await?;
+    let backend_handle = BackendHandle::new_shared(backend_type, &state.config.backend_config)?;
+    backend_handle.load_model(&model_info).await?;
 
-    Ok(Arc::new(Mutex::new(backend)))
+    Ok(backend_handle)
 }
 
 fn format_chat_messages(messages: &[ChatMessage]) -> String {
@@ -459,13 +459,13 @@ fn estimate_tokens(text: &str) -> u32 {
 
 async fn handle_non_streaming_chat(
     request: &ChatCompletionRequest,
-    backend: Arc<tokio::sync::Mutex<Backend>>,
+    backend: BackendHandle,
     prompt: String,
     params: InferenceParams,
 ) -> impl IntoResponse {
-    let mut backend_guard = backend.lock().await;
+    // BackendHandle already provides async methods, no need for explicit locking
 
-    match backend_guard.infer(&prompt, &params).await {
+    match backend.infer(&prompt, &params).await {
         Ok(output) => {
             let response = ChatCompletionResponse {
                 id: format!("chatcmpl-{}", Uuid::new_v4()),
@@ -508,7 +508,7 @@ async fn handle_non_streaming_chat(
 
 async fn handle_streaming_chat(
     request: &ChatCompletionRequest,
-    backend: Arc<tokio::sync::Mutex<Backend>>,
+    backend: BackendHandle,
     prompt: String,
     params: InferenceParams,
 ) -> impl IntoResponse {
@@ -519,9 +519,9 @@ async fn handle_streaming_chat(
     let request_id = format!("chatcmpl-{}", Uuid::new_v4());
 
     let stream = async_stream::stream! {
-        let mut backend_guard = backend.lock().await;
+        // BackendHandle already provides async methods, no need for explicit locking
 
-        match backend_guard.infer_stream(&prompt, &params).await {
+        match backend.infer_stream(&prompt, &params).await {
             Ok(mut token_stream) => {
                 // Send initial chunk with role
                 let initial_chunk = ChatCompletionChunk {
@@ -607,13 +607,13 @@ async fn handle_streaming_chat(
 
 async fn handle_non_streaming_completion(
     request: &CompletionRequest,
-    backend: Arc<tokio::sync::Mutex<Backend>>,
+    backend: BackendHandle,
     prompt: String,
     params: InferenceParams,
 ) -> impl IntoResponse {
-    let mut backend_guard = backend.lock().await;
+    // BackendHandle already provides async methods, no need for explicit locking
 
-    match backend_guard.infer(&prompt, &params).await {
+    match backend.infer(&prompt, &params).await {
         Ok(output) => {
             let response = CompletionResponse {
                 id: format!("cmpl-{}", Uuid::new_v4()),
@@ -653,7 +653,7 @@ async fn handle_non_streaming_completion(
 
 async fn handle_streaming_completion(
     request: &CompletionRequest,
-    backend: Arc<tokio::sync::Mutex<Backend>>,
+    backend: BackendHandle,
     prompt: String,
     params: InferenceParams,
 ) -> impl IntoResponse {
@@ -664,9 +664,9 @@ async fn handle_streaming_completion(
     let request_id = format!("cmpl-{}", Uuid::new_v4());
 
     let stream = async_stream::stream! {
-        let mut backend_guard = backend.lock().await;
+        // BackendHandle already provides async methods, no need for explicit locking
 
-        match backend_guard.infer_stream(&prompt, &params).await {
+        match backend.infer_stream(&prompt, &params).await {
             Ok(mut token_stream) => {
                 while let Some(token_result) = token_stream.next().await {
                     match token_result {

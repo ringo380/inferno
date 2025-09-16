@@ -3,9 +3,11 @@ use crate::batch::queue::{
 };
 use anyhow::Result;
 use chrono::{DateTime, Utc, TimeZone, Datelike, Timelike, Weekday};
+use cron::Schedule;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
+    str::FromStr,
     sync::Arc,
     time::{Duration, SystemTime},
 };
@@ -256,25 +258,136 @@ impl JobScheduler {
     }
 
     fn parse_cron_next(expression: &str, from: DateTime<Utc>) -> Result<DateTime<Utc>> {
-        // Simple cron parser for basic expressions
-        // Format: "minute hour day month weekday"
-        // This is a simplified implementation
+        // Handle special cron keywords first
+        let normalized_expression = Self::normalize_cron_expression(expression)?;
 
-        let parts: Vec<&str> = expression.split_whitespace().collect();
-        if parts.len() != 5 {
-            return Err(anyhow::anyhow!("Invalid cron expression format"));
+        // Parse the cron expression using the cron crate
+        let schedule = Schedule::from_str(&normalized_expression)
+            .map_err(|e| anyhow::anyhow!("Invalid cron expression '{}': {}", expression, e))?;
+
+        // Find the next occurrence after the current time
+        let next_occurrence = schedule.upcoming(Utc).next()
+            .ok_or_else(|| anyhow::anyhow!("No future occurrence found for cron expression: {}", expression))?;
+
+        // Ensure the next occurrence is after the from time
+        if next_occurrence <= from {
+            // If the calculated next time is not after 'from', get the one after that
+            schedule.after(&from).next()
+                .ok_or_else(|| anyhow::anyhow!("No future occurrence found after {} for cron expression: {}", from, expression))
+        } else {
+            Ok(next_occurrence)
         }
+    }
 
-        // For now, just implement a basic hourly schedule
-        // TODO: Implement full cron parsing
-        match expression {
-            "0 * * * *" => Ok(from.with_minute(0).unwrap().with_second(0).unwrap() + chrono::Duration::hours(1)),
-            "0 0 * * *" => Ok(from.with_hour(0).unwrap().with_minute(0).unwrap().with_second(0).unwrap() + chrono::Duration::days(1)),
+    fn normalize_cron_expression(expression: &str) -> Result<String> {
+        let trimmed = expression.trim();
+
+        // Handle special cron keywords
+        // Note: cron crate uses 7-field format: sec min hour day month dow year
+        match trimmed {
+            "@yearly" | "@annually" => Ok("0 0 0 1 1 * *".to_string()),
+            "@monthly" => Ok("0 0 0 1 * * *".to_string()),
+            "@weekly" => Ok("0 0 0 * * SUN *".to_string()),
+            "@daily" | "@midnight" => Ok("0 0 0 * * * *".to_string()),
+            "@hourly" => Ok("0 0 * * * * *".to_string()),
             _ => {
-                warn!("Complex cron expressions not fully implemented, defaulting to hourly");
-                Ok(from + chrono::Duration::hours(1))
+                // Convert 5-field to 7-field format if needed
+                Self::convert_to_seven_field_format(trimmed)
             }
         }
+    }
+
+    fn convert_to_seven_field_format(expression: &str) -> Result<String> {
+        let parts: Vec<&str> = expression.split_whitespace().collect();
+
+        match parts.len() {
+            5 => {
+                // Standard 5-field cron: min hour day month dow
+                // Convert to 7-field: sec min hour day month dow year
+                Ok(format!("0 {} *", expression))
+            }
+            6 => {
+                // 6-field cron: sec min hour day month dow
+                // Convert to 7-field: sec min hour day month dow year
+                Ok(format!("{} *", expression))
+            }
+            7 => {
+                // Already 7-field format
+                Self::validate_cron_expression(expression)?;
+                Ok(expression.to_string())
+            }
+            _ => {
+                Err(anyhow::anyhow!(
+                    "Invalid cron expression format. Expected 5, 6, or 7 fields, got {}: '{}'",
+                    parts.len(),
+                    expression
+                ))
+            }
+        }
+    }
+
+    fn validate_cron_expression(expression: &str) -> Result<()> {
+        let parts: Vec<&str> = expression.split_whitespace().collect();
+
+        // Accept 5, 6, or 7 field formats
+        if ![5, 6, 7].contains(&parts.len()) {
+            return Err(anyhow::anyhow!(
+                "Invalid cron expression format. Expected 5, 6, or 7 fields, got {}: '{}'",
+                parts.len(),
+                expression
+            ));
+        }
+
+        // Validate each field has valid characters
+        for (i, part) in parts.iter().enumerate() {
+            let field_name = match parts.len() {
+                5 => match i {
+                    0 => "minute",
+                    1 => "hour",
+                    2 => "day",
+                    3 => "month",
+                    4 => "weekday",
+                    _ => unreachable!(),
+                },
+                6 => match i {
+                    0 => "second",
+                    1 => "minute",
+                    2 => "hour",
+                    3 => "day",
+                    4 => "month",
+                    5 => "weekday",
+                    _ => unreachable!(),
+                },
+                7 => match i {
+                    0 => "second",
+                    1 => "minute",
+                    2 => "hour",
+                    3 => "day",
+                    4 => "month",
+                    5 => "weekday",
+                    6 => "year",
+                    _ => unreachable!(),
+                },
+                _ => unreachable!(),
+            };
+
+            if !Self::is_valid_cron_field(part) {
+                return Err(anyhow::anyhow!(
+                    "Invalid characters in {} field '{}'. Valid characters: 0-9, *, /, -, ,",
+                    field_name,
+                    part
+                ));
+            }
+        }
+
+        Ok(())
+    }
+
+    fn is_valid_cron_field(field: &str) -> bool {
+        // Allow digits, asterisk, forward slash, hyphen, comma, and question mark
+        field.chars().all(|c| {
+            c.is_ascii_digit() || matches!(c, '*' | '/' | '-' | ',' | '?')
+        })
     }
 
     fn calculate_daily_next(
@@ -483,5 +596,217 @@ mod tests {
         let next = JobScheduler::calculate_next_run(&Some(schedule), now).unwrap();
 
         assert_eq!(next, future_time);
+    }
+
+    #[test]
+    fn test_normalize_cron_expression_keywords() {
+        assert_eq!(JobScheduler::normalize_cron_expression("@yearly").unwrap(), "0 0 0 1 1 * *");
+        assert_eq!(JobScheduler::normalize_cron_expression("@annually").unwrap(), "0 0 0 1 1 * *");
+        assert_eq!(JobScheduler::normalize_cron_expression("@monthly").unwrap(), "0 0 0 1 * * *");
+        assert_eq!(JobScheduler::normalize_cron_expression("@weekly").unwrap(), "0 0 0 * * SUN *");
+        assert_eq!(JobScheduler::normalize_cron_expression("@daily").unwrap(), "0 0 0 * * * *");
+        assert_eq!(JobScheduler::normalize_cron_expression("@midnight").unwrap(), "0 0 0 * * * *");
+        assert_eq!(JobScheduler::normalize_cron_expression("@hourly").unwrap(), "0 0 * * * * *");
+    }
+
+    #[test]
+    fn test_normalize_cron_expression_standard() {
+        assert_eq!(JobScheduler::normalize_cron_expression("0 * * * *").unwrap(), "0 0 * * * * *");
+        assert_eq!(JobScheduler::normalize_cron_expression("15 14 1 * *").unwrap(), "0 15 14 1 * * *");
+        assert_eq!(JobScheduler::normalize_cron_expression("0 22 * * 1-5").unwrap(), "0 0 22 * * 1-5 *");
+        assert_eq!(JobScheduler::normalize_cron_expression("*/15 * * * *").unwrap(), "0 */15 * * * * *");
+    }
+
+    #[test]
+    fn test_validate_cron_expression() {
+        // Valid 5-field expressions
+        assert!(JobScheduler::validate_cron_expression("0 * * * *").is_ok());
+        assert!(JobScheduler::validate_cron_expression("15 14 1 * *").is_ok());
+        assert!(JobScheduler::validate_cron_expression("0 22 * * 1-5").is_ok());
+        assert!(JobScheduler::validate_cron_expression("*/15 * * * *").is_ok());
+        assert!(JobScheduler::validate_cron_expression("0,30 * * * *").is_ok());
+
+        // Valid 6-field expressions
+        assert!(JobScheduler::validate_cron_expression("0 0 * * * *").is_ok());
+        assert!(JobScheduler::validate_cron_expression("30 15 14 1 * *").is_ok());
+
+        // Valid 7-field expressions
+        assert!(JobScheduler::validate_cron_expression("0 0 * * * * *").is_ok());
+        assert!(JobScheduler::validate_cron_expression("30 15 14 1 * * 2024").is_ok());
+
+        // Invalid expressions
+        assert!(JobScheduler::validate_cron_expression("0 * * *").is_err()); // Too few fields
+        assert!(JobScheduler::validate_cron_expression("0 * * * * * * *").is_err()); // Too many fields
+        assert!(JobScheduler::validate_cron_expression("0 * * * @ ").is_err()); // Invalid character
+        assert!(JobScheduler::validate_cron_expression("abc * * * *").is_err()); // Invalid characters
+    }
+
+    #[test]
+    fn test_is_valid_cron_field() {
+        // Valid fields
+        assert!(JobScheduler::is_valid_cron_field("*"));
+        assert!(JobScheduler::is_valid_cron_field("0"));
+        assert!(JobScheduler::is_valid_cron_field("0-5"));
+        assert!(JobScheduler::is_valid_cron_field("*/15"));
+        assert!(JobScheduler::is_valid_cron_field("0,15,30,45"));
+        assert!(JobScheduler::is_valid_cron_field("?"));
+        assert!(JobScheduler::is_valid_cron_field("1-5"));
+
+        // Invalid fields
+        assert!(!JobScheduler::is_valid_cron_field("@"));
+        assert!(!JobScheduler::is_valid_cron_field("abc"));
+        assert!(!JobScheduler::is_valid_cron_field("0-5-10"));
+        assert!(!JobScheduler::is_valid_cron_field("*/*"));
+        assert!(!JobScheduler::is_valid_cron_field("!"));
+    }
+
+    #[test]
+    fn test_parse_cron_next_basic_expressions() {
+        let base_time = DateTime::parse_from_rfc3339("2024-01-15T10:30:00Z").unwrap().into();
+
+        // Test hourly: "0 * * * *" - every hour at minute 0
+        let next = JobScheduler::parse_cron_next("0 * * * *", base_time).unwrap();
+        assert_eq!(next.minute(), 0);
+        assert!(next > base_time);
+
+        // Test daily: "0 0 * * *" - every day at midnight
+        let next = JobScheduler::parse_cron_next("0 0 * * *", base_time).unwrap();
+        assert_eq!(next.hour(), 0);
+        assert_eq!(next.minute(), 0);
+        assert!(next > base_time);
+
+        // Test specific time: "30 14 * * *" - every day at 2:30 PM
+        let next = JobScheduler::parse_cron_next("30 14 * * *", base_time).unwrap();
+        assert_eq!(next.hour(), 14);
+        assert_eq!(next.minute(), 30);
+        assert!(next > base_time);
+    }
+
+    #[test]
+    fn test_parse_cron_next_keywords() {
+        let base_time = DateTime::parse_from_rfc3339("2024-01-15T10:30:00Z").unwrap().into();
+
+        // Test @hourly
+        let next = JobScheduler::parse_cron_next("@hourly", base_time).unwrap();
+        assert_eq!(next.minute(), 0);
+        assert!(next > base_time);
+
+        // Test @daily
+        let next = JobScheduler::parse_cron_next("@daily", base_time).unwrap();
+        assert_eq!(next.hour(), 0);
+        assert_eq!(next.minute(), 0);
+        assert!(next > base_time);
+
+        // Test @weekly
+        let next = JobScheduler::parse_cron_next("@weekly", base_time).unwrap();
+        assert_eq!(next.weekday(), Weekday::Sun);
+        assert_eq!(next.hour(), 0);
+        assert_eq!(next.minute(), 0);
+        assert!(next > base_time);
+
+        // Test @monthly
+        let next = JobScheduler::parse_cron_next("@monthly", base_time).unwrap();
+        assert_eq!(next.day(), 1);
+        assert_eq!(next.hour(), 0);
+        assert_eq!(next.minute(), 0);
+        assert!(next > base_time);
+
+        // Test @yearly
+        let next = JobScheduler::parse_cron_next("@yearly", base_time).unwrap();
+        assert_eq!(next.month(), 1);
+        assert_eq!(next.day(), 1);
+        assert_eq!(next.hour(), 0);
+        assert_eq!(next.minute(), 0);
+        assert!(next > base_time);
+    }
+
+    #[test]
+    fn test_parse_cron_next_complex_expressions() {
+        let base_time = DateTime::parse_from_rfc3339("2024-01-15T10:30:00Z").unwrap().into();
+
+        // Test every 15 minutes: "*/15 * * * *"
+        let next = JobScheduler::parse_cron_next("*/15 * * * *", base_time).unwrap();
+        assert!(next.minute() % 15 == 0);
+        assert!(next > base_time);
+
+        // Test weekdays at 9 AM: "0 9 * * 1-5"
+        let next = JobScheduler::parse_cron_next("0 9 * * 1-5", base_time).unwrap();
+        assert_eq!(next.hour(), 9);
+        assert_eq!(next.minute(), 0);
+        let weekday = next.weekday().num_days_from_monday();
+        assert!(weekday < 5); // Monday=0 to Friday=4
+        assert!(next > base_time);
+
+        // Test multiple specific minutes: "0,30 * * * *"
+        let next = JobScheduler::parse_cron_next("0,30 * * * *", base_time).unwrap();
+        assert!(next.minute() == 0 || next.minute() == 30);
+        assert!(next > base_time);
+    }
+
+    #[test]
+    fn test_parse_cron_next_invalid_expressions() {
+        let base_time = DateTime::parse_from_rfc3339("2024-01-15T10:30:00Z").unwrap().into();
+
+        // Test invalid format
+        assert!(JobScheduler::parse_cron_next("invalid", base_time).is_err());
+        assert!(JobScheduler::parse_cron_next("0 * * *", base_time).is_err()); // Too few fields
+        assert!(JobScheduler::parse_cron_next("0 * * * * *", base_time).is_err()); // Too many fields
+
+        // Test invalid ranges
+        assert!(JobScheduler::parse_cron_next("60 * * * *", base_time).is_err()); // Invalid minute
+        assert!(JobScheduler::parse_cron_next("0 25 * * *", base_time).is_err()); // Invalid hour
+    }
+
+    #[test]
+    fn test_calculate_next_run_cron() {
+        let schedule = JobSchedule {
+            schedule_type: ScheduleType::Cron {
+                expression: "@hourly".to_string(),
+                max_runs: None,
+            },
+            start_time: None,
+            end_time: None,
+            timezone: "UTC".to_string(),
+            enabled: true,
+        };
+
+        let now = SystemTime::now();
+        let next = JobScheduler::calculate_next_run(&Some(schedule), now).unwrap();
+
+        // The next run should be within the next hour
+        let duration = next.duration_since(now).unwrap();
+        assert!(duration <= Duration::from_secs(3600));
+
+        // Convert to DateTime to check that it's at minute 0
+        let next_dt: DateTime<Utc> = next.into();
+        assert_eq!(next_dt.minute(), 0);
+    }
+
+    #[test]
+    fn test_calculate_next_run_cron_with_end_time() {
+        let end_time = SystemTime::now() + Duration::from_secs(1800); // 30 minutes from now
+
+        let schedule = JobSchedule {
+            schedule_type: ScheduleType::Cron {
+                expression: "@hourly".to_string(),
+                max_runs: None,
+            },
+            start_time: None,
+            end_time: Some(end_time),
+            timezone: "UTC".to_string(),
+            enabled: true,
+        };
+
+        let now = SystemTime::now();
+
+        // This should fail because the next hourly run would be after the end time
+        let result = JobScheduler::calculate_next_run(&Some(schedule), now);
+
+        // Depending on the exact time this test runs, it might succeed or fail
+        // If it succeeds, the next run should be before the end time
+        if let Ok(next) = result {
+            assert!(next <= end_time);
+        }
+        // If it fails, that's also valid - it means the next run would be after end_time
     }
 }

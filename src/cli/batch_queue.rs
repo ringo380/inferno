@@ -2,7 +2,8 @@ use crate::{
     batch::queue::{
         JobQueue, JobQueueManager, JobQueueConfig, BatchJob, JobPriority,
         JobSchedule, ScheduleType, ResourceRequirements, RetryPolicy,
-        JobStatus, JobInfo
+        JobStatus, JobInfo, QueueMetrics, QueueStatus, ActiveJob,
+        CompletedJob, FailedJob, JobProgress, JobPhase
     },
     batch::{BatchConfig, BatchInput, BatchOutputFormat},
     backends::InferenceParams,
@@ -15,9 +16,12 @@ use std::{
     collections::HashMap,
     path::PathBuf,
     time::{Duration, SystemTime},
+    io::{self, Write},
+    fs::File,
 };
 use tokio::time::sleep;
 use tracing::{info, warn};
+use chrono::{DateTime, Local, Utc};
 
 #[derive(Args)]
 pub struct BatchQueueArgs {
@@ -407,8 +411,61 @@ pub async fn execute(args: BatchQueueArgs, config: &Config) -> Result<()> {
         }
 
         BatchQueueCommand::ListQueues { detailed, format } => {
-            // TODO: Implement queue listing
-            println!("Listing all queues...");
+            let queues = manager.list_all_queues().await?;
+
+            if queues.is_empty() {
+                println!("No queues found");
+                return Ok(());
+            }
+
+            match format {
+                OutputFormat::Table => {
+                    println!("{:-<100}", "");
+                    println!("{:<20} {:<20} {:<15} {:<15} {:<15} {:<15}",
+                             "Queue ID", "Name", "Status", "Queued", "Running", "Completed");
+                    println!("{:-<100}", "");
+
+                    for queue in &queues {
+                        let (queued, running, completed) = manager.get_queue_job_counts(&queue.id).await.unwrap_or((0, 0, 0));
+
+                        println!("{:<20} {:<20} {:<15} {:<15} {:<15} {:<15}",
+                                 queue.id,
+                                 queue.name,
+                                 format!("{:?}", queue.status),
+                                 queued,
+                                 running,
+                                 completed);
+
+                        if detailed {
+                            println!("  Description: {}", queue.description);
+                            println!("  Created: {}", format_system_time(queue.created_at));
+                            println!("  Max Concurrent: {}", queue.config.max_concurrent_jobs);
+                            println!("  Max Queue Size: {}", queue.config.max_queue_size);
+                            println!();
+                        }
+                    }
+                }
+                OutputFormat::Json => {
+                    let json = serde_json::to_string_pretty(&queues)?;
+                    println!("{}", json);
+                }
+                OutputFormat::Csv => {
+                    println!("queue_id,name,status,description,created_at,max_concurrent,max_queue_size");
+                    for queue in &queues {
+                        println!("{},{},{:?},{},{},{},{}",
+                                 queue.id,
+                                 queue.name,
+                                 queue.status,
+                                 queue.description,
+                                 format_system_time(queue.created_at),
+                                 queue.config.max_concurrent_jobs,
+                                 queue.config.max_queue_size);
+                    }
+                }
+                _ => {
+                    println!("Format {:?} not supported for queue listing", format);
+                }
+            }
         }
 
         BatchQueueCommand::ListJobs {
@@ -448,15 +505,130 @@ pub async fn execute(args: BatchQueueArgs, config: &Config) -> Result<()> {
             follow,
         } => {
             if follow {
-                println!("Following job '{}' progress...", job_id);
+                println!("Following job '{}' progress... (press Ctrl+C to stop)", job_id);
                 loop {
-                    // TODO: Get job status and display progress
-                    println!("Job {} status...", job_id);
-                    sleep(Duration::from_secs(5)).await;
+                    match manager.get_job_status(&queue_id, &job_id).await {
+                        Ok(Some(job_info)) => {
+                            // Clear screen and move cursor to top
+                            print!("\x1B[2J\x1B[1;1H");
+
+                            println!("Job Status - {}", chrono::Local::now().format("%H:%M:%S"));
+                            println!("{:-<60}", "");
+                            println!("Job ID: {}", job_info.id);
+                            println!("Name: {}", job_info.name);
+                            println!("Status: {:?}", job_info.status);
+                            println!("Priority: {:?}", job_info.priority);
+                            println!("Created: {}", format_system_time(job_info.created_at));
+
+                            if let Some(started_at) = job_info.started_at {
+                                println!("Started: {}", format_system_time(started_at));
+                            }
+
+                            if let Some(completed_at) = job_info.completed_at {
+                                println!("Completed: {}", format_system_time(completed_at));
+                            }
+
+                            if progress {
+                                if let Some(progress) = &job_info.progress {
+                                    println!();
+                                    println!("Progress Details:");
+                                    println!("{:-<40}", "");
+                                    println!("Phase: {:?}", progress.phase);
+
+                                    let percent = if progress.total_items > 0 {
+                                        (progress.completed_items as f64 / progress.total_items as f64) * 100.0
+                                    } else {
+                                        0.0
+                                    };
+
+                                    println!("Items: {}/{} ({:.1}%)",
+                                             progress.completed_items, progress.total_items, percent);
+                                    println!("Failed: {}", progress.failed_items);
+                                    println!("Rate: {:.2} items/sec", progress.current_rate_items_per_second);
+                                    println!("Avg Duration: {:.2}ms", progress.average_item_duration_ms);
+
+                                    if let Some(eta) = progress.estimated_completion_time {
+                                        println!("ETA: {}", format_system_time(eta));
+                                    }
+
+                                    // Progress bar
+                                    let bar_width = 40;
+                                    let filled = ((percent / 100.0) * bar_width as f64) as usize;
+                                    let empty = bar_width - filled;
+                                    println!("[{}{}] {:.1}%",
+                                             "█".repeat(filled),
+                                             "░".repeat(empty),
+                                             percent);
+                                }
+                            }
+
+                            // Exit if job is finished
+                            match job_info.status {
+                                JobStatus::Completed | JobStatus::Failed | JobStatus::Cancelled => {
+                                    println!("\nJob finished. Final status: {:?}", job_info.status);
+                                    break;
+                                }
+                                _ => {}
+                            }
+                        }
+                        Ok(None) => {
+                            println!("Job '{}' not found in queue '{}'", job_id, queue_id);
+                            break;
+                        }
+                        Err(e) => {
+                            println!("Error getting job status: {}", e);
+                            break;
+                        }
+                    }
+                    sleep(Duration::from_secs(2)).await;
                 }
             } else {
-                // TODO: Get single job status
-                println!("Job '{}' status in queue '{}'", job_id, queue_id);
+                match manager.get_job_status(&queue_id, &job_id).await? {
+                    Some(job_info) => {
+                        println!("Job Status:");
+                        println!("{:-<40}", "");
+                        println!("Job ID: {}", job_info.id);
+                        println!("Name: {}", job_info.name);
+                        println!("Status: {:?}", job_info.status);
+                        println!("Priority: {:?}", job_info.priority);
+                        println!("Created: {}", format_system_time(job_info.created_at));
+
+                        if let Some(started_at) = job_info.started_at {
+                            println!("Started: {}", format_system_time(started_at));
+                        }
+
+                        if let Some(completed_at) = job_info.completed_at {
+                            println!("Completed: {}", format_system_time(completed_at));
+                        }
+
+                        if progress {
+                            if let Some(progress) = &job_info.progress {
+                                println!();
+                                println!("Progress:");
+                                println!("{:-<20}", "");
+                                println!("Phase: {:?}", progress.phase);
+
+                                let percent = if progress.total_items > 0 {
+                                    (progress.completed_items as f64 / progress.total_items as f64) * 100.0
+                                } else {
+                                    0.0
+                                };
+
+                                println!("Items: {}/{} ({:.1}%)",
+                                         progress.completed_items, progress.total_items, percent);
+                                println!("Failed: {}", progress.failed_items);
+                                println!("Rate: {:.2} items/sec", progress.current_rate_items_per_second);
+
+                                if let Some(eta) = progress.estimated_completion_time {
+                                    println!("ETA: {}", format_system_time(eta));
+                                }
+                            }
+                        }
+                    }
+                    None => {
+                        println!("Job '{}' not found in queue '{}'", job_id, queue_id);
+                    }
+                }
             }
         }
 
@@ -477,8 +649,39 @@ pub async fn execute(args: BatchQueueArgs, config: &Config) -> Result<()> {
 
         BatchQueueCommand::Retry { queue_id, job_id, force } => {
             println!("Retrying job '{}' in queue '{}'...", job_id, queue_id);
-            // TODO: Implement job retry
-            println!("Job '{}' queued for retry", job_id);
+
+            // Check if job can be retried
+            match manager.get_job_status(&queue_id, &job_id).await? {
+                Some(job_info) => {
+                    match job_info.status {
+                        JobStatus::Failed => {
+                            // Check retry count
+                            let can_retry = manager.can_retry_job(&queue_id, &job_id).await?;
+
+                            if can_retry || force {
+                                if force {
+                                    println!("Force retrying job (ignoring retry limits)...");
+                                }
+
+                                manager.retry_job(&queue_id, &job_id, force).await?;
+                                println!("Job '{}' queued for retry", job_id);
+                            } else {
+                                println!("Job '{}' has exceeded maximum retry attempts. Use --force to override.", job_id);
+                            }
+                        }
+                        JobStatus::Cancelled => {
+                            manager.retry_job(&queue_id, &job_id, force).await?;
+                            println!("Cancelled job '{}' queued for retry", job_id);
+                        }
+                        _ => {
+                            println!("Job '{}' is in status {:?} and cannot be retried", job_id, job_info.status);
+                        }
+                    }
+                }
+                None => {
+                    println!("Job '{}' not found in queue '{}'", job_id, queue_id);
+                }
+            }
         }
 
         BatchQueueCommand::Metrics {
@@ -488,13 +691,48 @@ pub async fn execute(args: BatchQueueArgs, config: &Config) -> Result<()> {
         } => {
             if let Some(queue_id) = queue_id {
                 if let Some(metrics) = manager.get_queue_metrics(&queue_id).await {
-                    display_metrics(&metrics, format);
+                    display_metrics(&metrics, format, historical);
                 } else {
                     println!("Queue '{}' not found", queue_id);
                 }
             } else {
                 println!("Displaying metrics for all queues...");
-                // TODO: Get metrics for all queues
+                let all_metrics = manager.get_all_queue_metrics().await?;
+
+                if all_metrics.is_empty() {
+                    println!("No queues found");
+                } else {
+                    match format {
+                        OutputFormat::Table => {
+                            println!("{:-<120}", "");
+                            println!("{:<15} {:<10} {:<10} {:<10} {:<12} {:<12} {:<15} {:<15}",
+                                     "Queue ID", "Submitted", "Completed", "Failed", "Success%", "Throughput", "Avg Duration", "Queue Size");
+                            println!("{:-<120}", "");
+
+                            for (queue_id, metrics) in &all_metrics {
+                                println!("{:<15} {:<10} {:<10} {:<10} {:<12.1} {:<12.1} {:<15.1} {:<15}",
+                                         queue_id,
+                                         metrics.total_jobs_submitted,
+                                         metrics.total_jobs_completed,
+                                         metrics.total_jobs_failed,
+                                         metrics.success_rate * 100.0,
+                                         metrics.throughput_jobs_per_hour,
+                                         metrics.average_job_duration_ms,
+                                         metrics.current_queue_size);
+                            }
+                        }
+                        OutputFormat::Json => {
+                            let json = serde_json::to_string_pretty(&all_metrics)?;
+                            println!("{}", json);
+                        }
+                        _ => {
+                            for (queue_id, metrics) in &all_metrics {
+                                println!("\nQueue: {}", queue_id);
+                                display_metrics(metrics, format.clone(), historical);
+                            }
+                        }
+                    }
+                }
             }
         }
 
@@ -524,7 +762,34 @@ pub async fn execute(args: BatchQueueArgs, config: &Config) -> Result<()> {
                     }
                 } else {
                     println!("Monitoring all queues...");
-                    // TODO: Monitor all queues
+
+                    let all_queues = manager.list_all_queues().await?;
+
+                    for queue in &all_queues {
+                        println!("\nQueue: {} - Status: {:?}", queue.id, queue.status);
+
+                        if let Some(metrics) = manager.get_queue_metrics(&queue.id).await {
+                            println!("  Jobs: {} queued, {} running, {} completed, {} failed",
+                                     metrics.current_queue_size,
+                                     manager.get_running_job_count(&queue.id).await.unwrap_or(0),
+                                     metrics.total_jobs_completed,
+                                     metrics.total_jobs_failed);
+                            println!("  Throughput: {:.2} jobs/hour, {:.2} items/hour",
+                                     metrics.throughput_jobs_per_hour,
+                                     metrics.throughput_items_per_hour);
+                            println!("  Success Rate: {:.1}%", metrics.success_rate * 100.0);
+                        }
+
+                        if detailed {
+                            let recent_jobs = manager.get_recent_jobs(&queue.id, 5).await.unwrap_or_default();
+                            if !recent_jobs.is_empty() {
+                                println!("  Recent Jobs:");
+                                for job in recent_jobs {
+                                    println!("    {} - {} - {:?}", job.id, job.name, job.status);
+                                }
+                            }
+                        }
+                    }
                 }
 
                 println!("\nLast updated: {}", chrono::Local::now().format("%H:%M:%S"));
@@ -582,14 +847,30 @@ pub async fn execute(args: BatchQueueArgs, config: &Config) -> Result<()> {
 
         BatchQueueCommand::Pause { queue_id } => {
             println!("Pausing queue '{}'...", queue_id);
-            // TODO: Implement queue pause
-            println!("Queue '{}' paused successfully", queue_id);
+
+            match manager.pause_queue(&queue_id).await {
+                Ok(()) => {
+                    println!("Queue '{}' paused successfully", queue_id);
+                    println!("Running jobs will continue, but no new jobs will start.");
+                }
+                Err(e) => {
+                    println!("Failed to pause queue '{}': {}", queue_id, e);
+                }
+            }
         }
 
         BatchQueueCommand::Resume { queue_id } => {
             println!("Resuming queue '{}'...", queue_id);
-            // TODO: Implement queue resume
-            println!("Queue '{}' resumed successfully", queue_id);
+
+            match manager.resume_queue(&queue_id).await {
+                Ok(()) => {
+                    println!("Queue '{}' resumed successfully", queue_id);
+                    println!("Queue will now process pending jobs.");
+                }
+                Err(e) => {
+                    println!("Failed to resume queue '{}': {}", queue_id, e);
+                }
+            }
         }
 
         BatchQueueCommand::Clear {
@@ -613,8 +894,14 @@ pub async fn execute(args: BatchQueueArgs, config: &Config) -> Result<()> {
             }
 
             println!("Clearing queue '{}'...", queue_id);
-            // TODO: Implement queue clearing
-            println!("Queue '{}' cleared successfully", queue_id);
+
+            let cleared_count = manager.clear_queue(&queue_id, include_failed).await?;
+
+            if include_failed {
+                println!("Cleared {} completed and failed jobs from queue '{}'", cleared_count, queue_id);
+            } else {
+                println!("Cleared {} completed jobs from queue '{}'", cleared_count, queue_id);
+            }
         }
 
         BatchQueueCommand::Export {
@@ -633,8 +920,29 @@ pub async fn execute(args: BatchQueueArgs, config: &Config) -> Result<()> {
                      queue_id,
                      output);
 
-            // TODO: Implement data export
-            println!("Export completed successfully");
+            match export_type {
+                ExportType::Jobs => {
+                    let jobs = manager.export_jobs(&queue_id).await?;
+                    write_export_data(&output, &jobs, &format)?;
+                }
+                ExportType::Metrics => {
+                    if let Some(metrics) = manager.get_queue_metrics(&queue_id).await {
+                        write_export_data(&output, &metrics, &format)?;
+                    } else {
+                        return Err(anyhow!("Queue '{}' not found", queue_id));
+                    }
+                }
+                ExportType::Config => {
+                    let config = manager.export_queue_config(&queue_id).await?;
+                    write_export_data(&output, &config, &format)?;
+                }
+                ExportType::All => {
+                    let export_data = manager.export_all_data(&queue_id).await?;
+                    write_export_data(&output, &export_data, &format)?;
+                }
+            }
+
+            println!("Export completed successfully. Data saved to: {:?}", output);
         }
 
         BatchQueueCommand::Configure {
@@ -647,11 +955,73 @@ pub async fn execute(args: BatchQueueArgs, config: &Config) -> Result<()> {
         } => {
             if show {
                 println!("Current configuration for queue '{}':", queue_id);
-                // TODO: Show queue configuration
+
+                match manager.get_queue_config(&queue_id).await {
+                    Ok(config) => {
+                        println!("{:-<50}", "");
+                        println!("Max Concurrent Jobs: {}", config.max_concurrent_jobs);
+                        println!("Max Queue Size: {}", config.max_queue_size);
+                        println!("Job Timeout: {} minutes", config.job_timeout_minutes);
+                        println!("Priority Enabled: {}", config.priority_enabled);
+                        println!("Scheduling Enabled: {}", config.scheduling_enabled);
+                        println!();
+                        println!("Retry Policy:");
+                        println!("  Max Attempts: {}", config.retry_policy.max_attempts);
+                        println!("  Initial Delay: {}s", config.retry_policy.initial_delay_seconds);
+                        println!("  Max Delay: {}s", config.retry_policy.max_delay_seconds);
+                        println!("  Backoff Multiplier: {:.1}", config.retry_policy.backoff_multiplier);
+                        println!();
+                        println!("Resource Limits:");
+                        if let Some(memory) = config.resource_limits.max_memory_mb {
+                            println!("  Max Memory: {} MB", memory);
+                        }
+                        if let Some(cpu) = config.resource_limits.max_cpu_percent {
+                            println!("  Max CPU: {:.1}%", cpu);
+                        }
+                        if let Some(disk) = config.resource_limits.max_disk_space_mb {
+                            println!("  Max Disk: {} MB", disk);
+                        }
+                        if let Some(network) = config.resource_limits.max_network_bandwidth_mbps {
+                            println!("  Max Network: {:.1} Mbps", network);
+                        }
+                    }
+                    Err(e) => {
+                        println!("Failed to get queue configuration: {}", e);
+                    }
+                }
             } else {
                 println!("Updating configuration for queue '{}'...", queue_id);
-                // TODO: Update queue configuration
-                println!("Configuration updated successfully");
+
+                let mut updates = HashMap::new();
+
+                if let Some(max_concurrent) = max_concurrent {
+                    updates.insert("max_concurrent_jobs".to_string(), serde_json::Value::Number(max_concurrent.into()));
+                }
+
+                if let Some(max_size) = max_size {
+                    updates.insert("max_queue_size".to_string(), serde_json::Value::Number(max_size.into()));
+                }
+
+                if let Some(timeout) = timeout {
+                    updates.insert("job_timeout_minutes".to_string(), serde_json::Value::Number(timeout.into()));
+                }
+
+                if let Some(priority_enabled) = priority_enabled {
+                    updates.insert("priority_enabled".to_string(), serde_json::Value::Bool(priority_enabled));
+                }
+
+                if !updates.is_empty() {
+                    match manager.update_queue_config(&queue_id, updates).await {
+                        Ok(()) => {
+                            println!("Configuration updated successfully for queue '{}'", queue_id);
+                        }
+                        Err(e) => {
+                            println!("Failed to update queue configuration: {}", e);
+                        }
+                    }
+                } else {
+                    println!("No configuration changes specified");
+                }
             }
         }
     }
@@ -705,26 +1075,111 @@ fn parse_time(time_str: &str) -> Result<SystemTime> {
     Ok(SystemTime::from(dt.with_timezone(&Utc)))
 }
 
-fn display_metrics(metrics: &crate::batch::queue::QueueMetrics, format: OutputFormat) {
+fn display_metrics(metrics: &crate::batch::queue::QueueMetrics, format: OutputFormat, historical: bool) {
     match format {
         OutputFormat::Table => {
             println!("Queue Metrics:");
-            println!("{:-<50}", "");
+            println!("{:-<60}", "");
             println!("Total jobs submitted: {}", metrics.total_jobs_submitted);
             println!("Total jobs completed: {}", metrics.total_jobs_completed);
             println!("Total jobs failed: {}", metrics.total_jobs_failed);
             println!("Total items processed: {}", metrics.total_items_processed);
             println!("Average job duration: {:.2}ms", metrics.average_job_duration_ms);
             println!("Average queue wait time: {:.2}ms", metrics.average_queue_wait_time_ms);
+            println!("Peak concurrent jobs: {}", metrics.peak_concurrent_jobs);
             println!("Current queue size: {}", metrics.current_queue_size);
-            println!("Throughput: {:.2} jobs/hour", metrics.throughput_jobs_per_hour);
+            println!("Throughput (jobs): {:.2}/hour", metrics.throughput_jobs_per_hour);
+            println!("Throughput (items): {:.2}/hour", metrics.throughput_items_per_hour);
             println!("Success rate: {:.2}%", metrics.success_rate * 100.0);
+            println!("Uptime: {:.2} hours", metrics.uptime_hours);
+
+            if historical {
+                println!();
+                println!("Historical Trends:");
+                println!("{:-<30}", "");
+                // Calculate trends (simplified)
+                let failure_rate = if metrics.total_jobs_submitted > 0 {
+                    (metrics.total_jobs_failed as f64 / metrics.total_jobs_submitted as f64) * 100.0
+                } else {
+                    0.0
+                };
+                println!("Failure rate: {:.2}%", failure_rate);
+
+                if metrics.total_jobs_completed > 0 {
+                    let avg_items_per_job = metrics.total_items_processed as f64 / metrics.total_jobs_completed as f64;
+                    println!("Avg items per job: {:.1}", avg_items_per_job);
+                }
+            }
         }
         OutputFormat::Json => {
-            println!("{}", serde_json::to_string_pretty(metrics).unwrap());
+            let mut data = serde_json::to_value(metrics).unwrap();
+            if historical {
+                // Add calculated historical metrics
+                if let serde_json::Value::Object(ref mut map) = data {
+                    let failure_rate = if metrics.total_jobs_submitted > 0 {
+                        (metrics.total_jobs_failed as f64 / metrics.total_jobs_submitted as f64) * 100.0
+                    } else {
+                        0.0
+                    };
+                    map.insert("failure_rate_percent".to_string(), serde_json::Value::Number(
+                        serde_json::Number::from_f64(failure_rate).unwrap_or_default()
+                    ));
+                }
+            }
+            println!("{}", serde_json::to_string_pretty(&data).unwrap());
+        }
+        OutputFormat::Csv => {
+            println!("metric,value");
+            println!("total_jobs_submitted,{}", metrics.total_jobs_submitted);
+            println!("total_jobs_completed,{}", metrics.total_jobs_completed);
+            println!("total_jobs_failed,{}", metrics.total_jobs_failed);
+            println!("total_items_processed,{}", metrics.total_items_processed);
+            println!("average_job_duration_ms,{:.2}", metrics.average_job_duration_ms);
+            println!("average_queue_wait_time_ms,{:.2}", metrics.average_queue_wait_time_ms);
+            println!("peak_concurrent_jobs,{}", metrics.peak_concurrent_jobs);
+            println!("current_queue_size,{}", metrics.current_queue_size);
+            println!("throughput_jobs_per_hour,{:.2}", metrics.throughput_jobs_per_hour);
+            println!("throughput_items_per_hour,{:.2}", metrics.throughput_items_per_hour);
+            println!("success_rate,{:.4}", metrics.success_rate);
+            println!("uptime_hours,{:.2}", metrics.uptime_hours);
         }
         _ => {
             println!("Format {:?} not yet implemented", format);
         }
     }
+}
+
+fn format_system_time(time: SystemTime) -> String {
+    match time.elapsed() {
+        Ok(duration) => {
+            let datetime: DateTime<Utc> = (time + duration).into();
+            datetime.with_timezone(&Local).format("%Y-%m-%d %H:%M:%S").to_string()
+        }
+        Err(_) => {
+            // Handle time before Unix epoch
+            "N/A".to_string()
+        }
+    }
+}
+
+fn write_export_data<T: serde::Serialize>(path: &PathBuf, data: &T, format: &OutputFormat) -> Result<()> {
+    let content = match format {
+        OutputFormat::Json => serde_json::to_string_pretty(data)?,
+        OutputFormat::Csv => {
+            // For CSV, we need to handle this case by case or convert to a flattened format
+            return Err(anyhow!("CSV export not fully implemented for this data type"));
+        }
+        OutputFormat::Yaml => {
+            return Err(anyhow!("YAML export not implemented"));
+        }
+        _ => {
+            return Err(anyhow!("Unsupported export format: {:?}", format));
+        }
+    };
+
+    let mut file = File::create(path)?;
+    file.write_all(content.as_bytes())?;
+    file.flush()?;
+
+    Ok(())
 }
