@@ -1,0 +1,114 @@
+# Complete Audit Configuration Example
+# This demonstrates all the features implemented in the audit system
+
+[audit]
+enabled = true
+log_level = "MediumAndAbove"
+storage_path = "./logs/audit"
+max_file_size_mb = 100
+max_files = 50
+retention_days = 90
+batch_size = 1000
+flush_interval_seconds = 60
+include_request_body = false
+include_response_body = false
+exclude_patterns = ["health-check", "ping", "metrics"]
+alert_on_critical = true
+export_format = "JsonLines"
+
+# Compression Configuration
+compression_enabled = true
+compression_method = "Gzip"  # Options: "None", "Gzip", "Zstd"
+compression_level = 6        # 1-9 for Gzip, 1-22 for Zstd
+
+# Encryption Configuration
+encryption_enabled = true
+encryption_key_env = "INFERNO_AUDIT_ENCRYPTION_KEY"  # Environment variable name
+encryption_sensitive_fields_only = true              # Only encrypt sensitive fields
+
+# Alerting Configuration
+[audit.alerting]
+enabled = true
+rate_limit_per_hour = 60
+
+# Webhook Configuration
+[audit.alerting.webhook]
+enabled = true
+url = "https://your-webhook-endpoint.com/alerts"
+timeout_seconds = 30
+retry_count = 3
+
+[audit.alerting.webhook.headers]
+"Authorization" = "Bearer YOUR_WEBHOOK_TOKEN"
+"Content-Type" = "application/json"
+"X-Source" = "inferno-audit"
+
+# Email Configuration
+[audit.alerting.email]
+enabled = true
+smtp_host = "smtp.gmail.com"
+smtp_port = 587
+username = "your-audit-email@company.com"
+password_env = "INFERNO_SMTP_PASSWORD"
+from_address = "audit@inferno.company.com"
+to_addresses = ["security@company.com", "devops@company.com"]
+use_tls = true
+
+# Slack Configuration
+[audit.alerting.slack]
+enabled = true
+webhook_url = "https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK"
+channel = "#security-alerts"
+username = "Inferno Audit Bot"
+icon_emoji = ":warning:"
+
+# Custom Alert Templates (optional)
+[audit.alerting.custom_templates]
+critical_security = """
+🚨 CRITICAL SECURITY EVENT 🚨
+Environment: {{environment}}
+Event: {{event_type}}
+Actor: {{actor}}
+Resource: {{resource}}
+Description: {{description}}
+Time: {{timestamp}}
+"""
+
+# Alert Conditions
+[[audit.alerting.alert_conditions]]
+name = "Critical Events"
+severity_threshold = "Critical"
+event_types = []  # Empty means all event types
+enabled = true
+
+[[audit.alerting.alert_conditions]]
+name = "High Security Events"
+severity_threshold = "High"
+event_types = ["SecurityEvent", "Authentication", "Authorization"]
+enabled = true
+
+# Rate threshold for this condition
+[audit.alerting.alert_conditions.rate_threshold]
+events_per_minute = 5
+window_minutes = 10
+
+[[audit.alerting.alert_conditions]]
+name = "Model Access Monitoring"
+severity_threshold = "Medium"
+event_types = ["ModelManagement", "DataAccess"]
+enabled = true
+
+[audit.alerting.alert_conditions.rate_threshold]
+events_per_minute = 20
+window_minutes = 5
+
+# Environment Variables Required:
+# INFERNO_AUDIT_ENCRYPTION_KEY - Base64 encoded 32-byte key for encryption
+# INFERNO_SMTP_PASSWORD - SMTP password for email alerts
+#
+# To generate an encryption key:
+# openssl rand -base64 32
+#
+# Example environment setup:
+# export INFERNO_AUDIT_ENCRYPTION_KEY="YourBase64EncodedKey32BytesLong=="
+# export INFERNO_SMTP_PASSWORD="your-smtp-password"

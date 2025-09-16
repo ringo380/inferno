@@ -1,5 +1,5 @@
 use crate::{
-    backends::{Backend, BackendConfig, BackendType, InferenceParams},
+    backends::{BackendHandle, BackendConfig, BackendType, InferenceParams},
     cache::ModelCache,
     models::{ModelInfo, ModelManager},
     metrics::MetricsCollector,
@@ -144,7 +144,7 @@ enum WorkerMessage {
 /// Internal worker state
 struct Worker {
     worker_id: usize,
-    backends: HashMap<String, Backend>,
+    backends: HashMap<String, BackendHandle>,
     backend_config: BackendConfig,
     model_manager: Arc<ModelManager>,
     metrics: Option<Arc<MetricsCollector>>,
@@ -567,7 +567,7 @@ impl Worker {
     }
 
     /// Get or load a backend for the specified model
-    async fn get_or_load_backend(&mut self, model_name: &str) -> Result<&mut Backend> {
+    async fn get_or_load_backend(&mut self, model_name: &str) -> Result<&BackendHandle> {
         if !self.backends.contains_key(model_name) {
             // Check if we need to evict models due to memory constraints
             if self.backends.len() >= self.max_models {
@@ -576,16 +576,16 @@ impl Worker {
 
             let model_info = self.model_manager.resolve_model(model_name).await?;
             let backend_type = BackendType::from_model_path(&model_info.path);
-            let mut backend = Backend::new(backend_type, &self.backend_config)?;
-            backend.load_model(&model_info).await?;
+            let backend_handle = BackendHandle::new_shared(backend_type, &self.backend_config)?;
+            backend_handle.load_model(&model_info).await?;
 
-            self.backends.insert(model_name.to_string(), backend);
+            self.backends.insert(model_name.to_string(), backend_handle);
             self.stats.loaded_models.push(model_name.to_string());
 
             info!("Loaded model {} on worker {}", model_name, self.worker_id);
         }
 
-        Ok(self.backends.get_mut(model_name).unwrap())
+        Ok(self.backends.get(model_name).unwrap())
     }
 
     /// Preload a model

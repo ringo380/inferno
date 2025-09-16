@@ -1,5 +1,5 @@
 use crate::{
-    backends::{Backend, BackendConfig, BackendType, InferenceParams},
+    backends::{BackendHandle, BackendConfig, BackendType},
     models::{ModelInfo, ModelManager},
     metrics::MetricsCollector,
 };
@@ -9,15 +9,16 @@ use std::{
     collections::HashMap,
     path::PathBuf,
     sync::{
-        atomic::{AtomicU64, AtomicUsize, Ordering},
+        atomic::{AtomicU64, Ordering},
         Arc,
     },
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 use tokio::{
+    fs as async_fs,
     sync::{RwLock, Semaphore},
     task::JoinHandle,
-    time::{interval, timeout},
+    time::interval,
 };
 use tracing::{debug, error, info, warn};
 
@@ -84,7 +85,7 @@ pub enum WarmupStrategy {
 }
 
 pub struct CachedModel {
-    pub backend: Backend,
+    pub backend: BackendHandle,
     pub model_info: ModelInfo,
     pub last_used: Instant,
     pub created_at: Instant,
@@ -108,13 +109,20 @@ impl std::fmt::Debug for CachedModel {
 
 impl Clone for CachedModel {
     fn clone(&self) -> Self {
-        // Note: This creates a new backend instance, which might not be ideal
-        // In practice, you might want to use Arc<Backend> instead
-        panic!("CachedModel cannot be cloned due to Backend limitations")
+        // BackendHandle is now cloneable, so we can safely clone CachedModel
+        Self {
+            backend: self.backend.clone(),
+            model_info: self.model_info.clone(),
+            last_used: self.last_used,
+            created_at: self.created_at,
+            usage_count: AtomicU64::new(self.usage_count.load(Ordering::Relaxed)),
+            memory_estimate: self.memory_estimate,
+            warmup_priority: self.warmup_priority,
+        }
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ModelUsageStats {
     pub model_name: String,
     pub request_count: u64,
@@ -137,6 +145,37 @@ pub struct CacheStats {
     pub active_models: Vec<String>,
     pub model_stats: HashMap<String, ModelUsageStats>,
 }
+
+/// Serializable cache entry for disk persistence
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SerializableCacheEntry {
+    pub model_name: String,
+    pub model_info: ModelInfo,
+    pub last_used_timestamp: u64, // Unix timestamp
+    pub created_at_timestamp: u64, // Unix timestamp
+    pub usage_count: u64,
+    pub memory_estimate: u64,
+    pub warmup_priority: u8,
+}
+
+/// Serializable cache state for disk persistence
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SerializableCacheState {
+    pub version: u32,
+    pub cache_entries: Vec<SerializableCacheEntry>,
+    pub usage_stats: HashMap<String, ModelUsageStats>,
+    pub cache_hits: u64,
+    pub cache_misses: u64,
+    pub evictions: u64,
+    pub warmups: u64,
+    pub total_memory: u64,
+    pub saved_at: u64, // Unix timestamp
+}
+
+// Constants for cache file format
+const CACHE_FORMAT_VERSION: u32 = 1;
+const CACHE_FILE_NAME: &str = "cache_state.bin.zst";
+const CACHE_STATS_FILE_NAME: &str = "cache_stats.bin.zst";
 
 /// Advanced model cache with intelligent warm-up strategies
 pub struct ModelCache {
@@ -312,17 +351,22 @@ impl ModelCache {
         Ok(())
     }
 
+    /// Manually trigger cache persistence to disk
+    pub async fn save_cache(&self) -> Result<()> {
+        self.save_to_disk().await
+    }
+
     /// Load a model and cache it
     async fn load_model(&self, model_name: &str) -> Result<Arc<CachedModel>> {
         let model_info = self.model_manager.resolve_model(model_name).await?;
         let backend_type = BackendType::from_model_path(&model_info.path);
 
-        let mut backend = Backend::new(backend_type, &self.backend_config)?;
-        backend.load_model(&model_info).await?;
+        let backend_handle = BackendHandle::new_shared(backend_type, &self.backend_config)?;
+        backend_handle.load_model(&model_info).await?;
 
         let memory_estimate = self.estimate_model_memory(&model_info);
         let cached_model = Arc::new(CachedModel {
-            backend,
+            backend: backend_handle,
             model_info: model_info.clone(),
             last_used: Instant::now(),
             created_at: Instant::now(),
@@ -460,8 +504,78 @@ impl ModelCache {
             }
         }));
 
-        // Warmup task disabled due to self-reference complexity
-        // In a production implementation, this would use Arc<Self> or other patterns
+        // Periodic save task (if persistence is enabled)
+        if self.config.persist_cache {
+            let save_cache_dir = self.config.cache_dir.clone();
+            let save_cached_models = self.cached_models.clone();
+            let save_usage_stats = self.usage_stats.clone();
+            let save_cache_hits = Arc::new(AtomicU64::new(self.cache_hits.load(Ordering::Relaxed)));
+            let save_cache_misses = Arc::new(AtomicU64::new(self.cache_misses.load(Ordering::Relaxed)));
+            let save_evictions = Arc::new(AtomicU64::new(self.evictions.load(Ordering::Relaxed)));
+            let save_warmups = Arc::new(AtomicU64::new(self.warmups.load(Ordering::Relaxed)));
+            let save_total_memory = Arc::new(AtomicU64::new(self.total_memory.load(Ordering::Relaxed)));
+
+            self.stats_task = Some(tokio::spawn(async move {
+                let mut save_interval = interval(Duration::from_secs(300)); // Save every 5 minutes
+
+                loop {
+                    save_interval.tick().await;
+
+                    if let Some(cache_dir) = &save_cache_dir {
+                        // Create a temporary cache state for saving
+                        let cached_models = save_cached_models.read().await;
+                        let usage_stats = save_usage_stats.read().await;
+
+                        let mut cache_entries = Vec::new();
+                        let now_timestamp = SystemTime::now().duration_since(UNIX_EPOCH)
+                            .unwrap_or_default().as_secs();
+
+                        for (model_name, cached_model) in cached_models.iter() {
+                            cache_entries.push(SerializableCacheEntry {
+                                model_name: model_name.clone(),
+                                model_info: cached_model.model_info.clone(),
+                                last_used_timestamp: now_timestamp, // Approximation
+                                created_at_timestamp: now_timestamp, // Approximation
+                                usage_count: cached_model.usage_count.load(Ordering::Relaxed),
+                                memory_estimate: cached_model.memory_estimate,
+                                warmup_priority: cached_model.warmup_priority,
+                            });
+                        }
+
+                        let cache_state = SerializableCacheState {
+                            version: CACHE_FORMAT_VERSION,
+                            cache_entries,
+                            usage_stats: usage_stats.clone(),
+                            cache_hits: save_cache_hits.load(Ordering::Relaxed),
+                            cache_misses: save_cache_misses.load(Ordering::Relaxed),
+                            evictions: save_evictions.load(Ordering::Relaxed),
+                            warmups: save_warmups.load(Ordering::Relaxed),
+                            total_memory: save_total_memory.load(Ordering::Relaxed),
+                            saved_at: now_timestamp,
+                        };
+
+                        drop(cached_models);
+                        drop(usage_stats);
+
+                        // Save to disk
+                        if let Err(e) = async_fs::create_dir_all(cache_dir).await {
+                            warn!("Failed to create cache directory {:?}: {}", cache_dir, e);
+                            continue;
+                        }
+
+                        let cache_file = cache_dir.join(CACHE_FILE_NAME);
+                        match save_cache_state_to_file_static(&cache_state, &cache_file).await {
+                            Ok(()) => {
+                                debug!("Periodic cache save completed with {} entries", cache_state.cache_entries.len());
+                            }
+                            Err(e) => {
+                                warn!("Periodic cache save failed: {}", e);
+                            }
+                        }
+                    }
+                }
+            }));
+        }
 
         Ok(())
     }
@@ -587,10 +701,53 @@ impl ModelCache {
     /// Load cache state from disk
     async fn load_from_disk(&self) -> Result<()> {
         if let Some(cache_dir) = &self.config.cache_dir {
-            // Implementation for loading cached model metadata from disk
-            // This would restore usage statistics and warm frequently used models
             info!("Loading cache state from disk: {:?}", cache_dir);
-            // TODO: Implement actual disk loading logic
+
+            // Ensure cache directory exists
+            if !cache_dir.exists() {
+                debug!("Cache directory does not exist, skipping load: {:?}", cache_dir);
+                return Ok(());
+            }
+
+            let cache_file = cache_dir.join(CACHE_FILE_NAME);
+            if !cache_file.exists() {
+                debug!("Cache file does not exist, skipping load: {:?}", cache_file);
+                return Ok(());
+            }
+
+            match self.load_cache_state_from_file(&cache_file).await {
+                Ok(cache_state) => {
+                    info!("Successfully loaded cache state with {} entries", cache_state.cache_entries.len());
+
+                    // Restore usage statistics
+                    {
+                        let mut usage_stats = self.usage_stats.write().await;
+                        *usage_stats = cache_state.usage_stats;
+                    }
+
+                    // Restore cache statistics
+                    self.cache_hits.store(cache_state.cache_hits, Ordering::Relaxed);
+                    self.cache_misses.store(cache_state.cache_misses, Ordering::Relaxed);
+                    self.evictions.store(cache_state.evictions, Ordering::Relaxed);
+                    self.warmups.store(cache_state.warmups, Ordering::Relaxed);
+                    self.total_memory.store(cache_state.total_memory, Ordering::Relaxed);
+
+                    // Warm up models that were previously cached if they're still available
+                    for entry in cache_state.cache_entries {
+                        if self.should_restore_model(&entry).await {
+                            if let Err(e) = self.warmup_model(&entry.model_name).await {
+                                warn!("Failed to restore model from cache: {}: {}", entry.model_name, e);
+                            } else {
+                                debug!("Restored cached model: {}", entry.model_name);
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    warn!("Failed to load cache state from disk: {}", e);
+                    // Continue without cached state
+                }
+            }
         }
         Ok(())
     }
@@ -598,12 +755,172 @@ impl ModelCache {
     /// Save cache state to disk
     async fn save_to_disk(&self) -> Result<()> {
         if let Some(cache_dir) = &self.config.cache_dir {
-            // Implementation for saving cached model metadata to disk
             info!("Saving cache state to disk: {:?}", cache_dir);
-            // TODO: Implement actual disk saving logic
+
+            // Ensure cache directory exists
+            if let Err(e) = async_fs::create_dir_all(cache_dir).await {
+                return Err(anyhow!("Failed to create cache directory {:?}: {}", cache_dir, e));
+            }
+
+            // Collect current cache state
+            let cache_state = self.collect_cache_state().await;
+
+            let cache_file = cache_dir.join(CACHE_FILE_NAME);
+            match self.save_cache_state_to_file(&cache_state, &cache_file).await {
+                Ok(()) => {
+                    info!("Successfully saved cache state with {} entries to {:?}",
+                          cache_state.cache_entries.len(), cache_file);
+                }
+                Err(e) => {
+                    error!("Failed to save cache state to disk: {}", e);
+                    return Err(e);
+                }
+            }
         }
         Ok(())
     }
+
+    /// Load cache state from a specific file
+    async fn load_cache_state_from_file(&self, file_path: &PathBuf) -> Result<SerializableCacheState> {
+        let compressed_data = async_fs::read(file_path).await
+            .map_err(|e| anyhow!("Failed to read cache file {:?}: {}", file_path, e))?;
+
+        // Decompress the data
+        let decompressed_data = zstd::decode_all(&compressed_data[..])
+            .map_err(|e| anyhow!("Failed to decompress cache data: {}", e))?;
+
+        // Deserialize the data
+        let cache_state: SerializableCacheState = bincode::deserialize(&decompressed_data)
+            .map_err(|e| anyhow!("Failed to deserialize cache data: {}", e))?;
+
+        // Validate version compatibility
+        if cache_state.version != CACHE_FORMAT_VERSION {
+            return Err(anyhow!("Incompatible cache format version: {} (expected {})",
+                             cache_state.version, CACHE_FORMAT_VERSION));
+        }
+
+        Ok(cache_state)
+    }
+
+    /// Save cache state to a specific file
+    async fn save_cache_state_to_file(&self, cache_state: &SerializableCacheState, file_path: &PathBuf) -> Result<()> {
+        // Serialize the data
+        let serialized_data = bincode::serialize(cache_state)
+            .map_err(|e| anyhow!("Failed to serialize cache data: {}", e))?;
+
+        // Compress the data
+        let compressed_data = zstd::encode_all(&serialized_data[..], 3) // Compression level 3 for good balance
+            .map_err(|e| anyhow!("Failed to compress cache data: {}", e))?;
+
+        // Write to temporary file first, then atomically rename
+        let temp_file = file_path.with_extension("tmp");
+        async_fs::write(&temp_file, &compressed_data).await
+            .map_err(|e| anyhow!("Failed to write temporary cache file {:?}: {}", temp_file, e))?;
+
+        async_fs::rename(&temp_file, file_path).await
+            .map_err(|e| anyhow!("Failed to rename cache file {:?} to {:?}: {}", temp_file, file_path, e))?;
+
+        Ok(())
+    }
+
+    /// Collect current cache state for serialization
+    async fn collect_cache_state(&self) -> SerializableCacheState {
+        let cached_models = self.cached_models.read().await;
+        let usage_stats = self.usage_stats.read().await;
+
+        let mut cache_entries = Vec::new();
+
+        for (model_name, cached_model) in cached_models.iter() {
+            // Convert Instant to Unix timestamp for serialization
+            let last_used_timestamp = self.instant_to_unix_timestamp(cached_model.last_used);
+            let created_at_timestamp = self.instant_to_unix_timestamp(cached_model.created_at);
+
+            cache_entries.push(SerializableCacheEntry {
+                model_name: model_name.clone(),
+                model_info: cached_model.model_info.clone(),
+                last_used_timestamp,
+                created_at_timestamp,
+                usage_count: cached_model.usage_count.load(Ordering::Relaxed),
+                memory_estimate: cached_model.memory_estimate,
+                warmup_priority: cached_model.warmup_priority,
+            });
+        }
+
+        SerializableCacheState {
+            version: CACHE_FORMAT_VERSION,
+            cache_entries,
+            usage_stats: usage_stats.clone(),
+            cache_hits: self.cache_hits.load(Ordering::Relaxed),
+            cache_misses: self.cache_misses.load(Ordering::Relaxed),
+            evictions: self.evictions.load(Ordering::Relaxed),
+            warmups: self.warmups.load(Ordering::Relaxed),
+            total_memory: self.total_memory.load(Ordering::Relaxed),
+            saved_at: SystemTime::now().duration_since(UNIX_EPOCH)
+                .unwrap_or_default().as_secs(),
+        }
+    }
+
+    /// Determine if a model should be restored from cache
+    async fn should_restore_model(&self, entry: &SerializableCacheEntry) -> bool {
+        // Check if the model file still exists and hasn't changed
+        if !entry.model_info.path.exists() {
+            debug!("Model file no longer exists, skipping restore: {:?}", entry.model_info.path);
+            return false;
+        }
+
+        // Check if model is still valid
+        if let Ok(current_model_info) = self.model_manager.resolve_model(&entry.model_name).await {
+            // Compare file size as a simple integrity check
+            if current_model_info.size != entry.model_info.size {
+                debug!("Model file size changed, skipping restore: {}", entry.model_name);
+                return false;
+            }
+        } else {
+            debug!("Failed to get current model info, skipping restore: {}", entry.model_name);
+            return false;
+        }
+
+        // Check if model was recently used (within 24 hours)
+        let last_used_time = SystemTime::UNIX_EPOCH + Duration::from_secs(entry.last_used_timestamp);
+        let time_since_last_use = SystemTime::now().duration_since(last_used_time)
+            .unwrap_or(Duration::from_secs(u64::MAX));
+
+        if time_since_last_use > Duration::from_secs(86400) { // 24 hours
+            debug!("Model not used recently, skipping restore: {}", entry.model_name);
+            return false;
+        }
+
+        true
+    }
+
+    /// Convert Instant to Unix timestamp (best effort)
+    fn instant_to_unix_timestamp(&self, instant: Instant) -> u64 {
+        // This is an approximation since Instant is relative to program start
+        // We use SystemTime for the actual timestamp
+        SystemTime::now().duration_since(UNIX_EPOCH)
+            .unwrap_or_default().as_secs()
+    }
+}
+
+/// Static function to save cache state (used by background task)
+async fn save_cache_state_to_file_static(cache_state: &SerializableCacheState, file_path: &PathBuf) -> Result<()> {
+    // Serialize the data
+    let serialized_data = bincode::serialize(cache_state)
+        .map_err(|e| anyhow!("Failed to serialize cache data: {}", e))?;
+
+    // Compress the data
+    let compressed_data = zstd::encode_all(&serialized_data[..], 3) // Compression level 3 for good balance
+        .map_err(|e| anyhow!("Failed to compress cache data: {}", e))?;
+
+    // Write to temporary file first, then atomically rename
+    let temp_file = file_path.with_extension("tmp");
+    async_fs::write(&temp_file, &compressed_data).await
+        .map_err(|e| anyhow!("Failed to write temporary cache file {:?}: {}", temp_file, e))?;
+
+    async_fs::rename(&temp_file, file_path).await
+        .map_err(|e| anyhow!("Failed to rename cache file {:?} to {:?}: {}", temp_file, file_path, e))?;
+
+    Ok(())
 }
 
 impl Drop for ModelCache {
@@ -617,6 +934,16 @@ impl Drop for ModelCache {
         }
         if let Some(task) = self.stats_task.take() {
             task.abort();
+        }
+
+        // Save cache state to disk on shutdown if persistence is enabled
+        if self.config.persist_cache {
+            // We need to block here since Drop is synchronous
+            if let Ok(rt) = tokio::runtime::Runtime::new() {
+                if let Err(e) = rt.block_on(self.save_to_disk()) {
+                    error!("Failed to save cache state on shutdown: {}", e);
+                }
+            }
         }
     }
 }

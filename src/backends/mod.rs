@@ -6,7 +6,8 @@ use anyhow::Result;
 use clap::ValueEnum;
 use futures::Stream;
 use serde::{Deserialize, Serialize};
-use std::{path::Path, pin::Pin};
+use std::{path::Path, pin::Pin, sync::Arc};
+use tokio::sync::Mutex;
 
 #[derive(Debug, Clone, Copy, ValueEnum, Serialize, Deserialize)]
 pub enum BackendType {
@@ -134,6 +135,12 @@ impl Backend {
         Ok(Self { backend_impl })
     }
 
+    /// Create a new shared backend instance wrapped in Arc<Mutex<_>>
+    pub fn new_shared(backend_type: BackendType, config: &BackendConfig) -> Result<BackendHandle> {
+        let backend = Self::new(backend_type, config)?;
+        Ok(BackendHandle::new(backend))
+    }
+
     pub async fn load_model(&mut self, model_info: &ModelInfo) -> Result<()> {
         self.backend_impl.load_model(model_info).await
     }
@@ -168,5 +175,95 @@ impl Backend {
 
     pub fn get_metrics(&self) -> Option<InferenceMetrics> {
         self.backend_impl.get_metrics()
+    }
+}
+
+/// Thread-safe, cloneable handle to a shared Backend instance
+#[derive(Clone)]
+pub struct BackendHandle {
+    inner: Arc<Mutex<Backend>>,
+    backend_type: BackendType,
+}
+
+impl BackendHandle {
+    /// Create a new backend handle from a backend instance
+    pub fn new(backend: Backend) -> Self {
+        let backend_type = backend.get_backend_type();
+        Self {
+            inner: Arc::new(Mutex::new(backend)),
+            backend_type,
+        }
+    }
+
+    /// Create a new shared backend handle
+    pub fn new_shared(backend_type: BackendType, config: &BackendConfig) -> Result<Self> {
+        let backend = Backend::new(backend_type, config)?;
+        Ok(Self::new(backend))
+    }
+
+    /// Load a model into this backend
+    pub async fn load_model(&self, model_info: &ModelInfo) -> Result<()> {
+        let mut backend = self.inner.lock().await;
+        backend.load_model(model_info).await
+    }
+
+    /// Unload the current model from this backend
+    pub async fn unload_model(&self) -> Result<()> {
+        let mut backend = self.inner.lock().await;
+        backend.unload_model().await
+    }
+
+    /// Check if a model is currently loaded
+    pub async fn is_loaded(&self) -> bool {
+        let backend = self.inner.lock().await;
+        backend.is_loaded().await
+    }
+
+    /// Get information about the currently loaded model
+    pub async fn get_model_info(&self) -> Option<ModelInfo> {
+        let backend = self.inner.lock().await;
+        backend.get_model_info().await
+    }
+
+    /// Perform inference with the loaded model
+    pub async fn infer(&self, input: &str, params: &InferenceParams) -> Result<String> {
+        let mut backend = self.inner.lock().await;
+        backend.infer(input, params).await
+    }
+
+    /// Perform streaming inference with the loaded model
+    pub async fn infer_stream(&self, input: &str, params: &InferenceParams) -> Result<TokenStream> {
+        let mut backend = self.inner.lock().await;
+        backend.infer_stream(input, params).await
+    }
+
+    /// Get embeddings from the loaded model
+    pub async fn get_embeddings(&self, input: &str) -> Result<Vec<f32>> {
+        let mut backend = self.inner.lock().await;
+        backend.get_embeddings(input).await
+    }
+
+    /// Get the backend type
+    pub fn get_backend_type(&self) -> BackendType {
+        self.backend_type
+    }
+
+    /// Get current metrics from the backend
+    pub async fn get_metrics(&self) -> Option<InferenceMetrics> {
+        let backend = self.inner.lock().await;
+        backend.get_metrics()
+    }
+
+    /// Get a reference to the underlying Arc<Mutex<Backend>> for advanced usage
+    pub fn inner(&self) -> &Arc<Mutex<Backend>> {
+        &self.inner
+    }
+}
+
+impl std::fmt::Debug for BackendHandle {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("BackendHandle")
+            .field("backend_type", &self.backend_type)
+            .finish()
     }
 }

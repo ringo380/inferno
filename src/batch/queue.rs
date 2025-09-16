@@ -36,7 +36,7 @@ pub struct JobQueue {
     pub last_activity: SystemTime,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct JobQueueConfig {
     pub max_concurrent_jobs: usize,
     pub max_queue_size: usize,
@@ -348,6 +348,23 @@ pub enum QueueStatus {
     Error(String),
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QueueInfo {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+    pub status: QueueStatus,
+    pub created_at: SystemTime,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QueueExportData {
+    pub queue_info: QueueInfo,
+    pub jobs: Vec<JobInfo>,
+    pub metrics: QueueMetrics,
+    pub config: JobQueueConfig,
+}
+
 #[derive(Debug)]
 pub struct JobQueueManager {
     config: JobQueueConfig,
@@ -559,18 +576,355 @@ impl JobQueueManager {
     }
 
     pub async fn list_jobs(&self, queue_id: &str, status: Option<JobStatus>) -> Result<Vec<JobInfo>> {
-        // TODO: Implement job listing
-        Ok(vec![])
+        let queues = self.queues.read().await;
+        let queue = queues.get(queue_id)
+            .ok_or_else(|| anyhow::anyhow!("Queue '{}' not found", queue_id))?;
+
+        let mut job_infos = Vec::new();
+
+        // Get queued jobs
+        let queued_jobs = queue.jobs.read().await;
+        for job in queued_jobs.iter() {
+            if status.is_none() || matches!(status, Some(JobStatus::Queued)) {
+                job_infos.push(JobInfo {
+                    id: job.id.clone(),
+                    name: job.name.clone(),
+                    status: JobStatus::Queued,
+                    priority: job.priority.clone(),
+                    created_at: job.created_at,
+                    started_at: None,
+                    completed_at: None,
+                    progress: None,
+                });
+            }
+        }
+
+        // Get active jobs
+        let active_jobs = queue.active_jobs.read().await;
+        for active_job in active_jobs.values() {
+            if status.is_none() || matches!(status, Some(JobStatus::Running)) {
+                job_infos.push(JobInfo {
+                    id: active_job.job.id.clone(),
+                    name: active_job.job.name.clone(),
+                    status: JobStatus::Running,
+                    priority: active_job.job.priority.clone(),
+                    created_at: active_job.job.created_at,
+                    started_at: Some(active_job.started_at),
+                    completed_at: None,
+                    progress: Some(active_job.progress.clone()),
+                });
+            }
+        }
+
+        // Get completed jobs
+        let completed_jobs = queue.completed_jobs.read().await;
+        for completed_job in completed_jobs.iter() {
+            if status.is_none() || matches!(status, Some(JobStatus::Completed)) {
+                job_infos.push(JobInfo {
+                    id: completed_job.job.id.clone(),
+                    name: completed_job.job.name.clone(),
+                    status: JobStatus::Completed,
+                    priority: completed_job.job.priority.clone(),
+                    created_at: completed_job.job.created_at,
+                    started_at: Some(completed_job.started_at),
+                    completed_at: Some(completed_job.completed_at),
+                    progress: None,
+                });
+            }
+        }
+
+        // Get failed jobs
+        let failed_jobs = queue.failed_jobs.read().await;
+        for failed_job in failed_jobs.iter() {
+            if status.is_none() || matches!(status, Some(JobStatus::Failed)) {
+                job_infos.push(JobInfo {
+                    id: failed_job.job.id.clone(),
+                    name: failed_job.job.name.clone(),
+                    status: JobStatus::Failed,
+                    priority: failed_job.job.priority.clone(),
+                    created_at: failed_job.job.created_at,
+                    started_at: None, // TODO: Track start time for failed jobs
+                    completed_at: Some(failed_job.failed_at),
+                    progress: None,
+                });
+            }
+        }
+
+        // Sort by creation time (newest first)
+        job_infos.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+
+        Ok(job_infos)
     }
 
     pub async fn cancel_job(&self, queue_id: &str, job_id: &str) -> Result<()> {
-        // TODO: Implement job cancellation
-        info!("Cancelling job '{}' in queue '{}'", job_id, queue_id);
-        Ok(())
+        let queues = self.queues.read().await;
+        let queue = queues.get(queue_id)
+            .ok_or_else(|| anyhow::anyhow!("Queue '{}' not found", queue_id))?;
+
+        // Check if job is in active jobs
+        let mut active_jobs = queue.active_jobs.write().await;
+        if let Some(active_job) = active_jobs.remove(job_id) {
+            info!("Cancelled active job '{}' in queue '{}'", job_id, queue_id);
+
+            // Move to failed jobs with cancellation status
+            let failed_job = FailedJob {
+                job: active_job.job,
+                error: "Job cancelled by user".to_string(),
+                failed_at: SystemTime::now(),
+                worker_id: active_job.worker_id,
+                attempts_made: active_job.current_attempt,
+                partial_results: vec![], // TODO: Collect partial results
+                last_error_details: ErrorDetails {
+                    error_type: "Cancellation".to_string(),
+                    error_message: "Job cancelled by user".to_string(),
+                    stack_trace: None,
+                    system_info: SystemInfo {
+                        memory_usage_mb: 0.0,
+                        cpu_usage_percent: 0.0,
+                        disk_usage_percent: 0.0,
+                        load_average: vec![],
+                    },
+                },
+            };
+
+            let mut failed_jobs = queue.failed_jobs.write().await;
+            failed_jobs.push(failed_job);
+            return Ok(());
+        }
+
+        // Check if job is in queue
+        let mut queued_jobs = queue.jobs.write().await;
+        if let Some(pos) = queued_jobs.iter().position(|job| job.id == job_id) {
+            queued_jobs.remove(pos);
+            info!("Cancelled queued job '{}' in queue '{}'", job_id, queue_id);
+            return Ok(());
+        }
+
+        Err(anyhow::anyhow!("Job '{}' not found in queue '{}'", job_id, queue_id))
+    }
+
+    pub async fn list_all_queues(&self) -> Result<Vec<JobQueue>> {
+        let queues = self.queues.read().await;
+        Ok(queues.values().cloned().collect())
+    }
+
+    pub async fn get_queue_job_counts(&self, queue_id: &str) -> Result<(usize, usize, usize)> {
+        let queues = self.queues.read().await;
+        let queue = queues.get(queue_id)
+            .ok_or_else(|| anyhow::anyhow!("Queue '{}' not found", queue_id))?;
+
+        let queued = queue.jobs.read().await.len();
+        let running = queue.active_jobs.read().await.len();
+        let completed = queue.completed_jobs.read().await.len();
+
+        Ok((queued, running, completed))
+    }
+
+    pub async fn get_job_status(&self, queue_id: &str, job_id: &str) -> Result<Option<JobInfo>> {
+        let jobs = self.list_jobs(queue_id, None).await?;
+        Ok(jobs.into_iter().find(|job| job.id == job_id))
+    }
+
+    pub async fn can_retry_job(&self, queue_id: &str, job_id: &str) -> Result<bool> {
+        let queues = self.queues.read().await;
+        let queue = queues.get(queue_id)
+            .ok_or_else(|| anyhow::anyhow!("Queue '{}' not found", queue_id))?;
+
+        let failed_jobs = queue.failed_jobs.read().await;
+        if let Some(failed_job) = failed_jobs.iter().find(|job| job.job.id == job_id) {
+            Ok(failed_job.attempts_made < failed_job.job.max_retries)
+        } else {
+            Ok(true) // If not found in failed jobs, it can be retried
+        }
+    }
+
+    pub async fn retry_job(&self, queue_id: &str, job_id: &str, force: bool) -> Result<()> {
+        let queues = self.queues.read().await;
+        let queue = queues.get(queue_id)
+            .ok_or_else(|| anyhow::anyhow!("Queue '{}' not found", queue_id))?;
+
+        // Find job in failed jobs
+        let mut failed_jobs = queue.failed_jobs.write().await;
+        if let Some(pos) = failed_jobs.iter().position(|job| job.job.id == job_id) {
+            let mut failed_job = failed_jobs.remove(pos);
+
+            // Reset retry count if force is used
+            if force {
+                failed_job.job.retry_count = 0;
+            } else {
+                failed_job.job.retry_count += 1;
+            }
+
+            // Calculate exponential backoff delay
+            let delay_seconds = self.config.retry_policy.initial_delay_seconds
+                * (self.config.retry_policy.backoff_multiplier.powi(failed_job.job.retry_count as i32) as u64);
+            let delay_seconds = delay_seconds.min(self.config.retry_policy.max_delay_seconds);
+
+            // Schedule the job for retry
+            failed_job.job.scheduled_at = Some(SystemTime::now() + Duration::from_secs(delay_seconds));
+
+            // Add back to queue
+            let mut queue_jobs = queue.jobs.write().await;
+            queue_jobs.push_back(failed_job.job);
+
+            info!("Job '{}' scheduled for retry in {} seconds", job_id, delay_seconds);
+            return Ok(());
+        }
+
+        Err(anyhow::anyhow!("Failed job '{}' not found in queue '{}'", job_id, queue_id))
+    }
+
+    pub async fn get_all_queue_metrics(&self) -> Result<HashMap<String, QueueMetrics>> {
+        let queues = self.queues.read().await;
+        let mut all_metrics = HashMap::new();
+
+        for (queue_id, queue) in queues.iter() {
+            all_metrics.insert(queue_id.clone(), queue.metrics.clone());
+        }
+
+        Ok(all_metrics)
+    }
+
+    pub async fn get_running_job_count(&self, queue_id: &str) -> Result<usize> {
+        let queues = self.queues.read().await;
+        let queue = queues.get(queue_id)
+            .ok_or_else(|| anyhow::anyhow!("Queue '{}' not found", queue_id))?;
+
+        Ok(queue.active_jobs.read().await.len())
+    }
+
+    pub async fn get_recent_jobs(&self, queue_id: &str, limit: usize) -> Result<Vec<JobInfo>> {
+        let jobs = self.list_jobs(queue_id, None).await?;
+        Ok(jobs.into_iter().take(limit).collect())
+    }
+
+    pub async fn pause_queue(&self, queue_id: &str) -> Result<()> {
+        let queues = self.queues.write().await;
+        if let Some(mut queue) = queues.get(queue_id).cloned() {
+            queue.status = QueueStatus::Paused;
+            info!("Queue '{}' paused", queue_id);
+            Ok(())
+        } else {
+            Err(anyhow::anyhow!("Queue '{}' not found", queue_id))
+        }
+    }
+
+    pub async fn resume_queue(&self, queue_id: &str) -> Result<()> {
+        let queues = self.queues.write().await;
+        if let Some(mut queue) = queues.get(queue_id).cloned() {
+            queue.status = QueueStatus::Running;
+            info!("Queue '{}' resumed", queue_id);
+            Ok(())
+        } else {
+            Err(anyhow::anyhow!("Queue '{}' not found", queue_id))
+        }
+    }
+
+    pub async fn clear_queue(&self, queue_id: &str, include_failed: bool) -> Result<usize> {
+        let queues = self.queues.read().await;
+        let queue = queues.get(queue_id)
+            .ok_or_else(|| anyhow::anyhow!("Queue '{}' not found", queue_id))?;
+
+        let mut cleared_count = 0;
+
+        // Clear completed jobs
+        let mut completed_jobs = queue.completed_jobs.write().await;
+        cleared_count += completed_jobs.len();
+        completed_jobs.clear();
+
+        // Clear failed jobs if requested
+        if include_failed {
+            let mut failed_jobs = queue.failed_jobs.write().await;
+            cleared_count += failed_jobs.len();
+            failed_jobs.clear();
+        }
+
+        info!("Cleared {} jobs from queue '{}'", cleared_count, queue_id);
+        Ok(cleared_count)
+    }
+
+    pub async fn export_jobs(&self, queue_id: &str) -> Result<Vec<JobInfo>> {
+        self.list_jobs(queue_id, None).await
+    }
+
+    pub async fn export_queue_config(&self, queue_id: &str) -> Result<JobQueueConfig> {
+        let queues = self.queues.read().await;
+        let queue = queues.get(queue_id)
+            .ok_or_else(|| anyhow::anyhow!("Queue '{}' not found", queue_id))?;
+
+        Ok(queue.config.clone())
+    }
+
+    pub async fn export_all_data(&self, queue_id: &str) -> Result<QueueExportData> {
+        let queues = self.queues.read().await;
+        let queue = queues.get(queue_id)
+            .ok_or_else(|| anyhow::anyhow!("Queue '{}' not found", queue_id))?;
+
+        let jobs = self.list_jobs(queue_id, None).await?;
+        let metrics = queue.metrics.clone();
+        let config = queue.config.clone();
+
+        Ok(QueueExportData {
+            queue_info: QueueInfo {
+                id: queue.id.clone(),
+                name: queue.name.clone(),
+                description: queue.description.clone(),
+                status: queue.status.clone(),
+                created_at: queue.created_at,
+            },
+            jobs,
+            metrics,
+            config,
+        })
+    }
+
+    pub async fn get_queue_config(&self, queue_id: &str) -> Result<JobQueueConfig> {
+        let queues = self.queues.read().await;
+        let queue = queues.get(queue_id)
+            .ok_or_else(|| anyhow::anyhow!("Queue '{}' not found", queue_id))?;
+
+        Ok(queue.config.clone())
+    }
+
+    pub async fn update_queue_config(&self, queue_id: &str, updates: HashMap<String, serde_json::Value>) -> Result<()> {
+        let mut queues = self.queues.write().await;
+        if let Some(queue) = queues.get_mut(queue_id) {
+            for (key, value) in updates {
+                match key.as_str() {
+                    "max_concurrent_jobs" => {
+                        if let Some(val) = value.as_u64() {
+                            queue.config.max_concurrent_jobs = val as usize;
+                        }
+                    }
+                    "max_queue_size" => {
+                        if let Some(val) = value.as_u64() {
+                            queue.config.max_queue_size = val as usize;
+                        }
+                    }
+                    "job_timeout_minutes" => {
+                        if let Some(val) = value.as_u64() {
+                            queue.config.job_timeout_minutes = val;
+                        }
+                    }
+                    "priority_enabled" => {
+                        if let Some(val) = value.as_bool() {
+                            queue.config.priority_enabled = val;
+                        }
+                    }
+                    _ => {
+                        warn!("Unknown configuration key: {}", key);
+                    }
+                }
+            }
+            info!("Updated configuration for queue '{}'", queue_id);
+            Ok(())
+        } else {
+            Err(anyhow::anyhow!("Queue '{}' not found", queue_id))
+        }
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum JobStatus {
     Queued,
     Running,
@@ -579,7 +933,7 @@ pub enum JobStatus {
     Cancelled,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct JobInfo {
     pub id: String,
     pub name: String,
@@ -780,5 +1134,88 @@ mod tests {
 
         let result = manager.submit_job("test-queue", job).await;
         assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_list_all_queues() {
+        let manager = JobQueueManager::new(JobQueueConfig::default());
+
+        // Initially no queues
+        let queues = manager.list_all_queues().await.unwrap();
+        assert_eq!(queues.len(), 0);
+
+        // Create a queue
+        manager.create_queue(
+            "test-queue-1".to_string(),
+            "Test Queue 1".to_string(),
+            "First test queue".to_string()
+        ).await.unwrap();
+
+        // Should have one queue
+        let queues = manager.list_all_queues().await.unwrap();
+        assert_eq!(queues.len(), 1);
+        assert_eq!(queues[0].id, "test-queue-1");
+    }
+
+    #[tokio::test]
+    async fn test_get_queue_job_counts() {
+        let manager = JobQueueManager::new(JobQueueConfig::default());
+        manager.create_queue(
+            "count-test".to_string(),
+            "Count Test Queue".to_string(),
+            "Test queue for job counts".to_string()
+        ).await.unwrap();
+
+        // Initially should have zero counts
+        let (queued, running, completed) = manager.get_queue_job_counts("count-test").await.unwrap();
+        assert_eq!(queued, 0);
+        assert_eq!(running, 0);
+        assert_eq!(completed, 0);
+    }
+
+    #[tokio::test]
+    async fn test_queue_metrics() {
+        let manager = JobQueueManager::new(JobQueueConfig::default());
+        manager.create_queue(
+            "metrics-test".to_string(),
+            "Metrics Test Queue".to_string(),
+            "Test queue for metrics".to_string()
+        ).await.unwrap();
+
+        // Test getting metrics
+        let metrics = manager.get_queue_metrics("metrics-test").await;
+        assert!(metrics.is_some());
+
+        let metrics = metrics.unwrap();
+        assert_eq!(metrics.total_jobs_submitted, 0);
+        assert_eq!(metrics.total_jobs_completed, 0);
+        assert_eq!(metrics.current_queue_size, 0);
+
+        // Test getting all metrics
+        let all_metrics = manager.get_all_queue_metrics().await.unwrap();
+        assert!(all_metrics.contains_key("metrics-test"));
+    }
+
+    #[tokio::test]
+    async fn test_export_functionality() {
+        let manager = JobQueueManager::new(JobQueueConfig::default());
+        manager.create_queue(
+            "export-test".to_string(),
+            "Export Test Queue".to_string(),
+            "Test queue for export".to_string()
+        ).await.unwrap();
+
+        // Test job export
+        let jobs = manager.export_jobs("export-test").await.unwrap();
+        assert_eq!(jobs.len(), 0);
+
+        // Test config export
+        let config = manager.export_queue_config("export-test").await.unwrap();
+        assert_eq!(config.max_concurrent_jobs, 4); // Default value
+
+        // Test full export
+        let all_data = manager.export_all_data("export-test").await.unwrap();
+        assert_eq!(all_data.queue_info.id, "export-test");
+        assert_eq!(all_data.jobs.len(), 0);
     }
 }

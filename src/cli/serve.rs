@@ -1,4 +1,4 @@
-use crate::{config::Config, metrics::MetricsCollector, backends::{Backend, BackendType}, models::ModelManager, api::{openai, websocket}, distributed::DistributedInference};
+use crate::{config::Config, metrics::MetricsCollector, backends::{BackendHandle, BackendType}, models::ModelManager, api::{openai, websocket}, distributed::DistributedInference};
 use anyhow::Result;
 use axum::{
     extract::State,
@@ -74,7 +74,7 @@ pub async fn execute(args: ServeArgs, config: &Config) -> Result<()> {
         if let Some(model_name) = &args.model {
             info!("Loading model on startup: {}", model_name);
             match load_model_on_startup(model_name, &*model_manager, config).await {
-                Ok((backend, model_name)) => (Some(Arc::new(Mutex::new(backend))), Some(model_name)),
+                Ok((backend_handle, model_name)) => (Some(backend_handle), Some(model_name)),
                 Err(e) => {
                     warn!("Failed to load startup model: {}", e);
                     (None, None)
@@ -155,7 +155,7 @@ pub async fn execute(args: ServeArgs, config: &Config) -> Result<()> {
 
 pub struct ServerState {
     pub config: Config,
-    pub backend: Option<Arc<Mutex<Backend>>>,
+    pub backend: Option<BackendHandle>,
     pub loaded_model: Option<String>,
     pub metrics: MetricsCollector,
     pub model_manager: ModelManager,
@@ -168,12 +168,12 @@ async fn load_model_on_startup(
     model_name: &str,
     model_manager: &ModelManager,
     config: &Config,
-) -> Result<(Backend, String)> {
+) -> Result<(BackendHandle, String)> {
     let model_info = model_manager.resolve_model(model_name).await?;
     let backend_type = BackendType::from_model_path(&model_info.path);
-    let mut backend = Backend::new(backend_type, &config.backend_config)?;
-    backend.load_model(&model_info).await?;
-    Ok((backend, model_info.name.clone()))
+    let backend_handle = BackendHandle::new_shared(backend_type, &config.backend_config)?;
+    backend_handle.load_model(&model_info).await?;
+    Ok((backend_handle, model_info.name.clone()))
 }
 
 // Handler functions

@@ -10,10 +10,12 @@
 ## ✨ Features
 
 🚀 **High Performance**
-- Multi-threaded async inference engine
-- GPU acceleration (CUDA, Metal, Vulkan)
-- Optimized memory management
-- Batch processing support
+- Real GGUF backend with llama.cpp integration
+- Full ONNX Runtime support with GPU acceleration
+- Multi-format model conversion (GGUF ↔ ONNX ↔ PyTorch ↔ SafeTensors)
+- Advanced caching with disk persistence and compression
+- Thread-safe backend cloning architecture
+- Optimized memory management and batch processing
 
 🔒 **Enterprise Security**
 - JWT and API key authentication
@@ -34,22 +36,73 @@
 - Comprehensive CLI interface
 
 🔧 **Advanced Features**
+- Real-time model format conversion with optimization
+- Advanced response caching with Gzip/Zstd compression
+- Complete audit system with encryption and alerting
+- Batch queue with cron scheduling and retry logic
 - A/B testing and canary deployments
-- Distributed inference clusters
-- Response caching and deduplication
-- Model versioning and rollbacks
+- Distributed inference clusters with load balancing
+- Hash-based deduplication (Blake3, xxHash)
+- Model versioning and automated rollbacks
 
 ## 🚀 Quick Start
 
 ### Installation
 
+#### Prerequisites
+
+- **Rust 1.70+** - Install from [rustup.rs](https://rustup.rs/)
+- **llama.cpp** - Required for GGUF model support
+- **ONNX Runtime** - Automatically handled via the `ort` crate
+- **OpenSSL** - Required for TLS support
+
+#### Platform-specific GPU Support
+
+**Linux:**
 ```bash
-# Build from source
+# CUDA support (NVIDIA GPUs)
+sudo apt install nvidia-cuda-toolkit
+
+# Vulkan support
+sudo apt install vulkan-tools libvulkan-dev
+```
+
+**macOS:**
+```bash
+# Metal support is built-in on macOS 10.13+
+# No additional installation required
+```
+
+**Windows:**
+```bash
+# DirectML support (Windows 10+)
+# Automatically available on Windows 10 1903+
+```
+
+#### Build from Source
+
+```bash
+# Clone repository
 git clone https://github.com/ringo380/inferno.git
 cd inferno
-cargo build --release
 
-# Or use Docker
+# Build with all features
+cargo build --release --all-features
+
+# Or build specific features
+cargo build --release --features "gguf,onnx,gpu"
+```
+
+#### Docker Installation
+
+```bash
+# Pull latest image
+docker pull inferno:latest
+
+# Run with GPU support (Linux + NVIDIA)
+docker run --gpus all -p 8080:8080 inferno:latest serve
+
+# Run CPU-only
 docker run -p 8080:8080 inferno:latest serve
 ```
 
@@ -84,6 +137,8 @@ inferno models list                    # List available models
 inferno models load llama-2-7b         # Load model into memory
 inferno models info llama-2-7b         # Show model details
 inferno validate model.gguf            # Validate model file
+inferno convert model input.gguf output.onnx --format onnx --optimization balanced
+inferno convert model input.pt output.gguf --format gguf --quantization q4_0
 ```
 
 ### Inference Operations
@@ -111,6 +166,9 @@ inferno observability metrics serve    # Start metrics server
 inferno distributed coordinator start  # Start coordinator
 inferno ab-test create --name test1    # A/B testing
 inferno cache warm --model llama-2-7b  # Cache warm-up
+inferno cache persist --compress gzip  # Enable persistent caching
+inferno audit enable --encryption      # Enable encrypted audit logs
+inferno batch-queue create --schedule "0 2 * * *" # Cron-based batch jobs
 ```
 
 ## 📚 API Documentation
@@ -135,6 +193,25 @@ inferno cache warm --model llama-2-7b  # Cache warm-up
 | `/v1/completions` | Text completions |
 | `/v1/models` | List models |
 | `/v1/embeddings` | Generate embeddings |
+
+### Dashboard API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/dashboard/stats` | GET | System statistics |
+| `/dashboard/models` | GET | Model status and metrics |
+| `/dashboard/health` | GET | Health check with details |
+| `/dashboard/config` | GET | Current configuration |
+| `/dashboard/logs` | GET | Recent log entries |
+| `/dashboard/metrics` | GET | Performance metrics |
+| `/dashboard/cache` | GET | Cache statistics |
+| `/dashboard/jobs` | GET | Batch job status |
+| `/dashboard/audit` | GET | Audit log entries |
+| `/dashboard/workers` | GET | Distributed worker status |
+| `/dashboard/resources` | GET | System resource usage |
+| `/dashboard/errors` | GET | Recent error reports |
+| `/dashboard/security` | GET | Security status |
+| `/dashboard/alerts` | GET | System alerts |
 
 [📖 **Complete API Reference**](API.md)
 
@@ -189,12 +266,14 @@ docker-compose up -d
 ```
 
 This deploys:
-- **Inferno**: Main inference server
-- **Prometheus**: Metrics collection
-- **Grafana**: Visualization dashboards
-- **Jaeger**: Distributed tracing
-- **Redis**: Caching layer
-- **Nginx**: Load balancer
+- **Inferno**: Main inference server with real GGUF/ONNX support
+- **Prometheus**: Metrics collection and alerting
+- **Grafana**: Visualization dashboards with custom panels
+- **Jaeger**: Distributed tracing and performance monitoring
+- **Redis**: Advanced caching layer with persistence
+- **Nginx**: Load balancer with SSL termination
+- **Database**: Audit log storage with compression
+- **MinIO**: Model storage and versioning
 
 ### Configuration
 
@@ -209,6 +288,41 @@ log_level = "info"
 bind_address = "0.0.0.0"
 port = 8080
 max_concurrent_requests = 100
+
+# Backend configuration
+[backend_config]
+gpu_enabled = true
+gpu_device = "auto"  # or specific device ID
+cpu_threads = 8
+context_size = 4096
+batch_size = 64
+memory_map = true
+
+# Cache configuration
+[cache]
+type = "persistent"  # memory, disk, persistent
+compression = "gzip"  # none, gzip, zstd
+max_size_gb = 10
+ttl_hours = 24
+
+# Model conversion settings
+[conversion]
+default_optimization = "balanced"  # fast, balanced, aggressive
+quantization_enabled = true
+default_precision = "fp16"
+
+# Audit system
+[audit]
+enabled = true
+compression = true
+encryption = true
+alert_channels = ["email", "slack", "webhook"]
+
+# Batch processing
+[batch_queue]
+max_concurrent_jobs = 5
+retry_attempts = 3
+default_schedule = "0 2 * * *"  # Daily at 2 AM
 
 # Security configuration
 [auth_security]
@@ -233,8 +347,9 @@ Inferno is built with a modular, trait-based architecture designed for scalabili
 │                 │    │                 │    │                 │
 │ • REST API      │    │ • Prometheus    │    │ • JWT Auth      │
 │ • OpenAI API    │    │ • OpenTelemetry │    │ • Rate Limiting │
-│ • WebSocket     │    │ • Grafana       │    │ • Access Control│
-│ • CLI           │    │ • Health Checks │    │ • Audit Logs    │
+│ • WebSocket     │    │ • Grafana       │    │ • RBAC          │
+│ • CLI + TUI     │    │ • Health Checks │    │ • Encrypted Logs│
+│ • Dashboard     │    │ • Real-time Logs│    │ • Multi-channel │
 └─────────────────┘    └─────────────────┘    └─────────────────┘
          │                       │                       │
          └───────────────────────┼───────────────────────┘
@@ -244,8 +359,9 @@ Inferno is built with a modular, trait-based architecture designed for scalabili
                     │                 │
                     │ • Model Manager │
                     │ • Cache System  │
-                    │ • Task Queue    │
+                    │ • Batch Queue   │
                     │ • Load Balancer │
+                    │ • Hash Functions│
                     └─────────────────┘
                                  │
          ┌───────────────────────┼───────────────────────┐
@@ -253,10 +369,12 @@ Inferno is built with a modular, trait-based architecture designed for scalabili
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
 │  ML Backends    │    │  Storage Layer  │    │  Distributed    │
 │                 │    │                 │    │                 │
-│ • GGUF Support  │    │ • Model Store   │    │ • Worker Pools  │
-│ • ONNX Support  │    │ • Response Cache│    │ • Load Balancing│
-│ • GPU Offload   │    │ • Metrics Store │    │ • Auto Scaling  │
-│ • Quantization  │    │ • Config Store  │    │ • Fault Tolerance│
+│ • Real GGUF     │    │ • Persistent    │    │ • Worker Pools  │
+│ • Real ONNX     │    │   Cache Store   │    │ • Load Balancing│
+│ • GPU Accel     │    │ • Compressed    │    │ • Auto Scaling  │
+│ • Quantization  │    │   Audit Logs    │    │ • Fault Tolerance│
+│ • Conversion    │    │ • Model Versioning│  │ • Cron Scheduling│
+│ • Thread Safety │    │ • Metrics Store │    │ • Retry Logic   │
 └─────────────────┘    └─────────────────┘    └─────────────────┘
 ```
 
