@@ -1,0 +1,141 @@
+name: Bug Report
+description: File a bug report to help us improve Inferno
+title: "[Bug]: "
+labels: ["bug", "triage"]
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to fill out this bug report! Please provide as much detail as possible.
+
+  - type: input
+    id: version
+    attributes:
+      label: Inferno Version
+      description: What version of Inferno are you running?
+      placeholder: e.g., 1.0.0, main branch
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: Operating System
+      description: What operating system are you using?
+      placeholder: e.g., Ubuntu 22.04, macOS 14, Windows 11
+    validations:
+      required: true
+
+  - type: input
+    id: rust-version
+    attributes:
+      label: Rust Version
+      description: What version of Rust are you using? (run `rustc --version`)
+      placeholder: e.g., rustc 1.75.0
+    validations:
+      required: true
+
+  - type: dropdown
+    id: installation
+    attributes:
+      label: Installation Method
+      description: How did you install Inferno?
+      options:
+        - Built from source
+        - Docker
+        - Pre-built binary
+        - Package manager
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: backend
+    attributes:
+      label: Backend Type
+      description: Which backend were you using when the bug occurred?
+      options:
+        - GGUF
+        - ONNX
+        - Both
+        - Not applicable
+        - Unknown
+
+  - type: textarea
+    id: bug-description
+    attributes:
+      label: Bug Description
+      description: A clear and concise description of what the bug is.
+      placeholder: Describe what happened and what you expected to happen.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction-steps
+    attributes:
+      label: Steps to Reproduce
+      description: Steps to reproduce the behavior
+      placeholder: |
+        1. Run command '...'
+        2. Load model '...'
+        3. Send request '...'
+        4. See error
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected-behavior
+    attributes:
+      label: Expected Behavior
+      description: A clear and concise description of what you expected to happen.
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual-behavior
+    attributes:
+      label: Actual Behavior
+      description: A clear and concise description of what actually happened.
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Log Output
+      description: Please copy and paste any relevant log output (run with RUST_LOG=debug for verbose logs)
+      render: shell
+
+  - type: textarea
+    id: config
+    attributes:
+      label: Configuration
+      description: If applicable, please share your configuration file (remove any sensitive information)
+      render: toml
+
+  - type: input
+    id: model
+    attributes:
+      label: Model Information
+      description: If applicable, what model were you using when the bug occurred?
+      placeholder: e.g., llama-2-7b-chat.gguf, bert-base-uncased.onnx
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Checklist
+      description: Please confirm the following
+      options:
+        - label: I have searched the existing issues to make sure this hasn't been reported
+          required: true
+        - label: I have provided enough information to reproduce the issue
+          required: true
+        - label: I have removed any sensitive information from logs and config
+          required: true
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional Context
+      description: Add any other context about the problem here (screenshots, related issues, etc.)

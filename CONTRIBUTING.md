@@ -1,396 +1,262 @@
 # Contributing to Inferno
 
-Thank you for your interest in contributing to Inferno! This document provides guidelines and information for contributors.
+Thank you for your interest in contributing to Inferno! This guide will help you get started.
 
-## 🤝 Code of Conduct
+## 🤝 How to Contribute
 
-This project adheres to a [Code of Conduct](CODE_OF_CONDUCT.md). By participating, you are expected to uphold this code.
+### Reporting Issues
+- Use the [issue tracker](https://github.com/ringo380/inferno/issues) to report bugs
+- Search existing issues before creating a new one
+- Use the issue templates for bug reports and feature requests
+- Provide as much detail as possible, including:
+  - Operating system and version
+  - Rust version (`rustc --version`)
+  - Command that caused the issue
+  - Expected vs actual behavior
+  - Log output (with `RUST_LOG=debug`)
 
-## 🚀 Getting Started
+### Feature Requests
+- Open a [discussion](https://github.com/ringo380/inferno/discussions) first for major features
+- Use the feature request issue template
+- Explain the use case and why it would benefit Inferno users
+- Consider if it fits with Inferno's goal of being a local AI inference platform
+
+### Pull Requests
+1. **Fork** the repository
+2. **Create** a feature branch: `git checkout -b feature/amazing-feature`
+3. **Implement** your changes with tests
+4. **Run** the full test suite: `./verify.sh`
+5. **Commit** with a clear message
+6. **Push** and create a Pull Request
+
+## 🛠️ Development Setup
 
 ### Prerequisites
+- **Rust 1.70+**: Install via [rustup](https://rustup.rs/)
+- **Git**: For version control
+- **Docker** (optional): For testing containerized deployments
 
-- Rust (latest stable version)
-- Git
-- System dependencies:
-  - **Linux**: `libssl-dev`, `pkg-config`
-  - **macOS**: Xcode command line tools
-  - **Windows**: Visual Studio Build Tools
-
-### Development Setup
-
-1. **Fork and clone the repository:**
-   ```bash
-   git clone https://github.com/YOUR_USERNAME/inferno.git
-   cd inferno
-   ```
-
-2. **Install dependencies:**
-   ```bash
-   # Install Rust if you haven't already
-   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-
-   # Install additional components
-   rustup component add rustfmt clippy
-   ```
-
-3. **Build the project:**
-   ```bash
-   cargo build
-   ```
-
-4. **Run tests:**
-   ```bash
-   cargo test
-   ```
-
-5. **Run the application:**
-   ```bash
-   cargo run -- --help
-   ```
-
-## 🔧 Development Workflow
-
-### Branch Strategy
-
-- `main` - Production-ready code
-- `develop` - Integration branch for features
-- `feature/*` - Feature branches
-- `bugfix/*` - Bug fix branches
-- `release/*` - Release preparation branches
-
-### Making Changes
-
-1. **Create a feature branch:**
-   ```bash
-   git checkout -b feature/your-feature-name
-   ```
-
-2. **Make your changes and commit:**
-   ```bash
-   git add .
-   git commit -m "feat: add new feature description"
-   ```
-
-3. **Follow commit message conventions:**
-   - `feat:` - New features
-   - `fix:` - Bug fixes
-   - `docs:` - Documentation changes
-   - `style:` - Code style changes
-   - `refactor:` - Code refactoring
-   - `test:` - Test additions or modifications
-   - `chore:` - Maintenance tasks
-
-4. **Push changes and create a pull request:**
-   ```bash
-   git push origin feature/your-feature-name
-   ```
-
-### Code Quality Standards
-
-Before submitting a pull request, ensure your code meets our quality standards:
-
+### Clone and Build
 ```bash
-# Format code
-cargo fmt
+git clone https://github.com/ringo380/inferno.git
+cd inferno
 
-# Check for linting issues
-cargo clippy -- -D warnings
+# Build in development mode
+cargo build
 
-# Run all tests
+# Run tests
 cargo test
 
-# Run integration tests
-cargo test --test integration_tests
-
-# Check documentation
-cargo doc --no-deps --document-private-items
-
-# Security audit
-cargo audit
+# Run full verification (build + test + lint + audit)
+./verify.sh
 ```
 
-### Testing
-
-We maintain comprehensive test coverage:
-
-- **Unit tests**: Test individual functions and modules
-- **Integration tests**: Test complete workflows
-- **Benchmarks**: Performance testing
-- **Example tests**: Ensure examples work correctly
-
+### Development Dependencies
 ```bash
-# Run specific test types
-cargo test --lib                    # Unit tests only
-cargo test --test integration_tests # Integration tests only
-cargo bench                        # Benchmarks
+# Install development tools
+cargo install cargo-watch    # Auto-rebuild on changes
+cargo install cargo-audit    # Security audits
+cargo install cargo-tarpaulin # Code coverage
+
+# Optional: Install pre-commit hooks
+cargo install pre-commit
+pre-commit install
 ```
 
-## 📝 Documentation
+## 📝 Code Guidelines
 
-### Code Documentation
-
-- Document all public APIs with rustdoc comments
-- Include examples in documentation where helpful
-- Keep documentation up-to-date with code changes
-
-```rust
-/// Loads a model from the specified path.
-///
-/// # Arguments
-///
-/// * `path` - The file path to the model
-/// * `config` - Configuration options for loading
-///
-/// # Returns
-///
-/// Returns a `Result` containing the loaded model or an error.
-///
-/// # Examples
-///
-/// ```rust
-/// use inferno::models::ModelManager;
-///
-/// let manager = ModelManager::new("./models");
-/// let model = manager.load_model("llama-7b.gguf").await?;
-/// ```
-pub async fn load_model(&self, path: &Path, config: &Config) -> Result<Model> {
-    // Implementation
-}
-```
-
-### User Documentation
-
-- Update README.md for user-facing changes
-- Add examples for new features
-- Update configuration documentation
-
-## 🐛 Bug Reports
-
-When reporting bugs, please include:
-
-1. **Environment information:**
-   - Operating system and version
-   - Rust version (`rustc --version`)
-   - Inferno version
-
-2. **Steps to reproduce:**
-   - Minimal example that demonstrates the issue
-   - Expected vs. actual behavior
-
-3. **Additional context:**
-   - Error messages and stack traces
-   - Relevant configuration
-   - Model information (if applicable)
-
-Use the bug report template when creating issues.
-
-## 💡 Feature Requests
-
-For feature requests, please provide:
-
-1. **Use case description:**
-   - What problem does this solve?
-   - Who would benefit from this feature?
-
-2. **Proposed solution:**
-   - How should the feature work?
-   - API design considerations
-
-3. **Alternatives considered:**
-   - Other approaches you've thought about
-   - Why this approach is preferred
-
-## 🏗️ Architecture Overview
-
-### Core Components
-
-- **CLI (`src/cli/`)**: Command-line interface implementation
-- **TUI (`src/tui/`)**: Terminal user interface
-- **Backends (`src/backends/`)**: Model execution backends (GGUF, ONNX)
-- **Models (`src/models/`)**: Model management and metadata
-- **Config (`src/config.rs`)**: Configuration management
-- **I/O (`src/io/`)**: Input/output format handling
-- **Metrics (`src/metrics/`)**: Performance monitoring
-
-### Design Principles
-
-1. **Performance**: Prioritize speed and efficiency
-2. **Safety**: Use Rust's type system to prevent bugs
-3. **Modularity**: Keep components loosely coupled
-4. **Testability**: Design for easy testing
-5. **Documentation**: Maintain clear, helpful documentation
-
-### Adding New Features
-
-When adding new features:
-
-1. **Design first**: Consider the API and user experience
-2. **Start small**: Implement a minimal viable version
-3. **Add tests**: Ensure comprehensive test coverage
-4. **Document**: Update relevant documentation
-5. **Consider backwards compatibility**: Avoid breaking changes
-
-### Backend Implementation
-
-To add a new model backend:
-
-1. **Implement the `InferenceBackend` trait:**
-   ```rust
-   #[async_trait::async_trait]
-   impl InferenceBackend for NewBackend {
-       async fn load_model(&mut self, model_info: &ModelInfo) -> Result<()> {
-           // Implementation
-       }
-
-       async fn infer(&mut self, input: &str, params: &InferenceParams) -> Result<String> {
-           // Implementation
-       }
-
-       // Other required methods...
-   }
-   ```
-
-2. **Add backend type to enum:**
-   ```rust
-   #[derive(Debug, Clone, Copy, ValueEnum)]
-   pub enum BackendType {
-       Gguf,
-       Onnx,
-       NewBackend, // Add here
-   }
-   ```
-
-3. **Update backend creation:**
-   ```rust
-   pub fn new(backend_type: BackendType, config: &BackendConfig) -> Result<Self> {
-       let backend_impl: Box<dyn InferenceBackend> = match backend_type {
-           BackendType::Gguf => Box::new(gguf::GgufBackend::new(config.clone())?),
-           BackendType::Onnx => Box::new(onnx::OnnxBackend::new(config.clone())?),
-           BackendType::NewBackend => Box::new(new::NewBackend::new(config.clone())?),
-       };
-       Ok(Self { backend_impl })
-   }
-   ```
-
-4. **Add comprehensive tests**
-5. **Update documentation**
-
-## 🔄 Release Process
-
-Releases follow semantic versioning (SemVer):
-
-- **Major** (X.0.0): Breaking changes
-- **Minor** (0.X.0): New features, backwards compatible
-- **Patch** (0.0.X): Bug fixes, backwards compatible
-
-### Release Checklist
-
-1. Update version in `Cargo.toml`
-2. Update `CHANGELOG.md`
-3. Run full test suite
-4. Create release PR to `main`
-5. Tag release after merge
-6. GitHub Actions will build and publish artifacts
-
-## 🌍 Internationalization
-
-While not currently implemented, we plan to support internationalization:
-
-- Use `fluent` for message localization
-- Extract user-facing strings to resource files
-- Support major languages (English, Spanish, French, German, Chinese, Japanese)
-
-## ⚡ Performance Guidelines
-
-### Memory Management
-
-- Use `Arc` and `Rc` judiciously for shared ownership
-- Prefer borrowing over cloning when possible
-- Be mindful of large model loading and memory usage
-
-### Async Programming
-
-- Use `async/await` for I/O operations
-- Avoid blocking in async contexts
-- Use `tokio::spawn` for CPU-intensive tasks
+### Code Style
+- Use `cargo fmt` to format code
+- Use `cargo clippy` to catch common issues
+- Follow Rust naming conventions
+- Write self-documenting code with clear variable names
+- Add comments for complex logic or algorithms
 
 ### Error Handling
+- Use `anyhow::Result` for application errors
+- Use `thiserror` for library errors
+- Provide helpful error messages with context
+- Don't panic in library code (use `Result` instead)
 
-- Use `Result` types consistently
-- Provide meaningful error messages
-- Use `anyhow` for application errors, `thiserror` for library errors
+### Testing
+- Write unit tests for all public functions
+- Add integration tests for complex workflows
+- Use `#[cfg(test)]` for test-only code
+- Mock external dependencies in tests
+- Aim for >80% code coverage
 
-## 🧪 Testing Guidelines
+### Documentation
+- Document all public APIs with rustdoc comments
+- Include examples in documentation
+- Update relevant documentation files
+- Add entries to CHANGELOG.md for user-facing changes
 
-### Unit Tests
+## 🏗️ Project Structure
 
+```
+inferno/
+├── src/
+│   ├── backends/           # AI model backends (GGUF, ONNX)
+│   ├── api/               # HTTP and WebSocket APIs
+│   ├── cli/               # Command-line interface
+│   ├── tui/               # Terminal user interface
+│   ├── cache.rs           # Caching system
+│   ├── config.rs          # Configuration management
+│   └── lib.rs             # Library entry point
+├── tests/                 # Integration tests
+├── examples/              # Usage examples
+├── docs/                  # Additional documentation
+└── scripts/               # Build and deployment scripts
+```
+
+## 🧪 Testing
+
+### Running Tests
+```bash
+# Unit tests
+cargo test
+
+# Integration tests
+cargo test --test integration_tests
+
+# Specific test
+cargo test test_gguf_backend
+
+# With logging
+RUST_LOG=debug cargo test -- --nocapture
+```
+
+### Test Categories
+- **Unit Tests**: Fast, isolated tests for individual functions
+- **Integration Tests**: Test component interactions
+- **Performance Tests**: Benchmark critical paths
+- **End-to-End Tests**: Full workflow testing
+
+### Writing Tests
 ```rust
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_function_name() {
-        // Test implementation
-    }
+    use tempfile::TempDir;
 
     #[tokio::test]
-    async fn test_async_function() {
-        // Async test implementation
+    async fn test_model_loading() {
+        let temp_dir = TempDir::new().unwrap();
+        let model_manager = ModelManager::new(temp_dir.path());
+
+        // Test implementation
+        assert!(model_manager.list_models().await.is_ok());
     }
 }
 ```
 
-### Integration Tests
+## 🎯 Areas for Contribution
 
-Place integration tests in `tests/` directory:
+### High Priority
+- **Backend Improvements**: Enhance GGUF/ONNX implementations
+- **Performance**: Optimize inference speed and memory usage
+- **Documentation**: Improve guides and API documentation
+- **Testing**: Increase test coverage and add edge cases
 
-```rust
-// tests/integration_tests.rs
-use inferno::*;
+### Medium Priority
+- **New Model Formats**: Add support for additional formats
+- **Platform Support**: Improve Windows/macOS compatibility
+- **Monitoring**: Enhance metrics and observability
+- **Security**: Strengthen authentication and authorization
 
-#[tokio::test]
-async fn test_full_workflow() {
-    // Test complete user workflows
-}
+### Low Priority
+- **UI/UX**: Improve CLI and TUI interfaces
+- **Examples**: Add more usage examples
+- **Integrations**: Add client libraries for other languages
+- **Deployment**: Docker, Kubernetes, cloud deployment guides
+
+## 📋 Commit Guidelines
+
+### Commit Message Format
+```
+type(scope): brief description
+
+Longer description explaining the change and why it was made.
+
+Fixes #123
 ```
 
-### Benchmarks
+### Types
+- `feat`: New feature
+- `fix`: Bug fix
+- `docs`: Documentation changes
+- `style`: Code style changes (formatting, etc.)
+- `refactor`: Code refactoring
+- `test`: Adding or updating tests
+- `chore`: Maintenance tasks
 
-Use Criterion for benchmarks:
+### Examples
+```
+feat(backends): add GPU memory optimization for GGUF models
 
-```rust
-// benches/my_benchmark.rs
-use criterion::{criterion_group, criterion_main, Criterion};
+Implements dynamic memory allocation that reduces GPU memory usage
+by 30% for large models while maintaining inference speed.
 
-fn benchmark_function(c: &mut Criterion) {
-    c.bench_function("function_name", |b| {
-        b.iter(|| {
-            // Code to benchmark
-        })
-    });
-}
+Fixes #456
 
-criterion_group!(benches, benchmark_function);
-criterion_main!(benches);
+---
+
+fix(cache): resolve race condition in concurrent cache access
+
+The cache was not properly handling concurrent reads and writes,
+leading to occasional panics. Added proper synchronization using
+Arc<RwLock<>> pattern.
+
+Fixes #789
 ```
 
-## 📞 Getting Help
+## 🔍 Code Review Process
 
-If you need help:
+### For Contributors
+- Keep PRs focused and reasonably sized
+- Write clear PR descriptions explaining the change
+- Respond to feedback promptly and constructively
+- Update documentation and tests as needed
 
-1. Check existing [documentation](README.md)
-2. Search [existing issues](https://github.com/inferno-ai/inferno/issues)
-3. Join our [discussions](https://github.com/inferno-ai/inferno/discussions)
-4. Ask questions in issues (use the "question" label)
+### For Reviewers
+- Be constructive and helpful in feedback
+- Focus on code correctness, performance, and maintainability
+- Check that tests adequately cover the changes
+- Verify documentation is updated
 
-## 🎉 Recognition
+## 🚀 Release Process
 
-Contributors will be recognized in:
+### Versioning
+- Follow [Semantic Versioning](https://semver.org/)
+- Major: Breaking changes
+- Minor: New features (backward compatible)
+- Patch: Bug fixes (backward compatible)
 
-- `CONTRIBUTORS.md` file
-- Release notes for significant contributions
-- Special thanks in documentation
+### Release Checklist
+1. Update CHANGELOG.md
+2. Update version in Cargo.toml
+3. Run full test suite
+4. Create release PR
+5. Tag release after merge
+6. Publish to crates.io
+7. Update Docker images
+
+## 🏷️ Labels
+
+We use these labels to organize issues and PRs:
+
+- `bug`: Something isn't working
+- `enhancement`: New feature or improvement
+- `documentation`: Documentation needs
+- `good first issue`: Good for newcomers
+- `help wanted`: Extra attention needed
+- `performance`: Performance improvements
+- `security`: Security-related changes
+
+## 🤔 Questions?
+
+- **Discord**: [Join our community](https://discord.gg/inferno)
+- **Discussions**: [GitHub Discussions](https://github.com/ringo380/inferno/discussions)
+- **Issues**: [Report bugs or request features](https://github.com/ringo380/inferno/issues)
 
 Thank you for contributing to Inferno! 🔥
