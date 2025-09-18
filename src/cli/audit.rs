@@ -382,7 +382,7 @@ pub enum ReportFormat {
     Csv,
 }
 
-pub async fn execute(args: AuditArgs, config: &Config) -> Result<()> {
+pub async fn execute(args: AuditArgs, _config: &Config) -> Result<()> {
     let audit_config = AuditConfiguration::default();
     let logger = AuditLogger::new(audit_config).await?;
 
@@ -413,6 +413,7 @@ pub async fn execute(args: AuditArgs, config: &Config) -> Result<()> {
                 sort_by: Some(SortField::from(sort_by)),
                 sort_order: Some(SortOrder::from(sort_order)),
                 search_text: search,
+                ..Default::default()
             };
 
             let events = logger.query_events(query).await?;
@@ -448,6 +449,7 @@ pub async fn execute(args: AuditArgs, config: &Config) -> Result<()> {
                 sort_by: Some(SortField::Timestamp),
                 sort_order: Some(SortOrder::Descending),
                 search_text: None,
+                ..Default::default()
             };
 
             logger.export_events(query, &output, ExportFormat::from(format)).await?;
@@ -478,6 +480,12 @@ pub async fn execute(args: AuditArgs, config: &Config) -> Result<()> {
                     sort_by: Some(SortField::Timestamp),
                     sort_order: Some(SortOrder::Descending),
                     search_text: None,
+                    date_range: None,
+                    actor_filter: None,
+                    resource_filter: None,
+                    severity_filter: None,
+                    outcome_filter: None,
+                    text_search: None,
                 };
 
                 let events = logger.query_events(query).await?;
@@ -510,7 +518,13 @@ pub async fn execute(args: AuditArgs, config: &Config) -> Result<()> {
                 offset: None,
                 sort_by: Some(SortField::Timestamp),
                 sort_order: Some(SortOrder::Descending),
-                search_text: Some(query),
+                search_text: Some(query.clone()),
+                date_range: None,
+                actor_filter: None,
+                resource_filter: None,
+                severity_filter: None,
+                outcome_filter: None,
+                text_search: Some(query),
             };
 
             let events = logger.query_events(search_query).await?;
@@ -539,6 +553,7 @@ pub async fn execute(args: AuditArgs, config: &Config) -> Result<()> {
                 sort_by: Some(SortField::Timestamp),
                 sort_order: Some(SortOrder::Descending),
                 search_text: None,
+                ..Default::default()
             };
 
             let events = logger.query_events(query).await?;
@@ -821,7 +836,7 @@ fn create_audit_event(
         context: EventContext {
             environment: "manual".to_string(),
             application: "inferno".to_string(),
-            version: env!("CARGO_PKG_VERSION").to_string(),
+            version: std::env::var("CARGO_PKG_VERSION").unwrap_or_else(|_| "0.1.0".to_string()),
             hostname: "localhost".to_string(),
             process_id: std::process::id(),
             thread_id: None,

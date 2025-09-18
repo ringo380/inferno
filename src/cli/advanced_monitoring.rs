@@ -813,6 +813,7 @@ pub enum SilenceAction {
 pub enum OutputFormat {
     Json,
     Yaml,
+    Csv,
     Table,
     Plain,
 }
@@ -835,6 +836,7 @@ pub enum DiscoveryMethod {
 #[derive(Debug, Clone)]
 pub enum ExportFormat {
     Json,
+    Yaml,
     Csv,
     Prometheus,
     Parquet,
@@ -1023,7 +1025,7 @@ async fn handle_start_command(
     // Initialize monitoring system
     let monitoring_system = AdvancedMonitoringSystem::new(
         config.monitoring.clone().into()
-    ).await?;
+    )?;
 
     // Start the system
     monitoring_system.start().await?;
@@ -1084,7 +1086,7 @@ async fn handle_status_command(
 
     let monitoring_system = AdvancedMonitoringSystem::new(
         config.monitoring.clone().into()
-    ).await?;
+    )?;
 
     let status = monitoring_system.get_status().await?;
 
@@ -1096,6 +1098,17 @@ async fn handle_status_command(
         }
         OutputFormat::Yaml => {
             println!("{}", serde_yaml::to_string(&status)?);
+        }
+        OutputFormat::Csv => {
+            // CSV output for status
+            println!("component,status,healthy,message");
+            for (name, component_status) in &status.components {
+                println!("{},{},{},\"{}\"",
+                    name,
+                    if component_status.healthy { "OK" } else { "ERROR" },
+                    component_status.healthy,
+                    component_status.message.replace("\"", "\"\""));
+            }
         }
         OutputFormat::Table => {
             println!("Advanced Monitoring System Status");
@@ -1142,7 +1155,7 @@ async fn handle_prometheus_command(
         PrometheusAction::Config { raw, validate } => {
             let monitoring_system = AdvancedMonitoringSystem::new(
                 config.monitoring.clone().into()
-            ).await?;
+            )?;
 
             let prometheus_config = monitoring_system.get_prometheus_config().await?;
 
@@ -1173,7 +1186,7 @@ async fn handle_prometheus_command(
         PrometheusAction::Reload { force } => {
             let monitoring_system = AdvancedMonitoringSystem::new(
                 config.monitoring.clone().into()
-            ).await?;
+            )?;
 
             if !force {
                 if let Err(e) = monitoring_system.validate_prometheus_config().await {
@@ -1189,7 +1202,7 @@ async fn handle_prometheus_command(
         PrometheusAction::Query { query, time, timeout, format } => {
             let monitoring_system = AdvancedMonitoringSystem::new(
                 config.monitoring.clone().into()
-            ).await?;
+            )?;
 
             let query_time = time.as_deref().unwrap_or("now");
             let query_timeout = timeout.unwrap_or(30);
@@ -1198,7 +1211,7 @@ async fn handle_prometheus_command(
                 &query,
                 query_time,
                 query_timeout,
-            ).await?;
+            )?;
 
             let output_format = format.unwrap_or(OutputFormat::Json);
             match output_format {
@@ -1215,7 +1228,7 @@ async fn handle_prometheus_command(
         PrometheusAction::QueryRange { query, start, end, step, format } => {
             let monitoring_system = AdvancedMonitoringSystem::new(
                 config.monitoring.clone().into()
-            ).await?;
+            )?;
 
             let step_duration = step.as_deref().unwrap_or("1m");
 
@@ -1224,7 +1237,7 @@ async fn handle_prometheus_command(
                 &start,
                 &end,
                 step_duration,
-            ).await?;
+            )?;
 
             let output_format = format.unwrap_or(OutputFormat::Json);
             match output_format {
@@ -1249,7 +1262,7 @@ async fn handle_prometheus_command(
         PrometheusAction::Targets { active, unhealthy, job } => {
             let monitoring_system = AdvancedMonitoringSystem::new(
                 config.monitoring.clone().into()
-            ).await?;
+            )?;
 
             let targets = monitoring_system.get_prometheus_targets().await?;
 
@@ -1274,7 +1287,7 @@ async fn handle_prometheus_command(
         PrometheusAction::Info => {
             let monitoring_system = AdvancedMonitoringSystem::new(
                 config.monitoring.clone().into()
-            ).await?;
+            )?;
 
             let info = monitoring_system.get_prometheus_info().await?;
 
@@ -1300,7 +1313,7 @@ async fn handle_alertmanager_command(
         AlertmanagerAction::Config { raw, validate } => {
             let monitoring_system = AdvancedMonitoringSystem::new(
                 config.monitoring.clone().into()
-            ).await?;
+            )?;
 
             let alertmanager_config = monitoring_system.get_alertmanager_config().await?;
 
@@ -1329,7 +1342,7 @@ async fn handle_alertmanager_command(
         AlertmanagerAction::Reload { force } => {
             let monitoring_system = AdvancedMonitoringSystem::new(
                 config.monitoring.clone().into()
-            ).await?;
+            )?;
 
             if !force {
                 if let Err(e) = monitoring_system.validate_alertmanager_config().await {
@@ -1345,13 +1358,13 @@ async fn handle_alertmanager_command(
         AlertmanagerAction::Alerts { state, receiver, label, format } => {
             let monitoring_system = AdvancedMonitoringSystem::new(
                 config.monitoring.clone().into()
-            ).await?;
+            )?;
 
             let alerts = monitoring_system.get_alertmanager_alerts(
                 state.as_ref(),
                 receiver.as_deref(),
                 &label,
-            ).await?;
+            )?;
 
             let output_format = format.unwrap_or(OutputFormat::Table);
             match output_format {
@@ -1380,13 +1393,13 @@ async fn handle_alertmanager_command(
         AlertmanagerAction::Test { receiver, labels, annotations } => {
             let monitoring_system = AdvancedMonitoringSystem::new(
                 config.monitoring.clone().into()
-            ).await?;
+            )?;
 
             let test_result = monitoring_system.test_alertmanager_receiver(
                 &receiver,
                 &labels,
                 &annotations,
-            ).await?;
+            )?;
 
             if test_result.success {
                 info!("Test notification sent successfully to receiver: {}", receiver);
@@ -1398,7 +1411,7 @@ async fn handle_alertmanager_command(
         AlertmanagerAction::Status => {
             let monitoring_system = AdvancedMonitoringSystem::new(
                 config.monitoring.clone().into()
-            ).await?;
+            )?;
 
             let status = monitoring_system.get_alertmanager_status().await?;
 
@@ -1423,7 +1436,7 @@ async fn handle_dashboard_command(
         DashboardAction::List { tag, imported, format } => {
             let monitoring_system = AdvancedMonitoringSystem::new(
                 config.monitoring.clone().into()
-            ).await?;
+            )?;
 
             let dashboards = monitoring_system.list_dashboards(&tag, imported).await?;
 
@@ -1447,14 +1460,14 @@ async fn handle_dashboard_command(
         DashboardAction::Import { source, name, folder, overwrite } => {
             let monitoring_system = AdvancedMonitoringSystem::new(
                 config.monitoring.clone().into()
-            ).await?;
+            )?;
 
             let dashboard_id = monitoring_system.import_dashboard(
                 &source,
                 name.as_deref(),
                 folder.as_deref(),
                 overwrite,
-            ).await?;
+            )?;
 
             info!("Dashboard imported successfully with ID: {}", dashboard_id);
         }
@@ -1462,13 +1475,13 @@ async fn handle_dashboard_command(
         DashboardAction::Export { dashboard, output, include_variables } => {
             let monitoring_system = AdvancedMonitoringSystem::new(
                 config.monitoring.clone().into()
-            ).await?;
+            )?;
 
             monitoring_system.export_dashboard(
                 &dashboard,
                 &output,
                 include_variables,
-            ).await?;
+            )?;
 
             info!("Dashboard exported to: {}", output.display());
         }
@@ -1476,13 +1489,13 @@ async fn handle_dashboard_command(
         DashboardAction::Update { dashboard, file, message } => {
             let monitoring_system = AdvancedMonitoringSystem::new(
                 config.monitoring.clone().into()
-            ).await?;
+            )?;
 
             monitoring_system.update_dashboard(
                 &dashboard,
                 &file,
                 message.as_deref(),
-            ).await?;
+            )?;
 
             info!("Dashboard updated successfully");
         }
@@ -1500,7 +1513,7 @@ async fn handle_dashboard_command(
 
             let monitoring_system = AdvancedMonitoringSystem::new(
                 config.monitoring.clone().into()
-            ).await?;
+            )?;
 
             monitoring_system.delete_dashboard(&dashboard).await?;
             info!("Dashboard deleted successfully");
@@ -1509,13 +1522,13 @@ async fn handle_dashboard_command(
         DashboardAction::Snapshot { dashboard, name, expires } => {
             let monitoring_system = AdvancedMonitoringSystem::new(
                 config.monitoring.clone().into()
-            ).await?;
+            )?;
 
             let snapshot_url = monitoring_system.create_dashboard_snapshot(
                 &dashboard,
                 name.as_deref(),
                 expires,
-            ).await?;
+            )?;
 
             info!("Dashboard snapshot created: {}", snapshot_url);
         }
@@ -1523,19 +1536,19 @@ async fn handle_dashboard_command(
         DashboardAction::Provision { directory, watch, folder } => {
             let monitoring_system = AdvancedMonitoringSystem::new(
                 config.monitoring.clone().into()
-            ).await?;
+            )?;
 
             if watch {
                 info!("Watching directory for dashboard changes: {}", directory.display());
                 monitoring_system.watch_and_provision_dashboards(
                     &directory,
                     folder.as_deref(),
-                ).await?;
+                )?;
             } else {
                 let count = monitoring_system.provision_dashboards(
                     &directory,
                     folder.as_deref(),
-                ).await?;
+                )?;
                 info!("Provisioned {} dashboards from {}", count, directory.display());
             }
         }
@@ -1552,13 +1565,13 @@ async fn handle_targets_command(
         TargetAction::List { target_type, healthy, unhealthy, format } => {
             let monitoring_system = AdvancedMonitoringSystem::new(
                 config.monitoring.clone().into()
-            ).await?;
+            )?;
 
             let targets = monitoring_system.list_monitoring_targets(
                 target_type.as_deref(),
                 healthy,
                 unhealthy,
-            ).await?;
+            )?;
 
             let output_format = format.unwrap_or(OutputFormat::Table);
             match output_format {
@@ -1581,7 +1594,7 @@ async fn handle_targets_command(
         TargetAction::Add { address, target_type, labels, interval, timeout } => {
             let monitoring_system = AdvancedMonitoringSystem::new(
                 config.monitoring.clone().into()
-            ).await?;
+            )?;
 
             let target_id = monitoring_system.add_monitoring_target(
                 &address,
@@ -1589,7 +1602,7 @@ async fn handle_targets_command(
                 &labels,
                 interval.as_deref(),
                 timeout.as_deref(),
-            ).await?;
+            )?;
 
             info!("Monitoring target added with ID: {}", target_id);
         }
@@ -1607,7 +1620,7 @@ async fn handle_targets_command(
 
             let monitoring_system = AdvancedMonitoringSystem::new(
                 config.monitoring.clone().into()
-            ).await?;
+            )?;
 
             monitoring_system.remove_monitoring_target(&target).await?;
             info!("Monitoring target removed successfully");
@@ -1616,14 +1629,14 @@ async fn handle_targets_command(
         TargetAction::Update { target, labels, interval, timeout } => {
             let monitoring_system = AdvancedMonitoringSystem::new(
                 config.monitoring.clone().into()
-            ).await?;
+            )?;
 
             monitoring_system.update_monitoring_target(
                 &target,
                 &labels,
                 interval.as_deref(),
                 timeout.as_deref(),
-            ).await?;
+            )?;
 
             info!("Monitoring target updated successfully");
         }
@@ -1631,13 +1644,13 @@ async fn handle_targets_command(
         TargetAction::Test { address, timeout } => {
             let monitoring_system = AdvancedMonitoringSystem::new(
                 config.monitoring.clone().into()
-            ).await?;
+            )?;
 
             let test_timeout = timeout.unwrap_or(10);
             let result = monitoring_system.test_target_connectivity(
                 &address,
                 test_timeout,
-            ).await?;
+            )?;
 
             if result.success {
                 info!("Target connectivity test successful - Response time: {}ms",
@@ -1651,12 +1664,12 @@ async fn handle_targets_command(
         TargetAction::Discover { method, config: config_file, auto_add } => {
             let monitoring_system = AdvancedMonitoringSystem::new(
                 config.monitoring.clone().into()
-            ).await?;
+            )?;
 
             let discovered_targets = monitoring_system.discover_targets(
                 method.as_ref(),
                 config_file.as_deref(),
-            ).await?;
+            )?;
 
             info!("Discovered {} targets", discovered_targets.len());
 
@@ -1667,7 +1680,7 @@ async fn handle_targets_command(
             if auto_add {
                 let added_count = monitoring_system.auto_add_discovered_targets(
                     &discovered_targets
-                ).await?;
+                )?;
                 info!("Automatically added {} targets", added_count);
             }
         }
@@ -1684,12 +1697,12 @@ async fn handle_alerts_command(
         AlertAction::Rules { group, firing, format } => {
             let monitoring_system = AdvancedMonitoringSystem::new(
                 config.monitoring.clone().into()
-            ).await?;
+            )?;
 
             let rules = monitoring_system.list_alert_rules(
                 group.as_deref(),
                 firing,
-            ).await?;
+            )?;
 
             let output_format = format.unwrap_or(OutputFormat::Table);
             match output_format {
@@ -1715,7 +1728,7 @@ async fn handle_alerts_command(
         AlertAction::Add { file, group, validate } => {
             let monitoring_system = AdvancedMonitoringSystem::new(
                 config.monitoring.clone().into()
-            ).await?;
+            )?;
 
             if validate {
                 monitoring_system.validate_alert_rules(&file).await?;
@@ -1725,7 +1738,7 @@ async fn handle_alerts_command(
             let rule_id = monitoring_system.add_alert_rule(
                 &file,
                 group.as_deref(),
-            ).await?;
+            )?;
 
             info!("Alert rule added with ID: {}", rule_id);
         }
@@ -1743,7 +1756,7 @@ async fn handle_alerts_command(
 
             let monitoring_system = AdvancedMonitoringSystem::new(
                 config.monitoring.clone().into()
-            ).await?;
+            )?;
 
             monitoring_system.remove_alert_rule(&name, group.as_deref()).await?;
             info!("Alert rule removed successfully");
@@ -1752,13 +1765,13 @@ async fn handle_alerts_command(
         AlertAction::Test { rule, data, duration } => {
             let monitoring_system = AdvancedMonitoringSystem::new(
                 config.monitoring.clone().into()
-            ).await?;
+            )?;
 
             let test_result = monitoring_system.test_alert_rule(
                 &rule,
                 data.as_deref(),
                 duration.as_deref(),
-            ).await?;
+            )?;
 
             if test_result.success {
                 info!("Alert rule test passed");
@@ -1777,12 +1790,12 @@ async fn handle_alerts_command(
         AlertAction::Active { severity, label, format } => {
             let monitoring_system = AdvancedMonitoringSystem::new(
                 config.monitoring.clone().into()
-            ).await?;
+            )?;
 
             let active_alerts = monitoring_system.get_active_alerts(
                 severity.as_deref(),
                 &label,
-            ).await?;
+            )?;
 
             let output_format = format.unwrap_or(OutputFormat::Table);
             match output_format {
@@ -1807,14 +1820,14 @@ async fn handle_alerts_command(
         AlertAction::History { start, end, rule, limit } => {
             let monitoring_system = AdvancedMonitoringSystem::new(
                 config.monitoring.clone().into()
-            ).await?;
+            )?;
 
             let alert_history = monitoring_system.get_alert_history(
                 start.as_deref(),
                 end.as_deref(),
                 rule.as_deref(),
                 limit,
-            ).await?;
+            )?;
 
             println!("Alert History");
             println!("=============");
@@ -1827,13 +1840,13 @@ async fn handle_alerts_command(
         AlertAction::Ack { alert, comment, expires } => {
             let monitoring_system = AdvancedMonitoringSystem::new(
                 config.monitoring.clone().into()
-            ).await?;
+            )?;
 
             monitoring_system.acknowledge_alert(
                 &alert,
                 comment.as_deref(),
                 expires.as_deref(),
-            ).await?;
+            )?;
 
             info!("Alert acknowledged: {}", alert);
         }
@@ -1850,7 +1863,7 @@ async fn handle_export_command(
         ExportAction::Metrics { output, start, end, metrics, format, compress } => {
             let monitoring_system = AdvancedMonitoringSystem::new(
                 config.monitoring.clone().into()
-            ).await?;
+            )?;
 
             let export_format = format.unwrap_or(ExportFormat::Json);
 
@@ -1861,7 +1874,7 @@ async fn handle_export_command(
                 &metrics,
                 &export_format,
                 compress,
-            ).await?;
+            )?;
 
             info!("Metrics exported to: {}", output.display());
         }
@@ -1869,7 +1882,7 @@ async fn handle_export_command(
         ExportAction::Alerts { output, start, end, format } => {
             let monitoring_system = AdvancedMonitoringSystem::new(
                 config.monitoring.clone().into()
-            ).await?;
+            )?;
 
             let export_format = format.unwrap_or(ExportFormat::Json);
 
@@ -1878,7 +1891,7 @@ async fn handle_export_command(
                 start.as_deref(),
                 end.as_deref(),
                 &export_format,
-            ).await?;
+            )?;
 
             info!("Alerts exported to: {}", output.display());
         }
@@ -1886,7 +1899,7 @@ async fn handle_export_command(
         ExportAction::Config { output, include_secrets, format } => {
             let monitoring_system = AdvancedMonitoringSystem::new(
                 config.monitoring.clone().into()
-            ).await?;
+            )?;
 
             let export_format = format.unwrap_or(ExportFormat::Yaml);
 
@@ -1894,7 +1907,7 @@ async fn handle_export_command(
                 &output,
                 include_secrets,
                 &export_format,
-            ).await?;
+            )?;
 
             info!("Configuration exported to: {}", output.display());
         }
@@ -1902,7 +1915,7 @@ async fn handle_export_command(
         ExportAction::Dashboards { output, dashboards, format } => {
             let monitoring_system = AdvancedMonitoringSystem::new(
                 config.monitoring.clone().into()
-            ).await?;
+            )?;
 
             let export_format = format.unwrap_or(ExportFormat::Json);
 
@@ -1910,7 +1923,7 @@ async fn handle_export_command(
                 &output,
                 &dashboards,
                 &export_format,
-            ).await?;
+            )?;
 
             info!("Dashboards exported to: {}", output.display());
         }
@@ -1927,7 +1940,7 @@ async fn handle_health_command(
 ) -> Result<()> {
     let monitoring_system = AdvancedMonitoringSystem::new(
         config.monitoring.clone().into()
-    ).await?;
+    )?;
 
     let health_check = if comprehensive {
         monitoring_system.comprehensive_health_check().await?
@@ -1980,7 +1993,7 @@ async fn handle_retention_command(
         RetentionAction::Show { detailed, format } => {
             let monitoring_system = AdvancedMonitoringSystem::new(
                 config.monitoring.clone().into()
-            ).await?;
+            )?;
 
             let retention_policies = monitoring_system.get_retention_policies().await?;
 
@@ -2008,14 +2021,14 @@ async fn handle_retention_command(
         RetentionAction::Update { metrics, alerts, logs, auto_cleanup } => {
             let monitoring_system = AdvancedMonitoringSystem::new(
                 config.monitoring.clone().into()
-            ).await?;
+            )?;
 
             monitoring_system.update_retention_policies(
                 metrics.as_deref(),
                 alerts.as_deref(),
                 logs.as_deref(),
                 auto_cleanup,
-            ).await?;
+            )?;
 
             info!("Retention policies updated successfully");
         }
@@ -2023,13 +2036,13 @@ async fn handle_retention_command(
         RetentionAction::Cleanup { cleanup_type, older_than, dry_run, force } => {
             let monitoring_system = AdvancedMonitoringSystem::new(
                 config.monitoring.clone().into()
-            ).await?;
+            )?;
 
             if dry_run {
                 let cleanup_preview = monitoring_system.preview_cleanup(
                     cleanup_type.as_ref(),
                     older_than.as_deref(),
-                ).await?;
+                )?;
 
                 println!("Cleanup Preview");
                 println!("===============");
@@ -2052,7 +2065,7 @@ async fn handle_retention_command(
             let cleanup_result = monitoring_system.perform_cleanup(
                 cleanup_type.as_ref(),
                 older_than.as_deref(),
-            ).await?;
+            )?;
 
             info!("Cleanup completed - Deleted {} items, freed {} MB",
                   cleanup_result.deleted_count, cleanup_result.freed_space_mb);
@@ -2061,7 +2074,7 @@ async fn handle_retention_command(
         RetentionAction::Compact { level, start, end, force } => {
             let monitoring_system = AdvancedMonitoringSystem::new(
                 config.monitoring.clone().into()
-            ).await?;
+            )?;
 
             if !force {
                 println!("Data compaction may take a long time and impact performance. Continue? (y/N)");
@@ -2077,7 +2090,7 @@ async fn handle_retention_command(
                 level,
                 start.as_deref(),
                 end.as_deref(),
-            ).await?;
+            )?;
 
             info!("Data compaction completed - Processed {} blocks, saved {} MB",
                   compaction_result.processed_blocks, compaction_result.space_saved_mb);
@@ -2095,7 +2108,7 @@ async fn handle_test_command(
         TestAction::Config { config: config_file, component } => {
             let monitoring_system = AdvancedMonitoringSystem::new(
                 config.monitoring.clone().into()
-            ).await?;
+            )?;
 
             let test_result = if let Some(comp) = component {
                 monitoring_system.test_component_config(&comp, config_file.as_deref()).await?
@@ -2116,7 +2129,7 @@ async fn handle_test_command(
         TestAction::Connectivity { prometheus, alertmanager, grafana, all } => {
             let monitoring_system = AdvancedMonitoringSystem::new(
                 config.monitoring.clone().into()
-            ).await?;
+            )?;
 
             if all || prometheus {
                 match monitoring_system.test_prometheus_connectivity().await {
@@ -2143,12 +2156,12 @@ async fn handle_test_command(
         TestAction::AlertRules { file, data } => {
             let monitoring_system = AdvancedMonitoringSystem::new(
                 config.monitoring.clone().into()
-            ).await?;
+            )?;
 
             let test_result = monitoring_system.test_alert_rules_file(
-                &file,
+                file.as_path(),
                 data.as_deref(),
-            ).await?;
+            )?;
 
             if test_result.success {
                 info!("Alert rules test passed - {} rules validated", test_result.rules_count);
@@ -2160,12 +2173,12 @@ async fn handle_test_command(
         TestAction::Notifications { receiver, message } => {
             let monitoring_system = AdvancedMonitoringSystem::new(
                 config.monitoring.clone().into()
-            ).await?;
+            )?;
 
             let test_result = monitoring_system.test_notification_channel(
                 &receiver,
                 message.as_deref(),
-            ).await?;
+            )?;
 
             if test_result.success {
                 info!("Notification test successful - Delivery time: {}ms",
@@ -2178,7 +2191,7 @@ async fn handle_test_command(
         TestAction::Load { concurrency, duration, rate } => {
             let monitoring_system = AdvancedMonitoringSystem::new(
                 config.monitoring.clone().into()
-            ).await?;
+            )?;
 
             let test_concurrency = concurrency.unwrap_or(10);
             let test_duration = duration.unwrap_or(60);
@@ -2191,7 +2204,7 @@ async fn handle_test_command(
                 test_concurrency,
                 test_duration,
                 test_rate,
-            ).await?;
+            )?;
 
             println!("Load Test Results");
             println!("================");
@@ -2216,7 +2229,7 @@ async fn handle_rules_action(
         RulesAction::List { group, format } => {
             let monitoring_system = AdvancedMonitoringSystem::new(
                 config.monitoring.clone().into()
-            ).await?;
+            )?;
 
             let rules = monitoring_system.list_recording_rules(group.as_deref()).await?;
 
@@ -2240,7 +2253,7 @@ async fn handle_rules_action(
         RulesAction::Add { file, group } => {
             let monitoring_system = AdvancedMonitoringSystem::new(
                 config.monitoring.clone().into()
-            ).await?;
+            )?;
 
             let rule_id = monitoring_system.add_recording_rule(&file, group.as_deref()).await?;
             info!("Recording rule added with ID: {}", rule_id);
@@ -2249,7 +2262,7 @@ async fn handle_rules_action(
         RulesAction::Remove { name, group } => {
             let monitoring_system = AdvancedMonitoringSystem::new(
                 config.monitoring.clone().into()
-            ).await?;
+            )?;
 
             monitoring_system.remove_recording_rule(&name, group.as_deref()).await?;
             info!("Recording rule removed successfully");
@@ -2258,12 +2271,12 @@ async fn handle_rules_action(
         RulesAction::Test { file, duration } => {
             let monitoring_system = AdvancedMonitoringSystem::new(
                 config.monitoring.clone().into()
-            ).await?;
+            )?;
 
             let test_result = monitoring_system.test_recording_rule(
                 &file,
                 duration.as_deref(),
-            ).await?;
+            )?;
 
             if test_result.success {
                 info!("Recording rule test passed");
@@ -2284,7 +2297,7 @@ async fn handle_remote_write_action(
         RemoteWriteAction::List { format } => {
             let monitoring_system = AdvancedMonitoringSystem::new(
                 config.monitoring.clone().into()
-            ).await?;
+            )?;
 
             let endpoints = monitoring_system.list_remote_write_endpoints().await?;
 
@@ -2308,14 +2321,14 @@ async fn handle_remote_write_action(
         RemoteWriteAction::Add { url, name, auth, queue_config } => {
             let monitoring_system = AdvancedMonitoringSystem::new(
                 config.monitoring.clone().into()
-            ).await?;
+            )?;
 
             let endpoint_id = monitoring_system.add_remote_write_endpoint(
                 &url,
                 name.as_deref(),
                 auth.as_deref(),
                 queue_config.as_deref(),
-            ).await?;
+            )?;
 
             info!("Remote write endpoint added with ID: {}", endpoint_id);
         }
@@ -2323,7 +2336,7 @@ async fn handle_remote_write_action(
         RemoteWriteAction::Remove { endpoint } => {
             let monitoring_system = AdvancedMonitoringSystem::new(
                 config.monitoring.clone().into()
-            ).await?;
+            )?;
 
             monitoring_system.remove_remote_write_endpoint(&endpoint).await?;
             info!("Remote write endpoint removed successfully");
@@ -2332,13 +2345,13 @@ async fn handle_remote_write_action(
         RemoteWriteAction::Test { endpoint, timeout } => {
             let monitoring_system = AdvancedMonitoringSystem::new(
                 config.monitoring.clone().into()
-            ).await?;
+            )?;
 
             let test_timeout = timeout.unwrap_or(30);
             let test_result = monitoring_system.test_remote_write_endpoint(
                 &endpoint,
                 test_timeout,
-            ).await?;
+            )?;
 
             if test_result.success {
                 info!("Remote write endpoint test successful - Response time: {}ms",
@@ -2361,7 +2374,7 @@ async fn handle_silence_action(
         SilenceAction::List { expired, format } => {
             let monitoring_system = AdvancedMonitoringSystem::new(
                 config.monitoring.clone().into()
-            ).await?;
+            )?;
 
             let silences = monitoring_system.list_silences(expired).await?;
 
@@ -2388,14 +2401,14 @@ async fn handle_silence_action(
         SilenceAction::Create { matcher, duration, comment, created_by } => {
             let monitoring_system = AdvancedMonitoringSystem::new(
                 config.monitoring.clone().into()
-            ).await?;
+            )?;
 
             let silence_id = monitoring_system.create_silence(
                 &matcher,
                 &duration,
                 comment.as_deref(),
                 created_by.as_deref(),
-            ).await?;
+            )?;
 
             info!("Alert silence created with ID: {}", silence_id);
         }
@@ -2403,7 +2416,7 @@ async fn handle_silence_action(
         SilenceAction::Remove { id } => {
             let monitoring_system = AdvancedMonitoringSystem::new(
                 config.monitoring.clone().into()
-            ).await?;
+            )?;
 
             monitoring_system.remove_silence(&id).await?;
             info!("Alert silence removed successfully");
@@ -2412,7 +2425,7 @@ async fn handle_silence_action(
         SilenceAction::Extend { id, duration } => {
             let monitoring_system = AdvancedMonitoringSystem::new(
                 config.monitoring.clone().into()
-            ).await?;
+            )?;
 
             monitoring_system.extend_silence(&id, &duration).await?;
             info!("Alert silence extended successfully");

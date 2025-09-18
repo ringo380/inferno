@@ -26,7 +26,7 @@ pub struct MultiTenancyConfig {
     pub cache_isolation: CacheIsolationConfig,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum IsolationMode {
     Physical,           // Complete physical separation
     Logical,           // Logical separation with shared resources
@@ -124,7 +124,7 @@ pub struct Tenant {
     pub tags: HashSet<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum TenantTier {
     Free,
     Basic,
@@ -134,7 +134,7 @@ pub enum TenantTier {
     Custom(String),
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum TenantStatus {
     Active,
     Suspended,
@@ -463,7 +463,7 @@ pub struct SecurityContext {
     pub mfa_enabled: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum AuthenticationMethod {
     ApiKey,
     OAuth2,
@@ -1756,7 +1756,7 @@ pub enum AlertChannelType {
     PagerDuty,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum ComplianceStandard {
     Gdpr,
     Hipaa,
@@ -2850,7 +2850,7 @@ impl MultiTenancySystem {
     pub async fn delete_tenant(&self, tenant_id: Uuid) -> Result<()> {
         let mut manager = self.manager.write().await;
 
-        if let Some(mut tenant) = manager.tenants.get_mut(&tenant_id) {
+        if let Some(tenant) = manager.tenants.get_mut(&tenant_id) {
             tenant.status = TenantStatus::Deleting;
         }
 
@@ -2959,8 +2959,8 @@ impl MultiTenancySystem {
     }
 
     pub async fn generate_invoice(&self, tenant_id: Uuid) -> Result<Invoice> {
-        let billing = self.billing_manager.read().await;
-        let manager = self.manager.read().await;
+        let _billing = self.billing_manager.read().await;
+        let _manager = self.manager.read().await;
 
         let invoice = Invoice {
             id: Uuid::new_v4(),
@@ -3001,7 +3001,7 @@ impl MultiTenancySystem {
         Ok(())
     }
 
-    pub async fn check_compliance(&self, tenant_id: Uuid, standard: ComplianceStandard) -> Result<bool> {
+    pub async fn check_compliance(&self, _tenant_id: Uuid, _standard: ComplianceStandard) -> Result<bool> {
         // Mock compliance check
         Ok(true)
     }
