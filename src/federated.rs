@@ -1,12 +1,12 @@
 use crate::config::Config;
-use anyhow::{Context, Result};
+use anyhow::Result;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 
 /// Configuration for federated learning and edge deployment
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -583,7 +583,7 @@ pub struct PerformanceTargets {
 
 impl Default for FederatedConfig {
     fn default() -> Self {
-        let data_dir = dirs::data_dir()
+        let _data_dir = dirs::data_dir()
             .unwrap_or_else(|| PathBuf::from("."))
             .join("inferno")
             .join("federated");
@@ -1086,6 +1086,14 @@ impl FederatedNode {
     pub async fn get_metrics(&self) -> PerformanceMetrics {
         self.state.read().await.performance_metrics.clone()
     }
+
+    pub fn get_node_id(&self) -> &str {
+        &self.node_id
+    }
+
+    pub fn get_config(&self) -> &FederatedConfig {
+        &self.config
+    }
 }
 
 impl Default for PerformanceMetrics {
@@ -1477,13 +1485,13 @@ impl CommunicationManager {
         Ok(())
     }
 
-    pub async fn send_message(&self, peer_id: &str, message: &[u8]) -> Result<()> {
+    pub async fn send_message(&self, peer_id: &str, _message: &[u8]) -> Result<()> {
         // Implementation would send message to peer
         debug!("Sending message to peer: {}", peer_id);
         Ok(())
     }
 
-    pub async fn broadcast_message(&self, message: &[u8]) -> Result<()> {
+    pub async fn broadcast_message(&self, _message: &[u8]) -> Result<()> {
         // Implementation would broadcast message to all peers
         debug!("Broadcasting message to all peers");
         Ok(())

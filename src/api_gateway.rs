@@ -1,13 +1,11 @@
-use crate::config::Config;
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::{RwLock, Mutex};
-use tracing::{debug, error, info, warn};
+use tracing::{error, info, warn};
 
 /// API Gateway configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -942,8 +940,8 @@ struct RateLimitEntry {
 
 impl MemoryRateLimitStorage {
     pub fn new(config: &MemoryStorageConfig) -> Self {
-        let storage = Arc::new(RwLock::new(HashMap::new()));
-        let cleanup_task = Arc::new(Mutex::new(None));
+        let storage = Arc::new(RwLock::new(HashMap::<String, RateLimitEntry>::new()));
+        let cleanup_task = Arc::new(Mutex::new(None::<tokio::task::JoinHandle<()>>));
 
         // Start cleanup task
         if config.cleanup_interval > 0 {
@@ -953,18 +951,16 @@ impl MemoryRateLimitStorage {
                 let mut interval_timer = tokio::time::interval(interval);
                 loop {
                     interval_timer.tick().await;
-                    if let Ok(mut storage) = storage_clone.write().await {
-                        let now = Instant::now();
-                        storage.retain(|_, entry| entry.expires_at > now);
-                    }
+                    let mut storage = storage_clone.write().await;
+                    let now = Instant::now();
+                    storage.retain(|_, entry| entry.expires_at > now);
                 }
             });
 
             let cleanup_task_clone = Arc::clone(&cleanup_task);
             tokio::spawn(async move {
-                if let Ok(mut task_guard) = cleanup_task_clone.lock().await {
-                    *task_guard = Some(task);
-                }
+                let mut task_guard = cleanup_task_clone.lock().await;
+                *task_guard = Some(task);
             });
         }
 
@@ -1258,6 +1254,8 @@ impl HealthChecker {
         let expected_body = config.expected_body.clone();
         let service_id = service_id.to_string();
         let target_id = target.id.clone();
+        let healthy_threshold = config.healthy_threshold;
+        let unhealthy_threshold = config.unhealthy_threshold;
 
         let task = tokio::spawn(async move {
             let mut interval_timer = tokio::time::interval(interval);
@@ -1280,7 +1278,7 @@ impl HealthChecker {
                             consecutive_successes += 1;
                             consecutive_failures = 0;
 
-                            if consecutive_successes >= config.healthy_threshold {
+                            if consecutive_successes >= healthy_threshold {
                                 if let Err(e) = load_balancer.update_target_health(&service_id, &target_id, true).await {
                                     error!("Failed to update target health: {}", e);
                                 }
@@ -1289,7 +1287,7 @@ impl HealthChecker {
                             consecutive_failures += 1;
                             consecutive_successes = 0;
 
-                            if consecutive_failures >= config.unhealthy_threshold {
+                            if consecutive_failures >= unhealthy_threshold {
                                 if let Err(e) = load_balancer.update_target_health(&service_id, &target_id, false).await {
                                     error!("Failed to update target health: {}", e);
                                 }
@@ -1301,7 +1299,7 @@ impl HealthChecker {
                         consecutive_failures += 1;
                         consecutive_successes = 0;
 
-                        if consecutive_failures >= config.unhealthy_threshold {
+                        if consecutive_failures >= unhealthy_threshold {
                             if let Err(e) = load_balancer.update_target_health(&service_id, &target_id, false).await {
                                 error!("Failed to update target health: {}", e);
                             }
@@ -1490,8 +1488,9 @@ impl ApiGateway {
             StorageBackend::Memory => {
                 let memory_config = config.rate_limiting.storage.memory
                     .as_ref()
-                    .unwrap_or(&MemoryStorageConfig::default());
-                Arc::new(MemoryRateLimitStorage::new(memory_config))
+                    .cloned()
+                    .unwrap_or_else(MemoryStorageConfig::default);
+                Arc::new(MemoryRateLimitStorage::new(&memory_config))
             }
             _ => {
                 return Err(anyhow::anyhow!("Unsupported storage backend"));
@@ -1665,5 +1664,6 @@ pub struct GatewayStatus {
     pub rate_limiting_enabled: bool,
     pub authentication_enabled: bool,
     pub circuit_breaker_status: HashMap<String, String>,
+    #[serde(skip_serializing)]
     pub uptime: Instant,
 }

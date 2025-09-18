@@ -1,16 +1,13 @@
 use crate::{
     backends::{BackendHandle, BackendConfig, BackendType, InferenceParams},
-    cache::ModelCache,
-    models::{ModelInfo, ModelManager},
+    models::ModelManager,
     metrics::MetricsCollector,
-    InfernoError,
 };
 use anyhow::{anyhow, Result};
 use futures::{Stream, StreamExt};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
-    path::Path,
     pin::Pin,
     sync::{
         atomic::{AtomicUsize, Ordering},
@@ -19,7 +16,7 @@ use std::{
     time::{Duration, Instant},
 };
 use tokio::{
-    sync::{mpsc, oneshot, Mutex, RwLock, Semaphore},
+    sync::{mpsc, oneshot, RwLock, Semaphore},
     task::JoinHandle,
     time::timeout,
 };
@@ -165,7 +162,7 @@ impl DistributedInference {
         let stats = Arc::new(RwLock::new(HashMap::new()));
         let next_worker = Arc::new(AtomicUsize::new(0));
         let mut workers = Vec::with_capacity(config.worker_count);
-        let (shutdown_tx, mut shutdown_rx) = mpsc::unbounded_channel();
+        let (shutdown_tx, _shutdown_rx) = mpsc::unbounded_channel();
 
         // Spawn workers
         for worker_id in 0..config.worker_count {
@@ -184,7 +181,7 @@ impl DistributedInference {
 
         info!("Successfully spawned {} workers", workers.len());
 
-        let mut distributed = Self {
+        let distributed = Self {
             config,
             backend_config,
             model_manager,
