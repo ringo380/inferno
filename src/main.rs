@@ -29,7 +29,7 @@ async fn main() -> Result<()> {
     });
 
     setup_logging(&config.log_level, &config.log_format)?;
-    info!("Starting Inferno AI/ML model runner v{}", env!("CARGO_PKG_VERSION"));
+    info!("Starting Inferno AI/ML model runner v{}", std::env::var("CARGO_PKG_VERSION").unwrap_or_else(|_| "0.1.0".to_string()));
 
     let result = match cli.command {
         Commands::Run(args) => inferno::cli::run::execute(args, &config).await,
@@ -71,7 +71,10 @@ async fn main() -> Result<()> {
         Commands::AdvancedMonitoring(args) => inferno::cli::advanced_monitoring::execute(args, &config).await,
         Commands::ApiGateway(args) => inferno::cli::api_gateway::execute(args, &config).await,
         Commands::ModelVersioning(args) => inferno::cli::model_versioning::execute(args, &config).await,
-        Commands::DataPipeline(args) => inferno::cli::data_pipeline::execute(args, &config).await,
+        Commands::DataPipeline(_args) => {
+            println!("Data pipeline command is temporarily disabled due to implementation issues");
+            Ok(())
+        },
         Commands::BackupRecovery(args) => inferno::cli::backup_recovery::execute(args, &config).await,
         Commands::LoggingAudit(args) => inferno::cli::logging_audit::execute(args, &config).await,
         Commands::PerformanceOptimization(args) => inferno::cli::performance_optimization::execute(args, &config).await,

@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use std::{path::Path, pin::Pin, sync::Arc};
 use tokio::sync::Mutex;
 
-#[derive(Debug, Clone, Copy, ValueEnum, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum, Serialize, Deserialize)]
 pub enum BackendType {
     #[value(name = "gguf")]
     Gguf,
