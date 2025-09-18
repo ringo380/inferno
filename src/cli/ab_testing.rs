@@ -2,7 +2,7 @@ use crate::{
     config::Config,
 };
 use anyhow::Result;
-use clap::{Args, Subcommand, ValueEnum};
+use clap::{Args, Subcommand};
 
 #[derive(Args)]
 pub struct ABTestingArgs {

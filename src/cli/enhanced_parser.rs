@@ -79,61 +79,61 @@ impl EnhancedCliParser {
     }
 
     fn print_alias_suggestion(&self, input: &str, correct: &str) {
-        eprintln!(\"💡 Note: '{}' is an alias for '{}'\\n\", input, correct);
+        eprintln!("💡 Note: '{}' is an alias for '{}'", input, correct);
     }
 
     fn print_typo_suggestion(&self, input: &str, suggestion: &str) {
-        eprintln!(\"❓ Did you mean '{}'?\\n\", suggestion);
-        eprintln!(\"   You typed: {}\\n\", input);
+        eprintln!("❓ Did you mean '{}'?", suggestion);
+        eprintln!("   You typed: {}", input);
 
         // Provide additional context
-        if suggestion.contains(\" \") {
+        if suggestion.contains(" ") {
             let parts: Vec<&str> = suggestion.split_whitespace().collect();
             if parts.len() == 2 {
-                eprintln!(\"💡 Try: inferno {} {}\\n\", parts[0], parts[1]);
+                eprintln!("💡 Try: inferno {} {}", parts[0], parts[1]);
             }
         } else {
-            eprintln!(\"💡 Try: inferno {}\\n\", suggestion);
+            eprintln!("💡 Try: inferno {}", suggestion);
         }
     }
 
     fn print_subcommand_suggestion(&self, input: &str, suggestion: &str) {
-        eprintln!(\"💡 Suggestion: '{}'\\n\", suggestion);
-        eprintln!(\"   You typed: {}\\n\", input);
+        eprintln!("💡 Suggestion: '{}'", suggestion);
+        eprintln!("   You typed: {}", input);
     }
 
     fn print_invalid_command_help(&self, input: &str) {
-        eprintln!(\"❌ Unknown command: '{}'\\n\", input);
+        eprintln!("❌ Unknown command: '{}'", input);
 
         // Get multiple suggestions
         let suggestions = self.fuzzy_matcher.suggest_multiple(input, 3);
 
         if !suggestions.is_empty() {
-            eprintln!(\"💡 Did you mean one of these?\");
+            eprintln!("💡 Did you mean one of these?");
             for suggestion in &suggestions {
-                eprintln!(\"   • {}\", suggestion);
+                eprintln!("   • {}", suggestion);
             }
             eprintln!();
         }
 
         // Provide general help
-        eprintln!(\"🔧 Common commands:\");
-        eprintln!(\"   • inferno install <model>     # Install a model\");
-        eprintln!(\"   • inferno search <query>      # Search for models\");
-        eprintln!(\"   • inferno list                # List installed models\");
-        eprintln!(\"   • inferno run <model>         # Run inference\");
-        eprintln!(\"   • inferno --help              # Show all commands\");
+        eprintln!("🔧 Common commands:");
+        eprintln!("   • inferno install <model>     # Install a model");
+        eprintln!("   • inferno search <query>      # Search for models");
+        eprintln!("   • inferno list                # List installed models");
+        eprintln!("   • inferno run <model>         # Run inference");
+        eprintln!("   • inferno --help              # Show all commands");
         eprintln!();
 
         // Provide examples based on what they might have meant
-        if input.contains(\"instal\") || input.contains(\"add\") || input.contains(\"get\") {
-            eprintln!(\"{}\", HelpSystem::get_usage_examples(\"install\"));
-        } else if input.contains(\"search\") || input.contains(\"find\") {
-            eprintln!(\"{}\", HelpSystem::get_usage_examples(\"search\"));
-        } else if input.contains(\"list\") || input.contains(\"show\") {
-            eprintln!(\"{}\", HelpSystem::get_usage_examples(\"list\"));
+        if input.contains("instal") || input.contains("add") || input.contains("get") {
+            eprintln!("{}", HelpSystem::get_usage_examples("install"));
+        } else if input.contains("search") || input.contains("find") {
+            eprintln!("{}", HelpSystem::get_usage_examples("search"));
+        } else if input.contains("list") || input.contains("show") {
+            eprintln!("{}", HelpSystem::get_usage_examples("list"));
         } else {
-            eprintln!(\"{}\", HelpSystem::get_usage_examples(\"general\"));
+            eprintln!("{}", HelpSystem::get_usage_examples("general"));
         }
     }
 }
@@ -145,16 +145,16 @@ pub async fn execute_with_prerequisites(
 ) -> anyhow::Result<()> {
     // Check prerequisites before execution
     if let Some(prereq_message) = HelpSystem::check_prerequisites(command_name) {
-        eprintln!(\"{}\", prereq_message);
+        eprintln!("{}", prereq_message);
 
         // Ask user if they want to continue anyway
-        if command_name == \"install\" || command_name == \"search\" {
-            eprintln!(\"❓ Continue anyway? (y/N): \");
+        if command_name == "install" || command_name == "search" {
+            eprintln!("❓ Continue anyway? (y/N): ");
 
             let mut input = String::new();
             if std::io::stdin().read_line(&mut input).is_ok() {
                 if !input.trim().to_lowercase().starts_with('y') {
-                    eprintln!(\"Operation cancelled.\");
+                    eprintln!("Operation cancelled.");
                     return Ok(());
                 }
             }
@@ -170,26 +170,26 @@ pub async fn execute_with_prerequisites(
 
         // Provide specific guidance based on the command that failed
         match command_name {
-            \"install\" => {
-                if error_msg.contains(\"not found\") {
-                    eprintln!(\"\\n💡 Try searching for the model first:\");
-                    eprintln!(\"   inferno search [partial-model-name]\");
-                    eprintln!(\"   inferno search [model] --repo huggingface\");
+            "install" => {
+                if error_msg.contains("not found") {
+                    eprintln!("\n💡 Try searching for the model first:");
+                    eprintln!("   inferno search [partial-model-name]");
+                    eprintln!("   inferno search [model] --repo huggingface");
                 }
             }
-            \"run\" => {
-                if error_msg.contains(\"model\") {
-                    eprintln!(\"\\n💡 Make sure you have models available:\");
-                    eprintln!(\"   inferno list                    # Check installed models\");
-                    eprintln!(\"   inferno models list             # Check all models\");
-                    eprintln!(\"   inferno install [model-name]    # Install a model\");
+            "run" => {
+                if error_msg.contains("model") {
+                    eprintln!("\n💡 Make sure you have models available:");
+                    eprintln!("   inferno list                    # Check installed models");
+                    eprintln!("   inferno models list             # Check all models");
+                    eprintln!("   inferno install [model-name]    # Install a model");
                 }
             }
-            \"serve\" => {
-                if error_msg.contains(\"model\") || error_msg.contains(\"not found\") {
-                    eprintln!(\"\\n💡 Server needs a model to serve:\");
-                    eprintln!(\"   inferno install microsoft/DialoGPT-medium\");
-                    eprintln!(\"   inferno serve --model DialoGPT-medium\");
+            "serve" => {
+                if error_msg.contains("model") || error_msg.contains("not found") {
+                    eprintln!("\n💡 Server needs a model to serve:");
+                    eprintln!("   inferno install microsoft/DialoGPT-medium");
+                    eprintln!("   inferno serve --model DialoGPT-medium");
                 }
             }
             _ => {}
@@ -207,6 +207,6 @@ mod tests {
     fn test_enhanced_parser_creation() {
         let parser = EnhancedCliParser::new();
         // Just test that it can be created without panicking
-        assert!(!parser.fuzzy_matcher.suggest_command(\"test\").is_none());
+        assert!(!parser.fuzzy_matcher.suggest_command("test").is_none());
     }
 }

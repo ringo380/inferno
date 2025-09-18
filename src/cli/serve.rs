@@ -181,7 +181,7 @@ async fn load_model_on_startup(
 async fn root_handler() -> impl IntoResponse {
     Json(json!({
         "name": "Inferno AI/ML Runner",
-        "version": env!("CARGO_PKG_VERSION"),
+        "version": std::env::var("CARGO_PKG_VERSION").unwrap_or_else(|_| "0.1.0".to_string()),
         "description": "Offline AI/ML model runner for GGUF and ONNX models",
         "endpoints": {
             "/health": "Health check",

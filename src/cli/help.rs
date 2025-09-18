@@ -1,6 +1,5 @@
-use anyhow::{Context, Result};
-use std::path::PathBuf;
-use tracing::warn;
+// User-friendly error handling and setup guidance module
+// No external dependencies needed for static help content
 
 /// User-friendly error handling and setup guidance
 pub struct HelpSystem;
@@ -62,7 +61,7 @@ impl HelpSystem {
         message
     }
 
-    fn handle_permission_error(error_msg: &str) -> String {
+    fn handle_permission_error(_error_msg: &str) -> String {
         let mut message = String::from("❌ Permission denied.\n\n");
 
         message.push_str("💡 This usually means:\n");
@@ -84,7 +83,7 @@ impl HelpSystem {
         message
     }
 
-    fn handle_network_error(error_msg: &str) -> String {
+    fn handle_network_error(_error_msg: &str) -> String {
         let mut message = String::from("❌ Network connection error.\n\n");
 
         message.push_str("💡 This usually means:\n");
@@ -108,7 +107,7 @@ impl HelpSystem {
         message
     }
 
-    fn handle_config_error(error_msg: &str) -> String {
+    fn handle_config_error(_error_msg: &str) -> String {
         let mut message = String::from("❌ Configuration error.\n\n");
 
         message.push_str("💡 This usually means:\n");
@@ -159,7 +158,7 @@ impl HelpSystem {
         message
     }
 
-    fn handle_model_not_found_error(error_msg: &str) -> String {
+    fn handle_model_not_found_error(_error_msg: &str) -> String {
         let mut message = String::from("❌ Model not found.\n\n");
 
         message.push_str("💡 This usually means:\n");
@@ -184,7 +183,7 @@ impl HelpSystem {
         message
     }
 
-    fn handle_auth_error(error_msg: &str) -> String {
+    fn handle_auth_error(_error_msg: &str) -> String {
         let mut message = String::from("❌ Authentication error.\n\n");
 
         message.push_str("💡 This usually means:\n");
@@ -206,7 +205,7 @@ impl HelpSystem {
         message
     }
 
-    fn handle_disk_space_error(error_msg: &str) -> String {
+    fn handle_disk_space_error(_error_msg: &str) -> String {
         let mut message = String::from("❌ Disk space error.\n\n");
 
         message.push_str("💡 This usually means:\n");
@@ -230,7 +229,7 @@ impl HelpSystem {
         message
     }
 
-    fn handle_dependency_error(error_msg: &str) -> String {
+    fn handle_dependency_error(_error_msg: &str) -> String {
         let mut message = String::from("❌ Dependency error.\n\n");
 
         message.push_str("💡 This usually means:\n");

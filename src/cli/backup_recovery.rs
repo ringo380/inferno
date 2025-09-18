@@ -1,14 +1,11 @@
 use anyhow::Result;
 use clap::{Args, Subcommand};
-use serde_json::{json, Value};
-use std::collections::HashMap;
 use std::path::PathBuf;
 
 use crate::backup_recovery::{
     BackupRecoverySystem, BackupType, RestoreType, BackupJob, RestoreJob, BackupSet,
-    RecoveryPoint, BackupSystemStatus, SystemHealth, TestType, BackupValidationResult,
-    DisasterRecoveryTestResult, BackupMetrics, HealthCheckResult, HealthStatus,
-    BackupStatus, RestoreStatus, BackupProgress, RestoreProgress
+    RecoveryPoint, BackupSystemStatus, TestType, BackupValidationResult,
+    DisasterRecoveryTestResult, BackupStatus, RestoreStatus
 };
 use crate::config::Config;
 

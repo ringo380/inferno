@@ -414,7 +414,7 @@ async fn handle_info(
 }
 
 async fn handle_test(
-    marketplace: &ModelMarketplace,
+    _marketplace: &ModelMarketplace,
     name: &str,
 ) -> Result<()> {
     info!("Testing repository connection: {}", name);
@@ -438,7 +438,7 @@ async fn handle_test(
 }
 
 async fn handle_priority(
-    marketplace: &ModelMarketplace,
+    _marketplace: &ModelMarketplace,
     name: &str,
     priority: u32,
 ) -> Result<()> {
@@ -451,7 +451,7 @@ async fn handle_priority(
 }
 
 async fn handle_clean(
-    marketplace: &ModelMarketplace,
+    _marketplace: &ModelMarketplace,
     name: Option<&str>,
     metadata: bool,
     models: bool,

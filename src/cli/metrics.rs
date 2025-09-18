@@ -144,7 +144,7 @@ struct MetricsServerState {
 async fn metrics_root() -> impl IntoResponse {
     Json(json!({
         "name": "Inferno Metrics Server",
-        "version": env!("CARGO_PKG_VERSION"),
+        "version": std::env::var("CARGO_PKG_VERSION").unwrap_or_else(|_| "0.1.0".to_string()),
         "endpoints": {
             "/health": "Health check",
             "/metrics": "Prometheus metrics",
