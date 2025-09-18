@@ -1,4 +1,4 @@
-use crate::{config::Config, models::ModelInfo, InfernoError};
+use crate::InfernoError;
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
 use tracing::{debug, info, warn};
+use uuid::Uuid;
 
 /// Model optimization configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -117,11 +118,17 @@ pub struct OptimizationJob {
 }
 
 /// Type of optimization to perform
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum OptimizationType {
-    Quantization,
-    Pruning,
-    Distillation,
+    Quantization {
+        quant_type: QuantizationType,
+    },
+    Pruning {
+        strategy: PruningStrategy,
+    },
+    KnowledgeDistillation {
+        config: DistillationConfig,
+    },
     Combined {
         quantization: QuantizationType,
         pruning: PruningStrategy,
@@ -129,7 +136,7 @@ pub enum OptimizationType {
 }
 
 /// Knowledge distillation configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct DistillationConfig {
     /// Teacher model path
     pub teacher_model: PathBuf,
@@ -212,6 +219,67 @@ impl ModelOptimizer {
         Ok(())
     }
 
+    /// General method to optimize a model (used by CLI)
+    pub async fn optimize_model(
+        &self,
+        input_path: PathBuf,
+        output_path: PathBuf,
+        optimization_type: OptimizationType,
+    ) -> Result<String> {
+        let job_id = Uuid::new_v4().to_string();
+        let model_id = input_path.file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("unknown")
+            .to_string();
+
+        let (quantization, pruning, distillation) = match &optimization_type {
+            OptimizationType::Quantization { quant_type } => {
+                (Some(quant_type.clone()), None, None)
+            }
+            OptimizationType::Pruning { strategy } => {
+                (None, Some(strategy.clone()), None)
+            }
+            OptimizationType::KnowledgeDistillation { config } => {
+                (None, None, Some(config.clone()))
+            }
+            OptimizationType::Combined { quantization, pruning } => {
+                (Some(quantization.clone()), Some(pruning.clone()), None)
+            }
+        };
+
+        let job = OptimizationJob {
+            id: job_id.clone(),
+            model_id,
+            input_path,
+            output_path,
+            optimization_type,
+            quantization,
+            pruning,
+            distillation,
+            status: OptimizationStatus::Pending,
+            progress: 0.0,
+            created_at: Utc::now(),
+            started_at: None,
+            completed_at: None,
+            error_message: None,
+            original_size_bytes: None,
+            optimized_size_bytes: None,
+            compression_ratio: None,
+            performance_metrics: None,
+        };
+
+        // Store job
+        {
+            let mut jobs = self.jobs.write().await;
+            jobs.insert(job_id.clone(), job);
+        }
+
+        // Start job execution
+        self.execute_job(&job_id).await?;
+
+        Ok(job_id)
+    }
+
     /// Submit a quantization job
     pub async fn submit_quantization_job(
         &self,
@@ -219,7 +287,7 @@ impl ModelOptimizer {
         input_path: PathBuf,
         params: QuantizationParams,
     ) -> Result<String> {
-        let job_id = uuid::Uuid::new_v4().to_string();
+        let job_id = Uuid::new_v4().to_string();
         let output_path = self.get_output_path(&job_id, &params.target_type);
 
         let job = OptimizationJob {
@@ -227,7 +295,9 @@ impl ModelOptimizer {
             model_id,
             input_path,
             output_path,
-            optimization_type: OptimizationType::Quantization,
+            optimization_type: OptimizationType::Quantization {
+                quant_type: params.target_type.clone(),
+            },
             quantization: Some(params.target_type),
             pruning: None,
             distillation: None,
@@ -262,7 +332,7 @@ impl ModelOptimizer {
         input_path: PathBuf,
         params: PruningParams,
     ) -> Result<String> {
-        let job_id = uuid::Uuid::new_v4().to_string();
+        let job_id = Uuid::new_v4().to_string();
         let output_path = self.get_output_path(&job_id, &QuantizationType::Fp32); // Pruning doesn't change precision
 
         let job = OptimizationJob {
@@ -270,7 +340,9 @@ impl ModelOptimizer {
             model_id,
             input_path,
             output_path,
-            optimization_type: OptimizationType::Pruning,
+            optimization_type: OptimizationType::Pruning {
+                strategy: params.strategy.clone(),
+            },
             quantization: None,
             pruning: Some(params.strategy),
             distillation: None,
@@ -305,7 +377,7 @@ impl ModelOptimizer {
         input_path: PathBuf,
         distillation_config: DistillationConfig,
     ) -> Result<String> {
-        let job_id = uuid::Uuid::new_v4().to_string();
+        let job_id = Uuid::new_v4().to_string();
         let output_path = self.get_output_path(&job_id, &QuantizationType::Fp32);
 
         let job = OptimizationJob {
@@ -313,7 +385,9 @@ impl ModelOptimizer {
             model_id,
             input_path,
             output_path,
-            optimization_type: OptimizationType::Distillation,
+            optimization_type: OptimizationType::KnowledgeDistillation {
+                config: distillation_config.clone(),
+            },
             quantization: None,
             pruning: None,
             distillation: Some(distillation_config),
@@ -349,7 +423,7 @@ impl ModelOptimizer {
         quantization: QuantizationType,
         pruning: PruningStrategy,
     ) -> Result<String> {
-        let job_id = uuid::Uuid::new_v4().to_string();
+        let job_id = Uuid::new_v4().to_string();
         let output_path = self.get_output_path(&job_id, &quantization);
 
         let job = OptimizationJob {
@@ -448,11 +522,12 @@ impl ModelOptimizer {
             }
 
             // Spawn task for actual optimization work
-            let job_id = job_id.to_string();
-            let optimizer = self.clone();
+            let job_id_clone = job_id.to_string();
+            let optimizer_clone = self.clone();
+            let job_clone = job.clone();
             tokio::spawn(async move {
-                let result = optimizer.perform_optimization(&job).await;
-                optimizer.complete_job(&job_id, result).await;
+                let result = optimizer_clone.perform_optimization(&job_clone).await;
+                let _ = optimizer_clone.complete_job(&job_id_clone, result).await;
             });
         }
 
@@ -467,13 +542,13 @@ impl ModelOptimizer {
         let original_size = tokio::fs::metadata(&job.input_path).await?.len();
 
         let result = match &job.optimization_type {
-            OptimizationType::Quantization => {
+            OptimizationType::Quantization { .. } => {
                 self.perform_quantization(job).await?
             }
-            OptimizationType::Pruning => {
+            OptimizationType::Pruning { .. } => {
                 self.perform_pruning(job).await?
             }
-            OptimizationType::Distillation => {
+            OptimizationType::KnowledgeDistillation { .. } => {
                 self.perform_distillation(job).await?
             }
             OptimizationType::Combined { quantization, pruning } => {
@@ -660,8 +735,8 @@ impl ModelOptimizer {
     async fn perform_combined_optimization(
         &self,
         job: &OptimizationJob,
-        quantization: &QuantizationType,
-        pruning: &PruningStrategy,
+        _quantization: &QuantizationType,
+        _pruning: &PruningStrategy,
     ) -> Result<OptimizationResult> {
         debug!("Performing combined optimization for job: {}", job.id);
 
@@ -743,21 +818,24 @@ impl ModelOptimizer {
         let _ = self.save_job_history().await;
 
         // Process next queued job if any
-        self.process_next_queued_job().await;
+        self.process_next_queued_job();
     }
 
     /// Process next queued job
-    async fn process_next_queued_job(&self) {
-        let pending_job_id = {
-            let jobs = self.jobs.read().await;
-            jobs.values()
-                .find(|job| job.status == OptimizationStatus::Pending)
-                .map(|job| job.id.clone())
-        };
+    fn process_next_queued_job(&self) {
+        let optimizer = self.clone();
+        tokio::spawn(async move {
+            let pending_job_id = {
+                let jobs = optimizer.jobs.read().await;
+                jobs.values()
+                    .find(|job| job.status == OptimizationStatus::Pending)
+                    .map(|job| job.id.clone())
+            };
 
-        if let Some(job_id) = pending_job_id {
-            let _ = self.execute_job(&job_id).await;
-        }
+            if let Some(job_id) = pending_job_id {
+                let _ = optimizer.execute_job(&job_id).await;
+            }
+        });
     }
 
     /// Generate output path for optimized model
@@ -832,9 +910,9 @@ impl OptimizationUtils {
     /// Estimate compression ratio for given optimization type
     pub fn estimate_compression_ratio(optimization_type: &OptimizationType) -> f32 {
         match optimization_type {
-            OptimizationType::Quantization => 2.0, // Typical 2x compression
-            OptimizationType::Pruning => 3.0,      // Typical 3x compression
-            OptimizationType::Distillation => 4.0, // Typical 4x compression
+            OptimizationType::Quantization { .. } => 2.0, // Typical 2x compression
+            OptimizationType::Pruning { .. } => 3.0,      // Typical 3x compression
+            OptimizationType::KnowledgeDistillation { .. } => 4.0, // Typical 4x compression
             OptimizationType::Combined { .. } => 6.0, // Combined benefits
         }
     }
@@ -849,10 +927,14 @@ impl OptimizationUtils {
             }
         } else if model_size_gb > 5.0 {
             // Medium models benefit from quantization
-            OptimizationType::Quantization
+            OptimizationType::Quantization {
+                quant_type: QuantizationType::Int8,
+            }
         } else {
             // Small models can use pruning
-            OptimizationType::Pruning
+            OptimizationType::Pruning {
+                strategy: PruningStrategy::Magnitude,
+            }
         }
     }
 
@@ -870,15 +952,15 @@ impl OptimizationUtils {
 
         // Validate based on optimization type
         match optimization_type {
-            OptimizationType::Quantization => {
+            OptimizationType::Quantization { .. } => {
                 // Validate quantization-specific requirements
                 Ok(())
             }
-            OptimizationType::Pruning => {
+            OptimizationType::Pruning { .. } => {
                 // Validate pruning-specific requirements
                 Ok(())
             }
-            OptimizationType::Distillation => {
+            OptimizationType::KnowledgeDistillation { .. } => {
                 // Validate distillation-specific requirements
                 Ok(())
             }
@@ -935,17 +1017,19 @@ mod tests {
         // Check job status
         let job = optimizer.get_job_status(&job_id).await.unwrap();
         assert_eq!(job.model_id, "test_model");
-        assert_eq!(job.optimization_type, OptimizationType::Quantization);
+        assert!(matches!(job.optimization_type, OptimizationType::Quantization { .. }));
     }
 
     #[test]
     fn test_optimization_utils() {
         // Test compression ratio estimation
-        let ratio = OptimizationUtils::estimate_compression_ratio(&OptimizationType::Quantization);
+        let ratio = OptimizationUtils::estimate_compression_ratio(&OptimizationType::Quantization {
+            quant_type: QuantizationType::Int8,
+        });
         assert_eq!(ratio, 2.0);
 
         // Test recommended optimization
         let opt = OptimizationUtils::get_recommended_optimization(15.0);
-        matches!(opt, OptimizationType::Combined { .. });
+        assert!(matches!(opt, OptimizationType::Combined { .. }));
     }
 }

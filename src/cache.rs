@@ -256,8 +256,8 @@ impl ModelCache {
             let cache_guard = self.cached_models.read().await;
             if let Some(cached_model) = cache_guard.get(model_name) {
                 // Update last used time
-                let mut model = Arc::try_unwrap(cached_model.clone()).unwrap_or_else(|arc| (*arc).clone());
                 // Can't modify Arc contents directly, so we'll track usage separately
+                cached_model.usage_count.fetch_add(1, Ordering::Relaxed);
 
                 self.cache_hits.fetch_add(1, Ordering::Relaxed);
                 self.update_usage_stats(model_name, Duration::from_millis(0)).await;
@@ -894,7 +894,7 @@ impl ModelCache {
     }
 
     /// Convert Instant to Unix timestamp (best effort)
-    fn instant_to_unix_timestamp(&self, instant: Instant) -> u64 {
+    fn instant_to_unix_timestamp(&self, _instant: Instant) -> u64 {
         // This is an approximation since Instant is relative to program start
         // We use SystemTime for the actual timestamp
         SystemTime::now().duration_since(UNIX_EPOCH)
