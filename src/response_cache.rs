@@ -1,17 +1,15 @@
 use crate::{
-    config::Config,
     metrics::MetricsCollector,
 };
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use blake3;
-use xxhash_rust::xxh3::Xxh3;
 use std::{
     collections::HashMap,
     io::{Read, Write},
     sync::Arc,
-    time::{Duration, Instant, SystemTime},
+    time::{Duration, SystemTime},
 };
 use tokio::{
     sync::{Mutex, RwLock},
@@ -257,7 +255,6 @@ impl ResponseCache {
                     Err(e) => {
                         warn!("Decompression failed for key {}: {}, removing entry", cache_key, e);
                         drop(cache);
-                        drop(stats);
                         self.remove_expired_entry(&actual_key).await;
                         return None;
                     }
@@ -483,7 +480,7 @@ impl ResponseCache {
 
     async fn update_access_stats(&self, key: &str) {
         let cache = self.cache.read().await;
-        if let Some(cached_response) = cache.get(key) {
+        if let Some(_cached_response) = cache.get(key) {
             // Note: In a real implementation, we'd need to use interior mutability
             // or a different approach to update access stats
             debug!("Updated access stats for key: {}", key);

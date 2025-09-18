@@ -4,7 +4,6 @@ use crate::optimization::{
 };
 use crate::InfernoError;
 use clap::{Args, Subcommand};
-use std::collections::HashMap;
 use std::path::PathBuf;
 use tokio::time::{sleep, Duration};
 
@@ -407,7 +406,7 @@ async fn handle_benchmark_command(
     println!("Iterations: {}", iterations);
 
     // Load test prompts
-    let test_prompts = if let Some(prompts_file) = prompts {
+    let _test_prompts = if let Some(prompts_file) = prompts {
         let content = tokio::fs::read_to_string(prompts_file).await
             .map_err(|e| InfernoError::IoError(format!("Failed to read prompts file: {}", e)))?;
         content.lines().map(|s| s.to_string()).collect::<Vec<_>>()

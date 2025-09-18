@@ -1,5 +1,5 @@
 use crate::{
-    cache::{CacheConfig, ModelCache, WarmupStrategy},
+    cache::{ModelCache, WarmupStrategy},
     config::Config,
     metrics::MetricsCollector,
     models::ModelManager,

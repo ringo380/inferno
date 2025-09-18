@@ -1,12 +1,12 @@
 use crate::{
     config::Config,
-    response_cache::{ResponseCache, ResponseCacheConfig, CacheKey, ResponseMetadata, HashAlgorithm},
+    response_cache::{ResponseCache, CacheKey, ResponseMetadata, HashAlgorithm},
     metrics::MetricsCollector,
 };
 use anyhow::Result;
 use clap::{Args, Subcommand, ValueEnum};
 use std::sync::Arc;
-use tracing::{info, warn};
+use tracing::info;
 
 #[derive(Args)]
 pub struct ResponseCacheArgs {
