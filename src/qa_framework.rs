@@ -1,12 +1,11 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet, VecDeque, BTreeMap};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use std::time::{Duration, SystemTime, Instant};
+use std::time::Duration;
 use uuid::Uuid;
 use chrono::{DateTime, Utc};
-use async_trait::async_trait;
 use std::path::PathBuf;
 
 // Configuration structures
@@ -27,6 +26,49 @@ pub struct QAFrameworkConfig {
     pub data_management: TestDataConfig,
     pub monitoring: TestMonitoringConfig,
     pub integration: IntegrationTestingConfig,
+    // CLI compatibility fields
+    pub unit_testing: UnitTestingCompat,
+    pub integration_testing: IntegrationTestingCompat,
+    pub e2e_testing: E2ETestingCompat,
+    pub ml_testing: MLTestingCompat,
+    pub chaos_testing: ChaosTestingCompat,
+    pub test_automation: TestAutomationCompat,
+    pub execution: ExecutionCompat,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UnitTestingCompat {
+    pub enabled: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IntegrationTestingCompat {
+    pub enabled: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct E2ETestingCompat {
+    pub enabled: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MLTestingCompat {
+    pub enabled: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChaosTestingCompat {
+    pub enabled: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TestAutomationCompat {
+    pub enabled: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExecutionCompat {
+    pub default_timeout: Duration,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -125,6 +167,7 @@ pub enum SeverityLevel {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PerformanceTestingConfig {
+    pub enabled: bool,
     pub load_testing: LoadTestingConfig,
     pub stress_testing: StressTestingConfig,
     pub endurance_testing: EnduranceTestingConfig,
@@ -137,6 +180,7 @@ pub struct PerformanceTestingConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SecurityTestingConfig {
+    pub enabled: bool,
     pub vulnerability_scanning: VulnerabilityScanConfig,
     pub penetration_testing: PenetrationTestConfig,
     pub dependency_scanning: DependencyScanConfig,
@@ -211,13 +255,19 @@ pub struct TestCase {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub created_by: String,
+    // Additional fields for CLI compatibility
+    pub runner: Option<TestRunner>,
+    pub source_path: Option<PathBuf>,
+    pub test_command: Option<String>,
+    pub configuration: Option<HashMap<String, serde_json::Value>>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum TestType {
     Unit,
     Integration,
     EndToEnd,
+    E2E,
     Performance,
     Security,
     Smoke,
@@ -233,9 +283,10 @@ pub enum TestType {
     Contract,
     Mutation,
     Property,
+    MLModel,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum TestCategory {
     Functional,
     NonFunctional,
@@ -243,12 +294,180 @@ pub enum TestCategory {
     ChangeRelated,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum TestPriority {
     Critical,
     High,
     Medium,
     Low,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum TestRunner {
+    Local,
+    Docker,
+    Kubernetes,
+    Cloud,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum TestExecutionMode {
+    Sequential,
+    Parallel,
+    Distributed,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum TestStatus {
+    Pending,
+    Running,
+    Passed,
+    Failed,
+    Skipped,
+    Blocked,
+    Cancelled,
+    Error,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TestResult {
+    pub test_id: Uuid,
+    pub status: TestStatus,
+    pub start_time: DateTime<Utc>,
+    pub end_time: DateTime<Utc>,
+    pub duration: Duration,
+    pub message: Option<String>,
+    pub error: Option<String>,
+    pub artifacts: Vec<String>,
+}
+
+// Performance Testing Types
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PerformanceTest {
+    pub id: Uuid,
+    pub name: String,
+    pub target_endpoint: String,
+    pub load_profile: LoadProfile,
+    pub duration: Duration,
+    pub virtual_users: u32,
+    pub thresholds: HashMap<String, f64>,
+    pub metrics_collection: Vec<PerformanceMetric>,
+    pub load_generation: LoadGenerationStrategy,
+    pub monitoring_config: HashMap<String, serde_json::Value>,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum LoadProfile {
+    Constant { rps: u32 },
+    Ramp { start_rps: u32, end_rps: u32, duration: Duration },
+    Spike { base_rps: u32, spike_rps: u32, spike_duration: Duration },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum PerformanceMetric {
+    ResponseTime,
+    Throughput,
+    ErrorRate,
+    CpuUsage,
+    MemoryUsage,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum LoadGenerationStrategy {
+    Local,
+    Distributed,
+    Cloud,
+}
+
+// Security Testing Types
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SecurityTest {
+    pub id: Uuid,
+    pub test_id: Uuid,
+    pub name: String,
+    pub test_type: SecurityTestType,
+    pub target_system: String,
+    pub scanner_configuration: HashMap<String, serde_json::Value>,
+    pub custom_scripts: Vec<String>,
+    pub compliance_frameworks: Vec<String>,
+    pub severity_thresholds: HashMap<String, u32>,
+    pub reporting_config: HashMap<String, serde_json::Value>,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum SecurityTestType {
+    VulnerabilityScanning,
+    PenetrationTesting,
+    DependencyScanning,
+    SecretsScanning,
+    StaticAnalysis,
+    DynamicAnalysis,
+    ComplianceChecking,
+    AuthenticationTesting,
+    AuthorizationTesting,
+    ThreatModeling,
+}
+
+// ML Model Testing Types
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MLModelTest {
+    pub id: Uuid,
+    pub name: String,
+    pub model_path: PathBuf,
+    pub test_type: MLTestType,
+    pub test_dataset: Option<PathBuf>,
+    pub baseline_metrics: HashMap<String, f64>,
+    pub performance_thresholds: HashMap<String, f64>,
+    pub fairness_criteria: HashMap<String, f64>,
+    pub robustness_config: HashMap<String, serde_json::Value>,
+    pub drift_detection_config: HashMap<String, serde_json::Value>,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum MLTestType {
+    AccuracyTesting,
+    PerformanceTesting,
+    FairnessTesting,
+    RobustnessTesting,
+    DataDriftDetection,
+}
+
+// Chaos Testing Types
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChaosTest {
+    pub id: Uuid,
+    pub name: String,
+    pub fault_type: ChaosFaultType,
+    pub target: ChaosTarget,
+    pub target_selector: HashMap<String, String>,
+    pub fault_parameters: HashMap<String, serde_json::Value>,
+    pub duration: Duration,
+    pub monitoring_config: HashMap<String, serde_json::Value>,
+    pub recovery_verification: bool,
+    pub safety_checks: Vec<String>,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ChaosFaultType {
+    NetworkLatency,
+    NetworkPartition,
+    CpuStress,
+    MemoryStress,
+    DiskStress,
+    ServiceKill,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ChaosTarget {
+    Container,
+    Pod,
+    Node,
+    Service,
+    Network,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -313,6 +532,68 @@ pub enum DataGenerationStrategy {
     Custom,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum DataCleanupStrategy {
+    None,
+    Immediate,
+    Scheduled,
+    Manual,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DataSet {
+    pub name: String,
+    pub data: serde_json::Value,
+}
+
+// Additional types for CLI compatibility
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct RunConfiguration {
+    pub parallel_execution: bool,
+    pub max_concurrency: usize,
+    pub timeout: Duration,
+    pub retry_policy: RetryPolicy,
+    pub environment_setup: HashMap<String, String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RetryPolicy {
+    pub max_retries: u32,
+    pub retry_delay: Duration,
+}
+
+impl Default for RetryPolicy {
+    fn default() -> Self {
+        Self {
+            max_retries: 3,
+            retry_delay: Duration::from_secs(1),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TestSelection {
+    pub test_ids: Vec<Uuid>,
+    pub filters: TestFilters,
+    pub exclusions: TestExclusions,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TestFilters {
+    pub test_types: Vec<TestType>,
+    pub tags: Vec<String>,
+    pub priorities: Vec<TestPriority>,
+    pub environments: Vec<EnvironmentType>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TestExclusions {
+    pub test_ids: Vec<Uuid>,
+    pub patterns: Vec<String>,
+}
+
+
 // Test execution structures
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TestExecution {
@@ -333,28 +614,7 @@ pub struct TestExecution {
     pub parent_execution: Option<Uuid>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum TestStatus {
-    Pending,
-    Running,
-    Passed,
-    Failed,
-    Skipped,
-    Blocked,
-    Cancelled,
-    Error,
-}
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TestResult {
-    pub status: TestStatus,
-    pub message: String,
-    pub error_details: Option<ErrorDetails>,
-    pub assertions: Vec<AssertionResult>,
-    pub coverage: Option<CoverageData>,
-    pub performance_data: Option<PerformanceData>,
-    pub security_findings: Vec<SecurityFinding>,
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ErrorDetails {
@@ -390,6 +650,17 @@ pub struct TestRun {
     pub statistics: RunStatistics,
     pub executions: Vec<Uuid>,
     pub created_by: String,
+    // Additional fields for CLI compatibility
+    pub id: Option<Uuid>,
+    pub test_case_ids: Option<Vec<Uuid>>,
+    pub execution_mode: Option<TestExecutionMode>,
+    pub scheduled_at: Option<DateTime<Utc>>,
+    pub started_at: Option<DateTime<Utc>>,
+    pub completed_at: Option<DateTime<Utc>>,
+    pub results: Option<Vec<TestResult>>,
+    pub metrics: Option<HashMap<String, f64>>,
+    pub tags: Option<Vec<String>>,
+    pub created_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -405,8 +676,9 @@ pub enum RunTrigger {
     Deploy,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum RunStatus {
+    Pending,
     Queued,
     Running,
     Completed,
@@ -424,6 +696,7 @@ pub struct RunStatistics {
     pub error_tests: u32,
     pub success_rate: f32,
     pub total_duration: Duration,
+    pub average_execution_time: Duration,
     pub avg_test_duration: Duration,
     pub coverage_percentage: f32,
 }
@@ -441,6 +714,17 @@ pub struct QualityReport {
     pub performance_quality: PerformanceQualityMetrics,
     pub recommendations: Vec<QualityRecommendation>,
     pub trends: QualityTrends,
+    // CLI compatibility fields
+    pub test_summary: TestSummary,
+    pub quality_score: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TestSummary {
+    pub total_tests: u32,
+    pub passed_tests: u32,
+    pub failed_tests: u32,
+    pub skipped_tests: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -495,17 +779,6 @@ pub struct TestQualityMetrics {
 }
 
 // Performance testing structures
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PerformanceTest {
-    pub test_id: Uuid,
-    pub name: String,
-    pub test_type: PerformanceTestType,
-    pub load_profile: LoadProfile,
-    pub scenarios: Vec<TestScenario>,
-    pub sla: ServiceLevelAgreement,
-    pub environment: TestEnvironment,
-    pub monitoring: MonitoringConfig,
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum PerformanceTestType {
@@ -518,14 +791,6 @@ pub enum PerformanceTestType {
     Baseline,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LoadProfile {
-    pub ramp_up: RampUpStrategy,
-    pub steady_state: SteadyStateConfig,
-    pub ramp_down: RampDownStrategy,
-    pub think_time: ThinkTimeConfig,
-    pub data_variation: DataVariationConfig,
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum RampUpStrategy {
@@ -586,28 +851,7 @@ pub enum HttpMethod {
 }
 
 // Security testing structures
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SecurityTest {
-    pub test_id: Uuid,
-    pub name: String,
-    pub test_type: SecurityTestType,
-    pub target: SecurityTestTarget,
-    pub attack_vectors: Vec<AttackVector>,
-    pub compliance_standards: Vec<ComplianceStandard>,
-    pub risk_assessment: RiskAssessment,
-}
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum SecurityTestType {
-    VulnerabilityScanning,
-    PenetrationTesting,
-    DependencyScanning,
-    SecretsScanning,
-    StaticAnalysis,
-    DynamicAnalysis,
-    ComplianceChecking,
-    ThreatModeling,
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SecurityTestTarget {
@@ -671,15 +915,6 @@ pub enum ImpactLevel {
 }
 
 // Chaos testing structures
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ChaosTest {
-    pub test_id: Uuid,
-    pub name: String,
-    pub chaos_experiments: Vec<ChaosExperiment>,
-    pub blast_radius: BlastRadius,
-    pub safety_measures: SafetyMeasures,
-    pub monitoring: MonitoringConfig,
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChaosExperiment {
@@ -818,7 +1053,64 @@ pub struct TestEnvironment {
     pub health_status: HealthStatus,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+impl TestEnvironment {
+    pub fn Development() -> Self {
+        Self::new("development".to_string(), EnvironmentType::Development)
+    }
+
+    pub fn Testing() -> Self {
+        Self::new("testing".to_string(), EnvironmentType::Testing)
+    }
+
+    pub fn Staging() -> Self {
+        Self::new("staging".to_string(), EnvironmentType::Staging)
+    }
+
+    pub fn Production() -> Self {
+        Self::new("production".to_string(), EnvironmentType::Production)
+    }
+
+    fn new(name: String, env_type: EnvironmentType) -> Self {
+        use uuid::Uuid;
+        use std::collections::HashMap;
+
+        Self {
+            environment_id: Uuid::new_v4().to_string(),
+            name,
+            environment_type: env_type,
+            configuration: EnvironmentConfig {
+                services: Vec::new(),
+                databases: Vec::new(),
+                infrastructure: InfrastructureConfig {
+                    compute_resources: HashMap::new(),
+                    network_resources: HashMap::new(),
+                },
+                network: NetworkConfig {
+                    vpc_id: Some("default".to_string()),
+                    subnet_id: Some("default".to_string()),
+                    security_groups: vec!["default".to_string()],
+                },
+                monitoring: MonitoringConfig {
+                    enabled: true,
+                    metrics_collection: vec!["cpu".to_string(), "memory".to_string()],
+                    alerting: HashMap::new(),
+                },
+            },
+            resources: ResourceAllocation {
+                cpu_cores: 2,
+                memory_gb: 4,
+                storage_gb: 20,
+            },
+            data_state: DataState {
+                seeded: false,
+                version: "1.0.0".to_string(),
+            },
+            health_status: HealthStatus::Healthy,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum EnvironmentType {
     Development,
     Testing,
@@ -827,6 +1119,27 @@ pub enum EnvironmentType {
     Isolated,
     Shared,
     OnDemand,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResourceAllocation {
+    pub cpu_cores: u32,
+    pub memory_gb: u32,
+    pub storage_gb: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DataState {
+    pub seeded: bool,
+    pub version: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum HealthStatus {
+    Healthy,
+    Degraded,
+    Unhealthy,
+    Unknown,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -941,6 +1254,18 @@ pub struct UnitTestConfig {
     pub parallel_execution: bool,
 }
 
+impl Default for UnitTestConfig {
+    fn default() -> Self {
+        Self {
+            framework: "rust".to_string(),
+            mock_strategy: MockStrategy::Auto,
+            coverage_target: 80.0,
+            fast_fail: false,
+            parallel_execution: true,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum MockStrategy {
     Manual,
@@ -954,6 +1279,17 @@ pub struct IntegrationTestConfig {
     pub contract_testing: bool,
     pub database_strategy: DatabaseTestStrategy,
     pub external_dependencies: ExternalDependencyStrategy,
+}
+
+impl Default for IntegrationTestConfig {
+    fn default() -> Self {
+        Self {
+            test_boundaries: vec!["api".to_string(), "database".to_string()],
+            contract_testing: true,
+            database_strategy: DatabaseTestStrategy::InMemory,
+            external_dependencies: ExternalDependencyStrategy::Mock,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -981,6 +1317,19 @@ pub struct E2ETestConfig {
     pub visual_testing: bool,
     pub accessibility_testing: bool,
 }
+
+impl Default for E2ETestConfig {
+    fn default() -> Self {
+        Self {
+            browser_config: BrowserConfig::default(),
+            device_config: DeviceConfig::default(),
+            network_conditions: NetworkConditions::default(),
+            visual_testing: false,
+            accessibility_testing: true,
+        }
+    }
+}
+
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LoadTestingConfig {
@@ -1010,6 +1359,14 @@ impl Default for QAFrameworkConfig {
             data_management: TestDataConfig::default(),
             monitoring: TestMonitoringConfig::default(),
             integration: IntegrationTestingConfig::default(),
+            // CLI compatibility fields
+            unit_testing: UnitTestingCompat { enabled: false },
+            integration_testing: IntegrationTestingCompat { enabled: false },
+            e2e_testing: E2ETestingCompat { enabled: false },
+            ml_testing: MLTestingCompat { enabled: false },
+            chaos_testing: ChaosTestingCompat { enabled: false },
+            test_automation: TestAutomationCompat { enabled: false },
+            execution: ExecutionCompat { default_timeout: Duration::from_secs(300) },
         }
     }
 }
@@ -1038,7 +1395,7 @@ impl Default for QualityGatesConfig {
             duplication_threshold: 5.0,
             maintainability_index_min: 70.0,
             security_hotspots_max: 0,
-            technical_debt_max: Duration::from_hours(8),
+            technical_debt_max: Duration::from_secs(8 * 3600),
             reliability_rating_min: QualityRating::B,
             security_rating_min: QualityRating::A,
             maintainability_rating_min: QualityRating::B,
@@ -1098,7 +1455,38 @@ impl Default for ReportingConfig {
             trend_analysis: TrendAnalysisConfig::default(),
             export_options: ExportConfig::default(),
             real_time_reporting: true,
-            historical_data_retention: Duration::from_days(90),
+            historical_data_retention: Duration::from_secs(90 * 24 * 3600),
+        }
+    }
+}
+
+impl Default for PerformanceTestingConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            load_testing: LoadTestingConfig::default(),
+            stress_testing: StressTestingConfig::default(),
+            endurance_testing: EnduranceTestingConfig::default(),
+            spike_testing: SpikeTestingConfig::default(),
+            volume_testing: VolumeTestingConfig::default(),
+            scalability_testing: ScalabilityTestingConfig::default(),
+            baseline_comparison: false,
+            performance_budgets: HashMap::new(),
+        }
+    }
+}
+
+impl Default for SecurityTestingConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            vulnerability_scanning: VulnerabilityScanConfig::default(),
+            penetration_testing: PenetrationTestConfig::default(),
+            dependency_scanning: DependencyScanConfig::default(),
+            secrets_scanning: SecretsScanConfig::default(),
+            compliance_testing: SecurityComplianceConfig::default(),
+            threat_modeling: ThreatModelingConfig::default(),
+            security_automation: SecurityAutomationConfig::default(),
         }
     }
 }
@@ -1172,19 +1560,7 @@ pub struct TestIsolationConfig {
 }
 
 // Implement Default for many other structs
-macro_rules! impl_default {
-    ($($type:ty),*) => {
-        $(
-            impl Default for $type {
-                fn default() -> Self {
-                    Self {
-                        ..Default::default()
-                    }
-                }
-            }
-        )*
-    };
-}
+// Note: Using explicit implementations instead of macro for clarity
 
 // Additional required struct definitions with defaults
 
@@ -1678,7 +2054,7 @@ impl QAFrameworkSystem {
             },
             code_quality: CodeQualityMetrics {
                 lines_of_code: 10000,
-                technical_debt: Duration::from_hours(2),
+                technical_debt: Duration::from_secs(2 * 3600),
                 code_coverage: 85.0,
                 cyclomatic_complexity: 5.5,
                 duplication_ratio: 2.0,
@@ -1696,7 +2072,7 @@ impl QAFrameworkSystem {
                 test_effectiveness: 90.0,
                 test_automation_ratio: 95.0,
                 flaky_test_ratio: 2.0,
-                test_execution_time: Duration::from_minutes(15),
+                test_execution_time: Duration::from_secs(15 * 60),
                 test_pass_rate: 98.5,
                 test_maintenance_cost: 15.0,
             },
@@ -1717,6 +2093,14 @@ impl QAFrameworkSystem {
                 trend_data: HashMap::new(),
                 predictions: HashMap::new(),
             },
+            // CLI compatibility fields
+            test_summary: TestSummary {
+                total_tests: 500,
+                passed_tests: 485,
+                failed_tests: 10,
+                skipped_tests: 5,
+            },
+            quality_score: 87.5,
         };
 
         let mut analyzer = self.quality_analyzer.write().await;
@@ -1725,26 +2109,6 @@ impl QAFrameworkSystem {
         Ok(report)
     }
 
-    pub async fn run_performance_test(&self, test: PerformanceTest) -> Result<PerformanceTestResult> {
-        // Mock performance test execution
-        Ok(PerformanceTestResult {
-            test_id: test.test_id,
-            status: TestStatus::Passed,
-            metrics: PerformanceMetrics {
-                response_time_avg: Duration::from_millis(150),
-                response_time_p95: Duration::from_millis(300),
-                response_time_p99: Duration::from_millis(500),
-                throughput: 1000.0,
-                error_rate: 0.1,
-                cpu_usage: 45.0,
-                memory_usage: 60.0,
-                network_io: 100.0,
-                disk_io: 50.0,
-            },
-            violations: Vec::new(),
-            recommendations: Vec::new(),
-        })
-    }
 
     pub async fn run_security_test(&self, test: SecurityTest) -> Result<SecurityTestResult> {
         // Mock security test execution
@@ -1761,8 +2125,8 @@ impl QAFrameworkSystem {
     pub async fn optimize_test_suite(&self, suite_id: Uuid) -> Result<OptimizationResult> {
         // Mock test suite optimization
         Ok(OptimizationResult {
-            original_execution_time: Duration::from_minutes(30),
-            optimized_execution_time: Duration::from_minutes(20),
+            original_execution_time: Duration::from_secs(30 * 60),
+            optimized_execution_time: Duration::from_secs(20 * 60),
             tests_removed: 5,
             tests_parallelized: 15,
             improvement_percentage: 33.0,
@@ -1771,6 +2135,67 @@ impl QAFrameworkSystem {
                 "Increase parallelization".to_string(),
                 "Optimize test data setup".to_string(),
             ],
+        })
+    }
+
+    pub async fn run_performance_test(&self, test: PerformanceTest) -> Result<PerformanceTestResult> {
+        // Mock performance test execution
+        Ok(PerformanceTestResult {
+            test_id: test.id,
+            status: TestStatus::Passed,
+            metrics: PerformanceMetrics {
+                response_time_avg: Duration::from_millis(150),
+                response_time_p95: Duration::from_millis(300),
+                response_time_p99: Duration::from_millis(500),
+                throughput: 1000.0,
+                error_rate: 0.1,
+                cpu_usage: 45.0,
+                memory_usage: 60.0,
+                network_io: 100.0,
+                disk_io: 50.0,
+                concurrent_users: test.virtual_users,
+                total_requests: 10000,
+                successful_requests: 9990,
+                failed_requests: 10,
+                average_response_time: Duration::from_millis(150),
+                min_response_time: Duration::from_millis(50),
+                max_response_time: Duration::from_millis(800),
+            },
+            violations: Vec::new(),
+            recommendations: vec!["Consider increasing cache size".to_string()],
+        })
+    }
+
+    pub async fn run_ml_model_test(&self, test: MLModelTest) -> Result<MLModelTestResult> {
+        // Mock ML model test execution
+        Ok(MLModelTestResult {
+            test_id: test.id,
+            status: TestStatus::Passed,
+            accuracy_score: 0.95,
+            performance_metrics: HashMap::from([
+                ("inference_time".to_string(), 0.025),
+                ("memory_usage".to_string(), 512.0),
+            ]),
+            fairness_metrics: HashMap::from([
+                ("demographic_parity".to_string(), 0.85),
+                ("equalized_odds".to_string(), 0.88),
+            ]),
+            robustness_score: 0.92,
+            drift_detected: false,
+            recommendations: vec!["Monitor for data drift in production".to_string()],
+        })
+    }
+
+    pub async fn run_chaos_test(&self, test: ChaosTest) -> Result<ChaosTestResult> {
+        // Mock chaos test execution
+        Ok(ChaosTestResult {
+            test_id: test.id,
+            status: TestStatus::Passed,
+            fault_injected: true,
+            system_recovered: true,
+            recovery_time: Some(Duration::from_secs(30)),
+            impact_assessment: "System demonstrated good resilience".to_string(),
+            recommendations: vec!["Consider adding more redundancy".to_string()],
         })
     }
 }
@@ -1796,6 +2221,14 @@ pub struct PerformanceMetrics {
     pub memory_usage: f64,
     pub network_io: f64,
     pub disk_io: f64,
+    // Additional fields for CLI compatibility
+    pub concurrent_users: u32,
+    pub total_requests: u32,
+    pub successful_requests: u32,
+    pub failed_requests: u32,
+    pub average_response_time: Duration,
+    pub min_response_time: Duration,
+    pub max_response_time: Duration,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1826,6 +2259,29 @@ pub struct SecurityVulnerability {
     pub cwe_id: Option<String>,
     pub location: String,
     pub remediation: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MLModelTestResult {
+    pub test_id: Uuid,
+    pub status: TestStatus,
+    pub accuracy_score: f64,
+    pub performance_metrics: HashMap<String, f64>,
+    pub fairness_metrics: HashMap<String, f64>,
+    pub robustness_score: f64,
+    pub drift_detected: bool,
+    pub recommendations: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChaosTestResult {
+    pub test_id: Uuid,
+    pub status: TestStatus,
+    pub fault_injected: bool,
+    pub system_recovered: bool,
+    pub recovery_time: Option<Duration>,
+    pub impact_assessment: String,
+    pub recommendations: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -2010,33 +2466,6 @@ pub enum SecurityCategory {
 }
 
 // Additional placeholder structures for compilation
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TestSelection {
-    pub selection_criteria: String,
-    pub selected_tests: Vec<Uuid>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RunConfiguration {
-    pub parallel_execution: bool,
-    pub timeout: Duration,
-    pub retry_count: u32,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DataSet {
-    pub name: String,
-    pub data: serde_json::Value,
-    pub metadata: HashMap<String, String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum DataCleanupStrategy {
-    None,
-    AfterTest,
-    AfterSuite,
-    Manual,
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SetupAction {
@@ -2135,30 +2564,11 @@ pub struct Prediction {
 }
 
 // Additional structures needed for compilation
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct HealthStatus {
-    pub status: String,
-    pub last_check: DateTime<Utc>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DataState {
-    pub state: String,
-    pub last_updated: DateTime<Utc>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ResourceAllocation {
-    pub cpu: f32,
-    pub memory: u64,
-    pub storage: u64,
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InfrastructureConfig {
-    pub provider: String,
-    pub region: String,
-    pub resources: HashMap<String, serde_json::Value>,
+    pub compute_resources: HashMap<String, serde_json::Value>,
+    pub network_resources: HashMap<String, serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -2171,9 +2581,11 @@ pub struct NetworkConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MonitoringConfig {
     pub enabled: bool,
-    pub metrics: Vec<String>,
-    pub alerts: Vec<AlertConfig>,
+    pub metrics_collection: Vec<String>,
+    pub alerting: HashMap<String, serde_json::Value>,
 }
+
+
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AlertConfig {
@@ -2427,11 +2839,31 @@ pub struct BrowserConfig {
     pub headless: bool,
 }
 
+impl Default for BrowserConfig {
+    fn default() -> Self {
+        Self {
+            browsers: vec!["chrome".to_string()],
+            versions: vec!["latest".to_string()],
+            headless: true,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeviceConfig {
     pub devices: Vec<String>,
     pub screen_resolutions: Vec<String>,
     pub mobile_testing: bool,
+}
+
+impl Default for DeviceConfig {
+    fn default() -> Self {
+        Self {
+            devices: vec!["desktop".to_string()],
+            screen_resolutions: vec!["1920x1080".to_string()],
+            mobile_testing: false,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -2441,13 +2873,23 @@ pub struct NetworkConditions {
     pub packet_loss: f32,
 }
 
+impl Default for NetworkConditions {
+    fn default() -> Self {
+        Self {
+            bandwidth: "fast3g".to_string(),
+            latency: Duration::from_millis(100),
+            packet_loss: 0.0,
+        }
+    }
+}
+
 impl Default for LoadTestingConfig {
     fn default() -> Self {
         Self {
             max_virtual_users: 100,
-            ramp_up_duration: Duration::from_minutes(5),
-            test_duration: Duration::from_minutes(10),
-            think_time: Duration::from_seconds(1),
+            ramp_up_duration: Duration::from_secs(5 * 60),
+            test_duration: Duration::from_secs(10 * 60),
+            think_time: Duration::from_secs(1),
             resource_monitoring: true,
         }
     }

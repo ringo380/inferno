@@ -1,19 +1,28 @@
 use crate::qa_framework::{
     QAFrameworkSystem, QAFrameworkConfig, TestCase, TestRun, TestType, TestPriority,
-    TestEnvironment, TestRunner, QualityGate, PerformanceTest, SecurityTest, MLModelTest,
-    ChaosTest, LoadProfile, SecurityTestType, TestAutomationLevel, TestOrchestrationMode,
-    TestAnalyticsConfig, TestStatus, TestResult, LoadGenerationStrategy, PerformanceMetric,
-    QualityThreshold, ChaosFaultType, ChaosTarget, MLTestType, TestReportFormat,
-    TestExecutionMode, TestSchedule, QualityMetrics, TestDashboardConfig,
+    TestEnvironment, PerformanceTest, SecurityTest,
+    ChaosTest, LoadProfile, SecurityTestType, LoadGenerationStrategy,
+    TestRunner, TestExecutionMode,
+    TestCategory, TestData, TestDataType, DataSource, DataGenerationStrategy,
+    DataCleanupStrategy, TestMetadata, RunTrigger, RunConfiguration,
+    TestSelection, TestFilters, TestExclusions, RunStatus, RunStatistics,
+    RetryPolicy, MLModelTest, MLTestType,
+    ChaosFaultType, ChaosTarget,
+    PerformanceMetric,
 };
 use crate::config::Config;
 use anyhow::Result;
 use clap::{Args, Subcommand};
 use serde_json;
+use serde_yaml;
 use std::path::PathBuf;
 use std::collections::HashMap;
 use tokio::time::Duration;
 use uuid::Uuid;
+
+
+
+
 
 #[derive(Args)]
 pub struct QAFrameworkArgs {
@@ -540,9 +549,9 @@ pub enum DashboardCommands {
     },
 }
 
-pub async fn execute(args: QAFrameworkArgs, config: &Config) -> Result<()> {
+pub async fn execute(args: QAFrameworkArgs, _config: &Config) -> Result<()> {
     let qa_config = QAFrameworkConfig::default();
-    let qa_system = QAFrameworkSystem::new(qa_config).await?;
+    let qa_system = QAFrameworkSystem::new(qa_config);
 
     match args.command {
         QAFrameworkCommands::Init { output, enable_all, timeout } => {
@@ -609,7 +618,7 @@ pub async fn execute(args: QAFrameworkArgs, config: &Config) -> Result<()> {
 }
 
 async fn handle_init(
-    qa_system: &QAFrameworkSystem,
+    _qa_system: &QAFrameworkSystem,
     output: Option<PathBuf>,
     enable_all: bool,
     timeout: Option<u64>,
@@ -684,14 +693,14 @@ async fn handle_create_test(
 
     let environment = if let Some(env) = environment {
         match env.to_lowercase().as_str() {
-            "development" | "dev" => TestEnvironment::Development,
-            "staging" => TestEnvironment::Staging,
-            "production" | "prod" => TestEnvironment::Production,
-            "testing" | "test" => TestEnvironment::Testing,
-            _ => TestEnvironment::Testing,
+            "development" | "dev" => TestEnvironment::Development(),
+            "staging" => TestEnvironment::Staging(),
+            "production" | "prod" => TestEnvironment::Production(),
+            "testing" | "test" => TestEnvironment::Testing(),
+            _ => TestEnvironment::Testing(),
         }
     } else {
-        TestEnvironment::Testing
+        TestEnvironment::Testing()
     };
 
     let runner = if let Some(r) = runner {
@@ -720,24 +729,45 @@ async fn handle_create_test(
         test_config = serde_json::from_str(&config_content)?;
     }
 
+    use std::collections::HashSet;
+
     let test_case = TestCase {
         id: Uuid::new_v4(),
         name,
-        description,
+        description: description.unwrap_or_else(|| "Test case description".to_string()),
         test_type,
+        category: TestCategory::Functional,
         priority,
-        environment,
-        runner,
-        source_path: None,
-        test_command: None,
+        tags: parsed_tags.into_iter().collect::<HashSet<String>>(),
+        preconditions: Vec::new(),
+        steps: Vec::new(),
         expected_results: Vec::new(),
-        timeout: test_timeout,
-        retry_count: 0,
-        tags: parsed_tags,
+        test_data: TestData {
+            data_type: TestDataType::Static,
+            source: DataSource::File,
+            generation_strategy: DataGenerationStrategy::Random,
+            cleanup_strategy: DataCleanupStrategy::None,
+            sensitive_data: false,
+            data_sets: Vec::new(),
+        },
+        environment: environment,
+        metadata: TestMetadata {
+            author: "cli_user".to_string(),
+            version: "1.0.0".to_string(),
+            labels: HashMap::new(),
+            links: Vec::new(),
+        },
         dependencies: Vec::new(),
-        configuration: test_config,
+        timeout: test_timeout.unwrap_or_else(|| Duration::from_secs(300)),
+        retry_count: 0,
         created_at: chrono::Utc::now(),
         updated_at: chrono::Utc::now(),
+        created_by: "cli_user".to_string(),
+        // CLI compatibility fields
+        runner: Some(runner),
+        source_path: None,
+        test_command: None,
+        configuration: Some(test_config),
     };
 
     let test_id = qa_system.create_test_case(test_case).await?;
@@ -748,14 +778,14 @@ async fn handle_create_test(
 
 async fn handle_run_tests(
     qa_system: &QAFrameworkSystem,
-    test: Option<String>,
+    _test: Option<String>,
     name: Option<String>,
     environment: Option<String>,
     mode: Option<String>,
     parallel: Option<usize>,
     tags: Option<String>,
     test_type: Option<String>,
-    fail_fast: bool,
+    _fail_fast: bool,
     detailed_report: bool,
 ) -> Result<()> {
     println!("Executing test run...");
@@ -773,10 +803,10 @@ async fn handle_run_tests(
 
     let target_environment = if let Some(env) = environment {
         match env.to_lowercase().as_str() {
-            "development" | "dev" => Some(TestEnvironment::Development),
-            "staging" => Some(TestEnvironment::Staging),
-            "production" | "prod" => Some(TestEnvironment::Production),
-            "testing" | "test" => Some(TestEnvironment::Testing),
+            "development" | "dev" => Some(TestEnvironment::Development()),
+            "staging" => Some(TestEnvironment::Staging()),
+            "production" | "prod" => Some(TestEnvironment::Production()),
+            "testing" | "test" => Some(TestEnvironment::Testing()),
             _ => None,
         }
     } else {
@@ -805,20 +835,59 @@ async fn handle_run_tests(
     };
 
     let test_run = TestRun {
-        id: Uuid::new_v4(),
+        run_id: Uuid::new_v4(),
         name: name.unwrap_or_else(|| format!("Test Run {}", chrono::Utc::now().format("%Y%m%d_%H%M%S"))),
-        test_case_ids: vec![], // Will be populated based on filters
-        environment: target_environment.unwrap_or(TestEnvironment::Testing),
-        execution_mode,
-        configuration: HashMap::new(),
+        description: "CLI-generated test run".to_string(),
+        trigger: RunTrigger::Manual,
+        environment: target_environment.unwrap_or_else(|| TestEnvironment::Testing()),
+        configuration: RunConfiguration {
+            parallel_execution: execution_mode == TestExecutionMode::Parallel,
+            max_concurrency: parallel.unwrap_or(1),
+            timeout: Duration::from_secs(3600),
+            retry_policy: RetryPolicy::default(),
+            environment_setup: HashMap::new(),
+        },
+        test_selection: TestSelection {
+            test_ids: Vec::new(),
+            filters: TestFilters {
+                test_types: filter_type.map(|t| vec![t]).unwrap_or_default(),
+                tags: filter_tags.clone(),
+                priorities: Vec::new(),
+                environments: Vec::new(),
+            },
+            exclusions: TestExclusions {
+                test_ids: Vec::new(),
+                patterns: Vec::new(),
+            },
+        },
+        start_time: chrono::Utc::now(),
+        end_time: None,
+        status: RunStatus::Pending,
+        statistics: RunStatistics {
+            total_tests: 0,
+            passed_tests: 0,
+            failed_tests: 0,
+            skipped_tests: 0,
+            error_tests: 0,
+            success_rate: 0.0,
+            total_duration: Duration::from_secs(0),
+            average_execution_time: Duration::from_secs(0),
+            avg_test_duration: Duration::from_secs(0),
+            coverage_percentage: 0.0,
+        },
+        executions: Vec::new(),
+        created_by: "cli_user".to_string(),
+        // CLI compatibility fields
+        id: Some(Uuid::new_v4()),
+        test_case_ids: Some(vec![]),
+        execution_mode: Some(execution_mode),
         scheduled_at: None,
         started_at: None,
         completed_at: None,
-        status: TestStatus::Pending,
-        results: Vec::new(),
-        metrics: HashMap::new(),
-        tags: filter_tags.clone(),
-        created_at: chrono::Utc::now(),
+        results: Some(Vec::new()),
+        metrics: Some(HashMap::new()),
+        tags: Some(filter_tags.clone()),
+        created_at: Some(chrono::Utc::now()),
     };
 
     let run_id = qa_system.execute_test_run(test_run).await?;
@@ -838,12 +907,12 @@ async fn handle_run_tests(
 }
 
 async fn handle_list_tests(
-    qa_system: &QAFrameworkSystem,
-    test_type: Option<String>,
-    environment: Option<String>,
-    status: Option<String>,
+    _qa_system: &QAFrameworkSystem,
+    _test_type: Option<String>,
+    _environment: Option<String>,
+    _status: Option<String>,
     detailed: bool,
-    format: Option<String>,
+    _format: Option<String>,
 ) -> Result<()> {
     println!("Listing test cases...");
 
@@ -870,13 +939,13 @@ async fn handle_list_tests(
 
 async fn handle_generate_report(
     qa_system: &QAFrameworkSystem,
-    report_type: Option<String>,
-    run_id: Option<String>,
+    _report_type: Option<String>,
+    _run_id: Option<String>,
     output: Option<PathBuf>,
     format: Option<String>,
-    include_history: bool,
-    include_performance: bool,
-    include_security: bool,
+    _include_history: bool,
+    _include_performance: bool,
+    _include_security: bool,
 ) -> Result<()> {
     println!("Generating quality report...");
 
@@ -905,7 +974,7 @@ async fn handle_performance_commands(
     command: PerformanceCommands,
 ) -> Result<()> {
     match command {
-        PerformanceCommands::Create { name, target, load_profile, duration, users, rps, ramp_up, thresholds } => {
+        PerformanceCommands::Create { name, target, load_profile, duration, users, rps, ramp_up, thresholds: _thresholds } => {
             let load_profile_type = match load_profile.to_lowercase().as_str() {
                 "constant" => LoadProfile::Constant { rps: rps.unwrap_or(10) },
                 "ramp" => LoadProfile::Ramp {
@@ -941,15 +1010,15 @@ async fn handle_performance_commands(
 
             let result = qa_system.run_performance_test(perf_test).await?;
             println!("Performance test completed:");
-            println!("- Average Response Time: {:.2}ms", result.average_response_time.as_millis());
-            println!("- Total Requests: {}", result.total_requests);
-            println!("- Error Rate: {:.2}%", result.error_rate);
+            println!("- Average Response Time: {:.2}ms", result.metrics.average_response_time.as_millis());
+            println!("- Total Requests: {}", result.metrics.total_requests);
+            println!("- Error Rate: {:.2}%", result.metrics.error_rate);
         }
-        PerformanceCommands::Run { test_id, duration, live_metrics } => {
+        PerformanceCommands::Run { test_id, duration: _duration, live_metrics: _live_metrics } => {
             println!("Running performance test: {}", test_id);
             // Implementation would retrieve and execute the test
         }
-        PerformanceCommands::Results { test_id, date_range, trends } => {
+        PerformanceCommands::Results { test_id: _test_id, date_range: _date_range, trends: _trends } => {
             println!("Performance test results:");
             // Implementation would query and display results
         }
@@ -963,7 +1032,7 @@ async fn handle_security_commands(
     command: SecurityCommands,
 ) -> Result<()> {
     match command {
-        SecurityCommands::Create { name, test_type, target, scanner_config, scripts } => {
+        SecurityCommands::Create { name, test_type, target, scanner_config: _scanner_config, scripts } => {
             let security_type = match test_type.to_lowercase().as_str() {
                 "vulnerability" => SecurityTestType::VulnerabilityScanning,
                 "penetration" => SecurityTestType::PenetrationTesting,
@@ -975,6 +1044,7 @@ async fn handle_security_commands(
 
             let security_test = SecurityTest {
                 id: Uuid::new_v4(),
+                test_id: Uuid::new_v4(),
                 name,
                 test_type: security_type,
                 target_system: target,
@@ -988,15 +1058,15 @@ async fn handle_security_commands(
 
             let result = qa_system.run_security_test(security_test).await?;
             println!("Security test completed:");
-            println!("- Vulnerabilities Found: {}", result.vulnerabilities_found.len());
-            println!("- High Severity: {}", result.vulnerabilities_found.iter().filter(|v| v.severity == "High").count());
+            println!("- Vulnerabilities Found: {}", result.vulnerabilities.len());
+            println!("- High Severity: {}", result.vulnerabilities.iter().filter(|v| matches!(v.severity, crate::qa_framework::SeverityLevel::Critical)).count());
             println!("- Compliance Score: {:.2}%", result.compliance_score);
         }
-        SecurityCommands::Scan { test_id, intensity, detailed } => {
+        SecurityCommands::Scan { test_id, intensity: _intensity, detailed: _detailed } => {
             println!("Running security scan: {}", test_id);
             // Implementation would execute the security scan
         }
-        SecurityCommands::Vulnerabilities { severity, status, export } => {
+        SecurityCommands::Vulnerabilities { severity: _severity, status: _status, export: _export } => {
             println!("Security vulnerabilities:");
             // Implementation would list vulnerabilities
         }
@@ -1010,7 +1080,7 @@ async fn handle_ml_model_commands(
     command: MLModelCommands,
 ) -> Result<()> {
     match command {
-        MLModelCommands::Create { name, model_path, test_type, dataset, thresholds } => {
+        MLModelCommands::Create { name, model_path, test_type, dataset, thresholds: _thresholds } => {
             let ml_test_type = match test_type.to_lowercase().as_str() {
                 "accuracy" => MLTestType::AccuracyTesting,
                 "performance" => MLTestType::PerformanceTesting,
@@ -1040,11 +1110,11 @@ async fn handle_ml_model_commands(
             println!("- Performance Score: {:.2}", result.performance_metrics.get("score").unwrap_or(&0.0));
             println!("- Fairness Score: {:.2}", result.fairness_metrics.get("score").unwrap_or(&0.0));
         }
-        MLModelCommands::Validate { test_id, dataset, fairness, robustness } => {
+        MLModelCommands::Validate { test_id, dataset: _dataset, fairness: _fairness, robustness: _robustness } => {
             println!("Validating ML model: {}", test_id);
             // Implementation would run validation
         }
-        MLModelCommands::Compare { model_a, model_b, metrics } => {
+        MLModelCommands::Compare { model_a, model_b, metrics: _metrics } => {
             println!("Comparing models: {} vs {}", model_a, model_b);
             // Implementation would compare models
         }
@@ -1058,7 +1128,7 @@ async fn handle_chaos_commands(
     command: ChaosCommands,
 ) -> Result<()> {
     match command {
-        ChaosCommands::Create { name, fault_type, target, intensity, duration, verify_recovery } => {
+        ChaosCommands::Create { name, fault_type, target, intensity: _intensity, duration, verify_recovery } => {
             let chaos_fault_type = match fault_type.to_lowercase().as_str() {
                 "network_latency" => ChaosFaultType::NetworkLatency,
                 "network_partition" => ChaosFaultType::NetworkPartition,
@@ -1097,13 +1167,13 @@ async fn handle_chaos_commands(
             println!("- System Recovery: {}", if result.system_recovered { "Yes" } else { "No" });
             println!("- Recovery Time: {:?}", result.recovery_time);
         }
-        ChaosCommands::Run { test_id, dry_run, monitor } => {
+        ChaosCommands::Run { test_id, dry_run, monitor: _monitor } => {
             println!("Running chaos experiment: {}", test_id);
             if dry_run {
                 println!("Running in dry-run mode...");
             }
         }
-        ChaosCommands::List { fault_type, target, results } => {
+        ChaosCommands::List { fault_type: _fault_type, target: _target, results: _results } => {
             println!("Chaos experiments:");
             // Implementation would list experiments
         }
@@ -1117,15 +1187,15 @@ async fn handle_quality_gate_commands(
     command: QualityGateCommands,
 ) -> Result<()> {
     match command {
-        QualityGateCommands::Create { name, thresholds, criteria } => {
+        QualityGateCommands::Create { name, thresholds: _thresholds, criteria: _criteria } => {
             println!("Creating quality gate: {}", name);
             // Implementation would create quality gate
         }
-        QualityGateCommands::Evaluate { gate_id, run_id, override_thresholds } => {
+        QualityGateCommands::Evaluate { gate_id, run_id, override_thresholds: _override_thresholds } => {
             println!("Evaluating quality gate: {} for run: {}", gate_id, run_id);
             // Implementation would evaluate gate
         }
-        QualityGateCommands::List { status, history } => {
+        QualityGateCommands::List { status: _status, history: _history } => {
             println!("Quality gates:");
             // Implementation would list gates
         }
@@ -1139,15 +1209,15 @@ async fn handle_automation_commands(
     command: AutomationCommands,
 ) -> Result<()> {
     match command {
-        AutomationCommands::Configure { level, triggers, schedule } => {
+        AutomationCommands::Configure { level: _level, triggers: _triggers, schedule: _schedule } => {
             println!("Configuring test automation...");
             // Implementation would configure automation
         }
-        AutomationCommands::Status { scheduled, history } => {
+        AutomationCommands::Status { scheduled: _scheduled, history: _history } => {
             println!("Automation status:");
             // Implementation would show status
         }
-        AutomationCommands::Trigger { automation_id, parameters } => {
+        AutomationCommands::Trigger { automation_id, parameters: _parameters } => {
             println!("Triggering automation: {}", automation_id);
             // Implementation would trigger automation
         }
@@ -1161,15 +1231,15 @@ async fn handle_analytics_commands(
     command: AnalyticsCommands,
 ) -> Result<()> {
     match command {
-        AnalyticsCommands::Generate { analytics_type, time_range, predictions, export } => {
+        AnalyticsCommands::Generate { analytics_type, time_range: _time_range, predictions: _predictions, export: _export } => {
             println!("Generating analytics: {}", analytics_type);
             // Implementation would generate analytics
         }
-        AnalyticsCommands::Trends { metric, period, forecast } => {
+        AnalyticsCommands::Trends { metric, period: _period, forecast: _forecast } => {
             println!("Showing trends for: {}", metric);
             // Implementation would show trends
         }
-        AnalyticsCommands::Insights { scope, recommendations } => {
+        AnalyticsCommands::Insights { scope: _scope, recommendations: _recommendations } => {
             println!("Generating insights...");
             // Implementation would generate insights
         }
@@ -1183,16 +1253,16 @@ async fn handle_dashboard_commands(
     command: DashboardCommands,
 ) -> Result<()> {
     match command {
-        DashboardCommands::Start { port, realtime, config } => {
+        DashboardCommands::Start { port, realtime: _realtime, config: _config } => {
             let dashboard_port = port.unwrap_or(3000);
             println!("Starting QA dashboard on port: {}", dashboard_port);
             // Implementation would start dashboard server
         }
-        DashboardCommands::Snapshot { format, metrics, output } => {
+        DashboardCommands::Snapshot { format: _format, metrics: _metrics, output: _output } => {
             println!("Generating dashboard snapshot...");
             // Implementation would generate snapshot
         }
-        DashboardCommands::Configure { layout, widgets, theme } => {
+        DashboardCommands::Configure { layout: _layout, widgets: _widgets, theme: _theme } => {
             println!("Configuring dashboard...");
             // Implementation would configure dashboard
         }
