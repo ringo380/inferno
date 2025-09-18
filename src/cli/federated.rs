@@ -1,14 +1,14 @@
 use crate::config::Config;
 use crate::federated::{
-    FederatedConfig, FederatedNode, NodeRole, AggregationStrategy, DeploymentStrategy,
-    EdgeCapabilities, NodeStatus
+    FederatedNode, NodeRole, AggregationStrategy, DeploymentStrategy
 };
 use anyhow::{Context, Result};
 use clap::{Args, Subcommand, ValueEnum};
 use serde_json;
 use std::path::PathBuf;
 use tokio::time::{Duration, interval};
-use tracing::{error, info, warn};
+use tracing::info;
+use uuid::Uuid;
 
 #[derive(Args)]
 pub struct FederatedArgs {
@@ -436,7 +436,7 @@ pub enum ConfigCommands {
     },
 }
 
-#[derive(Clone, ValueEnum)]
+#[derive(Debug, Clone, ValueEnum)]
 pub enum NodeRoleArg {
     Coordinator,
     Participant,
@@ -453,7 +453,7 @@ impl From<NodeRoleArg> for NodeRole {
     }
 }
 
-#[derive(Clone, ValueEnum)]
+#[derive(Debug, Clone, ValueEnum)]
 pub enum AggregationStrategyArg {
     FederatedAveraging,
     WeightedAveraging,
@@ -472,7 +472,7 @@ impl From<AggregationStrategyArg> for AggregationStrategy {
     }
 }
 
-#[derive(Clone, ValueEnum)]
+#[derive(Debug, Clone, ValueEnum)]
 pub enum DeploymentStrategyArg {
     Push,
     Pull,
@@ -493,7 +493,7 @@ impl From<DeploymentStrategyArg> for DeploymentStrategy {
     }
 }
 
-#[derive(Clone, ValueEnum)]
+#[derive(Debug, Clone, ValueEnum)]
 pub enum OutputFormat {
     Table,
     Json,
@@ -501,7 +501,7 @@ pub enum OutputFormat {
     Csv,
 }
 
-#[derive(Clone, ValueEnum)]
+#[derive(Debug, Clone, ValueEnum)]
 pub enum TemplateType {
     Coordinator,
     Participant,
@@ -588,7 +588,7 @@ async fn handle_start(
     coordinator: Option<String>,
     port: u16,
     daemon: bool,
-    log_level: String,
+    _log_level: String,
 ) -> Result<()> {
     info!("Starting federated learning node with role: {:?}", role);
 
@@ -611,7 +611,7 @@ async fn handle_start(
 
     // Create and start federated node
     let node = FederatedNode::new(config)?;
-    let node_id = node.node_id.clone();
+    let node_id = node.get_node_id().to_string();
 
     if daemon {
         info!("Starting node {} as daemon", node_id);
@@ -622,12 +622,12 @@ async fn handle_start(
 
     println!("✓ Federated node started successfully");
     println!("Node ID: {}", node_id);
-    println!("Role: {:?}", node.config.coordinator.role);
+    println!("Role: {:?}", node.get_config().coordinator.role);
 
-    if matches!(node.config.coordinator.role, NodeRole::Coordinator | NodeRole::Both) {
+    if matches!(node.get_config().coordinator.role, NodeRole::Coordinator | NodeRole::Both) {
         println!("Coordinator listening on: {}:{}",
-            node.config.coordinator.bind_address,
-            node.config.coordinator.port);
+            node.get_config().coordinator.bind_address,
+            node.get_config().coordinator.port);
     }
 
     if !daemon {
@@ -960,7 +960,7 @@ async fn handle_participant_command(command: ParticipantCommands) -> Result<()> 
             }
 
             println!("✓ Participant registered successfully");
-            println!("Node ID: node-{}", uuid::Uuid::new_v4());
+            println!("Node ID: node-{}", Uuid::new_v4());
         }
 
         ParticipantCommands::Remove { node_id, reason } => {
@@ -1005,7 +1005,7 @@ async fn handle_model_command(command: ModelCommands) -> Result<()> {
     match command {
         ModelCommands::List {
             global_only,
-            history,
+            history: _,
             output,
         } => {
             println!("Federated Learning Models");

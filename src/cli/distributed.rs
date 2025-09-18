@@ -8,7 +8,6 @@ use crate::{
 use anyhow::Result;
 use clap::{Args, Subcommand};
 use futures::StreamExt;
-use serde_json::json;
 use std::{sync::Arc, time::Instant};
 use tracing::{info, warn};
 

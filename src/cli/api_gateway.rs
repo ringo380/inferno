@@ -1,5 +1,5 @@
 use crate::{
-    api_gateway::{ApiGateway, ApiGatewayConfig},
+    api_gateway::ApiGateway,
     config::Config,
 };
 use uuid;
@@ -7,7 +7,7 @@ use anyhow::Result;
 use clap::{Args, Subcommand};
 use std::path::PathBuf;
 use tokio::signal;
-use tracing::{info, warn, error};
+use tracing::{info, warn};
 
 #[derive(Debug, Args)]
 pub struct ApiGatewayArgs {
@@ -1127,7 +1127,7 @@ pub async fn execute(args: ApiGatewayArgs, config: &Config) -> Result<()> {
 
 async fn handle_start_command(
     config: &Config,
-    config_override: Option<PathBuf>,
+    _config_override: Option<PathBuf>,
     daemon: bool,
     bind_address: Option<String>,
     port: Option<u16>,
@@ -1290,16 +1290,16 @@ async fn handle_routes_command(config: &Config, action: RouteAction) -> Result<(
             }
         }
 
-        RouteAction::Add { id, path, service, methods, priority, tags, rewrite, middleware } => {
+        RouteAction::Add { id, path, service, methods, priority: _, tags, rewrite: _, middleware: _ } => {
             info!("Adding route: {} -> {} ({})", id, path, service);
 
-            let route_methods = if let Some(m) = methods {
+            let _route_methods = if let Some(m) = methods {
                 m.split(',').map(|s| s.trim().to_uppercase()).collect()
             } else {
                 vec!["GET".to_string()]
             };
 
-            let route_tags = if let Some(t) = tags {
+            let _route_tags = if let Some(t) = tags {
                 t.split(',').map(|s| s.trim().to_string()).collect()
             } else {
                 Vec::new()
@@ -1310,7 +1310,7 @@ async fn handle_routes_command(config: &Config, action: RouteAction) -> Result<(
             println!("Route '{}' added: {} -> {}", id, path, service);
         }
 
-        RouteAction::Update { id, path, service, methods, priority, enabled } => {
+        RouteAction::Update { id, path: _, service: _, methods: _, priority: _, enabled: _ } => {
             info!("Updating route: {}", id);
 
             // In a real implementation, this would update the route configuration
@@ -1369,7 +1369,7 @@ async fn handle_routes_command(config: &Config, action: RouteAction) -> Result<(
 
 async fn handle_services_command(config: &Config, action: ServiceAction) -> Result<()> {
     match action {
-        ServiceAction::List { healthy, detailed, format } => {
+        ServiceAction::List { healthy: _, detailed, format } => {
             println!("Upstream Services");
             println!("================");
 
@@ -1398,7 +1398,7 @@ async fn handle_services_command(config: &Config, action: ServiceAction) -> Resu
             }
         }
 
-        ServiceAction::Add { id, name, targets, weight, health_check, health_path, health_interval } => {
+        ServiceAction::Add { id, name, targets, weight: _, health_check, health_path, health_interval } => {
             info!("Adding service: {} ({})", id, name);
 
             // Parse targets
@@ -1422,7 +1422,7 @@ async fn handle_services_command(config: &Config, action: ServiceAction) -> Resu
             info!("Service added successfully");
         }
 
-        ServiceAction::Update { id, name, targets, weight, health_check } => {
+        ServiceAction::Update { id, name: _, targets: _, weight: _, health_check: _ } => {
             info!("Updating service: {}", id);
             println!("Service '{}' updated", id);
         }
@@ -1442,7 +1442,7 @@ async fn handle_services_command(config: &Config, action: ServiceAction) -> Resu
             println!("Service '{}' removed", id);
         }
 
-        ServiceAction::AddTarget { service, host, port, weight } => {
+        ServiceAction::AddTarget { service, host, port, weight: _ } => {
             info!("Adding target {}:{} to service {}", host, port, service);
             println!("Target added to service '{}'", service);
         }
@@ -1563,14 +1563,14 @@ async fn handle_rate_limit_command(config: &Config, action: RateLimitAction) -> 
             let time_range = range.unwrap_or(60);
             println!("Time range: {} minutes", time_range);
 
-            if let Some(client_id) = client {
+            if let Some(ref client_id) = client {
                 println!("Client: {}", client_id);
                 println!("  Requests: 150");
                 println!("  Rate: 2.5 req/s");
                 println!("  Rejected: 5");
             }
 
-            if let Some(route_pattern) = route {
+            if let Some(ref route_pattern) = route {
                 println!("Route: {}", route_pattern);
                 println!("  Requests: 500");
                 println!("  Rate: 8.3 req/s");
@@ -1622,7 +1622,7 @@ async fn handle_rate_limit_command(config: &Config, action: RateLimitAction) -> 
 
 async fn handle_auth_command(config: &Config, action: AuthAction) -> Result<()> {
     match action {
-        AuthAction::Show { format } => {
+        AuthAction::Show { format: _ } => {
             println!("Authentication Configuration");
             println!("===========================");
 
@@ -1655,7 +1655,7 @@ async fn handle_auth_command(config: &Config, action: AuthAction) -> Result<()> 
             handle_jwt_action(config, action).await?;
         }
 
-        AuthAction::Test { token, method } => {
+        AuthAction::Test { token: _, method } => {
             info!("Testing authentication token");
             let auth_method = method.unwrap_or_else(|| "auto".to_string());
             println!("Testing token with method: {}", auth_method);
@@ -1672,7 +1672,7 @@ async fn handle_auth_command(config: &Config, action: AuthAction) -> Result<()> 
 
 async fn handle_api_key_action(config: &Config, action: ApiKeyAction) -> Result<()> {
     match action {
-        ApiKeyAction::List { show_expired, format } => {
+        ApiKeyAction::List { show_expired, format: _ } => {
             println!("API Keys");
             println!("========");
 
@@ -1693,7 +1693,7 @@ async fn handle_api_key_action(config: &Config, action: ApiKeyAction) -> Result<
             }
         }
 
-        ApiKeyAction::Create { name, permissions, expires_in, rate_limit } => {
+        ApiKeyAction::Create { name, permissions, expires_in, rate_limit: _ } => {
             info!("Creating API key: {}", name);
 
             let key = format!("ak_{}", uuid::Uuid::new_v4().to_string().replace('-', ""));
@@ -1742,7 +1742,7 @@ async fn handle_api_key_action(config: &Config, action: ApiKeyAction) -> Result<
     Ok(())
 }
 
-async fn handle_jwt_action(config: &Config, action: JwtAction) -> Result<()> {
+async fn handle_jwt_action(_config: &Config, action: JwtAction) -> Result<()> {
     match action {
         JwtAction::Generate { subject, claims, expires_in } => {
             info!("Generating JWT token for subject: {}", subject);
@@ -1764,7 +1764,7 @@ async fn handle_jwt_action(config: &Config, action: JwtAction) -> Result<()> {
             }
         }
 
-        JwtAction::Verify { token } => {
+        JwtAction::Verify { token: _ } => {
             info!("Verifying JWT token");
 
             // In a real implementation, this would verify the token
@@ -1774,7 +1774,7 @@ async fn handle_jwt_action(config: &Config, action: JwtAction) -> Result<()> {
             println!("Expires: 2024-12-31 23:59:59 UTC");
         }
 
-        JwtAction::Decode { token, no_verify } => {
+        JwtAction::Decode { token: _, no_verify } => {
             info!("Decoding JWT token");
 
             if no_verify {

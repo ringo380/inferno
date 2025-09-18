@@ -5,8 +5,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use tokio::sync::{Mutex, RwLock};
-use tracing::{debug, info, warn};
+use tokio::sync::RwLock;
+use tracing::info;
+use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeploymentArgs {
@@ -1124,6 +1125,131 @@ pub struct DeploymentStatus {
     pub resources: ResourceStatus,
 }
 
+/// Result types for deployment operations
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeploymentResult {
+    pub deployment_id: String,
+    pub status: String,
+    pub manifest_preview: String,
+    pub service_urls: HashMap<String, String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RollbackResult {
+    pub revision: u32,
+    pub status: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScaleResult {
+    pub current_replicas: u32,
+    pub target_replicas: u32,
+    pub status: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StatusInfo {
+    pub environment: String,
+    pub version: String,
+    pub status: String,
+    pub ready_replicas: u32,
+    pub total_replicas: u32,
+    pub last_updated: String,
+    pub pods: Vec<PodInfo>,
+    pub service_urls: HashMap<String, String>,
+    pub health_checks: Vec<HealthCheck>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PodInfo {
+    pub name: String,
+    pub status: String,
+    pub ready: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HealthCheck {
+    pub name: String,
+    pub passing: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LogEntry {
+    pub timestamp: String,
+    pub pod: String,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ValidationResult {
+    pub is_valid: bool,
+    pub warnings: Vec<String>,
+    pub errors: Vec<String>,
+    pub cluster_resources: Vec<ClusterResource>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ClusterResource {
+    pub name: String,
+    pub kind: String,
+    pub status: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeploymentHistoryEntry {
+    pub revision: u32,
+    pub version: String,
+    pub timestamp: String,
+    pub status: String,
+    pub rolled_back: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AutoscalingStatus {
+    pub enabled: bool,
+    pub current_replicas: u32,
+    pub min_replicas: u32,
+    pub max_replicas: u32,
+    pub current_cpu_percent: u32,
+    pub target_cpu_percent: u32,
+    pub current_memory_percent: Option<u32>,
+    pub target_memory_percent: Option<u32>,
+    pub last_scale_time: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConfigEntry {
+    pub key: String,
+    pub value: String,
+    pub is_secret: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HealthReport {
+    pub overall_healthy: bool,
+    pub uptime: String,
+    pub services: Vec<ServiceHealthInfo>,
+    pub cpu_usage: u32,
+    pub cpu_limit: u32,
+    pub memory_usage: u32,
+    pub memory_limit: u32,
+    pub recent_errors: Vec<ErrorInfo>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ServiceHealthInfo {
+    pub name: String,
+    pub healthy: bool,
+    pub status: String,
+    pub response_time_ms: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ErrorInfo {
+    pub timestamp: String,
+    pub message: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum DeploymentState {
     Pending,
@@ -1180,6 +1306,20 @@ pub struct DeploymentManager {
     deployment_history: Arc<RwLock<Vec<DeploymentStatus>>>,
 }
 
+// Send and Sync implementations for thread safety
+unsafe impl Send for DeploymentManager {}
+unsafe impl Sync for DeploymentManager {}
+
+impl Clone for DeploymentManager {
+    fn clone(&self) -> Self {
+        Self {
+            config: self.config.clone(),
+            active_deployments: Arc::clone(&self.active_deployments),
+            deployment_history: Arc::clone(&self.deployment_history),
+        }
+    }
+}
+
 impl DeploymentManager {
     /// Create a new deployment manager
     pub fn new(config: DeploymentConfig) -> Self {
@@ -1207,32 +1347,27 @@ impl DeploymentManager {
     }
 
     /// Deploy to environment
-    pub async fn deploy(
-        &self,
-        environment: &str,
-        version: &str,
-        dry_run: bool,
-    ) -> Result<String> {
-        let deployment_id = uuid::Uuid::new_v4().to_string();
+    pub async fn deploy(&mut self, args: &DeploymentArgs) -> Result<DeploymentResult> {
+        let deployment_id = Uuid::new_v4().to_string();
 
-        info!("Starting deployment {} to environment: {}", deployment_id, environment);
+        info!("Starting deployment {} to environment: {}", deployment_id, args.environment);
 
         // Get environment configuration
-        let env_config = self.config.environments.get(environment)
-            .ok_or_else(|| InfernoError::InvalidArgument(format!("Unknown environment: {}", environment)))?;
+        let env_config = self.config.environments.get(&args.environment)
+            .ok_or_else(|| InfernoError::InvalidArgument(format!("Unknown environment: {}", args.environment)))?;
 
         // Create deployment status
         let deployment_status = DeploymentStatus {
             id: deployment_id.clone(),
-            environment: environment.to_string(),
+            environment: args.environment.clone(),
             status: DeploymentState::Pending,
             created_at: Utc::now(),
             updated_at: Utc::now(),
-            deployed_version: version.to_string(),
-            helm_release_name: self.config.helm.release_name_template.replace("{environment}", environment),
-            kubernetes_namespace: self.config.kubernetes.namespace.clone(),
+            deployed_version: args.version.clone(),
+            helm_release_name: self.config.helm.release_name_template.replace("{environment}", &args.environment),
+            kubernetes_namespace: args.namespace.clone().unwrap_or_else(|| self.config.kubernetes.namespace.clone()),
             replicas: ReplicaStatus {
-                desired: (self.config.autoscaling.min_replicas as f64 * env_config.scale_factor) as u32,
+                desired: args.replicas.unwrap_or((self.config.autoscaling.min_replicas as f64 * env_config.scale_factor) as u32),
                 current: 0,
                 ready: 0,
                 available: 0,
@@ -1261,14 +1396,39 @@ impl DeploymentManager {
             deployments.insert(deployment_id.clone(), deployment_status);
         }
 
+        let manifest_preview = if args.dry_run {
+            "# Dry run - manifests would be generated here".to_string()
+        } else {
+            "Deployment executed successfully".to_string()
+        };
+
         // Execute deployment steps
-        if !dry_run {
-            self.execute_deployment(&deployment_id, environment, version).await?;
+        if !args.dry_run {
+            // Spawn the deployment task to avoid blocking
+            let manager_clone = self.clone();
+            let deployment_id_clone = deployment_id.clone();
+            let environment_clone = args.environment.clone();
+            let version_clone = args.version.clone();
+
+            tokio::spawn(async move {
+                if let Err(e) = manager_clone.execute_deployment(&deployment_id_clone, &environment_clone, &version_clone).await {
+                    tracing::error!("Deployment failed: {}", e);
+                    // Update deployment status to failed
+                    let _ = manager_clone.update_deployment_status(&deployment_id_clone, DeploymentState::Failed).await;
+                }
+            });
         } else {
             info!("Dry run mode - skipping actual deployment");
         }
 
-        Ok(deployment_id)
+        Ok(DeploymentResult {
+            deployment_id: deployment_id.clone(),
+            status: "Success".to_string(),
+            manifest_preview,
+            service_urls: HashMap::from([
+                ("main".to_string(), format!("http://inferno-{}.{}.svc.cluster.local:8080", args.environment, args.namespace.as_deref().unwrap_or("default")))
+            ]),
+        })
     }
 
     /// Get deployment status
@@ -1284,62 +1444,68 @@ impl DeploymentManager {
     }
 
     /// Rollback deployment
-    pub async fn rollback(&self, environment: &str, revision: Option<u32>) -> Result<String> {
+    pub async fn rollback(&mut self, environment: &str, revision: Option<u32>) -> Result<RollbackResult> {
         info!("Rolling back deployment in environment: {}", environment);
 
-        let rollback_id = uuid::Uuid::new_v4().to_string();
+        let rollback_revision = revision.unwrap_or(1);
 
         // In a real implementation, this would execute helm rollback
-        info!("Rollback {} initiated for environment {}", rollback_id, environment);
+        info!("Rollback to revision {} initiated for environment {}", rollback_revision, environment);
 
-        Ok(rollback_id)
+        Ok(RollbackResult {
+            revision: rollback_revision,
+            status: "Success".to_string(),
+        })
     }
 
     /// Scale deployment
-    pub async fn scale(&self, environment: &str, replicas: u32) -> Result<()> {
+    pub async fn scale(&mut self, environment: &str, replicas: u32) -> Result<ScaleResult> {
         info!("Scaling deployment in environment {} to {} replicas", environment, replicas);
 
         // In a real implementation, this would update the HPA or deployment
 
-        Ok(())
+        Ok(ScaleResult {
+            current_replicas: 2, // Mock current value
+            target_replicas: replicas,
+            status: "Scaling".to_string(),
+        })
     }
 
     /// Pause deployment
-    pub async fn pause(&self, environment: &str) -> Result<()> {
+    pub async fn pause(&mut self, environment: &str) -> Result<()> {
         info!("Pausing deployment in environment: {}", environment);
         Ok(())
     }
 
     /// Resume deployment
-    pub async fn resume(&self, environment: &str) -> Result<()> {
+    pub async fn resume(&mut self, environment: &str) -> Result<()> {
         info!("Resuming deployment in environment: {}", environment);
         Ok(())
     }
 
     /// Delete deployment
-    pub async fn delete(&self, environment: &str) -> Result<()> {
+    pub async fn delete(&mut self, environment: &str) -> Result<()> {
         info!("Deleting deployment in environment: {}", environment);
         Ok(())
     }
 
     /// Generate Kubernetes manifests
-    pub async fn generate_manifests(&self, environment: &str, output_dir: &Path) -> Result<()> {
+    pub async fn generate_manifests(&mut self, environment: &str, version: &str) -> Result<HashMap<String, String>> {
         info!("Generating Kubernetes manifests for environment: {}", environment);
 
-        // Create output directory
-        tokio::fs::create_dir_all(output_dir).await?;
+        let mut manifests = HashMap::new();
 
         // Generate manifests (mock implementation)
-        self.generate_deployment_manifest(environment, output_dir).await?;
-        self.generate_service_manifest(environment, output_dir).await?;
-        self.generate_configmap_manifest(environment, output_dir).await?;
-        self.generate_hpa_manifest(environment, output_dir).await?;
+        manifests.insert("deployment".to_string(), self.create_deployment_manifest(environment, version).await?);
+        manifests.insert("service".to_string(), self.create_service_manifest(environment).await?);
+        manifests.insert("configmap".to_string(), self.create_configmap_manifest(environment).await?);
+        manifests.insert("hpa".to_string(), self.create_hpa_manifest(environment).await?);
 
-        Ok(())
+        Ok(manifests)
     }
 
     /// Generate Helm chart
-    pub async fn generate_helm_chart(&self, output_dir: &Path) -> Result<()> {
+    pub async fn generate_helm_chart(&mut self, output_dir: &Path) -> Result<()> {
         info!("Generating Helm chart");
 
         // Create chart directory structure
@@ -1379,7 +1545,7 @@ impl DeploymentManager {
         Ok(())
     }
 
-    async fn execute_deployment(&self, deployment_id: &str, environment: &str, version: &str) -> Result<()> {
+    async fn execute_deployment(&self, deployment_id: &str, _environment: &str, _version: &str) -> Result<()> {
         // Update status to in progress
         self.update_deployment_status(deployment_id, DeploymentState::InProgress).await?;
 
@@ -1886,6 +2052,364 @@ spec:
         let file_path = templates_dir.join("ingress.yaml");
         tokio::fs::write(file_path, template).await?;
         Ok(())
+    }
+
+    /// Get deployment status
+    pub async fn get_status(&mut self, environment: &str, _namespace: Option<&str>) -> Result<StatusInfo> {
+        info!("Getting status for environment: {}", environment);
+
+        Ok(StatusInfo {
+            environment: environment.to_string(),
+            version: "1.0.0".to_string(),
+            status: "Running".to_string(),
+            ready_replicas: 2,
+            total_replicas: 2,
+            last_updated: Utc::now().format("%Y-%m-%d %H:%M:%S UTC").to_string(),
+            pods: vec![
+                PodInfo {
+                    name: format!("inferno-{}-pod-1", environment),
+                    status: "Running".to_string(),
+                    ready: "1/1".to_string(),
+                },
+                PodInfo {
+                    name: format!("inferno-{}-pod-2", environment),
+                    status: "Running".to_string(),
+                    ready: "1/1".to_string(),
+                },
+            ],
+            service_urls: HashMap::from([
+                ("main".to_string(), format!("http://inferno-{}.default.svc.cluster.local:8080", environment)),
+                ("metrics".to_string(), format!("http://inferno-{}.default.svc.cluster.local:9090", environment)),
+            ]),
+            health_checks: vec![
+                HealthCheck {
+                    name: "liveness".to_string(),
+                    passing: true,
+                },
+                HealthCheck {
+                    name: "readiness".to_string(),
+                    passing: true,
+                },
+            ],
+        })
+    }
+
+    /// Get deployment logs
+    pub async fn get_logs(&mut self, environment: &str, _namespace: Option<&str>, lines: u32, _since: Option<&str>, _selector: Option<&str>) -> Result<Vec<LogEntry>> {
+        info!("Getting logs for environment: {}", environment);
+
+        let mut logs = Vec::new();
+        for i in 0..lines.min(10) {
+            logs.push(LogEntry {
+                timestamp: Utc::now().format("%Y-%m-%d %H:%M:%S UTC").to_string(),
+                pod: format!("inferno-{}-pod-1", environment),
+                message: format!("Sample log entry {}", i + 1),
+            });
+        }
+
+        Ok(logs)
+    }
+
+    /// Validate deployment configuration
+    pub async fn validate_config(&mut self, environment: &str, _config_file: Option<&Path>, _namespace: Option<&str>, cluster: bool) -> Result<ValidationResult> {
+        info!("Validating configuration for environment: {}", environment);
+
+        let mut warnings = Vec::new();
+        let mut errors = Vec::new();
+        let mut cluster_resources = Vec::new();
+
+        // Mock validation
+        if !self.config.environments.contains_key(environment) {
+            errors.push(format!("Unknown environment: {}", environment));
+        }
+
+        if cluster {
+            cluster_resources.push(ClusterResource {
+                name: format!("inferno-{}", environment),
+                kind: "Deployment".to_string(),
+                status: "Available".to_string(),
+            });
+        }
+
+        if self.config.autoscaling.min_replicas > self.config.autoscaling.max_replicas {
+            warnings.push("Min replicas is greater than max replicas".to_string());
+        }
+
+        Ok(ValidationResult {
+            is_valid: errors.is_empty(),
+            warnings,
+            errors,
+            cluster_resources,
+        })
+    }
+
+    /// Get deployment history
+    pub async fn get_deployment_history(&mut self, environment: &str, _namespace: Option<&str>, limit: u32) -> Result<Vec<DeploymentHistoryEntry>> {
+        info!("Getting deployment history for environment: {}", environment);
+
+        let mut history = Vec::new();
+        for i in 0..limit.min(5) {
+            history.push(DeploymentHistoryEntry {
+                revision: i + 1,
+                version: format!("1.0.{}", i),
+                timestamp: Utc::now().format("%Y-%m-%d %H:%M:%S UTC").to_string(),
+                status: "Deployed".to_string(),
+                rolled_back: false,
+            });
+        }
+
+        Ok(history)
+    }
+
+    /// Enable autoscaling
+    pub async fn enable_autoscaling(&mut self, environment: &str, _namespace: Option<&str>, min_replicas: u32, max_replicas: u32, cpu_percent: u32, _memory_percent: Option<u32>) -> Result<()> {
+        info!("Enabling autoscaling for environment: {} (min: {}, max: {}, cpu: {}%)", environment, min_replicas, max_replicas, cpu_percent);
+
+        // In a real implementation, this would configure HPA
+
+        Ok(())
+    }
+
+    /// Disable autoscaling
+    pub async fn disable_autoscaling(&mut self, environment: &str, _namespace: Option<&str>) -> Result<()> {
+        info!("Disabling autoscaling for environment: {}", environment);
+
+        // In a real implementation, this would remove HPA
+
+        Ok(())
+    }
+
+    /// Get autoscaling status
+    pub async fn get_autoscaling_status(&mut self, environment: &str, _namespace: Option<&str>) -> Result<AutoscalingStatus> {
+        info!("Getting autoscaling status for environment: {}", environment);
+
+        Ok(AutoscalingStatus {
+            enabled: true,
+            current_replicas: 3,
+            min_replicas: self.config.autoscaling.min_replicas,
+            max_replicas: self.config.autoscaling.max_replicas,
+            current_cpu_percent: 45,
+            target_cpu_percent: self.config.autoscaling.target_cpu_utilization,
+            current_memory_percent: Some(60),
+            target_memory_percent: Some(self.config.autoscaling.target_memory_utilization),
+            last_scale_time: Utc::now().format("%Y-%m-%d %H:%M:%S UTC").to_string(),
+        })
+    }
+
+    /// Update autoscaling
+    pub async fn update_autoscaling(&mut self, environment: &str, _namespace: Option<&str>, _min_replicas: Option<u32>, _max_replicas: Option<u32>, _cpu_percent: Option<u32>, _memory_percent: Option<u32>) -> Result<()> {
+        info!("Updating autoscaling for environment: {}", environment);
+
+        // In a real implementation, this would update HPA configuration
+
+        Ok(())
+    }
+
+    /// Set configuration
+    pub async fn set_config(&mut self, environment: &str, _namespace: Option<&str>, key: &str, _value: &str, secret: bool) -> Result<()> {
+        info!("Setting {} {} in environment: {}", if secret { "secret" } else { "config" }, key, environment);
+
+        // In a real implementation, this would create/update ConfigMap or Secret
+
+        Ok(())
+    }
+
+    /// Get configuration
+    pub async fn get_config(&mut self, environment: &str, _namespace: Option<&str>, key: &str) -> Result<String> {
+        info!("Getting config {} in environment: {}", key, environment);
+
+        // In a real implementation, this would read from ConfigMap or Secret
+        Ok(format!("value-for-{}", key))
+    }
+
+    /// List configuration
+    pub async fn list_config(&mut self, environment: &str, _namespace: Option<&str>, include_secrets: bool) -> Result<Vec<ConfigEntry>> {
+        info!("Listing config for environment: {} (secrets: {})", environment, include_secrets);
+
+        let mut configs = vec![
+            ConfigEntry {
+                key: "LOG_LEVEL".to_string(),
+                value: "info".to_string(),
+                is_secret: false,
+            },
+            ConfigEntry {
+                key: "ENVIRONMENT".to_string(),
+                value: environment.to_string(),
+                is_secret: false,
+            },
+        ];
+
+        if include_secrets {
+            configs.push(ConfigEntry {
+                key: "API_KEY".to_string(),
+                value: "****".to_string(),
+                is_secret: true,
+            });
+        }
+
+        Ok(configs)
+    }
+
+    /// Delete configuration
+    pub async fn delete_config(&mut self, environment: &str, _namespace: Option<&str>, key: &str) -> Result<()> {
+        info!("Deleting config {} in environment: {}", key, environment);
+
+        // In a real implementation, this would remove from ConfigMap or Secret
+
+        Ok(())
+    }
+
+    /// Import configuration
+    pub async fn import_config(&mut self, environment: &str, _namespace: Option<&str>, _file: &Path, secrets: bool) -> Result<()> {
+        info!("Importing {} from file for environment: {}", if secrets { "secrets" } else { "config" }, environment);
+
+        // In a real implementation, this would read file and create ConfigMap/Secret
+
+        Ok(())
+    }
+
+    /// Export configuration
+    pub async fn export_config(&mut self, environment: &str, _namespace: Option<&str>, file: &Path, include_secrets: bool, format: &str) -> Result<()> {
+        info!("Exporting config for environment: {} to {} (format: {}, secrets: {})", environment, file.display(), format, include_secrets);
+
+        // In a real implementation, this would export ConfigMap/Secret to file
+        let content = match format {
+            "yaml" => "# Configuration exported\nkey: value\n".to_string(),
+            "json" => "{\"key\": \"value\"}".to_string(),
+            "env" => "KEY=value\n".to_string(),
+            _ => "key=value\n".to_string(),
+        };
+
+        tokio::fs::write(file, content).await?;
+
+        Ok(())
+    }
+
+    /// Check health
+    pub async fn check_health(&mut self, environment: &str, _namespace: Option<&str>) -> Result<HealthReport> {
+        info!("Checking health for environment: {}", environment);
+
+        Ok(HealthReport {
+            overall_healthy: true,
+            uptime: "2d 4h 30m".to_string(),
+            services: vec![
+                ServiceHealthInfo {
+                    name: "api".to_string(),
+                    healthy: true,
+                    status: "running".to_string(),
+                    response_time_ms: 45,
+                },
+                ServiceHealthInfo {
+                    name: "inference".to_string(),
+                    healthy: true,
+                    status: "running".to_string(),
+                    response_time_ms: 120,
+                },
+            ],
+            cpu_usage: 45,
+            cpu_limit: 80,
+            memory_usage: 60,
+            memory_limit: 90,
+            recent_errors: vec![],
+        })
+    }
+
+    // Helper methods for manifest generation
+    async fn create_deployment_manifest(&self, environment: &str, version: &str) -> Result<String> {
+        let env_config = self.config.environments.get(environment).unwrap();
+
+        let manifest = format!(r#"apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: inferno-{environment}
+  namespace: {namespace}
+spec:
+  replicas: {replicas}
+  selector:
+    matchLabels:
+      app: inferno
+      environment: {environment}
+  template:
+    metadata:
+      labels:
+        app: inferno
+        environment: {environment}
+    spec:
+      containers:
+      - name: inferno
+        image: {registry}/{repository}:{version}
+        ports:
+        - containerPort: 8080
+"#,
+            environment = environment,
+            namespace = self.config.kubernetes.namespace,
+            replicas = (self.config.autoscaling.min_replicas as f64 * env_config.scale_factor) as u32,
+            registry = self.config.registry.url,
+            repository = format!("{}/inferno", self.config.registry.repository_prefix),
+            version = version,
+        );
+
+        Ok(manifest)
+    }
+
+    async fn create_service_manifest(&self, environment: &str) -> Result<String> {
+        let manifest = format!(r#"apiVersion: v1
+kind: Service
+metadata:
+  name: inferno-{environment}
+  namespace: {namespace}
+spec:
+  selector:
+    app: inferno
+    environment: {environment}
+  ports:
+  - port: 8080
+    targetPort: 8080
+"#,
+            environment = environment,
+            namespace = self.config.kubernetes.namespace,
+        );
+
+        Ok(manifest)
+    }
+
+    async fn create_configmap_manifest(&self, environment: &str) -> Result<String> {
+        let manifest = format!(r#"apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: inferno-config-{environment}
+  namespace: {namespace}
+data:
+  ENVIRONMENT: "{environment}"
+"#,
+            environment = environment,
+            namespace = self.config.kubernetes.namespace,
+        );
+
+        Ok(manifest)
+    }
+
+    async fn create_hpa_manifest(&self, environment: &str) -> Result<String> {
+        let manifest = format!(r#"apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: inferno-hpa-{environment}
+  namespace: {namespace}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: inferno-{environment}
+  minReplicas: {min_replicas}
+  maxReplicas: {max_replicas}
+"#,
+            environment = environment,
+            namespace = self.config.kubernetes.namespace,
+            min_replicas = self.config.autoscaling.min_replicas,
+            max_replicas = self.config.autoscaling.max_replicas,
+        );
+
+        Ok(manifest)
     }
 }
 

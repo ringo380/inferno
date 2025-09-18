@@ -1,14 +1,14 @@
 use crate::config::Config;
 use crate::deployment::{
-    DeploymentArgs, DeploymentConfig, DeploymentManager, EnvironmentConfig, HelmConfig,
-    KubernetesConfig, AutoScalingConfig, SecurityConfig as DeploymentSecurityConfig,
+    DeploymentArgs, DeploymentConfig, DeploymentManager,
 };
 use anyhow::{Context, Result};
 use clap::{Args, Subcommand};
-use serde_json::Value;
 use std::collections::HashMap;
+use std::io;
 use std::path::PathBuf;
-use tracing::{error, info, warn};
+use tracing::{info, warn};
+use chrono::Utc;
 
 #[derive(Args)]
 pub struct DeploymentCliArgs {
@@ -601,12 +601,12 @@ async fn handle_rollback(
     manager: &mut DeploymentManager,
     environment: String,
     revision: Option<u32>,
-    namespace: Option<String>,
+    _namespace: Option<String>,
     wait: bool,
 ) -> Result<()> {
     info!("Rolling back deployment in {} environment", environment);
 
-    let result = manager.rollback(&environment, revision, namespace.as_deref()).await?;
+    let result = manager.rollback(&environment, revision).await?;
 
     println!("Rollback successful!");
     println!("Rolled back to revision: {}", result.revision);
@@ -624,12 +624,12 @@ async fn handle_scale(
     manager: &mut DeploymentManager,
     environment: String,
     replicas: u32,
-    namespace: Option<String>,
+    _namespace: Option<String>,
     wait: bool,
 ) -> Result<()> {
     info!("Scaling deployment in {} environment to {} replicas", environment, replicas);
 
-    let result = manager.scale(&environment, replicas, namespace.as_deref()).await?;
+    let result = manager.scale(&environment, replicas).await?;
 
     println!("Scaling successful!");
     println!("Current replicas: {}", result.current_replicas);
@@ -716,11 +716,11 @@ async fn handle_logs(
 async fn handle_pause(
     manager: &mut DeploymentManager,
     environment: String,
-    namespace: Option<String>,
+    _namespace: Option<String>,
 ) -> Result<()> {
     info!("Pausing deployment in {} environment", environment);
 
-    manager.pause(&environment, namespace.as_deref()).await?;
+    manager.pause(&environment).await?;
 
     println!("Deployment paused successfully!");
     println!("All replicas have been scaled to zero.");
@@ -731,13 +731,13 @@ async fn handle_pause(
 async fn handle_resume(
     manager: &mut DeploymentManager,
     environment: String,
-    namespace: Option<String>,
+    _namespace: Option<String>,
     replicas: Option<u32>,
 ) -> Result<()> {
     info!("Resuming deployment in {} environment", environment);
 
     let replica_count = replicas.unwrap_or(1);
-    manager.resume(&environment, namespace.as_deref(), replica_count).await?;
+    manager.resume(&environment).await?;
 
     println!("Deployment resumed successfully!");
     println!("Scaled back to {} replicas.", replica_count);
@@ -748,7 +748,7 @@ async fn handle_resume(
 async fn handle_delete(
     manager: &mut DeploymentManager,
     environment: String,
-    namespace: Option<String>,
+    _namespace: Option<String>,
     force: bool,
     purge: bool,
 ) -> Result<()> {
@@ -760,7 +760,7 @@ async fn handle_delete(
         println!("Are you sure? (y/N)");
 
         let mut input = String::new();
-        std::io::stdin().read_line(&mut input).context("Failed to read user input")?;
+        io::stdin().read_line(&mut input).context("Failed to read user input")?;
 
         if !input.trim().to_lowercase().starts_with('y') {
             println!("Deletion cancelled.");
@@ -770,7 +770,7 @@ async fn handle_delete(
 
     info!("Deleting deployment in {} environment", environment);
 
-    manager.delete(&environment, namespace.as_deref(), purge).await?;
+    manager.delete(&environment).await?;
 
     println!("Deployment deleted successfully!");
     if purge {
@@ -786,12 +786,12 @@ async fn handle_generate(
     version: String,
     output: PathBuf,
     format: String,
-    namespace: Option<String>,
-    values_file: Option<PathBuf>,
+    _namespace: Option<String>,
+    _values_file: Option<PathBuf>,
 ) -> Result<()> {
     info!("Generating {} manifests for {} environment", format, environment);
 
-    let manifests = manager.generate_manifests(&environment, &version, namespace.as_deref(), values_file.as_deref()).await?;
+    let manifests = manager.generate_manifests(&environment, &version).await?;
 
     std::fs::create_dir_all(&output).context("Failed to create output directory")?;
 
@@ -805,7 +805,7 @@ async fn handle_generate(
         }
         "helm" => {
             let chart_dir = output.join("inferno-chart");
-            manager.generate_helm_chart(&environment, &version, &chart_dir).await?;
+            manager.generate_helm_chart(&chart_dir).await?;
             println!("Generated Helm chart: {}", chart_dir.display());
         }
         _ => {
