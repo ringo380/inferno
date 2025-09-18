@@ -6,6 +6,7 @@ use crate::marketplace::{
 use anyhow::{Context, Result};
 use clap::{Args, Subcommand, ValueEnum};
 use serde_json;
+use serde_yaml;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use tracing::{error, info, warn};
