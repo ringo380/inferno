@@ -1,23 +1,21 @@
 use crate::{
-    backends::{Backend, InferenceParams},
-    config::Config,
-    metrics::{InferenceEvent, MetricsCollector},
+    backends::InferenceParams,
+    metrics::MetricsCollector,
     batch::{BatchInput, BatchResult, BatchConfig},
 };
 use anyhow::Result;
-use chrono::{DateTime, Utc};
+// use chrono::DateTime; // Reserved for future datetime operations
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, VecDeque},
-    path::PathBuf,
-    sync::{Arc, atomic::{AtomicUsize, Ordering}},
+    sync::{Arc, atomic::Ordering},
     time::{Duration, SystemTime},
 };
 use tokio::{
-    sync::{RwLock, Mutex, mpsc, Semaphore},
-    time::{interval, sleep, timeout},
+    sync::{RwLock, Mutex, mpsc},
+    time::sleep,
 };
-use tracing::{debug, error, info, warn};
+use tracing::{info, warn};
 use uuid::Uuid;
 
 #[derive(Debug, Clone)]
@@ -358,6 +356,22 @@ pub struct QueueInfo {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SerializableJobQueue {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+    pub config: JobQueueConfig,
+    pub status: QueueStatus,
+    pub created_at: SystemTime,
+    pub last_activity: SystemTime,
+    pub metrics: QueueMetrics,
+    pub queued_jobs_count: usize,
+    pub active_jobs_count: usize,
+    pub completed_jobs_count: usize,
+    pub failed_jobs_count: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QueueExportData {
     pub queue_info: QueueInfo,
     pub jobs: Vec<JobInfo>,
@@ -374,6 +388,30 @@ pub struct JobQueueManager {
     metrics_collector: Option<Arc<MetricsCollector>>,
     shutdown_tx: Option<mpsc::Sender<()>>,
     resource_monitor: Arc<Mutex<ResourceMonitor>>,
+}
+
+impl JobQueue {
+    pub async fn to_serializable(&self) -> SerializableJobQueue {
+        let queued_jobs_count = self.jobs.read().await.len();
+        let active_jobs_count = self.active_jobs.read().await.len();
+        let completed_jobs_count = self.completed_jobs.read().await.len();
+        let failed_jobs_count = self.failed_jobs.read().await.len();
+
+        SerializableJobQueue {
+            id: self.id.clone(),
+            name: self.name.clone(),
+            description: self.description.clone(),
+            config: self.config.clone(),
+            status: self.status.clone(),
+            created_at: self.created_at,
+            last_activity: self.last_activity,
+            metrics: self.metrics.clone(),
+            queued_jobs_count,
+            active_jobs_count,
+            completed_jobs_count,
+            failed_jobs_count,
+        }
+    }
 }
 
 impl JobQueueManager {
@@ -497,7 +535,7 @@ impl JobQueueManager {
                     return Err(anyhow::anyhow!("Cron expression cannot be empty"));
                 }
             }
-            ScheduleType::Daily { time, weekdays } => {
+            ScheduleType::Daily { time: _, weekdays } => {
                 // TODO: Validate time format (HH:MM)
                 if weekdays.is_empty() {
                     return Err(anyhow::anyhow!("At least one weekday must be specified"));
@@ -703,9 +741,15 @@ impl JobQueueManager {
         Err(anyhow::anyhow!("Job '{}' not found in queue '{}'", job_id, queue_id))
     }
 
-    pub async fn list_all_queues(&self) -> Result<Vec<JobQueue>> {
+    pub async fn list_all_queues(&self) -> Result<Vec<SerializableJobQueue>> {
         let queues = self.queues.read().await;
-        Ok(queues.values().cloned().collect())
+        let mut serializable_queues = Vec::new();
+
+        for queue in queues.values() {
+            serializable_queues.push(queue.to_serializable().await);
+        }
+
+        Ok(serializable_queues)
     }
 
     pub async fn get_queue_job_counts(&self, queue_id: &str) -> Result<(usize, usize, usize)> {
@@ -787,10 +831,12 @@ impl JobQueueManager {
 
     pub async fn get_running_job_count(&self, queue_id: &str) -> Result<usize> {
         let queues = self.queues.read().await;
-        let queue = queues.get(queue_id)
-            .ok_or_else(|| anyhow::anyhow!("Queue '{}' not found", queue_id))?;
-
-        Ok(queue.active_jobs.read().await.len())
+        if let Some(queue) = queues.get(queue_id) {
+            let count = queue.active_jobs.read().await.len();
+            Ok(count)
+        } else {
+            Err(anyhow::anyhow!("Queue '{}' not found", queue_id))
+        }
     }
 
     pub async fn get_recent_jobs(&self, queue_id: &str, limit: usize) -> Result<Vec<JobInfo>> {
@@ -799,8 +845,8 @@ impl JobQueueManager {
     }
 
     pub async fn pause_queue(&self, queue_id: &str) -> Result<()> {
-        let queues = self.queues.write().await;
-        if let Some(mut queue) = queues.get(queue_id).cloned() {
+        let mut queues = self.queues.write().await;
+        if let Some(queue) = queues.get_mut(queue_id) {
             queue.status = QueueStatus::Paused;
             info!("Queue '{}' paused", queue_id);
             Ok(())
@@ -810,8 +856,8 @@ impl JobQueueManager {
     }
 
     pub async fn resume_queue(&self, queue_id: &str) -> Result<()> {
-        let queues = self.queues.write().await;
-        if let Some(mut queue) = queues.get(queue_id).cloned() {
+        let mut queues = self.queues.write().await;
+        if let Some(queue) = queues.get_mut(queue_id) {
             queue.status = QueueStatus::Running;
             info!("Queue '{}' resumed", queue_id);
             Ok(())

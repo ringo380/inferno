@@ -1,29 +1,29 @@
 use crate::{
     config::Config,
-    models::{ModelInfo, ModelManager, GgufMetadata, OnnxMetadata},
-    InfernoError,
+    models::ModelManager,
 };
 use anyhow::{anyhow, Result};
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use half::f16;
 use memmap2::Mmap;
-use ndarray::{Array, Array1, Array2, Array3, Array4, ArrayD};
-use num_traits::{cast::ToPrimitive, Zero};
-use safetensors::{SafeTensors, serialize, Dtype};
+use ort::{
+    Environment, SessionBuilder,
+    tensor::TensorElementDataType,
+};
+use safetensors::{SafeTensors, Dtype};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     fs::File,
-    io::{BufReader, BufWriter, Cursor, Read, Seek, SeekFrom, Write},
+    io::{BufReader, BufWriter, Read, Seek, Write},
     path::{Path, PathBuf},
     sync::Arc,
 };
 use tokio::{
     fs as async_fs,
-    io::{AsyncReadExt, AsyncWriteExt},
-    task,
+    io::AsyncReadExt,
 };
-use tracing::{debug, info, warn, error};
+use tracing::{info, warn};
 
 #[cfg(feature = "pytorch")]
 use tch::{nn, Tensor as TchTensor, Kind as TchKind, Device as TchDevice};
@@ -63,25 +63,40 @@ pub enum GgmlType {
     Q5_1 = 7,
     Q8_0 = 8,
     Q8_1 = 9,
+    #[allow(non_camel_case_types)]
     Q2_K = 10,
+    #[allow(non_camel_case_types)]
     Q3_K = 11,
+    #[allow(non_camel_case_types)]
     Q4_K = 12,
+    #[allow(non_camel_case_types)]
     Q5_K = 13,
+    #[allow(non_camel_case_types)]
     Q6_K = 14,
+    #[allow(non_camel_case_types)]
     Q8_K = 15,
+    #[allow(non_camel_case_types)]
     IQ2_XXS = 16,
+    #[allow(non_camel_case_types)]
     IQ2_XS = 17,
+    #[allow(non_camel_case_types)]
     IQ3_XXS = 18,
+    #[allow(non_camel_case_types)]
     IQ1_S = 19,
+    #[allow(non_camel_case_types)]
     IQ4_NL = 20,
+    #[allow(non_camel_case_types)]
     IQ3_S = 21,
+    #[allow(non_camel_case_types)]
     IQ2_S = 22,
+    #[allow(non_camel_case_types)]
     IQ4_XS = 23,
     I8 = 24,
     I16 = 25,
     I32 = 26,
     I64 = 27,
     F64 = 28,
+    #[allow(non_camel_case_types)]
     IQ1_M = 29,
 }
 
@@ -159,7 +174,7 @@ pub struct GgufFile {
 #[derive(Debug, Clone)]
 pub struct OnnxTensorInfo {
     pub name: String,
-    pub dtype: ort::TensorElementDataType,
+    pub dtype: TensorElementDataType,
     pub shape: Vec<i64>,
     pub data: Vec<u8>,
 }
@@ -841,6 +856,7 @@ impl ModelConverter {
     }
 
     // Real PyTorch to GGUF conversion
+    #[allow(unused_variables)]
     async fn convert_pytorch_to_gguf(&self, input_path: &Path, output_path: &Path) -> Result<Vec<String>> {
         #[cfg(feature = "pytorch")]
         {
@@ -869,6 +885,7 @@ impl ModelConverter {
     }
 
     // Real PyTorch to ONNX conversion
+    #[allow(unused_variables)]
     async fn convert_pytorch_to_onnx(&self, input_path: &Path, output_path: &Path) -> Result<Vec<String>> {
         #[cfg(feature = "pytorch")]
         {
@@ -1103,7 +1120,8 @@ impl ModelConverter {
         info!("Reading ONNX model: {}", path.display());
 
         // Use ort to read ONNX model
-        let session = ort::SessionBuilder::new()?
+        let env = Arc::new(Environment::builder().build()?);
+        let session = SessionBuilder::new(&env)?
             .with_model_from_file(path)?;
 
         let mut tensors = Vec::new();
@@ -1112,8 +1130,8 @@ impl ModelConverter {
         for input in session.inputs.iter() {
             let tensor_info = OnnxTensorInfo {
                 name: input.name.clone(),
-                dtype: input.input_type.tensor_type(),
-                shape: input.dimensions.clone(),
+                dtype: input.input_type,
+                shape: input.dimensions.iter().map(|&dim| dim.map(|d| d as i64).unwrap_or(-1)).collect(),
                 data: Vec::new(), // Will be filled by actual model data
             };
             tensors.push(tensor_info);
@@ -1267,7 +1285,7 @@ impl ModelConverter {
 
             onnx_tensors.push(OnnxTensorInfo {
                 name: name.clone(),
-                dtype: ort::TensorElementDataType::Float32,
+                dtype: TensorElementDataType::Float32,
                 shape: onnx_shape,
                 data,
             });
@@ -1326,7 +1344,7 @@ impl ModelConverter {
         Ok(architecture)
     }
 
-    async fn convert_safetensors_to_gguf_format(&self, safetensors: &SafeTensors) -> Result<(GgufFile, Vec<u8>)> {
+    async fn convert_safetensors_to_gguf_format(&self, safetensors: &SafeTensors<'_>) -> Result<(GgufFile, Vec<u8>)> {
         let mut metadata = HashMap::new();
         let mut tensors = Vec::new();
         let mut tensor_data = Vec::new();
@@ -1451,31 +1469,31 @@ impl ModelConverter {
     }
 
     // Data type conversion functions
-    fn ggml_to_onnx_dtype(&self, ggml_type: GgmlType) -> Result<ort::TensorElementDataType> {
+    fn ggml_to_onnx_dtype(&self, ggml_type: GgmlType) -> Result<TensorElementDataType> {
         match ggml_type {
-            GgmlType::F32 => Ok(ort::TensorElementDataType::Float32),
-            GgmlType::F16 => Ok(ort::TensorElementDataType::Float16),
-            GgmlType::I8 => Ok(ort::TensorElementDataType::Int8),
-            GgmlType::I16 => Ok(ort::TensorElementDataType::Int16),
-            GgmlType::I32 => Ok(ort::TensorElementDataType::Int32),
-            GgmlType::I64 => Ok(ort::TensorElementDataType::Int64),
-            GgmlType::F64 => Ok(ort::TensorElementDataType::Float64),
+            GgmlType::F32 => Ok(TensorElementDataType::Float32),
+            GgmlType::F16 => Ok(TensorElementDataType::Float16),
+            GgmlType::I8 => Ok(TensorElementDataType::Int8),
+            GgmlType::I16 => Ok(TensorElementDataType::Int16),
+            GgmlType::I32 => Ok(TensorElementDataType::Int32),
+            GgmlType::I64 => Ok(TensorElementDataType::Int64),
+            GgmlType::F64 => Ok(TensorElementDataType::Float64),
             _ => {
                 // For quantized types, convert to Float32
-                Ok(ort::TensorElementDataType::Float32)
+                Ok(TensorElementDataType::Float32)
             }
         }
     }
 
-    fn onnx_to_ggml_dtype(&self, onnx_type: ort::TensorElementDataType) -> Result<GgmlType> {
+    fn onnx_to_ggml_dtype(&self, onnx_type: TensorElementDataType) -> Result<GgmlType> {
         match onnx_type {
-            ort::TensorElementDataType::Float32 => Ok(GgmlType::F32),
-            ort::TensorElementDataType::Float16 => Ok(GgmlType::F16),
-            ort::TensorElementDataType::Int8 => Ok(GgmlType::I8),
-            ort::TensorElementDataType::Int16 => Ok(GgmlType::I16),
-            ort::TensorElementDataType::Int32 => Ok(GgmlType::I32),
-            ort::TensorElementDataType::Int64 => Ok(GgmlType::I64),
-            ort::TensorElementDataType::Float64 => Ok(GgmlType::F64),
+            TensorElementDataType::Float32 => Ok(GgmlType::F32),
+            TensorElementDataType::Float16 => Ok(GgmlType::F16),
+            TensorElementDataType::Int8 => Ok(GgmlType::I8),
+            TensorElementDataType::Int16 => Ok(GgmlType::I16),
+            TensorElementDataType::Int32 => Ok(GgmlType::I32),
+            TensorElementDataType::Int64 => Ok(GgmlType::I64),
+            TensorElementDataType::Float64 => Ok(GgmlType::F64),
             _ => Err(anyhow!("Unsupported ONNX data type: {:?}", onnx_type)),
         }
     }
@@ -1493,15 +1511,15 @@ impl ModelConverter {
         }
     }
 
-    fn safetensors_to_onnx_dtype(&self, safetensors_type: Dtype) -> Result<ort::TensorElementDataType> {
+    fn safetensors_to_onnx_dtype(&self, safetensors_type: Dtype) -> Result<TensorElementDataType> {
         match safetensors_type {
-            Dtype::F32 => Ok(ort::TensorElementDataType::Float32),
-            Dtype::F16 => Ok(ort::TensorElementDataType::Float16),
-            Dtype::I8 => Ok(ort::TensorElementDataType::Int8),
-            Dtype::I16 => Ok(ort::TensorElementDataType::Int16),
-            Dtype::I32 => Ok(ort::TensorElementDataType::Int32),
-            Dtype::I64 => Ok(ort::TensorElementDataType::Int64),
-            Dtype::F64 => Ok(ort::TensorElementDataType::Float64),
+            Dtype::F32 => Ok(TensorElementDataType::Float32),
+            Dtype::F16 => Ok(TensorElementDataType::Float16),
+            Dtype::I8 => Ok(TensorElementDataType::Int8),
+            Dtype::I16 => Ok(TensorElementDataType::Int16),
+            Dtype::I32 => Ok(TensorElementDataType::Int32),
+            Dtype::I64 => Ok(TensorElementDataType::Int64),
+            Dtype::F64 => Ok(TensorElementDataType::Float64),
             _ => Err(anyhow!("Unsupported SafeTensors data type: {:?}", safetensors_type)),
         }
     }
@@ -1558,12 +1576,12 @@ impl ModelConverter {
         Ok(float_data)
     }
 
-    fn convert_onnx_data_to_ggml(&self, data: &[u8], onnx_type: ort::TensorElementDataType, ggml_type: GgmlType) -> Result<Vec<u8>> {
+    fn convert_onnx_data_to_ggml(&self, data: &[u8], onnx_type: TensorElementDataType, ggml_type: GgmlType) -> Result<Vec<u8>> {
         match (onnx_type, ggml_type) {
-            (ort::TensorElementDataType::Float32, GgmlType::F32) => {
+            (TensorElementDataType::Float32, GgmlType::F32) => {
                 Ok(data.to_vec())
             }
-            (ort::TensorElementDataType::Float32, GgmlType::F16) => {
+            (TensorElementDataType::Float32, GgmlType::F16) => {
                 let mut f16_data = Vec::new();
                 for chunk in data.chunks_exact(4) {
                     let f32_val = f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
@@ -1756,7 +1774,7 @@ impl ModelConverter {
         let quantized_tensors: Result<Vec<_>> = onnx_tensors.into_iter().map(|mut tensor| {
             match quantization_type {
                 QuantizationType::Int8 => {
-                    tensor.dtype = ort::TensorElementDataType::Int8;
+                    tensor.dtype = TensorElementDataType::Int8;
                     // Convert data (simplified - real implementation would use proper quantization)
                     if !tensor.data.is_empty() {
                         let float_data = tensor.data.chunks_exact(4)
@@ -1769,7 +1787,7 @@ impl ModelConverter {
                     }
                 }
                 QuantizationType::F16 => {
-                    tensor.dtype = ort::TensorElementDataType::Float16;
+                    tensor.dtype = TensorElementDataType::Float16;
                     if !tensor.data.is_empty() {
                         let mut f16_data = Vec::new();
                         for chunk in tensor.data.chunks_exact(4) {
@@ -1860,7 +1878,7 @@ impl ModelConverter {
         // Q4_0 quantization: groups of 32 elements
         for chunk_start in (0..total_elements).step_by(32) {
             let chunk_end = (chunk_start + 32).min(total_elements);
-            let chunk_size = chunk_end - chunk_start;
+            let _chunk_size = chunk_end - chunk_start;
 
             // Extract float values for this chunk
             let mut values = Vec::new();
@@ -2164,7 +2182,8 @@ impl ModelConverter {
 
     async fn verify_onnx_model(&self, path: &Path) -> Result<bool> {
         // Try to load the ONNX model to verify it's valid
-        match ort::SessionBuilder::new() {
+        let env = Arc::new(Environment::builder().build().map_err(|e| anyhow!("Failed to create ONNX environment: {}", e))?);
+        match SessionBuilder::new(&env) {
             Ok(builder) => {
                 match builder.with_model_from_file(path) {
                     Ok(_) => Ok(true),
