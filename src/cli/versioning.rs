@@ -1,7 +1,8 @@
 use crate::{
     versioning::{
         ModelVersionManager, VersioningConfig, SemanticVersion, ModelMetadata,
-        TrainingInfo, VersionStatus, RollbackReason, ChecksumAlgorithm
+        VersionStatus, RollbackReason, TriggerType, ModelVersion, RollbackRecord,
+        ActiveDeployment
     },
     config::Config,
 };
@@ -11,9 +12,7 @@ use serde_json;
 use std::{
     collections::HashMap,
     path::PathBuf,
-    time::SystemTime,
 };
-use tracing::{info, warn};
 
 #[derive(Args)]
 pub struct VersioningArgs {
@@ -284,10 +283,10 @@ impl From<RollbackReasonArg> for RollbackReason {
     fn from(arg: RollbackReasonArg) -> Self {
         match arg {
             RollbackReasonArg::Manual => RollbackReason::Manual,
-            RollbackReasonArg::ErrorRate => RollbackReason::AutoTriggered(crate::versioning::TriggerType::ErrorRate),
-            RollbackReasonArg::ResponseTime => RollbackReason::AutoTriggered(crate::versioning::TriggerType::ResponseTime),
-            RollbackReasonArg::Throughput => RollbackReason::AutoTriggered(crate::versioning::TriggerType::Throughput),
-            RollbackReasonArg::Accuracy => RollbackReason::AutoTriggered(crate::versioning::TriggerType::Accuracy),
+            RollbackReasonArg::ErrorRate => RollbackReason::AutoTriggered(TriggerType::ErrorRate),
+            RollbackReasonArg::ResponseTime => RollbackReason::AutoTriggered(TriggerType::ResponseTime),
+            RollbackReasonArg::Throughput => RollbackReason::AutoTriggered(TriggerType::Throughput),
+            RollbackReasonArg::Accuracy => RollbackReason::AutoTriggered(TriggerType::Accuracy),
             RollbackReasonArg::HealthCheck => RollbackReason::HealthCheck,
             RollbackReasonArg::Emergency => RollbackReason::Emergency,
         }
@@ -309,7 +308,7 @@ pub enum ExportFormat {
     Archive,
 }
 
-pub async fn execute(args: VersioningArgs, config: &Config) -> Result<()> {
+pub async fn execute(args: VersioningArgs, _config: &Config) -> Result<()> {
     let versioning_config = VersioningConfig::default();
     let manager = ModelVersionManager::new(versioning_config).await?;
 
@@ -680,7 +679,7 @@ pub async fn execute(args: VersioningArgs, config: &Config) -> Result<()> {
     Ok(())
 }
 
-fn display_versions(versions: &[crate::versioning::ModelVersion], detailed: bool, format: OutputFormat) {
+fn display_versions(versions: &[ModelVersion], detailed: bool, format: OutputFormat) {
     match format {
         OutputFormat::Table => {
             if detailed {
@@ -717,7 +716,7 @@ fn display_versions(versions: &[crate::versioning::ModelVersion], detailed: bool
     }
 }
 
-fn display_rollback_history(history: &[crate::versioning::RollbackRecord], format: OutputFormat) {
+fn display_rollback_history(history: &[RollbackRecord], format: OutputFormat) {
     match format {
         OutputFormat::Table => {
             println!("{:<20} {:<12} {:<12} {:<12} {:<20}", "Model", "From", "To", "Status", "Triggered");
@@ -740,7 +739,7 @@ fn display_rollback_history(history: &[crate::versioning::RollbackRecord], forma
     }
 }
 
-fn display_deployments(deployments: &[&crate::versioning::ActiveDeployment], format: OutputFormat) {
+fn display_deployments(deployments: &[&ActiveDeployment], format: OutputFormat) {
     match format {
         OutputFormat::Table => {
             println!("{:<20} {:<12} {:<12} {:<12} {:<20}", "Model", "Version", "Environment", "Health", "Deployed");

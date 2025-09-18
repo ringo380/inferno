@@ -1,13 +1,12 @@
 use crate::config::Config;
 use anyhow::{Context, Result};
 use axum::{
-    extract::{Path, Query, State, WebSocketUpgrade},
+    extract::{Path, Query, State, WebSocketUpgrade, ws::WebSocket},
     http::StatusCode,
     response::{Html, IntoResponse},
-    routing::{get, post, put, delete},
+    routing::{get, post},
     Json, Router,
 };
-use axum_tungstenite::WebSocket;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -478,6 +477,7 @@ pub struct NotificationMessage {
     pub message: String,
     pub timestamp: DateTime<Utc>,
     pub category: String,
+    pub actions: Vec<NotificationAction>,
 }
 
 // API Request/Response structures
@@ -555,6 +555,7 @@ pub enum NotificationLevel {
     Success,
     Warning,
     Error,
+    Primary,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -867,7 +868,7 @@ async fn settings_page(State(state): State<DashboardState>) -> impl IntoResponse
 // API handlers
 async fn api_list_models(State(state): State<DashboardState>) -> impl IntoResponse {
     let models = state.models.read().await;
-    Json(&*models)
+    Json(models.clone())
 }
 
 async fn api_get_model(
@@ -876,7 +877,7 @@ async fn api_get_model(
 ) -> impl IntoResponse {
     let models = state.models.read().await;
     if let Some(model) = models.iter().find(|m| m.id == id) {
-        Json(model)
+        Json(serde_json::json!(model.clone()))
     } else {
         Json(serde_json::json!({"error": "Model not found"}))
     }
@@ -884,24 +885,24 @@ async fn api_get_model(
 
 async fn api_system_metrics(State(state): State<DashboardState>) -> impl IntoResponse {
     let metrics = state.metrics.read().await;
-    Json(&*metrics)
+    Json(metrics.clone())
 }
 
 async fn api_list_nodes(State(state): State<DashboardState>) -> impl IntoResponse {
     let nodes = state.nodes.read().await;
-    Json(&*nodes)
+    Json(nodes.clone())
 }
 
 async fn api_list_deployments(State(state): State<DashboardState>) -> impl IntoResponse {
     let deployments = state.deployments.read().await;
-    Json(&*deployments)
+    Json(deployments.clone())
 }
 
 async fn api_health_check() -> impl IntoResponse {
     Json(serde_json::json!({
         "status": "healthy",
         "timestamp": Utc::now(),
-        "version": env!("CARGO_PKG_VERSION")
+        "version": std::env::var("CARGO_PKG_VERSION").unwrap_or_else(|_| "0.1.0".to_string())
     }))
 }
 
@@ -912,20 +913,20 @@ async fn api_create_model(
 ) -> impl IntoResponse {
     // Validate input
     if request.name.trim().is_empty() {
-        return (StatusCode::BAD_REQUEST, Json(ApiError {
-            error: "Model name cannot be empty".to_string(),
-            details: None,
-        }));
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({
+            "error": "Model name cannot be empty",
+            "details": null
+        })));
     }
 
     // Check if model with same name already exists
     {
         let models = state.models.read().await;
         if models.iter().any(|m| m.name == request.name) {
-            return (StatusCode::CONFLICT, Json(ApiError {
-                error: "Model with this name already exists".to_string(),
-                details: Some(format!("Model '{}' already exists", request.name)),
-            }));
+            return (StatusCode::CONFLICT, Json(serde_json::json!({
+                "error": "Model with this name already exists",
+                "details": format!("Model '{}' already exists", request.name)
+            })));
         }
     }
 
@@ -959,12 +960,13 @@ async fn api_create_model(
         message: format!("Model '{}' has been created successfully", model.name),
         timestamp: Utc::now(),
         category: "models".to_string(),
+        actions: vec![],
     });
 
-    (StatusCode::CREATED, Json(ApiResponse {
-        data: model,
-        message: Some("Model created successfully".to_string()),
-    }))
+    (StatusCode::CREATED, Json(serde_json::json!({
+        "data": model,
+        "message": "Model created successfully"
+    })))
 }
 async fn api_update_model(
     State(state): State<DashboardState>,
@@ -999,17 +1001,18 @@ async fn api_update_model(
             message: format!("Model '{}' has been updated", updated_model.name),
             timestamp: Utc::now(),
             category: "models".to_string(),
+            actions: vec![],
         });
 
-        (StatusCode::OK, Json(ApiResponse {
-            data: updated_model,
-            message: Some("Model updated successfully".to_string()),
-        }))
+        (StatusCode::OK, Json(serde_json::json!({
+            "data": updated_model,
+            "message": "Model updated successfully"
+        })))
     } else {
-        (StatusCode::NOT_FOUND, Json(ApiError {
-            error: "Model not found".to_string(),
-            details: Some(format!("Model with ID '{}' does not exist", id)),
-        }))
+        (StatusCode::NOT_FOUND, Json(serde_json::json!({
+            "error": "Model not found",
+            "details": format!("Model with ID '{}' does not exist", id)
+        })))
     }
 }
 async fn api_delete_model(
@@ -1027,10 +1030,10 @@ async fn api_delete_model(
             let deployments = state.deployments.read().await;
             let active_deployments = deployments.iter().filter(|d| d.model_id == id).count();
             if active_deployments > 0 {
-                return (StatusCode::CONFLICT, Json(ApiError {
-                    error: "Cannot delete model".to_string(),
-                    details: Some(format!("Model is currently used in {} active deployment(s)", active_deployments)),
-                }));
+                return (StatusCode::CONFLICT, Json(serde_json::json!({
+                    "error": "Cannot delete model",
+                    "details": format!("Model is currently used in {} active deployment(s)", active_deployments)
+                })));
             }
         }
 
@@ -1042,6 +1045,7 @@ async fn api_delete_model(
             message: format!("Model '{}' has been deleted", model.name),
             timestamp: Utc::now(),
             category: "models".to_string(),
+            actions: vec![],
         });
 
         (StatusCode::OK, Json(serde_json::json!({
@@ -1052,10 +1056,10 @@ async fn api_delete_model(
             }
         })))
     } else {
-        (StatusCode::NOT_FOUND, Json(ApiError {
-            error: "Model not found".to_string(),
-            details: Some(format!("Model with ID '{}' does not exist", id)),
-        }))
+        (StatusCode::NOT_FOUND, Json(serde_json::json!({
+            "error": "Model not found",
+            "details": format!("Model with ID '{}' does not exist", id)
+        })))
     }
 }
 async fn api_deploy_model(
@@ -1070,10 +1074,10 @@ async fn api_deploy_model(
     };
 
     if !model_exists {
-        return (StatusCode::NOT_FOUND, Json(ApiError {
-            error: "Model not found".to_string(),
-            details: Some(format!("Model with ID '{}' does not exist", id)),
-        }));
+        return (StatusCode::NOT_FOUND, Json(serde_json::json!({
+            "error": "Model not found",
+            "details": format!("Model with ID '{}' does not exist", id)
+        })));
     }
 
     // Create new deployment
@@ -1111,12 +1115,13 @@ async fn api_deploy_model(
         message: format!("Model deployment '{}' has been initiated", deployment.id),
         timestamp: Utc::now(),
         category: "deployments".to_string(),
+        actions: vec![],
     });
 
-    (StatusCode::CREATED, Json(ApiResponse {
-        data: deployment,
-        message: Some("Model deployment initiated successfully".to_string()),
-    }))
+    (StatusCode::CREATED, Json(serde_json::json!({
+        "data": deployment,
+        "message": "Model deployment initiated successfully"
+    })))
 }
 async fn api_model_metrics(
     State(state): State<DashboardState>,
@@ -1129,10 +1134,10 @@ async fn api_model_metrics(
     };
 
     if !model_exists {
-        return (StatusCode::NOT_FOUND, Json(ApiError {
-            error: "Model not found".to_string(),
-            details: Some(format!("Model with ID '{}' does not exist", id)),
-        }));
+        return (StatusCode::NOT_FOUND, Json(serde_json::json!({
+            "error": "Model not found",
+            "details": format!("Model with ID '{}' does not exist", id)
+        })));
     }
 
     // Generate model-specific metrics
@@ -1179,10 +1184,10 @@ async fn api_metrics_history(
 
     // Validate time range
     if start_time >= end_time {
-        return (StatusCode::BAD_REQUEST, Json(ApiError {
-            error: "Invalid time range".to_string(),
-            details: Some("Start time must be before end time".to_string()),
-        }));
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({
+            "error": "Invalid time range",
+            "details": "Start time must be before end time"
+        })));
     }
 
     // Generate historical metrics data
@@ -1247,7 +1252,7 @@ async fn api_export_metrics(
                     "generated_at": Utc::now(),
                     "start_time": start_time,
                     "end_time": end_time,
-                    "version": env!("CARGO_PKG_VERSION")
+                    "version": std::env::var("CARGO_PKG_VERSION").unwrap_or_else(|_| "0.1.0".to_string())
                 },
                 "current_metrics": *metrics,
                 "summary": {
@@ -1291,10 +1296,10 @@ async fn api_export_metrics(
             })))
         },
         _ => {
-            (StatusCode::BAD_REQUEST, Json(ApiError {
-                error: "Unsupported export format".to_string(),
-                details: Some(format!("Format '{}' is not supported. Use: json, csv, prometheus", format)),
-            }))
+            (StatusCode::BAD_REQUEST, Json(serde_json::json!({
+                "error": "Unsupported export format",
+                "details": format!("Format '{}' is not supported. Use: json, csv, prometheus", format)
+            })))
         }
     }
 }
@@ -1344,10 +1349,10 @@ async fn api_get_node(
 
         (StatusCode::OK, Json(detailed_node))
     } else {
-        (StatusCode::NOT_FOUND, Json(ApiError {
-            error: "Node not found".to_string(),
-            details: Some(format!("Node with ID '{}' does not exist", id)),
-        }))
+        (StatusCode::NOT_FOUND, Json(serde_json::json!({
+            "error": "Node not found",
+            "details": format!("Node with ID '{}' does not exist", id)
+        })))
     }
 }
 async fn api_node_status(
@@ -1416,10 +1421,10 @@ async fn api_node_status(
 
         (StatusCode::OK, Json(status_response))
     } else {
-        (StatusCode::NOT_FOUND, Json(ApiError {
-            error: "Node not found".to_string(),
-            details: Some(format!("Node with ID '{}' does not exist", id)),
-        }))
+        (StatusCode::NOT_FOUND, Json(serde_json::json!({
+            "error": "Node not found",
+            "details": format!("Node with ID '{}' does not exist", id)
+        })))
     }
 }
 async fn api_create_deployment(
@@ -1433,18 +1438,18 @@ async fn api_create_deployment(
     };
 
     if !model_exists {
-        return (StatusCode::BAD_REQUEST, Json(ApiError {
-            error: "Invalid model ID".to_string(),
-            details: Some(format!("Model with ID '{}' does not exist", request.model_id)),
-        }));
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({
+            "error": "Invalid model ID",
+            "details": format!("Model with ID '{}' does not exist", request.model_id)
+        })));
     }
 
     // Validate replicas count
     if request.replicas == 0 || request.replicas > 100 {
-        return (StatusCode::BAD_REQUEST, Json(ApiError {
-            error: "Invalid replica count".to_string(),
-            details: Some("Replica count must be between 1 and 100".to_string()),
-        }));
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({
+            "error": "Invalid replica count",
+            "details": "Replica count must be between 1 and 100"
+        })));
     }
 
     // Create new deployment
@@ -1487,12 +1492,13 @@ async fn api_create_deployment(
         message: format!("Deployment '{}' created for environment '{}'", deployment.id, request.environment),
         timestamp: Utc::now(),
         category: "deployments".to_string(),
+        actions: vec![],
     });
 
-    (StatusCode::CREATED, Json(ApiResponse {
-        data: deployment,
-        message: Some("Deployment created successfully".to_string()),
-    }))
+    (StatusCode::CREATED, Json(serde_json::json!({
+        "data": deployment,
+        "message": "Deployment created successfully"
+    })))
 }
 async fn api_get_deployment(
     State(state): State<DashboardState>,
@@ -1553,10 +1559,10 @@ async fn api_get_deployment(
 
         (StatusCode::OK, Json(detailed_deployment))
     } else {
-        (StatusCode::NOT_FOUND, Json(ApiError {
-            error: "Deployment not found".to_string(),
-            details: Some(format!("Deployment with ID '{}' does not exist", id)),
-        }))
+        (StatusCode::NOT_FOUND, Json(serde_json::json!({
+            "error": "Deployment not found",
+            "details": format!("Deployment with ID '{}' does not exist", id)
+        })))
     }
 }
 async fn api_update_deployment(
@@ -1582,10 +1588,10 @@ async fn api_update_deployment(
         // Update target replicas if provided
         if let Some(target_replicas) = request.target_replicas {
             if target_replicas == 0 || target_replicas > 100 {
-                return (StatusCode::BAD_REQUEST, Json(ApiError {
-                    error: "Invalid replica count".to_string(),
-                    details: Some("Replica count must be between 1 and 100".to_string()),
-                }));
+                return (StatusCode::BAD_REQUEST, Json(serde_json::json!({
+                    "error": "Invalid replica count",
+                    "details": "Replica count must be between 1 and 100"
+                })));
             }
 
             if deployment.target_replicas != target_replicas {
@@ -1610,24 +1616,25 @@ async fn api_update_deployment(
                 message: format!("Deployment '{}' updated: {}", updated_deployment.id, changes.join(", ")),
                 timestamp: Utc::now(),
                 category: "deployments".to_string(),
+                actions: vec![],
             });
 
-            (StatusCode::OK, Json(ApiResponse {
-                data: updated_deployment,
-                message: Some("Deployment updated successfully".to_string()),
-            }))
+            (StatusCode::OK, Json(serde_json::json!({
+                "data": updated_deployment,
+                "message": "Deployment updated successfully"
+            })))
         } else {
             let deployment_copy = deployment.clone();
-            (StatusCode::OK, Json(ApiResponse {
-                data: deployment_copy,
-                message: Some("No changes made to deployment".to_string()),
-            }))
+            (StatusCode::OK, Json(serde_json::json!({
+                "data": deployment_copy,
+                "message": "No changes made to deployment"
+            })))
         }
     } else {
-        (StatusCode::NOT_FOUND, Json(ApiError {
-            error: "Deployment not found".to_string(),
-            details: Some(format!("Deployment with ID '{}' does not exist", id)),
-        }))
+        (StatusCode::NOT_FOUND, Json(serde_json::json!({
+            "error": "Deployment not found",
+            "details": format!("Deployment with ID '{}' does not exist", id)
+        })))
     }
 }
 async fn api_delete_deployment(
@@ -1650,6 +1657,7 @@ async fn api_delete_deployment(
             message: format!("Deployment '{}' has been terminated and deleted", deployment_info.id),
             timestamp: Utc::now(),
             category: "deployments".to_string(),
+            actions: vec![],
         });
 
         (StatusCode::OK, Json(serde_json::json!({
@@ -1662,10 +1670,10 @@ async fn api_delete_deployment(
             }
         })))
     } else {
-        (StatusCode::NOT_FOUND, Json(ApiError {
-            error: "Deployment not found".to_string(),
-            details: Some(format!("Deployment with ID '{}' does not exist", id)),
-        }))
+        (StatusCode::NOT_FOUND, Json(serde_json::json!({
+            "error": "Deployment not found",
+            "details": format!("Deployment with ID '{}' does not exist", id)
+        })))
     }
 }
 async fn api_scale_deployment(
@@ -1675,10 +1683,10 @@ async fn api_scale_deployment(
 ) -> impl IntoResponse {
     // Validate replica count
     if request.replicas == 0 || request.replicas > 100 {
-        return (StatusCode::BAD_REQUEST, Json(ApiError {
-            error: "Invalid replica count".to_string(),
-            details: Some("Replica count must be between 1 and 100".to_string()),
-        }));
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({
+            "error": "Invalid replica count",
+            "details": "Replica count must be between 1 and 100"
+        })));
     }
 
     let mut deployments = state.deployments.write().await;
@@ -1689,10 +1697,10 @@ async fn api_scale_deployment(
 
         if old_replicas == new_replicas {
             let deployment_copy = deployment.clone();
-            return (StatusCode::OK, Json(ApiResponse {
-                data: deployment_copy,
-                message: Some("Deployment is already at the requested replica count".to_string()),
-            }));
+            return (StatusCode::OK, Json(serde_json::json!({
+                "data": deployment_copy,
+                "message": "Deployment is already at the requested replica count"
+            })));
         }
 
         // Update deployment
@@ -1724,6 +1732,7 @@ async fn api_scale_deployment(
             ),
             timestamp: Utc::now(),
             category: "deployments".to_string(),
+            actions: vec![],
         });
 
         let response_data = serde_json::json!({
@@ -1737,15 +1746,15 @@ async fn api_scale_deployment(
             }
         });
 
-        (StatusCode::OK, Json(ApiResponse {
-            data: response_data,
-            message: Some(format!("Deployment scaling initiated: {} -> {} replicas", old_replicas, new_replicas)),
-        }))
+        (StatusCode::OK, Json(serde_json::json!({
+            "data": response_data,
+            "message": format!("Deployment scaling initiated: {} -> {} replicas", old_replicas, new_replicas)
+        })))
     } else {
-        (StatusCode::NOT_FOUND, Json(ApiError {
-            error: "Deployment not found".to_string(),
-            details: Some(format!("Deployment with ID '{}' does not exist", id)),
-        }))
+        (StatusCode::NOT_FOUND, Json(serde_json::json!({
+            "error": "Deployment not found",
+            "details": format!("Deployment with ID '{}' does not exist", id)
+        })))
     }
 }
 async fn api_deployment_logs() -> impl IntoResponse { Json(serde_json::json!({"message": "Not implemented"})) }
@@ -1789,7 +1798,7 @@ async fn handle_websocket(mut socket: WebSocket, state: DashboardState) {
                 match msg {
                     Ok(notification) => {
                         let json = serde_json::to_string(&notification).unwrap_or_default();
-                        if socket.send(axum_tungstenite::Message::Text(json)).await.is_err() {
+                        if socket.send(axum::extract::ws::Message::Text(json)).await.is_err() {
                             break;
                         }
                     }
@@ -1798,7 +1807,7 @@ async fn handle_websocket(mut socket: WebSocket, state: DashboardState) {
             }
             msg = socket.recv() => {
                 match msg {
-                    Some(Ok(axum_tungstenite::Message::Close(_))) => break,
+                    Some(Ok(axum::extract::ws::Message::Close(_))) => break,
                     Some(Err(_)) => break,
                     None => break,
                     _ => {} // Ignore other message types
@@ -1983,8 +1992,8 @@ async fn update_system_metrics(state: &DashboardState) -> Result<()> {
     // Mock metrics update
     let mut metrics = state.metrics.write().await;
     metrics.timestamp = Utc::now();
-    metrics.cpu_usage = rand::random::<f32>() * 100.0;
-    metrics.memory_usage = rand::random::<f32>() * 100.0;
+    metrics.cpu_usage = (Utc::now().timestamp() as f32 * 0.001).sin().abs() * 100.0;
+    metrics.memory_usage = (Utc::now().timestamp() as f32 * 0.002).cos().abs() * 100.0;
     // Update other metrics...
 
     Ok(())
@@ -1995,7 +2004,7 @@ async fn check_system_alerts(state: &DashboardState) -> Result<()> {
 
     if metrics.cpu_usage > 90.0 {
         let notification = NotificationMessage {
-            id: uuid::Uuid::new_v4().to_string(),
+            id: Uuid::new_v4().to_string(),
             level: NotificationLevel::Warning,
             title: "High CPU Usage".to_string(),
             message: format!("CPU usage is at {:.1}%", metrics.cpu_usage),

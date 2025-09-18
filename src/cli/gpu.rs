@@ -1,12 +1,12 @@
 use crate::{
-    gpu::{GpuManager, GpuConfiguration, GpuVendor, GpuStatus, GpuApi},
+    gpu::{GpuManager, GpuConfiguration, GpuVendor, GpuStatus},
     config::Config,
 };
 use anyhow::Result;
 use clap::{Args, Subcommand, ValueEnum};
 use serde_json;
 use std::collections::HashMap;
-use tracing::{info, warn};
+// Note: tracing imports removed since not used in current implementation
 
 #[derive(Args)]
 pub struct GpuArgs {
@@ -255,7 +255,7 @@ pub enum PowerState {
     PowerSaver,
 }
 
-pub async fn execute(args: GpuArgs, config: &Config) -> Result<()> {
+pub async fn execute(args: GpuArgs, _config: &Config) -> Result<()> {
     let gpu_config = GpuConfiguration::default();
     let mut manager = GpuManager::new(gpu_config);
 
@@ -386,7 +386,7 @@ pub async fn execute(args: GpuArgs, config: &Config) -> Result<()> {
 
         GpuCommand::Allocations {
             gpu_id,
-            history,
+            history: _,
             format,
         } => {
             let allocations = manager.get_gpu_allocations().await;
@@ -513,17 +513,12 @@ pub async fn execute(args: GpuArgs, config: &Config) -> Result<()> {
         GpuCommand::Metrics {
             gpu_id,
             range: _,
-            metric,
+            metric: _,
             format,
         } => {
             let metrics = manager.get_gpu_metrics(gpu_id).await;
 
-            let filtered_metrics = if let Some(metric_type) = metric {
-                // Filter by metric type (implementation would depend on specific needs)
-                metrics
-            } else {
-                metrics
-            };
+            let filtered_metrics = metrics;
 
             if filtered_metrics.is_empty() {
                 println!("No metrics found");
@@ -574,7 +569,7 @@ pub async fn execute(args: GpuArgs, config: &Config) -> Result<()> {
             println!("Export completed successfully");
         }
 
-        GpuCommand::Power { gpu_id, state, limit } => {
+        GpuCommand::Power { gpu_id, state, limit: _ } => {
             println!("Setting power management for GPU {} to {:?}...", gpu_id, state);
             // TODO: Implement GPU power management
             println!("Power management updated (feature not yet implemented)");

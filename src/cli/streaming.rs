@@ -7,10 +7,8 @@ use crate::{
 use anyhow::Result;
 use clap::{Args, Subcommand};
 use futures::StreamExt;
-use serde_json::json;
 use std::io::{self, Write};
 use std::sync::Arc;
-use tokio::sync::Mutex;
 use tracing::{error, info, warn};
 
 #[derive(Args)]
@@ -413,7 +411,7 @@ async fn execute_server(
     bind: std::net::SocketAddr,
     model: Option<String>,
     max_connections: usize,
-    config: &Config,
+    _config: &Config,
 ) -> Result<()> {
     info!("Starting WebSocket streaming server on {}", bind);
 

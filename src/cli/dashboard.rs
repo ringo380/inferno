@@ -1,5 +1,5 @@
 use crate::config::Config;
-use crate::dashboard::{DashboardConfig, DashboardServer};
+use crate::dashboard::DashboardServer;
 use anyhow::{Context, Result};
 use clap::{Args, Subcommand};
 use std::path::PathBuf;
@@ -227,7 +227,7 @@ pub enum UserCommands {
     },
 }
 
-#[derive(clap::ValueEnum, Clone)]
+#[derive(Debug, clap::ValueEnum, Clone)]
 pub enum ExportType {
     Metrics,
     Models,
@@ -236,7 +236,7 @@ pub enum ExportType {
     All,
 }
 
-#[derive(clap::ValueEnum, Clone)]
+#[derive(Debug, clap::ValueEnum, Clone)]
 pub enum ImportType {
     Metrics,
     Models,

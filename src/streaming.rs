@@ -9,8 +9,9 @@ use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tokio::sync::broadcast;
-use tokio::time::{interval, sleep};
+use tokio::time::interval;
 use tracing::{debug, error, info, warn};
+use uuid;
 
 /// Configuration for real-time streaming inference
 #[derive(Debug, Clone, Serialize, Deserialize)]

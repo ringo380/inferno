@@ -1,5 +1,4 @@
 use anyhow::Result;
-use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
@@ -11,7 +10,7 @@ use tokio::{
     fs,
     sync::RwLock,
 };
-use tracing::{debug, error, info, warn};
+use tracing::info;
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -516,7 +515,7 @@ impl ModelVersionManager {
         model_name: &str,
         version_id: &str,
         target_status: VersionStatus,
-        promoted_by: String,
+        _promoted_by: String,
     ) -> Result<()> {
         let mut registry = self.registry.write().await;
 
