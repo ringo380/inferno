@@ -1,4 +1,4 @@
-use crate::{backends::InferenceParams, config::Config, models::ModelInfo, InfernoError};
+use crate::{backends::InferenceParams, InfernoError};
 use anyhow::Result;
 use base64::{engine::general_purpose, Engine as _};
 use chrono::{DateTime, Utc};
@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
-use tracing::{debug, info, warn};
+use tracing::info;
 
 /// Multi-modal inference configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -307,8 +307,8 @@ struct ProcessedMedia {
 }
 
 /// Active processing session
-#[derive(Debug)]
-struct ProcessingSession {
+#[derive(Debug, Clone)]
+pub struct ProcessingSession {
     pub id: String,
     pub model_id: String,
     pub status: ProcessingStatus,
@@ -1030,12 +1030,10 @@ mod tests {
         };
 
         let params = InferenceParams {
-            max_tokens: Some(100),
-            temperature: Some(0.7),
-            top_p: Some(0.9),
-            frequency_penalty: Some(0.0),
-            presence_penalty: Some(0.0),
-            stop_sequences: None,
+            max_tokens: 100,
+            temperature: 0.7,
+            top_p: 0.9,
+            stream: false,
         };
 
         let result = processor.process_input("test-model", input, params).await;

@@ -1,6 +1,6 @@
 use crate::multimodal::{
-    MultiModalProcessor, MultiModalConfig, MediaInput, ProcessingStatus,
-    ImageFormat, AudioFormat, VideoFormat, ModelCapabilities, VisionFeatures, AudioFeatures
+    MultiModalProcessor, MultiModalConfig, ProcessingStatus,
+    ModelCapabilities, VisionFeatures, AudioFeatures
 };
 use crate::backends::InferenceParams;
 use crate::InfernoError;
@@ -50,7 +50,7 @@ pub enum MultiModalCommands {
 
         /// Show processing progress
         #[arg(long)]
-        show_progress: bool,
+        _show_progress: bool,
     },
 
     /// Process base64 encoded media
@@ -233,7 +233,7 @@ pub async fn handle_multimodal_command(args: MultiModalArgs) -> Result<(), Infer
             temperature,
             output_format,
             output_file,
-            show_progress,
+            _show_progress,
         } => {
             handle_process_command(
                 &processor,
@@ -244,7 +244,7 @@ pub async fn handle_multimodal_command(args: MultiModalArgs) -> Result<(), Infer
                 temperature,
                 output_format,
                 output_file,
-                show_progress,
+                _show_progress,
             ).await
         }
 
@@ -333,17 +333,15 @@ async fn handle_process_command(
     temperature: f32,
     output_format: String,
     output_file: Option<PathBuf>,
-    show_progress: bool,
+    _show_progress: bool,
 ) -> Result<(), InfernoError> {
     println!("Processing file: {:?}", input);
 
     let params = InferenceParams {
-        max_tokens: Some(max_tokens),
-        temperature: Some(temperature),
-        top_p: Some(0.9),
-        frequency_penalty: Some(0.0),
-        presence_penalty: Some(0.0),
-        stop_sequences: None,
+        max_tokens,
+        temperature,
+        top_p: 0.9,
+        stream: false,
     };
 
     let result = processor.process_file(&model, &input, prompt, params).await
@@ -380,12 +378,10 @@ async fn handle_process_base64_command(
     println!("Processing base64 data ({} type)", media_type);
 
     let params = InferenceParams {
-        max_tokens: Some(max_tokens),
-        temperature: Some(temperature),
-        top_p: Some(0.9),
-        frequency_penalty: Some(0.0),
-        presence_penalty: Some(0.0),
-        stop_sequences: None,
+        max_tokens,
+        temperature,
+        top_p: 0.9,
+        stream: false,
     };
 
     let result = processor.process_base64(&model, &data, &media_type, prompt, params).await
@@ -432,12 +428,10 @@ async fn handle_batch_command(
     }
 
     let params = InferenceParams {
-        max_tokens: Some(500),
-        temperature: Some(0.7),
-        top_p: Some(0.9),
-        frequency_penalty: Some(0.0),
-        presence_penalty: Some(0.0),
-        stop_sequences: None,
+        max_tokens: 500,
+        temperature: 0.7,
+        top_p: 0.9,
+        stream: false,
     };
 
     let mut processed = 0;
@@ -703,7 +697,7 @@ async fn handle_formats_command(
 }
 
 async fn handle_capabilities_command(
-    processor: &MultiModalProcessor,
+    _processor: &MultiModalProcessor,
     model: Option<String>,
     media_type: Option<String>,
     format: String,

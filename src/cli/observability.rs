@@ -1,7 +1,7 @@
 use crate::{
     config::Config,
     observability::{
-        GrafanaDashboard, ObservabilityConfig, ObservabilityManager, DashboardPanel, GridPosition,
+        GrafanaDashboard, ObservabilityConfig, ObservabilityManager,
     },
 };
 use anyhow::Result;
@@ -302,7 +302,7 @@ async fn handle_metrics_command(command: MetricsCommand, _config: &Config) -> Re
             // For now, just simulate it
             tokio::time::sleep(tokio::time::Duration::from_secs(3600)).await;
         }
-        MetricsCommand::Show { filter, format } => {
+        MetricsCommand::Show { filter, format: _format } => {
             let obs_config = ObservabilityConfig::default();
             let manager = ObservabilityManager::new(obs_config);
             manager.initialize().await?;
@@ -394,7 +394,7 @@ async fn handle_tracing_command(command: TracingCommand, _config: &Config) -> Re
                 println!("  Status: {:?}", trace.status);
             }
         }
-        TracingCommand::Export { output, format } => {
+        TracingCommand::Export { output, format: _format } => {
             let obs_config = ObservabilityConfig::default();
             let manager = ObservabilityManager::new(obs_config);
 
@@ -473,7 +473,7 @@ async fn handle_dashboard_command(command: DashboardCommand, _config: &Config) -
                 println!("  Time range: {}", dashboard.time_range);
             }
         }
-        DashboardCommand::Export { id, output, format } => {
+        DashboardCommand::Export { id, output, format: _format } => {
             let obs_config = ObservabilityConfig::default();
             let manager = ObservabilityManager::new(obs_config);
             manager.initialize().await?;
@@ -529,7 +529,7 @@ async fn export_observability_data(
     metrics: Option<PathBuf>,
     traces: Option<PathBuf>,
     dashboards: Option<PathBuf>,
-    format: ExportFormat,
+    _format: ExportFormat,
     _config: &Config,
 ) -> Result<()> {
     let obs_config = ObservabilityConfig::default();

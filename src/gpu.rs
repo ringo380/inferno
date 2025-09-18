@@ -10,7 +10,7 @@ use tokio::{
     sync::RwLock,
     time::interval,
 };
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info, warn};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GpuInfo {
@@ -257,7 +257,7 @@ impl GpuManager {
     }
 
     async fn detect_amd_gpus(&self) -> Result<Vec<GpuInfo>> {
-        let mut gpus = Vec::new();
+        let gpus = Vec::new();
 
         // Try rocm-smi command
         match Command::new("rocm-smi")
@@ -281,7 +281,10 @@ impl GpuManager {
     }
 
     async fn detect_intel_gpus(&self) -> Result<Vec<GpuInfo>> {
+        #[cfg(target_os = "linux")]
         let mut gpus = Vec::new();
+        #[cfg(not(target_os = "linux"))]
+        let gpus = Vec::new();
 
         // Intel GPUs are typically detected through system info or OpenCL
         #[cfg(target_os = "linux")]
@@ -403,7 +406,7 @@ impl GpuManager {
         }
     }
 
-    async fn get_compute_capability(&self, gpu_id: u32) -> Option<ComputeCapability> {
+    async fn get_compute_capability(&self, _gpu_id: u32) -> Option<ComputeCapability> {
         // This would require more sophisticated detection
         // For now, return a default for common GPUs
         Some(ComputeCapability { major: 7, minor: 5 })
