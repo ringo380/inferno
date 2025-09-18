@@ -1,10 +1,10 @@
 use crate::config::Config;
 use crate::marketplace::{ModelMarketplace, MarketplaceConfig};
-use crate::cli::{enhanced_parser::execute_with_prerequisites, help::HelpSystem};
+use crate::cli::enhanced_parser::execute_with_prerequisites;
 use anyhow::{Context, Result};
 use clap::{Args, Subcommand};
 use std::path::PathBuf;
-use tracing::{info, warn};
+use tracing::info;
 
 #[derive(Args)]
 pub struct PackageArgs {
@@ -536,7 +536,7 @@ async fn handle_info(
                 println!("  Backends: {}", model.compatibility.supported_backends.join(", "));
             }
         }
-        Err(e) => {
+        Err(_e) => {
             // Try to get from installed packages
             match marketplace.package_list(Some(package)).await {
                 Ok(packages) => {
@@ -784,7 +784,7 @@ async fn handle_autoremove(
 }
 
 async fn handle_clean(
-    marketplace: &ModelMarketplace,
+    _marketplace: &ModelMarketplace,
     all: bool,
     packages: bool,
     metadata: bool,
@@ -813,7 +813,7 @@ async fn handle_clean(
 }
 
 async fn handle_depends(
-    marketplace: &ModelMarketplace,
+    _marketplace: &ModelMarketplace,
     package: &str,
     reverse: bool,
     tree: bool,
