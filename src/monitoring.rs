@@ -1,5 +1,4 @@
 use crate::{
-    config::Config,
     metrics::MetricsCollector,
 };
 use anyhow::Result;
@@ -7,10 +6,10 @@ use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, VecDeque},
     sync::Arc,
-    time::{Duration, Instant, SystemTime},
+    time::{Duration, SystemTime},
 };
 use tokio::{
-    sync::{Mutex, RwLock},
+    sync::RwLock,
     time::interval,
 };
 use tracing::{debug, error, info, warn};
@@ -24,6 +23,18 @@ pub struct MonitoringConfig {
     pub performance_thresholds: PerformanceThresholds,
     pub alerting: AlertingConfig,
     pub dashboards: DashboardConfig,
+    pub prometheus: PrometheusConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PrometheusConfig {
+    pub global: PrometheusGlobal,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PrometheusGlobal {
+    pub external_url: String,
+    pub scrape_interval_seconds: u64,
 }
 
 impl Default for MonitoringConfig {
@@ -36,6 +47,24 @@ impl Default for MonitoringConfig {
             performance_thresholds: PerformanceThresholds::default(),
             alerting: AlertingConfig::default(),
             dashboards: DashboardConfig::default(),
+            prometheus: PrometheusConfig::default(),
+        }
+    }
+}
+
+impl Default for PrometheusConfig {
+    fn default() -> Self {
+        Self {
+            global: PrometheusGlobal::default(),
+        }
+    }
+}
+
+impl Default for PrometheusGlobal {
+    fn default() -> Self {
+        Self {
+            external_url: "http://localhost:9090".to_string(),
+            scrape_interval_seconds: 15,
         }
     }
 }
@@ -602,7 +631,7 @@ impl PerformanceMonitor {
                     metrics_guard.pop_front();
                 }
 
-                if let Some(ref collector) = metrics_collector {
+                if let Some(ref _collector) = metrics_collector {
                     // Record metrics in the collector as well
                     debug!("Collected system metrics");
                 }

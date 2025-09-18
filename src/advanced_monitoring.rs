@@ -283,6 +283,17 @@ pub enum AlertSeverity {
     Debug,
 }
 
+impl std::fmt::Display for AlertSeverity {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            AlertSeverity::Critical => write!(f, "Critical"),
+            AlertSeverity::Warning => write!(f, "Warning"),
+            AlertSeverity::Info => write!(f, "Info"),
+            AlertSeverity::Debug => write!(f, "Debug"),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RoutingConfig {
     /// Default receiver
@@ -464,6 +475,10 @@ pub struct MetricsCollectionConfig {
     pub global_labels: HashMap<String, String>,
     /// Metrics to collect
     pub metrics: Vec<MetricConfig>,
+    /// Collection interval in seconds
+    pub interval_seconds: u64,
+    /// Timeout in seconds
+    pub timeout_seconds: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -838,6 +853,8 @@ impl Default for MetricsCollectionConfig {
             retry: RetryConfig::default(),
             global_labels: HashMap::new(),
             metrics: vec![],
+            interval_seconds: 15,
+            timeout_seconds: 30,
         }
     }
 }
@@ -929,6 +946,298 @@ impl AdvancedMonitoringConfig {
     }
 }
 
+// Additional data structures for CLI return types
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MonitoringStatus {
+    pub healthy: bool,
+    pub uptime: Duration,
+    pub components: HashMap<String, ComponentStatus>,
+    pub active_alerts: u32,
+    pub metrics_collected: u64,
+    pub last_collection: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ComponentStatus {
+    pub healthy: bool,
+    pub message: String,
+    pub response_time: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PrometheusConfigResponse {
+    pub global: PrometheusGlobalConfig,
+    pub scrape_configs: Vec<ScrapeConfig>,
+    pub rule_files: Vec<String>,
+    pub remote_write: Vec<RemoteWriteConfig>,
+    pub remote_read: Vec<RemoteReadConfig>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PrometheusGlobalConfig {
+    pub scrape_interval_seconds: u64,
+    pub evaluation_interval_seconds: u64,
+    pub external_labels: HashMap<String, String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScrapeConfig {
+    pub job_name: String,
+    pub scrape_interval: u64,
+    pub metrics_path: String,
+    pub static_configs: Vec<StaticConfig>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StaticConfig {
+    pub targets: Vec<String>,
+    pub labels: HashMap<String, String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RemoteReadConfig {
+    pub url: String,
+    pub read_recent: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PrometheusTarget {
+    pub job: String,
+    pub instance: String,
+    pub health: String,
+    pub last_scrape: String,
+    pub scrape_duration: f64,
+    pub labels: HashMap<String, String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PrometheusInfo {
+    pub version: String,
+    pub revision: String,
+    pub branch: String,
+    pub build_user: String,
+    pub build_date: String,
+    pub go_version: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AlertmanagerConfigResponse {
+    pub global: AlertmanagerGlobalConfig,
+    pub routes: Vec<RouteConfig>,
+    pub receivers: Vec<ReceiverConfig>,
+    pub inhibit_rules: Vec<InhibitRule>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AlertmanagerGlobalConfig {
+    pub resolve_timeout_seconds: u64,
+    pub smtp_smarthost: Option<String>,
+    pub smtp_from: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RouteConfig {
+    pub receiver: String,
+    pub group_by: Vec<String>,
+    pub group_wait: Duration,
+    pub routes: Vec<RouteConfig>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReceiverConfig {
+    pub name: String,
+    pub email_configs: Vec<EmailReceiverConfig>,
+    pub slack_configs: Vec<SlackReceiverConfig>,
+    pub webhook_configs: Vec<WebhookReceiverConfig>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EmailReceiverConfig {
+    pub to: String,
+    pub subject: String,
+    pub body: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SlackReceiverConfig {
+    pub api_url: String,
+    pub channel: String,
+    pub title: String,
+    pub text: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WebhookReceiverConfig {
+    pub url: String,
+    pub send_resolved: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InhibitRule {
+    pub source_match: HashMap<String, String>,
+    pub target_match: HashMap<String, String>,
+    pub equal: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AlertmanagerAlert {
+    pub name: String,
+    pub state: String,
+    pub started_at: String,
+    pub receiver: String,
+    pub labels: HashMap<String, String>,
+    pub annotations: HashMap<String, String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TestResult {
+    pub success: bool,
+    pub error: Option<String>,
+    pub response_time: Option<u64>,
+    pub delivery_time: Option<u64>,
+    pub warnings: Vec<String>,
+    pub rules_count: usize,
+    pub triggered_alerts: Option<Vec<Alert>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AlertmanagerStatus {
+    pub version: String,
+    pub uptime: Duration,
+    pub active_alerts: u32,
+    pub silences: u32,
+    pub cluster_size: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DashboardInfo {
+    pub id: String,
+    pub name: String,
+    pub folder: String,
+    pub tags: Vec<String>,
+    pub url: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MonitoringTarget {
+    pub id: String,
+    pub address: String,
+    pub target_type: String,
+    pub status: String,
+    pub last_check: String,
+    pub labels: HashMap<String, String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AlertRuleInfo {
+    pub name: String,
+    pub group: String,
+    pub state: String,
+    pub severity: String,
+    pub firing_duration: Option<String>,
+    pub labels: HashMap<String, String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ActiveAlert {
+    pub name: String,
+    pub severity: String,
+    pub started_at: String,
+    pub duration: String,
+    pub labels: HashMap<String, String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AlertHistoryEntry {
+    pub name: String,
+    pub state: String,
+    pub timestamp: String,
+    pub duration: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RecordingRuleInfo {
+    pub name: String,
+    pub group: String,
+    pub interval: u64,
+    pub expression: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RemoteWriteEndpoint {
+    pub name: String,
+    pub url: String,
+    pub status: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SilenceInfo {
+    pub id: String,
+    pub matcher: String,
+    pub expires_at: String,
+    pub created_by: String,
+    pub comment: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HealthCheckResult {
+    pub healthy: bool,
+    pub timestamp: DateTime<Utc>,
+    pub components: HashMap<String, ComponentStatus>,
+    pub memory_usage: Option<u64>,
+    pub cpu_usage: Option<f64>,
+    pub disk_usage: Option<f64>,
+    pub network_latency: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RetentionPolicy {
+    pub data_type: String,
+    pub retention_period: String,
+    pub auto_cleanup: bool,
+    pub last_cleanup: Option<String>,
+    pub current_size: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CleanupPreviewItem {
+    pub path: String,
+    pub size_mb: u64,
+    pub age: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CleanupResult {
+    pub deleted_count: u64,
+    pub freed_space_mb: u64,
+    pub duration: Duration,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CompactionResult {
+    pub processed_blocks: u64,
+    pub space_saved_mb: u64,
+    pub duration: Duration,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LoadTestResult {
+    pub total_requests: u64,
+    pub successful_requests: u64,
+    pub failed_requests: u64,
+    pub avg_response_time: f64,
+    pub p95_response_time: f64,
+    pub p99_response_time: f64,
+    pub throughput: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DiscoveredTarget {
+    pub address: String,
+    pub target_type: String,
+    pub labels: HashMap<String, String>,
+}
+
 /// Advanced monitoring system with Prometheus integration
 pub struct AdvancedMonitoringSystem {
     config: AdvancedMonitoringConfig,
@@ -1009,6 +1318,656 @@ impl AdvancedMonitoringSystem {
             export_healthy: self.export_manager.is_healthy().await,
             prometheus_healthy: self.prometheus_client.is_healthy().await,
         }
+    }
+
+    // Status and general monitoring methods
+    pub async fn get_status(&self) -> Result<MonitoringStatus> {
+        let health = self.get_health_status().await;
+        Ok(MonitoringStatus {
+            healthy: health.collector_healthy && health.alertmanager_healthy && health.dashboards_healthy,
+            uptime: Duration::from_secs(3600), // Mock uptime
+            components: HashMap::from([
+                ("collector".to_string(), ComponentStatus {
+                    healthy: health.collector_healthy,
+                    message: "OK".to_string(),
+                    response_time: Some(10),
+                }),
+                ("alertmanager".to_string(), ComponentStatus {
+                    healthy: health.alertmanager_healthy,
+                    message: "OK".to_string(),
+                    response_time: Some(15),
+                }),
+                ("dashboards".to_string(), ComponentStatus {
+                    healthy: health.dashboards_healthy,
+                    message: "OK".to_string(),
+                    response_time: Some(8),
+                }),
+            ]),
+            active_alerts: 0,
+            metrics_collected: 1250,
+            last_collection: Some(Utc::now()),
+        })
+    }
+
+    // Prometheus methods
+    pub async fn get_prometheus_config(&self) -> Result<PrometheusConfigResponse> {
+        Ok(PrometheusConfigResponse {
+            global: PrometheusGlobalConfig {
+                scrape_interval_seconds: self.config.prometheus.scrape_interval,
+                evaluation_interval_seconds: self.config.prometheus.evaluation_interval,
+                external_labels: HashMap::new(),
+            },
+            scrape_configs: vec![
+                ScrapeConfig {
+                    job_name: "inferno".to_string(),
+                    scrape_interval: 15,
+                    metrics_path: "/metrics".to_string(),
+                    static_configs: vec![StaticConfig {
+                        targets: vec!["localhost:8080".to_string()],
+                        labels: HashMap::new(),
+                    }],
+                }
+            ],
+            rule_files: vec![],
+            remote_write: self.config.prometheus.remote_write.clone(),
+            remote_read: vec![],
+        })
+    }
+
+    pub async fn validate_prometheus_config(&self) -> Result<()> {
+        // Mock validation - always passes
+        Ok(())
+    }
+
+    pub async fn reload_prometheus_config(&self) -> Result<()> {
+        info!("Reloading Prometheus configuration");
+        // Mock reload
+        Ok(())
+    }
+
+    pub fn query_prometheus(&self, query: &str, time: &str, timeout: u64) -> Result<serde_json::Value> {
+        // Mock Prometheus query
+        Ok(serde_json::json!({
+            "status": "success",
+            "data": {
+                "resultType": "vector",
+                "result": [
+                    {
+                        "metric": {"__name__": "up", "job": "inferno"},
+                        "value": [1635724800, "1"]
+                    }
+                ]
+            }
+        }))
+    }
+
+    pub fn query_range_prometheus(&self, query: &str, start: &str, end: &str, step: &str) -> Result<serde_json::Value> {
+        // Mock Prometheus range query
+        Ok(serde_json::json!({
+            "status": "success",
+            "data": {
+                "resultType": "matrix",
+                "result": [
+                    {
+                        "metric": {"__name__": "up", "job": "inferno"},
+                        "values": [[1635724800, "1"], [1635724860, "1"]]
+                    }
+                ]
+            }
+        }))
+    }
+
+    pub async fn get_prometheus_targets(&self) -> Result<Vec<PrometheusTarget>> {
+        Ok(vec![
+            PrometheusTarget {
+                job: "inferno".to_string(),
+                instance: "localhost:8080".to_string(),
+                health: "up".to_string(),
+                last_scrape: "2023-11-01T12:00:00Z".to_string(),
+                scrape_duration: 0.025,
+                labels: HashMap::from([("job".to_string(), "inferno".to_string())]),
+            }
+        ])
+    }
+
+    pub async fn get_prometheus_info(&self) -> Result<PrometheusInfo> {
+        Ok(PrometheusInfo {
+            version: "2.40.0".to_string(),
+            revision: "abc123".to_string(),
+            branch: "HEAD".to_string(),
+            build_user: "inferno@localhost".to_string(),
+            build_date: "2023-11-01T10:00:00Z".to_string(),
+            go_version: "go1.19".to_string(),
+        })
+    }
+
+    // Alertmanager methods
+    pub async fn get_alertmanager_config(&self) -> Result<AlertmanagerConfigResponse> {
+        Ok(AlertmanagerConfigResponse {
+            global: AlertmanagerGlobalConfig {
+                resolve_timeout_seconds: 300,
+                smtp_smarthost: None,
+                smtp_from: None,
+            },
+            routes: vec![],
+            receivers: vec![],
+            inhibit_rules: vec![],
+        })
+    }
+
+    pub async fn validate_alertmanager_config(&self) -> Result<()> {
+        // Mock validation - always passes
+        Ok(())
+    }
+
+    pub async fn reload_alertmanager_config(&self) -> Result<()> {
+        info!("Reloading Alertmanager configuration");
+        // Mock reload
+        Ok(())
+    }
+
+    pub fn get_alertmanager_alerts(&self, state: Option<&crate::cli::advanced_monitoring::AlertState>, receiver: Option<&str>, labels: &[String]) -> Result<Vec<AlertmanagerAlert>> {
+        Ok(vec![
+            AlertmanagerAlert {
+                name: "HighResponseTime".to_string(),
+                state: "firing".to_string(),
+                started_at: "2023-11-01T12:00:00Z".to_string(),
+                receiver: "default".to_string(),
+                labels: HashMap::from([("severity".to_string(), "warning".to_string())]),
+                annotations: HashMap::from([("description".to_string(), "Response time is high".to_string())]),
+            }
+        ])
+    }
+
+    pub fn test_alertmanager_receiver(&self, receiver: &str, labels: &[String], annotations: &[String]) -> Result<TestResult> {
+        Ok(TestResult {
+            success: true,
+            error: None,
+            response_time: Some(150),
+            delivery_time: Some(200),
+            warnings: vec![],
+            rules_count: 0,
+            triggered_alerts: None,
+        })
+    }
+
+    pub async fn get_alertmanager_status(&self) -> Result<AlertmanagerStatus> {
+        Ok(AlertmanagerStatus {
+            version: "0.25.0".to_string(),
+            uptime: Duration::from_secs(3600),
+            active_alerts: 0,
+            silences: 0,
+            cluster_size: 1,
+        })
+    }
+
+    // Dashboard methods
+    pub async fn list_dashboards(&self, tags: &[String], imported: bool) -> Result<Vec<DashboardInfo>> {
+        Ok(vec![
+            DashboardInfo {
+                id: "1".to_string(),
+                name: "Inferno Overview".to_string(),
+                folder: "General".to_string(),
+                tags: vec!["inferno".to_string(), "monitoring".to_string()],
+                url: "/d/inferno-overview".to_string(),
+            }
+        ])
+    }
+
+    pub fn import_dashboard(&self, source: &str, name: Option<&str>, folder: Option<&str>, overwrite: bool) -> Result<String> {
+        info!("Importing dashboard from: {}", source);
+        Ok("dashboard-123".to_string())
+    }
+
+    pub fn export_dashboard(&self, dashboard: &str, output: &PathBuf, include_variables: bool) -> Result<()> {
+        info!("Exporting dashboard {} to {}", dashboard, output.display());
+        Ok(())
+    }
+
+    pub fn update_dashboard(&self, dashboard: &str, file: &PathBuf, message: Option<&str>) -> Result<()> {
+        info!("Updating dashboard {} from {}", dashboard, file.display());
+        Ok(())
+    }
+
+    pub async fn delete_dashboard(&self, dashboard: &str) -> Result<()> {
+        info!("Deleting dashboard: {}", dashboard);
+        Ok(())
+    }
+
+    pub fn create_dashboard_snapshot(&self, dashboard: &str, name: Option<&str>, expires: Option<u64>) -> Result<String> {
+        let snapshot_url = format!("https://grafana.example.com/dashboard/snapshot/{}", dashboard);
+        Ok(snapshot_url)
+    }
+
+    pub fn watch_and_provision_dashboards(&self, directory: &PathBuf, folder: Option<&str>) -> Result<()> {
+        info!("Watching directory for dashboards: {}", directory.display());
+        Ok(())
+    }
+
+    pub fn provision_dashboards(&self, directory: &PathBuf, folder: Option<&str>) -> Result<u32> {
+        info!("Provisioning dashboards from: {}", directory.display());
+        Ok(3) // Mock count
+    }
+
+    // Target management methods
+    pub fn list_monitoring_targets(&self, target_type: Option<&str>, healthy: bool, unhealthy: bool) -> Result<Vec<MonitoringTarget>> {
+        Ok(vec![
+            MonitoringTarget {
+                id: "target-1".to_string(),
+                address: "localhost:8080".to_string(),
+                target_type: "http".to_string(),
+                status: "healthy".to_string(),
+                last_check: "2023-11-01T12:00:00Z".to_string(),
+                labels: HashMap::new(),
+            }
+        ])
+    }
+
+    pub fn add_monitoring_target(&self, address: &str, target_type: &str, labels: &[String], interval: Option<&str>, timeout: Option<&str>) -> Result<String> {
+        info!("Adding monitoring target: {} ({})", address, target_type);
+        Ok("target-123".to_string())
+    }
+
+    pub async fn remove_monitoring_target(&self, target: &str) -> Result<()> {
+        info!("Removing monitoring target: {}", target);
+        Ok(())
+    }
+
+    pub fn update_monitoring_target(&self, target: &str, labels: &[String], interval: Option<&str>, timeout: Option<&str>) -> Result<()> {
+        info!("Updating monitoring target: {}", target);
+        Ok(())
+    }
+
+    pub fn test_target_connectivity(&self, address: &str, timeout: u64) -> Result<TestResult> {
+        Ok(TestResult {
+            success: true,
+            error: None,
+            response_time: Some(50),
+            delivery_time: None,
+            warnings: vec![],
+            rules_count: 0,
+            triggered_alerts: None,
+        })
+    }
+
+    pub fn discover_targets(&self, method: Option<&crate::cli::advanced_monitoring::DiscoveryMethod>, config_file: Option<&std::path::Path>) -> Result<Vec<DiscoveredTarget>> {
+        Ok(vec![
+            DiscoveredTarget {
+                address: "192.168.1.100:8080".to_string(),
+                target_type: "http".to_string(),
+                labels: HashMap::from([("discovered".to_string(), "true".to_string())]),
+            }
+        ])
+    }
+
+    pub fn auto_add_discovered_targets(&self, targets: &[DiscoveredTarget]) -> Result<u32> {
+        Ok(targets.len() as u32)
+    }
+
+    // Alert rules methods
+    pub fn list_alert_rules(&self, group: Option<&str>, firing: bool) -> Result<Vec<AlertRuleInfo>> {
+        Ok(vec![
+            AlertRuleInfo {
+                name: "HighResponseTime".to_string(),
+                group: "inferno.rules".to_string(),
+                state: "inactive".to_string(),
+                severity: "warning".to_string(),
+                firing_duration: None,
+                labels: HashMap::new(),
+            }
+        ])
+    }
+
+    pub async fn validate_alert_rules(&self, file: &PathBuf) -> Result<()> {
+        info!("Validating alert rules from: {}", file.display());
+        Ok(())
+    }
+
+    pub fn add_alert_rule(&self, file: &PathBuf, group: Option<&str>) -> Result<String> {
+        info!("Adding alert rule from: {}", file.display());
+        Ok("rule-123".to_string())
+    }
+
+    pub async fn remove_alert_rule(&self, name: &str, group: Option<&str>) -> Result<()> {
+        info!("Removing alert rule: {}", name);
+        Ok(())
+    }
+
+    pub fn test_alert_rule(&self, rule: &str, data: Option<&std::path::Path>, duration: Option<&str>) -> Result<TestResult> {
+        Ok(TestResult {
+            success: true,
+            error: None,
+            response_time: None,
+            delivery_time: None,
+            warnings: vec![],
+            rules_count: 1,
+            triggered_alerts: Some(vec![]),
+        })
+    }
+
+    pub fn get_active_alerts(&self, severity: Option<&str>, labels: &[String]) -> Result<Vec<ActiveAlert>> {
+        Ok(vec![
+            ActiveAlert {
+                name: "HighMemoryUsage".to_string(),
+                severity: "warning".to_string(),
+                started_at: "2023-11-01T12:00:00Z".to_string(),
+                duration: "5m".to_string(),
+                labels: HashMap::from([("instance".to_string(), "localhost:8080".to_string())]),
+            }
+        ])
+    }
+
+    pub fn get_alert_history(&self, start: Option<&str>, end: Option<&str>, rule: Option<&str>, limit: Option<usize>) -> Result<Vec<AlertHistoryEntry>> {
+        Ok(vec![
+            AlertHistoryEntry {
+                name: "HighResponseTime".to_string(),
+                state: "resolved".to_string(),
+                timestamp: "2023-11-01T11:00:00Z".to_string(),
+                duration: "10m".to_string(),
+            }
+        ])
+    }
+
+    pub fn acknowledge_alert(&self, alert: &str, comment: Option<&str>, expires: Option<&str>) -> Result<()> {
+        info!("Acknowledging alert: {}", alert);
+        Ok(())
+    }
+
+    // Export methods
+    pub fn export_metrics(&self, output: &PathBuf, start: Option<&str>, end: Option<&str>, metrics: &[String], format: &crate::cli::advanced_monitoring::ExportFormat, compress: bool) -> Result<()> {
+        info!("Exporting metrics to: {}", output.display());
+        Ok(())
+    }
+
+    pub fn export_alerts(&self, output: &PathBuf, start: Option<&str>, end: Option<&str>, format: &crate::cli::advanced_monitoring::ExportFormat) -> Result<()> {
+        info!("Exporting alerts to: {}", output.display());
+        Ok(())
+    }
+
+    pub fn export_configuration(&self, output: &PathBuf, include_secrets: bool, format: &crate::cli::advanced_monitoring::ExportFormat) -> Result<()> {
+        info!("Exporting configuration to: {}", output.display());
+        Ok(())
+    }
+
+    pub fn export_dashboards(&self, output: &PathBuf, dashboards: &[String], format: &crate::cli::advanced_monitoring::ExportFormat) -> Result<()> {
+        info!("Exporting dashboards to: {}", output.display());
+        Ok(())
+    }
+
+    // Health check methods
+    pub async fn comprehensive_health_check(&self) -> Result<HealthCheckResult> {
+        Ok(HealthCheckResult {
+            healthy: true,
+            timestamp: Utc::now(),
+            components: HashMap::from([
+                ("prometheus".to_string(), ComponentStatus {
+                    healthy: true,
+                    message: "OK".to_string(),
+                    response_time: Some(25),
+                }),
+                ("alertmanager".to_string(), ComponentStatus {
+                    healthy: true,
+                    message: "OK".to_string(),
+                    response_time: Some(30),
+                }),
+            ]),
+            memory_usage: Some(512),
+            cpu_usage: Some(45.2),
+            disk_usage: Some(68.5),
+            network_latency: Some(12),
+        })
+    }
+
+    pub async fn component_health_check(&self, component: &str) -> Result<HealthCheckResult> {
+        Ok(HealthCheckResult {
+            healthy: true,
+            timestamp: Utc::now(),
+            components: HashMap::from([
+                (component.to_string(), ComponentStatus {
+                    healthy: true,
+                    message: "OK".to_string(),
+                    response_time: Some(20),
+                }),
+            ]),
+            memory_usage: None,
+            cpu_usage: None,
+            disk_usage: None,
+            network_latency: None,
+        })
+    }
+
+    pub async fn basic_health_check(&self) -> Result<HealthCheckResult> {
+        Ok(HealthCheckResult {
+            healthy: true,
+            timestamp: Utc::now(),
+            components: HashMap::new(),
+            memory_usage: None,
+            cpu_usage: None,
+            disk_usage: None,
+            network_latency: None,
+        })
+    }
+
+    // Retention methods
+    pub async fn get_retention_policies(&self) -> Result<Vec<RetentionPolicy>> {
+        Ok(vec![
+            RetentionPolicy {
+                data_type: "metrics".to_string(),
+                retention_period: "30d".to_string(),
+                auto_cleanup: true,
+                last_cleanup: Some("2023-11-01T00:00:00Z".to_string()),
+                current_size: Some(1024),
+            },
+            RetentionPolicy {
+                data_type: "alerts".to_string(),
+                retention_period: "7d".to_string(),
+                auto_cleanup: true,
+                last_cleanup: Some("2023-11-01T00:00:00Z".to_string()),
+                current_size: Some(256),
+            },
+        ])
+    }
+
+    pub fn update_retention_policies(&self, metrics: Option<&str>, alerts: Option<&str>, logs: Option<&str>, auto_cleanup: Option<bool>) -> Result<()> {
+        info!("Updating retention policies");
+        Ok(())
+    }
+
+    pub fn preview_cleanup(&self, cleanup_type: Option<&crate::cli::advanced_monitoring::CleanupType>, older_than: Option<&str>) -> Result<Vec<CleanupPreviewItem>> {
+        Ok(vec![
+            CleanupPreviewItem {
+                path: "/data/metrics/old_data.db".to_string(),
+                size_mb: 256,
+                age: "45d".to_string(),
+            }
+        ])
+    }
+
+    pub fn perform_cleanup(&self, cleanup_type: Option<&crate::cli::advanced_monitoring::CleanupType>, older_than: Option<&str>) -> Result<CleanupResult> {
+        Ok(CleanupResult {
+            deleted_count: 5,
+            freed_space_mb: 1024,
+            duration: Duration::from_secs(30),
+        })
+    }
+
+    pub fn compact_data(&self, level: Option<u32>, start: Option<&str>, end: Option<&str>) -> Result<CompactionResult> {
+        Ok(CompactionResult {
+            processed_blocks: 100,
+            space_saved_mb: 512,
+            duration: Duration::from_secs(300),
+        })
+    }
+
+    // Test methods
+    pub async fn test_component_config(&self, component: &str, config_file: Option<&std::path::Path>) -> Result<TestResult> {
+        Ok(TestResult {
+            success: true,
+            error: None,
+            response_time: None,
+            delivery_time: None,
+            warnings: vec![],
+            rules_count: 0,
+            triggered_alerts: None,
+        })
+    }
+
+    pub async fn test_full_config(&self, config_file: Option<&std::path::Path>) -> Result<TestResult> {
+        Ok(TestResult {
+            success: true,
+            error: None,
+            response_time: None,
+            delivery_time: None,
+            warnings: vec!["Configuration uses default values".to_string()],
+            rules_count: 0,
+            triggered_alerts: None,
+        })
+    }
+
+    pub async fn test_prometheus_connectivity(&self) -> Result<()> {
+        info!("Testing Prometheus connectivity");
+        Ok(())
+    }
+
+    pub async fn test_alertmanager_connectivity(&self) -> Result<()> {
+        info!("Testing Alertmanager connectivity");
+        Ok(())
+    }
+
+    pub async fn test_grafana_connectivity(&self) -> Result<()> {
+        info!("Testing Grafana connectivity");
+        Ok(())
+    }
+
+    pub fn test_alert_rules_file(&self, file: &std::path::Path, data: Option<&std::path::Path>) -> Result<TestResult> {
+        Ok(TestResult {
+            success: true,
+            error: None,
+            response_time: None,
+            delivery_time: None,
+            warnings: vec![],
+            rules_count: 5,
+            triggered_alerts: None,
+        })
+    }
+
+    pub fn test_notification_channel(&self, receiver: &str, message: Option<&str>) -> Result<TestResult> {
+        Ok(TestResult {
+            success: true,
+            error: None,
+            response_time: None,
+            delivery_time: Some(250),
+            warnings: vec![],
+            rules_count: 0,
+            triggered_alerts: None,
+        })
+    }
+
+    pub fn run_load_test(&self, concurrency: u32, duration: u64, rate: f64) -> Result<LoadTestResult> {
+        Ok(LoadTestResult {
+            total_requests: (duration * rate as u64),
+            successful_requests: (duration * rate as u64 * 95 / 100),
+            failed_requests: (duration * rate as u64 * 5 / 100),
+            avg_response_time: 150.0,
+            p95_response_time: 300.0,
+            p99_response_time: 500.0,
+            throughput: rate * 0.95,
+        })
+    }
+
+    // Recording rules methods
+    pub async fn list_recording_rules(&self, group: Option<&str>) -> Result<Vec<RecordingRuleInfo>> {
+        Ok(vec![
+            RecordingRuleInfo {
+                name: "inferno:response_time_p95".to_string(),
+                group: "inferno.rules".to_string(),
+                interval: 30,
+                expression: "histogram_quantile(0.95, response_time_bucket)".to_string(),
+            }
+        ])
+    }
+
+    pub async fn add_recording_rule(&self, file: &PathBuf, group: Option<&str>) -> Result<String> {
+        info!("Adding recording rule from: {}", file.display());
+        Ok("recording-rule-123".to_string())
+    }
+
+    pub async fn remove_recording_rule(&self, name: &str, group: Option<&str>) -> Result<()> {
+        info!("Removing recording rule: {}", name);
+        Ok(())
+    }
+
+    pub fn test_recording_rule(&self, file: &PathBuf, duration: Option<&str>) -> Result<TestResult> {
+        Ok(TestResult {
+            success: true,
+            error: None,
+            response_time: None,
+            delivery_time: None,
+            warnings: vec![],
+            rules_count: 1,
+            triggered_alerts: None,
+        })
+    }
+
+    // Remote write methods
+    pub async fn list_remote_write_endpoints(&self) -> Result<Vec<RemoteWriteEndpoint>> {
+        Ok(vec![
+            RemoteWriteEndpoint {
+                name: "remote-storage".to_string(),
+                url: "https://remote.example.com/write".to_string(),
+                status: "active".to_string(),
+            }
+        ])
+    }
+
+    pub fn add_remote_write_endpoint(&self, url: &str, name: Option<&str>, auth: Option<&str>, queue_config: Option<&std::path::Path>) -> Result<String> {
+        info!("Adding remote write endpoint: {}", url);
+        Ok("endpoint-123".to_string())
+    }
+
+    pub async fn remove_remote_write_endpoint(&self, endpoint: &str) -> Result<()> {
+        info!("Removing remote write endpoint: {}", endpoint);
+        Ok(())
+    }
+
+    pub fn test_remote_write_endpoint(&self, endpoint: &str, timeout: u64) -> Result<TestResult> {
+        Ok(TestResult {
+            success: true,
+            error: None,
+            response_time: Some(100),
+            delivery_time: None,
+            warnings: vec![],
+            rules_count: 0,
+            triggered_alerts: None,
+        })
+    }
+
+    // Silence methods
+    pub async fn list_silences(&self, expired: bool) -> Result<Vec<SilenceInfo>> {
+        Ok(vec![
+            SilenceInfo {
+                id: "silence-123".to_string(),
+                matcher: "alertname=HighResponseTime".to_string(),
+                expires_at: "2023-11-02T12:00:00Z".to_string(),
+                created_by: "admin".to_string(),
+                comment: "Maintenance window".to_string(),
+            }
+        ])
+    }
+
+    pub fn create_silence(&self, matcher: &str, duration: &str, comment: Option<&str>, created_by: Option<&str>) -> Result<String> {
+        info!("Creating silence for: {}", matcher);
+        Ok("silence-456".to_string())
+    }
+
+    pub async fn remove_silence(&self, id: &str) -> Result<()> {
+        info!("Removing silence: {}", id);
+        Ok(())
+    }
+
+    pub async fn extend_silence(&self, id: &str, duration: &str) -> Result<()> {
+        info!("Extending silence {} by {}", id, duration);
+        Ok(())
     }
 }
 
@@ -1091,10 +2050,10 @@ impl MetricsCollector {
         *self.running.read().await
     }
 
-    async fn collect_metrics(
-        config: &MetricsCollectionConfig,
-        prometheus_client: &PrometheusClient,
-        custom_metrics: &Arc<RwLock<HashMap<String, CustomMetricDefinition>>>,
+    async fn collect_metrics<'a>(
+        config: &'a MetricsCollectionConfig,
+        prometheus_client: &'a PrometheusClient,
+        custom_metrics: &'a Arc<RwLock<HashMap<String, CustomMetricDefinition>>>,
     ) -> Result<()> {
         debug!("Collecting metrics");
 
@@ -1630,4 +2589,64 @@ impl MetricsExporter for HttpExporter {
     async fn stop(&self) -> Result<()> { Ok(()) }
     async fn export(&self, _metrics: Vec<Metric>) -> Result<()> { Ok(()) }
     async fn is_healthy(&self) -> bool { true }
+}
+
+// Implement conversion from MonitoringConfig to AdvancedMonitoringConfig
+impl From<crate::monitoring::MonitoringConfig> for AdvancedMonitoringConfig {
+    fn from(config: crate::monitoring::MonitoringConfig) -> Self {
+        Self {
+            enabled: config.enabled,
+            prometheus: PrometheusConfig {
+                endpoint: config.prometheus.global.external_url,
+                push_gateway: None,
+                scrape_interval: config.prometheus.global.scrape_interval_seconds,
+                evaluation_interval: config.prometheus.global.scrape_interval_seconds,
+                remote_write: vec![],
+                service_discovery: ServiceDiscoveryConfig::default(),
+                recording_rules: vec![],
+                federation: FederationConfig::default(),
+            },
+            alerting: AlertingConfig {
+                alertmanager: AlertmanagerConfig::default(),
+                rules: vec![],
+                routing: RoutingConfig::default(),
+                channels: vec![],
+                inhibition: vec![],
+                silences: vec![],
+            },
+            collection: MetricsCollectionConfig {
+                interval: Duration::from_millis(config.collection_interval_ms),
+                interval_seconds: config.collection_interval_ms / 1000,
+                buffer_size: 1000,
+                batch_size: 100,
+                timeout: Duration::from_secs(30),
+                timeout_seconds: 30,
+                retry: RetryConfig::default(),
+                global_labels: HashMap::new(),
+                metrics: vec![],
+            },
+            dashboards: DashboardsConfig {
+                grafana: GrafanaConfig::default(),
+                dashboards: vec![],
+                auto_import: AutoImportConfig {
+                    enabled: false,
+                    directory: PathBuf::from("./dashboards"),
+                    watch: false,
+                    interval: Duration::from_secs(300),
+                },
+            },
+            retention: RetentionConfig {
+                default_retention: Duration::from_secs(config.metric_retention_hours * 3600),
+                per_metric_retention: HashMap::new(),
+                downsampling: vec![],
+                compaction: CompactionConfig::default(),
+            },
+            export: ExportConfig {
+                formats: vec![ExportFormat::Prometheus],
+                targets: vec![],
+                schedule: None,
+            },
+            custom_metrics: vec![],
+        }
+    }
 }

@@ -1,14 +1,13 @@
 use crate::config::Config;
 use crate::multi_tenancy::{
     MultiTenancySystem, MultiTenancyConfig, TenantInfo, TenantTier, ResourceRequirements,
-    ResourceCapacity, ComplianceStandard, UsageMetric, IsolationMode,
+    ResourceCapacity, ComplianceStandard,
 };
 use anyhow::Result;
 use clap::{Args, Subcommand};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::path::PathBuf;
 use uuid::Uuid;
-use chrono::Utc;
 
 #[derive(Args)]
 pub struct MultiTenancyArgs {
@@ -140,8 +139,8 @@ pub enum TenantManagementCommand {
         #[arg(long, help = "Update status")]
         status: Option<String>,
 
-        #[arg(long, help = "Update metadata")]
-        metadata: Option<HashMap<String, String>>,
+        #[arg(long, help = "Update metadata key=value")]
+        metadata: Option<String>,
     },
 
     #[command(about = "Delete tenant")]
@@ -267,10 +266,10 @@ pub enum ResourceCommand {
         enable: bool,
 
         #[arg(long, help = "Min resources")]
-        min: Option<HashMap<String, String>>,
+        min: Option<String>,
 
         #[arg(long, help = "Max resources")]
-        max: Option<HashMap<String, String>>,
+        max: Option<String>,
 
         #[arg(long, help = "Scale policy")]
         policy: Option<String>,
@@ -321,7 +320,7 @@ pub enum PoolCommand {
         name: String,
 
         #[arg(long, help = "New capacity")]
-        capacity: Option<HashMap<String, String>>,
+        capacity: Option<String>,
 
         #[arg(long, help = "Scheduling policy")]
         policy: Option<String>,
@@ -399,7 +398,7 @@ pub enum QuotaPolicyCommand {
         name: String,
 
         #[arg(long, help = "Policy rules")]
-        rules: Option<HashMap<String, String>>,
+        rules: Option<String>,
 
         #[arg(long, help = "Enforcement action")]
         action: Option<String>,
@@ -621,7 +620,7 @@ pub enum PricingCommand {
         base_price: f64,
 
         #[arg(long, help = "Resource rates")]
-        rates: Option<HashMap<String, f64>>,
+        rates: Option<String>,
     },
 
     #[command(about = "Assign pricing plan")]
@@ -970,7 +969,7 @@ pub enum StorageCommand {
     },
 }
 
-pub async fn execute(args: MultiTenancyArgs, config: &Config) -> Result<()> {
+pub async fn execute(args: MultiTenancyArgs, _config: &Config) -> Result<()> {
     let system = MultiTenancySystem::new(MultiTenancyConfig::default());
 
     match args.command {
@@ -1018,7 +1017,7 @@ async fn handle_tenant_command(
     system: &MultiTenancySystem,
 ) -> Result<()> {
     match command {
-        TenantManagementCommand::Create { name, organization, admin_email, tier, config, auto_provision } => {
+        TenantManagementCommand::Create { name, organization, admin_email, tier, config: _, auto_provision } => {
             println!("Creating tenant: {}", name);
 
             let tenant_tier = match tier.as_deref() {
@@ -1064,6 +1063,9 @@ async fn handle_tenant_command(
             if let Some(s) = status {
                 updates.insert("status".to_string(), serde_json::json!(s));
             }
+            if let Some(m) = metadata {
+                updates.insert("metadata".to_string(), serde_json::json!(m));
+            }
 
             system.update_tenant(id, updates).await?;
 
@@ -1087,7 +1089,7 @@ async fn handle_tenant_command(
 
             Ok(())
         }
-        TenantManagementCommand::List { status, tier, format, sort } => {
+        TenantManagementCommand::List { status: _, tier: _, format: _, sort: _ } => {
             println!("Tenant List");
             println!("===========");
 
@@ -1160,7 +1162,7 @@ async fn handle_resource_command(
     system: &MultiTenancySystem,
 ) -> Result<()> {
     match command {
-        ResourceCommand::Allocate { tenant_id, cpu, memory, storage, bandwidth, gpu, priority } => {
+        ResourceCommand::Allocate { tenant_id, cpu, memory, storage, bandwidth, gpu, priority: _ } => {
             println!("Allocating resources for tenant: {}", tenant_id);
 
             let requirements = ResourceRequirements {
@@ -1202,7 +1204,7 @@ async fn handle_resource_command(
 
             Ok(())
         }
-        ResourceCommand::Deallocate { tenant_id, pool, force } => {
+        ResourceCommand::Deallocate { tenant_id, pool: _, force } => {
             println!("Deallocating resources for tenant: {}", tenant_id);
 
             if force {
@@ -1212,7 +1214,7 @@ async fn handle_resource_command(
             println!("✓ Resources deallocated successfully");
             Ok(())
         }
-        ResourceCommand::View { tenant_id, pool, available } => {
+        ResourceCommand::View { tenant_id, pool: _, available } => {
             println!("Resource Allocation");
             println!("==================");
 
@@ -1248,10 +1250,10 @@ async fn handle_resource_command(
                     println!("  Policy: {}", policy);
                 }
                 if let Some(min) = min {
-                    println!("  Min resources: {:?}", min);
+                    println!("  Min resources: {}", min);
                 }
                 if let Some(max) = max {
-                    println!("  Max resources: {:?}", max);
+                    println!("  Max resources: {}", max);
                 }
             }
 
@@ -1280,7 +1282,7 @@ async fn handle_pool_command(command: PoolCommand) -> Result<()> {
             println!("✓ Resource pool deleted successfully");
             Ok(())
         }
-        PoolCommand::List { pool_type, utilization } => {
+        PoolCommand::List { pool_type: _, utilization: _ } => {
             println!("Resource Pools");
             println!("=============");
             println!("Name     | Type     | CPU    | Memory | Storage | Utilization");
@@ -1292,7 +1294,7 @@ async fn handle_pool_command(command: PoolCommand) -> Result<()> {
         PoolCommand::Update { name, capacity, policy } => {
             println!("Updating resource pool: {}", name);
             if let Some(cap) = capacity {
-                println!("  New capacity: {:?}", cap);
+                println!("  New capacity: {}", cap);
             }
             if let Some(pol) = policy {
                 println!("  Scheduling policy: {}", pol);
@@ -1321,7 +1323,7 @@ async fn handle_quota_command(
             println!("✓ Quota set successfully");
             Ok(())
         }
-        QuotaCommand::View { tenant_id, usage, format } => {
+        QuotaCommand::View { tenant_id, usage: _, format: _ } => {
             println!("Tenant Quotas: {}", tenant_id);
             println!("================");
             println!("Resource    | Limit     | Used      | Available");
@@ -1332,7 +1334,7 @@ async fn handle_quota_command(
             println!("API Calls   | 100k/day  | 35k       | 65k");
             Ok(())
         }
-        QuotaCommand::Check { tenant_id, quota_type, violations } => {
+        QuotaCommand::Check { tenant_id, quota_type: _, violations } => {
             let compliant = system.enforce_quotas(tenant_id).await?;
 
             if compliant {
@@ -1346,7 +1348,7 @@ async fn handle_quota_command(
             }
             Ok(())
         }
-        QuotaCommand::Reset { tenant_id, reset_type, confirm } => {
+        QuotaCommand::Reset { tenant_id, reset_type: _, confirm } => {
             if !confirm {
                 println!("This will reset quotas for tenant {}. Use --confirm to proceed.", tenant_id);
                 return Ok(());
@@ -1363,7 +1365,7 @@ async fn handle_quota_command(
 
 async fn handle_quota_policy_command(command: QuotaPolicyCommand) -> Result<()> {
     match command {
-        QuotaPolicyCommand::Create { name, rules, action } => {
+        QuotaPolicyCommand::Create { name, rules: _, action } => {
             println!("Creating quota policy: {}", name);
             if let Some(act) = action {
                 println!("  Enforcement action: {}", act);
@@ -1376,7 +1378,7 @@ async fn handle_quota_policy_command(command: QuotaPolicyCommand) -> Result<()> 
             println!("✓ Policy applied successfully");
             Ok(())
         }
-        QuotaPolicyCommand::List { enforcement } => {
+        QuotaPolicyCommand::List { enforcement: _ } => {
             println!("Quota Policies");
             println!("=============");
             println!("Name         | Enforcement | Tenants");
@@ -1390,7 +1392,7 @@ async fn handle_quota_policy_command(command: QuotaPolicyCommand) -> Result<()> 
 
 async fn handle_isolation_command(
     command: IsolationCommand,
-    system: &MultiTenancySystem,
+    _system: &MultiTenancySystem,
 ) -> Result<()> {
     match command {
         IsolationCommand::Configure { tenant_id, mode, network, storage, process } => {
@@ -1448,7 +1450,7 @@ async fn handle_isolation_command(
 
 async fn handle_zone_command(command: ZoneCommand) -> Result<()> {
     match command {
-        ZoneCommand::Create { name, zone_type, network } => {
+        ZoneCommand::Create { name, zone_type, network: _ } => {
             println!("Creating isolation zone: {}", name);
             if let Some(t) = zone_type {
                 println!("  Type: {}", t);
@@ -1461,7 +1463,7 @@ async fn handle_zone_command(command: ZoneCommand) -> Result<()> {
             println!("✓ Tenant assigned successfully");
             Ok(())
         }
-        ZoneCommand::List { zone_type } => {
+        ZoneCommand::List { zone_type: _ } => {
             println!("Isolation Zones");
             println!("==============");
             println!("Name      | Type     | Tenants");
@@ -1475,7 +1477,7 @@ async fn handle_zone_command(command: ZoneCommand) -> Result<()> {
 
 async fn handle_security_command(command: SecurityCommand) -> Result<()> {
     match command {
-        SecurityCommand::SetPolicy { tenant_id, policy, rules } => {
+        SecurityCommand::SetPolicy { tenant_id, policy, rules: _ } => {
             println!("Setting security policy for tenant: {}", tenant_id);
             println!("  Policy: {}", policy);
             println!("✓ Security policy applied");
@@ -1514,7 +1516,7 @@ async fn handle_billing_command(
     system: &MultiTenancySystem,
 ) -> Result<()> {
     match command {
-        BillingCommand::Invoice { tenant_id, period, send, format } => {
+        BillingCommand::Invoice { tenant_id, period: _, send, format: _ } => {
             println!("Generating invoice for tenant: {}", tenant_id);
 
             let invoice = system.generate_invoice(tenant_id).await?;
@@ -1529,7 +1531,7 @@ async fn handle_billing_command(
             }
             Ok(())
         }
-        BillingCommand::View { tenant_id, history, period } => {
+        BillingCommand::View { tenant_id, history, period: _ } => {
             println!("Billing Information: {}", tenant_id);
             println!("===================");
             println!("  Current Month: $250.00");
@@ -1556,7 +1558,7 @@ async fn handle_billing_command(
             println!("✓ Payment processed successfully");
             Ok(())
         }
-        BillingCommand::Cost { tenant_id, group_by, period } => {
+        BillingCommand::Cost { tenant_id, group_by: _, period: _ } => {
             println!("Cost Tracking");
             println!("============");
             if let Some(tid) = tenant_id {
@@ -1575,7 +1577,7 @@ async fn handle_billing_command(
 
 async fn handle_pricing_command(command: PricingCommand) -> Result<()> {
     match command {
-        PricingCommand::Create { name, tier, base_price, rates } => {
+        PricingCommand::Create { name, tier, base_price, rates: _ } => {
             println!("Creating pricing plan: {}", name);
             println!("  Tier: {}", tier);
             println!("  Base price: ${:.2}", base_price);
@@ -1587,7 +1589,7 @@ async fn handle_pricing_command(command: PricingCommand) -> Result<()> {
             println!("✓ Pricing plan assigned");
             Ok(())
         }
-        PricingCommand::List { tier } => {
+        PricingCommand::List { tier: _ } => {
             println!("Pricing Plans");
             println!("============");
             println!("Name      | Tier       | Base Price");
@@ -1618,7 +1620,7 @@ async fn handle_session_command(
             }
             Ok(())
         }
-        SessionCommand::List { tenant_id, all } => {
+        SessionCommand::List { tenant_id: _, all: _ } => {
             println!("Active Sessions");
             println!("==============");
             println!("Session ID                           | Tenant ID | User       | Started");
@@ -1693,7 +1695,7 @@ async fn handle_compliance_command(
             println!("✓ Compliance configured");
             Ok(())
         }
-        ComplianceCommand::Audit { tenant_id, from, to, export } => {
+        ComplianceCommand::Audit { tenant_id, from: _, to: _, export: _ } => {
             println!("Audit Trail for tenant: {}", tenant_id);
             println!("=======================");
             println!("Timestamp           | Event              | User");
@@ -1724,7 +1726,7 @@ async fn handle_lifecycle_command(
     system: &MultiTenancySystem,
 ) -> Result<()> {
     match command {
-        LifecycleCommand::Provision { tenant_id, config, auto } => {
+        LifecycleCommand::Provision { tenant_id, config: _, auto } => {
             println!("Provisioning tenant: {}", tenant_id);
             if auto {
                 println!("  Auto-configuration enabled");
@@ -1732,7 +1734,7 @@ async fn handle_lifecycle_command(
             println!("✓ Tenant provisioned successfully");
             Ok(())
         }
-        LifecycleCommand::Migrate { tenant_id, target, migration_type, schedule } => {
+        LifecycleCommand::Migrate { tenant_id, target, migration_type: _, schedule } => {
             println!("Migrating tenant: {}", tenant_id);
             println!("  Target zone: {}", target);
 
@@ -1755,7 +1757,7 @@ async fn handle_lifecycle_command(
             println!("✓ Decommissioning scheduled");
             Ok(())
         }
-        LifecycleCommand::Backup { tenant_id, location, data, config } => {
+        LifecycleCommand::Backup { tenant_id, location: _, data, config } => {
             println!("Backing up tenant: {}", tenant_id);
             if data {
                 println!("  Including data");
@@ -1783,7 +1785,7 @@ async fn handle_monitor_command(
     system: &MultiTenancySystem,
 ) -> Result<()> {
     match command {
-        MonitorCommand::Metrics { tenant_id, metric_type, range, aggregation } => {
+        MonitorCommand::Metrics { tenant_id, metric_type: _, range: _, aggregation: _ } => {
             println!("Metrics for tenant: {}", tenant_id);
 
             if let Some(metrics) = system.get_metrics(tenant_id).await? {
@@ -1799,7 +1801,7 @@ async fn handle_monitor_command(
             }
             Ok(())
         }
-        MonitorCommand::Sla { tenant_id, violations, period } => {
+        MonitorCommand::Sla { tenant_id, violations, period: _ } => {
             println!("SLA Tracking for tenant: {}", tenant_id);
             println!("========================");
             println!("  Availability: 99.95% (Target: 99.9%)");
@@ -1841,7 +1843,7 @@ async fn handle_monitor_command(
 
 async fn handle_network_command(
     command: NetworkCommand,
-    system: &MultiTenancySystem,
+    _system: &MultiTenancySystem,
 ) -> Result<()> {
     match command {
         NetworkCommand::Configure { tenant_id, vlan, subnet, gateway } => {
@@ -1896,7 +1898,7 @@ async fn handle_network_command(
 
 async fn handle_storage_command(
     command: StorageCommand,
-    system: &MultiTenancySystem,
+    _system: &MultiTenancySystem,
 ) -> Result<()> {
     match command {
         StorageCommand::Allocate { tenant_id, size, class, iops } => {
@@ -1948,7 +1950,7 @@ async fn handle_storage_command(
 async fn handle_status_command(
     system: &MultiTenancySystem,
     detailed: bool,
-    format: Option<String>,
+    _format: Option<String>,
     tenant: Option<Uuid>,
     metrics: bool,
     resources: bool,
@@ -2011,4 +2013,3 @@ async fn handle_status_command(
     Ok(())
 }
 
-use std::sync::Arc;

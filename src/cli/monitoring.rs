@@ -6,7 +6,7 @@ use crate::{
 use anyhow::Result;
 use clap::{Args, Subcommand, ValueEnum};
 use std::{sync::Arc, time::Duration};
-use tracing::{info, warn};
+use tracing::warn;
 
 #[derive(Args)]
 pub struct MonitoringArgs {
@@ -216,7 +216,7 @@ pub async fn execute(args: MonitoringArgs, config: &Config) -> Result<()> {
     }
 }
 
-async fn show_monitoring_status(config: &Config) -> Result<()> {
+async fn show_monitoring_status(_config: &Config) -> Result<()> {
     println!("=== Monitoring System Status ===");
 
     let monitoring_config = MonitoringConfig::default(); // In real implementation, load from config
@@ -286,7 +286,7 @@ async fn show_monitoring_status(config: &Config) -> Result<()> {
     Ok(())
 }
 
-async fn start_dashboard(config: &Config, port: u16, interval: u64, detailed: bool) -> Result<()> {
+async fn start_dashboard(_config: &Config, port: u16, interval: u64, detailed: bool) -> Result<()> {
     println!("Starting monitoring dashboard on port {} (update interval: {}s)", port, interval);
     if detailed {
         println!("Detailed metrics enabled");
@@ -348,7 +348,7 @@ async fn start_dashboard(config: &Config, port: u16, interval: u64, detailed: bo
 }
 
 async fn show_alerts(
-    config: &Config,
+    _config: &Config,
     show_resolved: bool,
     severity: Option<AlertSeverityArg>,
     limit: usize,
@@ -429,7 +429,7 @@ async fn show_alerts(
     Ok(())
 }
 
-async fn resolve_alert(config: &Config, alert_id: String) -> Result<()> {
+async fn resolve_alert(_config: &Config, alert_id: String) -> Result<()> {
     let monitoring_config = MonitoringConfig::default();
     let monitor = PerformanceMonitor::new(monitoring_config, None).await?;
 
@@ -483,7 +483,7 @@ async fn configure_monitoring(
 }
 
 async fn test_alerts(
-    config: &Config,
+    _config: &Config,
     alert_type: Option<String>,
     generate_metrics: bool,
 ) -> Result<()> {
@@ -524,7 +524,7 @@ async fn test_alerts(
 }
 
 async fn show_trends(
-    config: &Config,
+    _config: &Config,
     hours: u64,
     model: Option<String>,
     group_by_minutes: u64,
@@ -560,7 +560,7 @@ async fn show_trends(
 }
 
 async fn export_monitoring_data(
-    config: &Config,
+    _config: &Config,
     output: Option<std::path::PathBuf>,
     format: ExportFormat,
     hours: u64,
@@ -621,7 +621,7 @@ async fn export_monitoring_data(
 }
 
 async fn watch_performance(
-    config: &Config,
+    _config: &Config,
     interval: u64,
     model: Option<String>,
     alerts_only: bool,
@@ -688,7 +688,7 @@ async fn watch_performance(
 }
 
 async fn generate_report(
-    config: &Config,
+    _config: &Config,
     hours: u64,
     detailed: bool,
     recommendations: bool,
@@ -774,7 +774,7 @@ async fn generate_report(
 }
 
 async fn benchmark_monitoring(
-    config: &Config,
+    _config: &Config,
     metrics_count: usize,
     concurrent: usize,
     duration: u64,

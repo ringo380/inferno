@@ -1,16 +1,20 @@
 use anyhow::Result;
 use clap::{Args, Subcommand};
-use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::time::SystemTime;
 
 use crate::config::Config;
-use crate::logging_audit::{
-    LoggingAuditSystem, AuditEvent, LogEntry, AuditSearchQuery, ExportRequest, ExportFormat,
-    ComplianceStandard, DateRange, AuditEventType, EventSeverity, ActionOutcome, ActorType,
-    ActorFilter, ResourceFilter, SortOrder, ComplianceReport, AuditStatistics, IntegrityReport,
-    AnomalyAlert, ExportStatus
+use crate::audit::{
+    AuditEvent, EventType as AuditEventType, Severity as EventSeverity,
+    ActorType, AuditLogger as LoggingAuditSystem, AuditQuery as AuditSearchQuery,
+    Actor, Resource, EventOutcome, SortField, SortOrder
 };
+use crate::logging_audit::{
+    IntegrityReport, ComplianceReport, ActionOutcome, ComplianceStandard, ExportRequest,
+    AuditStatistics, DateRange
+};
+use crate::audit::ExportFormat;
 
 #[derive(Args)]
 pub struct LoggingAuditArgs {
@@ -1480,7 +1484,8 @@ pub enum SearchCommand {
 }
 
 pub async fn execute(args: LoggingAuditArgs, config: &Config) -> Result<()> {
-    let system = LoggingAuditSystem::new(config.logging_audit.clone()).await?;
+    let audit_config = convert_logging_audit_config(&config.logging_audit)?;
+    let system = LoggingAuditSystem::new(audit_config).await?;
 
     match args.command {
         LoggingAuditCommand::Audit { command } => {
@@ -1555,50 +1560,42 @@ async fn handle_audit_command(command: AuditCommand, system: &LoggingAuditSystem
         } => {
             println!("Searching audit events...");
 
+            let (start_time, end_time) = if from.is_some() || to.is_some() {
+                parse_date_range(from.as_deref(), to.as_deref())?
+            } else {
+                (None, None)
+            };
+
             let mut query = AuditSearchQuery {
                 event_types: if event_types.is_empty() {
                     None
                 } else {
                     Some(event_types.into_iter().map(|t| parse_event_type(&t)).collect::<Result<Vec<_>>>()?)
                 },
-                date_range: if from.is_some() || to.is_some() {
-                    Some(parse_date_range(from.as_deref(), to.as_deref())?)
-                } else {
-                    None
-                },
-                actor_filter: if user_id.is_some() {
-                    Some(ActorFilter {
-                        user_ids: user_id.map(|id| vec![id]),
-                        actor_types: None,
-                        roles: None,
-                    })
-                } else {
-                    None
-                },
-                resource_filter: if resource_type.is_some() || resource_id.is_some() {
-                    Some(ResourceFilter {
-                        resource_types: resource_type.map(|t| vec![t]),
-                        resource_ids: resource_id.map(|id| vec![id]),
-                        parent_resources: None,
-                    })
-                } else {
-                    None
-                },
-                severity_filter: if severity.is_empty() {
+                severities: if severity.is_empty() {
                     None
                 } else {
                     Some(severity.into_iter().map(|s| parse_severity(&s)).collect::<Result<Vec<_>>>()?)
                 },
-                outcome_filter: if outcome.is_empty() {
-                    None
-                } else {
-                    Some(outcome.into_iter().map(|o| parse_outcome(&o)).collect::<Result<Vec<_>>>()?)
-                },
-                text_search: text,
+                actors: user_id.map(|id| vec![id]),
+                resources: resource_id.map(|id| vec![id]),
+                start_time,
+                end_time,
                 limit,
                 offset,
-                sort_by,
+                sort_by: sort_by.map(|s| parse_sort_field(&s)).transpose()?,
                 sort_order: sort_order.map(|o| parse_sort_order(&o)).transpose()?,
+                search_text: text.clone(),
+                date_range: if let (Some(start), Some(end)) = (start_time, end_time) {
+                    Some((start, end))
+                } else {
+                    None
+                },
+                actor_filter: None,
+                resource_filter: None,
+                severity_filter: None,
+                outcome_filter: None,
+                text_search: text,
             };
 
             let events = system.search_audit_events(query).await?;
@@ -1616,7 +1613,7 @@ async fn handle_audit_command(command: AuditCommand, system: &LoggingAuditSystem
             println!("Generating audit statistics...");
 
             let date_range = parse_time_range(range.as_deref().unwrap_or("24h"))?;
-            let stats = system.get_audit_statistics(date_range).await?;
+            let stats = system.get_audit_statistics(Some((date_range.start, date_range.end))).await?;
 
             display_audit_statistics(&stats, format.as_deref(), &group_by, trends)?;
 
@@ -1641,7 +1638,10 @@ async fn handle_audit_command(command: AuditCommand, system: &LoggingAuditSystem
                 }
             }
 
-            if fix && integrity_report.integrity_violations > 0 {
+            let has_violations = !integrity_report.hash_mismatches.is_empty() ||
+                                !integrity_report.missing_files.is_empty() ||
+                                !integrity_report.errors.is_empty();
+            if fix && has_violations {
                 println!("Attempting to fix integrity issues...");
                 // This would implement integrity fixing logic
                 println!("✓ Integrity issues fixed");
@@ -1691,12 +1691,16 @@ async fn handle_compliance_command(command: ComplianceCommand, system: &LoggingA
             let date_range = if let Some(period_str) = period {
                 parse_time_range(&period_str)?
             } else if from.is_some() || to.is_some() {
-                parse_date_range(from.as_deref(), to.as_deref())?
+                let (start, end) = parse_date_range(from.as_deref(), to.as_deref())?;
+                crate::logging_audit::DateRange {
+                    start: start.unwrap_or_else(|| std::time::SystemTime::now() - std::time::Duration::from_secs(30 * 24 * 3600)),
+                    end: end.unwrap_or_else(|| std::time::SystemTime::now()),
+                }
             } else {
                 parse_time_range("30d")?
             };
 
-            let report = system.generate_compliance_report(compliance_standard, date_range).await?;
+            let report = system.generate_compliance_report(format!("{:?}", compliance_standard), Some((date_range.start, date_range.end))).await?;
             display_compliance_report(&report, format.as_deref(), evidence, recommendations)?;
 
             if let Some(output_path) = output {
@@ -1737,11 +1741,23 @@ async fn handle_export_command(command: ExportCommand, system: &LoggingAuditSyst
                 } else {
                     Some(event_types.into_iter().map(|t| parse_event_type(&t)).collect::<Result<Vec<_>>>()?)
                 },
-                date_range,
+                severities: None,
+                actors: None,
+                resources: None,
+                start_time: date_range.and_then(|(start, _)| start),
+                end_time: date_range.and_then(|(_, end)| end),
+                date_range: date_range.and_then(|(start, end)| {
+                    if let (Some(s), Some(e)) = (start, end) {
+                        Some((s, e))
+                    } else {
+                        None
+                    }
+                }),
                 actor_filter: None,
                 resource_filter: None,
                 severity_filter: None,
                 outcome_filter: None,
+                search_text: None,
                 text_search: None,
                 limit: None,
                 offset: None,
@@ -1750,14 +1766,17 @@ async fn handle_export_command(command: ExportCommand, system: &LoggingAuditSyst
             };
 
             let export_request = ExportRequest {
-                query: search_query,
                 format: export_format,
-                destination,
-                compression: compress,
-                encryption: encrypt,
+                start_time: search_query.start_time,
+                end_time: search_query.end_time,
+                filters: HashMap::new(),
+                destination: destination.unwrap_or_else(|| "stdout".to_string()),
+                query: None, // Could serialize the search_query to string if needed
+                compression: Some(compress),
+                encryption: Some(encrypt),
             };
 
-            let export_id = system.export_audit_data(export_request).await?;
+            let export_id = system.export_audit_data(serde_json::to_value(export_request)?).await?;
             println!("✓ Export job created with ID: {}", export_id);
         },
 
@@ -2015,11 +2034,11 @@ fn display_audit_events(events: &[AuditEvent], format: Option<&str>) -> Result<(
             for event in events {
                 println!("{:<36} {:<20} {:<15} {:<15} {:<20} {:<30}",
                         event.id,
-                        event.timestamp.format("%Y-%m-%d %H:%M:%S"),
+                        chrono::DateTime::<chrono::Utc>::from(event.timestamp).format("%Y-%m-%d %H:%M:%S"),
                         format!("{:?}", event.event_type),
                         format!("{:?}", event.severity),
-                        event.actor.user_id.as_deref().unwrap_or("system"),
-                        format!("{}:{}", event.resource.resource_type, event.resource.resource_id));
+                        event.actor.id.as_str(),
+                        format!("{:?}:{}", event.resource.resource_type, event.resource.id));
             }
         },
     }
@@ -2039,8 +2058,8 @@ fn display_audit_statistics(stats: &AuditStatistics, format: Option<&str>, group
             println!("Audit Statistics");
             println!("================");
             println!("Total Events: {}", stats.total_events);
-            println!("Anomalies Detected: {}", stats.anomalies_detected);
-            println!("Compliance Violations: {}", stats.compliance_violations);
+            println!("Critical Events: {}", stats.critical_events_count);
+            println!("Error Events: {}", stats.error_events_count);
 
             if !stats.events_by_type.is_empty() {
                 println!("\nEvents by Type:");
@@ -2064,19 +2083,32 @@ fn display_audit_statistics(stats: &AuditStatistics, format: Option<&str>, group
 fn display_integrity_report(report: &IntegrityReport, detailed: bool) -> Result<()> {
     println!("Audit Trail Integrity Report");
     println!("============================");
-    println!("Total Events Checked: {}", report.total_events_checked);
-    println!("Integrity Violations: {}", report.integrity_violations);
-    println!("Overall Status: {:?}", report.overall_status);
-    println!("Verification Time: {}", report.verification_timestamp);
+    println!("Files Checked: {}", report.files_checked);
+    println!("Files Valid: {}", report.files_valid);
+    let violations = report.hash_mismatches.len() + report.missing_files.len() + report.errors.len();
+    println!("Integrity Violations: {}", violations);
+    println!("Overall Status: {:?}", report.status);
+    println!("Generated At: {}", report.generated_at.format("%Y-%m-%d %H:%M:%S"));
+    println!("Integrity Score: {:.2}", report.integrity_score);
 
-    if detailed && !report.tamper_evidence.is_empty() {
-        println!("\nTamper Evidence:");
-        for evidence in &report.tamper_evidence {
-            println!("  {} - {} - {:?}: {}",
-                    evidence.timestamp.format("%Y-%m-%d %H:%M:%S"),
-                    evidence.event_id,
-                    evidence.tamper_type,
-                    evidence.description);
+    if detailed {
+        if !report.hash_mismatches.is_empty() {
+            println!("\nHash Mismatches:");
+            for file in &report.hash_mismatches {
+                println!("  {}", file);
+            }
+        }
+        if !report.missing_files.is_empty() {
+            println!("\nMissing Files:");
+            for file in &report.missing_files {
+                println!("  {}", file);
+            }
+        }
+        if !report.errors.is_empty() {
+            println!("\nErrors:");
+            for error in &report.errors {
+                println!("  {}", error);
+            }
         }
     }
 
@@ -2094,14 +2126,14 @@ fn display_compliance_report(report: &ComplianceReport, format: Option<&str>, ev
         "table" | _ => {
             println!("Compliance Report - {:?}", report.standard);
             println!("========================================");
-            println!("Period: {:?}", report.period);
-            println!("Status: {:?}", report.compliance_status);
+            println!("Period: {:?} to {:?}", report.period_start, report.period_end);
+            println!("Score: {:.2}", report.compliance_score);
             println!("Findings: {}", report.findings.len());
 
             if !report.findings.is_empty() {
                 println!("\nFindings:");
                 for finding in &report.findings {
-                    println!("  {} - {:?}: {}", finding.requirement, finding.status, finding.description);
+                    println!("  {} - {}: {}", finding.id, finding.severity, finding.description);
                 }
             }
 
@@ -2112,11 +2144,14 @@ fn display_compliance_report(report: &ComplianceReport, format: Option<&str>, ev
                 }
             }
 
-            if evidence && !report.evidence.is_empty() {
+            if evidence {
                 println!("\nEvidence:");
-                for evidence_item in &report.evidence {
-                    println!("  {} - {}: {}", evidence_item.timestamp.format("%Y-%m-%d %H:%M:%S"),
-                            evidence_item.evidence_type, evidence_item.description);
+                for finding in &report.findings {
+                    if !finding.evidence.is_empty() {
+                        for evidence_item in &finding.evidence {
+                            println!("  • {}", evidence_item);
+                        }
+                    }
                 }
             }
         },
@@ -2131,22 +2166,22 @@ fn parse_event_type(event_type: &str) -> Result<AuditEventType> {
     match event_type.to_lowercase().as_str() {
         "authentication" | "auth" => Ok(AuditEventType::Authentication),
         "authorization" | "authz" => Ok(AuditEventType::Authorization),
+        "model_management" | "model" => Ok(AuditEventType::ModelManagement),
         "data_access" | "access" => Ok(AuditEventType::DataAccess),
-        "data_modification" | "modification" => Ok(AuditEventType::DataModification),
-        "system_changes" | "system" => Ok(AuditEventType::SystemChanges),
-        "security_events" | "security" => Ok(AuditEventType::SecurityEvents),
-        "performance_events" | "performance" => Ok(AuditEventType::PerformanceEvents),
-        "business_events" | "business" => Ok(AuditEventType::BusinessEvents),
-        "model_inference" | "inference" => Ok(AuditEventType::ModelInference),
-        "model_training" | "training" => Ok(AuditEventType::ModelTraining),
-        "configuration_changes" | "config" => Ok(AuditEventType::ConfigurationChanges),
-        "user_management" | "user" => Ok(AuditEventType::UserManagement),
-        "api_access" | "api" => Ok(AuditEventType::APIAccess),
+        "system_change" | "system" => Ok(AuditEventType::SystemChange),
+        "security_event" | "security" => Ok(AuditEventType::SecurityEvent),
+        "performance_event" | "performance" => Ok(AuditEventType::PerformanceEvent),
+        "error_event" | "error" => Ok(AuditEventType::ErrorEvent),
+        "user_action" | "user" => Ok(AuditEventType::UserAction),
+        "api_call" | "api" => Ok(AuditEventType::ApiCall),
         "file_access" | "file" => Ok(AuditEventType::FileAccess),
-        "network_access" | "network" => Ok(AuditEventType::NetworkAccess),
-        "resource_usage" | "resource" => Ok(AuditEventType::ResourceUsage),
-        "error_events" | "error" => Ok(AuditEventType::ErrorEvents),
-        "compliance_events" | "compliance" => Ok(AuditEventType::ComplianceEvents),
+        "config_change" | "config" => Ok(AuditEventType::ConfigChange),
+        "network_event" | "network" => Ok(AuditEventType::NetworkEvent),
+        "batch_job" | "batch" => Ok(AuditEventType::BatchJob),
+        "ab_test" | "abtest" => Ok(AuditEventType::ABTest),
+        "deployment" | "deploy" => Ok(AuditEventType::Deployment),
+        "rollback" => Ok(AuditEventType::Rollback),
+        "gpu_usage" | "gpu" => Ok(AuditEventType::GpuUsage),
         _ => Ok(AuditEventType::Custom(event_type.to_string())),
     }
 }
@@ -2181,15 +2216,36 @@ fn parse_sort_order(order: &str) -> Result<SortOrder> {
 
 fn parse_compliance_standard(standard: &str) -> Result<ComplianceStandard> {
     match standard.to_uppercase().as_str() {
-        "GDPR" => Ok(ComplianceStandard::GDPR),
-        "HIPAA" => Ok(ComplianceStandard::HIPAA),
-        "SOX" => Ok(ComplianceStandard::SOX),
-        "PCI" => Ok(ComplianceStandard::PCI),
-        "FERPA" => Ok(ComplianceStandard::FERPA),
-        "CCPA" => Ok(ComplianceStandard::CCPA),
-        "ISO27001" => Ok(ComplianceStandard::ISO27001),
-        "NIST" => Ok(ComplianceStandard::NIST),
-        _ => Ok(ComplianceStandard::Custom(standard.to_string())),
+        "GDPR" => Ok(ComplianceStandard {
+            name: "GDPR".to_string(),
+            description: "General Data Protection Regulation".to_string(),
+            requirements: vec!["Data protection".to_string(), "Privacy rights".to_string()],
+            version: "2.0".to_string(),
+        }),
+        "HIPAA" => Ok(ComplianceStandard {
+            name: "HIPAA".to_string(),
+            description: "Health Insurance Portability and Accountability Act".to_string(),
+            requirements: vec!["Medical data protection".to_string()],
+            version: "1.0".to_string(),
+        }),
+        "SOX" => Ok(ComplianceStandard {
+            name: "SOX".to_string(),
+            description: "Sarbanes-Oxley Act".to_string(),
+            requirements: vec!["Financial reporting".to_string()],
+            version: "1.0".to_string(),
+        }),
+        "PCI" => Ok(ComplianceStandard {
+            name: "PCI".to_string(),
+            description: "Payment Card Industry Data Security Standard".to_string(),
+            requirements: vec!["Payment data protection".to_string()],
+            version: "4.0".to_string(),
+        }),
+        _ => Ok(ComplianceStandard {
+            name: standard.to_string(),
+            description: format!("Custom compliance standard: {}", standard),
+            requirements: vec![],
+            version: "1.0".to_string(),
+        }),
     }
 }
 
@@ -2197,35 +2253,72 @@ fn parse_export_format(format: &str) -> Result<ExportFormat> {
     match format.to_lowercase().as_str() {
         "json" => Ok(ExportFormat::Json),
         "csv" => Ok(ExportFormat::Csv),
-        "xml" => Ok(ExportFormat::Xml),
         "parquet" => Ok(ExportFormat::Parquet),
         "avro" => Ok(ExportFormat::Avro),
-        "orc" => Ok(ExportFormat::Orc),
         _ => Err(anyhow::anyhow!("Invalid export format: {}", format)),
     }
 }
 
-fn parse_date_range(from: Option<&str>, to: Option<&str>) -> Result<DateRange> {
+fn parse_sort_field(field: &str) -> Result<SortField> {
+    match field.to_lowercase().as_str() {
+        "timestamp" | "time" => Ok(SortField::Timestamp),
+        "severity" => Ok(SortField::Severity),
+        "event_type" | "type" => Ok(SortField::EventType),
+        "actor" | "user" => Ok(SortField::Actor),
+        "resource" => Ok(SortField::Resource),
+        _ => Err(anyhow::anyhow!("Invalid sort field: {}", field)),
+    }
+}
+
+fn parse_date_range(from: Option<&str>, to: Option<&str>) -> Result<(Option<std::time::SystemTime>, Option<std::time::SystemTime>)> {
     use chrono::DateTime;
+    use std::time::SystemTime;
 
     match (from, to) {
         (Some(from_str), Some(to_str)) => {
             let from_date = DateTime::parse_from_rfc3339(from_str)?.with_timezone(&chrono::Utc);
             let to_date = DateTime::parse_from_rfc3339(to_str)?.with_timezone(&chrono::Utc);
-            Ok(DateRange::Custom { from: from_date, to: to_date })
+            Ok((Some(from_date.into()), Some(to_date.into())))
         },
-        _ => Ok(DateRange::Last24Hours), // Default fallback
+        (Some(from_str), None) => {
+            let from_date = DateTime::parse_from_rfc3339(from_str)?.with_timezone(&chrono::Utc);
+            Ok((Some(from_date.into()), None))
+        },
+        (None, Some(to_str)) => {
+            let to_date = DateTime::parse_from_rfc3339(to_str)?.with_timezone(&chrono::Utc);
+            Ok((None, Some(to_date.into())))
+        },
+        (None, None) => Ok((None, None)),
     }
 }
 
 fn parse_time_range(range: &str) -> Result<DateRange> {
+    let now = SystemTime::now();
     match range {
-        "1h" => Ok(DateRange::Last24Hours), // Simplified mapping
-        "24h" => Ok(DateRange::Last24Hours),
-        "7d" => Ok(DateRange::LastWeek),
-        "30d" => Ok(DateRange::LastMonth),
-        "1y" => Ok(DateRange::LastYear),
-        _ => Ok(DateRange::Last24Hours),
+        "1h" => Ok(DateRange {
+            start: now - std::time::Duration::from_secs(3600),
+            end: now,
+        }),
+        "24h" => Ok(DateRange {
+            start: now - std::time::Duration::from_secs(24 * 3600),
+            end: now,
+        }),
+        "7d" => Ok(DateRange {
+            start: now - std::time::Duration::from_secs(7 * 24 * 3600),
+            end: now,
+        }),
+        "30d" => Ok(DateRange {
+            start: now - std::time::Duration::from_secs(30 * 24 * 3600),
+            end: now,
+        }),
+        "1y" => Ok(DateRange {
+            start: now - std::time::Duration::from_secs(365 * 24 * 3600),
+            end: now,
+        }),
+        _ => Ok(DateRange {
+            start: now - std::time::Duration::from_secs(24 * 3600),
+            end: now,
+        }),
     }
 }
 
@@ -2269,4 +2362,32 @@ fn export_compliance_report(report: &ComplianceReport, path: &PathBuf, format: &
 
     std::fs::write(path, content)?;
     Ok(())
+}
+
+fn convert_logging_audit_config(config: &crate::logging_audit::LoggingAuditConfig) -> Result<crate::audit::AuditConfiguration> {
+    use crate::audit::{AuditConfiguration, LogLevel, CompressionMethod, AlertConfiguration, ExportFormat};
+    use std::path::PathBuf;
+
+    Ok(AuditConfiguration {
+        enabled: config.enabled,
+        log_level: LogLevel::InfoOnly, // Default to Info
+        storage_path: PathBuf::from("./audit_logs"),
+        max_file_size_mb: 100,
+        max_files: 50,
+        compression_enabled: true,
+        compression_method: CompressionMethod::Gzip,
+        compression_level: 6,
+        encryption_enabled: false,
+        encryption_key_env: "AUDIT_ENCRYPTION_KEY".to_string(),
+        encryption_sensitive_fields_only: false,
+        retention_days: 30,
+        batch_size: 1000,
+        flush_interval_seconds: 30,
+        include_request_body: true,
+        include_response_body: true,
+        exclude_patterns: vec![],
+        alert_on_critical: true,
+        alerting: AlertConfiguration::default(),
+        export_format: ExportFormat::Json,
+    })
 }
