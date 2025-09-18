@@ -207,7 +207,7 @@ async fn validate_batch_inputs(args: &BatchArgs) -> Result<()> {
 
             if args.verbose {
                 info!("Sample inputs:");
-                for (i, input) in inputs.iter().take(3).enumerate() {
+                for (_i, input) in inputs.iter().take(3).enumerate() {
                     info!("  {}: {} ({})", input.id,
                           input.content.chars().take(50).collect::<String>(),
                           if input.content.len() > 50 { "..." } else { "" });
@@ -282,7 +282,7 @@ fn print_batch_summary(progress: &crate::batch::BatchProgress, args: &BatchArgs)
     println!("Success rate: {:.1}%", success_rate);
 
     if let Some(completion_time) = progress.estimated_completion {
-        let duration = completion_time.signed_duration_since(progress.start_time);
+        let duration = completion_time - progress.start_time;
         println!("Processing time: {}", humantime::format_duration(
             duration.to_std().unwrap_or(std::time::Duration::ZERO)
         ));

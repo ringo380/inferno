@@ -1,11 +1,10 @@
 use crate::{
     batch::queue::{
-        JobQueue, JobQueueManager, JobQueueConfig, BatchJob, JobPriority,
-        JobSchedule, ScheduleType, ResourceRequirements, RetryPolicy,
-        JobStatus, JobInfo, QueueMetrics, QueueStatus, ActiveJob,
-        CompletedJob, FailedJob, JobProgress, JobPhase
+        JobQueueManager, JobQueueConfig, BatchJob, JobPriority,
+        JobSchedule, ScheduleType, ResourceRequirements,
+        JobStatus, QueueMetrics
     },
-    batch::{BatchConfig, BatchInput, BatchOutputFormat},
+    batch::{BatchConfig, BatchInput},
     backends::InferenceParams,
     config::Config,
 };
@@ -16,11 +15,10 @@ use std::{
     collections::HashMap,
     path::PathBuf,
     time::{Duration, SystemTime},
-    io::{self, Write},
+    io::Write,
     fs::File,
 };
 use tokio::time::sleep;
-use tracing::{info, warn};
 use chrono::{DateTime, Local, Utc};
 
 #[derive(Args)]
@@ -286,7 +284,7 @@ pub enum ExportType {
     All,
 }
 
-pub async fn execute(args: BatchQueueArgs, config: &Config) -> Result<()> {
+pub async fn execute(args: BatchQueueArgs, _config: &Config) -> Result<()> {
     let manager = JobQueueManager::new(JobQueueConfig::default());
 
     match args.command {
@@ -798,19 +796,19 @@ pub async fn execute(args: BatchQueueArgs, config: &Config) -> Result<()> {
         }
 
         BatchQueueCommand::Schedule {
-            queue_id,
+            queue_id: _,
             name,
             schedule_type,
             expression,
-            input_file,
-            model,
+            input_file: _,
+            model: _,
             max_runs,
             start_time,
             end_time,
         } => {
             println!("Creating scheduled job '{}'...", name);
 
-            let schedule = match schedule_type {
+            let _schedule = match schedule_type {
                 ScheduleTypeArg::Interval => {
                     let minutes: u64 = expression.parse()
                         .map_err(|_| anyhow!("Invalid interval minutes: {}", expression))?;
@@ -1122,7 +1120,7 @@ fn display_metrics(metrics: &crate::batch::queue::QueueMetrics, format: OutputFo
                         0.0
                     };
                     map.insert("failure_rate_percent".to_string(), serde_json::Value::Number(
-                        serde_json::Number::from_f64(failure_rate).unwrap_or_default()
+                        serde_json::Number::from_f64(failure_rate).unwrap_or_else(|| serde_json::Number::from(0))
                     ));
                 }
             }
