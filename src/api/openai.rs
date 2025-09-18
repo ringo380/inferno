@@ -9,7 +9,6 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use tokio::sync::Mutex;
 use uuid::Uuid;
 
 // OpenAI API compatible types
@@ -513,7 +512,7 @@ async fn handle_streaming_chat(
     params: InferenceParams,
 ) -> impl IntoResponse {
     use axum::response::sse::{Event, Sse};
-    use futures::stream::{self, StreamExt};
+    use futures::stream::StreamExt;
 
     let model = request.model.clone();
     let request_id = format!("chatcmpl-{}", Uuid::new_v4());

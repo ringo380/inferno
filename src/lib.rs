@@ -1,4 +1,5 @@
-pub mod ab_testing;
+// mod ab_testing;
+// pub mod ab_testing_config;
 pub mod advanced_monitoring;
 pub mod api;
 pub mod api_gateway;
@@ -132,4 +133,7 @@ pub enum InfernoError {
 
     #[error("I/O error: {0}")]
     IoError(String),
+
+    #[error("Generic error: {0}")]
+    Generic(#[from] anyhow::Error),
 }

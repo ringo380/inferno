@@ -117,7 +117,7 @@ rand = "0.8"
 humantime = "2.1"
 
 # UUID generation for OpenAI API compatibility
-uuid = { version = "1.6", features = ["v4"] }
+uuid = { version = "1.6", features = ["v4", "serde"] }
 
 # Async streaming for OpenAI API
 async-stream = "0.3"

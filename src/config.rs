@@ -1,4 +1,4 @@
-use crate::{backends::BackendConfig, distributed::DistributedConfig, cache::CacheConfig, response_cache::ResponseCacheConfig, monitoring::MonitoringConfig, ab_testing::ABTestingConfig, observability::ObservabilityConfig, marketplace::MarketplaceConfig, deployment::DeploymentConfig, federated::FederatedConfig, dashboard::DashboardConfig, advanced_monitoring::AdvancedMonitoringConfig, api_gateway::ApiGatewayConfig, model_versioning::ModelVersioningConfig, data_pipeline::DataPipelineConfig, backup_recovery::BackupRecoveryConfig, logging_audit::LoggingAuditConfig, performance_optimization::PerformanceOptimizationConfig, multi_tenancy::MultiTenancyConfig, advanced_cache::AdvancedCacheConfig};
+use crate::{backends::BackendConfig, distributed::DistributedConfig, cache::CacheConfig, response_cache::ResponseCacheConfig, monitoring::MonitoringConfig, /* ab_testing_config::ABTestingConfig, */ observability::ObservabilityConfig, marketplace::MarketplaceConfig, deployment::DeploymentConfig, federated::FederatedConfig, dashboard::DashboardConfig, advanced_monitoring::AdvancedMonitoringConfig, api_gateway::ApiGatewayConfig, model_versioning::ModelVersioningConfig, data_pipeline::DataPipelineConfig, backup_recovery::BackupRecoveryConfig, logging_audit::LoggingAuditConfig, performance_optimization::PerformanceOptimizationConfig, multi_tenancy::MultiTenancyConfig, advanced_cache::AdvancedCacheConfig};
 use anyhow::Result;
 use figment::{
     providers::{Env, Format, Toml},
@@ -23,7 +23,7 @@ pub struct Config {
     pub cache: CacheConfig,
     pub response_cache: ResponseCacheConfig,
     pub monitoring: MonitoringConfig,
-    pub ab_testing: ABTestingConfig,
+    // pub ab_testing: ABTestingConfig,
     pub observability: ObservabilityConfig,
     pub marketplace: MarketplaceConfig,
     pub deployment: DeploymentConfig,
@@ -88,7 +88,7 @@ impl Default for Config {
             cache: CacheConfig::default(),
             response_cache: ResponseCacheConfig::default(),
             monitoring: MonitoringConfig::default(),
-            ab_testing: ABTestingConfig::default(),
+            // ab_testing: ABTestingConfig::default(),
             observability: ObservabilityConfig::default(),
             marketplace: MarketplaceConfig::default(),
             deployment: DeploymentConfig::default(),

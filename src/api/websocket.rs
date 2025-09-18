@@ -2,7 +2,7 @@ use crate::{
     api::openai::{ChatCompletionRequest, ChatMessage, ChatDelta, ChatCompletionChunk, ChatChunkChoice},
     backends::{Backend, InferenceParams},
     cli::serve::ServerState,
-    streaming::{StreamingConfig, StreamingManager, StreamingToken},
+    streaming::{StreamingConfig, StreamingManager},
     InfernoError,
 };
 use axum::{
@@ -93,7 +93,7 @@ async fn handle_websocket(socket: WebSocket, state: Arc<ServerState>) {
     // Send connection info
     let connection_info = WSMessage::ConnectionInfo {
         connection_id: connection_id.clone(),
-        server_version: env!("CARGO_PKG_VERSION").to_string(),
+        server_version: std::env::var("CARGO_PKG_VERSION").unwrap_or_else(|_| "0.1.0".to_string()),
         capabilities: vec![
             "streaming_chat".to_string(),
             "real_time_metrics".to_string(),
@@ -353,7 +353,7 @@ async fn get_or_load_backend_for_ws(
     model_name: &str,
 ) -> Result<Arc<tokio::sync::Mutex<Backend>>, InfernoError> {
     // Similar to the HTTP API version but optimized for WebSocket
-    if let Some(ref distributed) = state.distributed {
+    if let Some(ref _distributed) = state.distributed {
         return Err(InfernoError::WebSocket(
             "WebSocket streaming not supported with distributed inference yet".to_string()
         ));
@@ -363,7 +363,7 @@ async fn get_or_load_backend_for_ws(
     if let Some(ref loaded_model) = state.loaded_model {
         if loaded_model == model_name {
             if let Some(ref backend) = state.backend {
-                return Ok(backend.clone());
+                return Ok(backend.inner().clone());
             }
         }
     }

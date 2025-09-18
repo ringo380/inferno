@@ -56,7 +56,7 @@ impl GgufBackend {
         let tokens: Vec<i32> = words
             .iter()
             .enumerate()
-            .map(|(i, word)| {
+            .map(|(_i, word)| {
                 // Create a simple hash-based token ID
                 let mut hash = 0i32;
                 for byte in word.bytes() {
@@ -142,6 +142,7 @@ impl GgufBackend {
         info!("Starting real GGUF streaming inference");
 
         let response = self.generate_response(input, params).await?;
+        let max_tokens = params.max_tokens;
 
         // Split response into realistic tokens
         let words: Vec<String> = response
@@ -166,7 +167,7 @@ impl GgufBackend {
                 yield Ok(word);
 
                 // Respect max_tokens limit
-                if i >= params.max_tokens as usize {
+                if i >= max_tokens as usize {
                     break;
                 }
             }
@@ -344,5 +345,142 @@ impl InferenceBackend for GgufBackend {
 
     fn get_metrics(&self) -> Option<InferenceMetrics> {
         self.metrics.clone()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::ModelInfo;
+    use std::path::PathBuf;
+    use tempfile::tempdir;
+    use chrono::Utc;
+
+    #[tokio::test]
+    async fn test_gguf_backend_creation() {
+        let config = BackendConfig::default();
+        let backend = GgufBackend::new(config);
+        assert!(backend.is_ok());
+
+        let backend = backend.unwrap();
+        assert_eq!(backend.get_backend_type(), BackendType::Gguf);
+        assert!(!backend.is_loaded().await);
+    }
+
+    #[tokio::test]
+    async fn test_gguf_backend_config_validation() {
+        let mut config = BackendConfig::default();
+        config.context_size = 100; // Too small
+
+        let backend = GgufBackend::new(config);
+        assert!(backend.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_gguf_tokenization() {
+        let config = BackendConfig::default();
+        let backend = GgufBackend::new(config).unwrap();
+
+        // Test tokenization without loading a model (should fail)
+        let result = backend.real_tokenize("hello world").await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_gguf_model_loading_invalid_file() {
+        let config = BackendConfig::default();
+        let mut backend = GgufBackend::new(config).unwrap();
+
+        // Test with non-existent file
+        let model_info = ModelInfo {
+            path: PathBuf::from("/non/existent/file.gguf"),
+            name: "test".to_string(),
+            backend_type: "gguf".to_string(),
+            size: 0,
+            checksum: None,
+            modified: Utc::now(),
+        };
+
+        let result = backend.load_model(&model_info).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_gguf_model_loading_invalid_magic() {
+        let config = BackendConfig::default();
+        let mut backend = GgufBackend::new(config).unwrap();
+
+        // Create a temporary file with wrong magic bytes
+        let dir = tempdir().unwrap();
+        let model_path = dir.path().join("fake.gguf");
+        std::fs::write(&model_path, b"FAKE model file content").unwrap();
+
+        let model_info = ModelInfo {
+            path: model_path,
+            name: "fake".to_string(),
+            backend_type: "gguf".to_string(),
+            size: 24,
+            checksum: None,
+            modified: Utc::now(),
+        };
+
+        let result = backend.load_model(&model_info).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("GGUF magic bytes"));
+    }
+
+    #[tokio::test]
+    async fn test_gguf_model_loading_valid_magic() {
+        let config = BackendConfig::default();
+        let mut backend = GgufBackend::new(config).unwrap();
+
+        // Create a temporary file with correct GGUF magic bytes
+        let dir = tempdir().unwrap();
+        let model_path = dir.path().join("valid.gguf");
+        let mut content = b"GGUF".to_vec();
+        content.extend_from_slice(&[0u8; 1024]); // Add padding to meet size requirements
+        std::fs::write(&model_path, &content).unwrap();
+
+        let model_info = ModelInfo {
+            path: model_path,
+            name: "valid".to_string(),
+            backend_type: "gguf".to_string(),
+            size: content.len() as u64,
+            checksum: None,
+            modified: Utc::now(),
+        };
+
+        let result = backend.load_model(&model_info).await;
+        assert!(result.is_ok());
+        assert!(backend.is_loaded().await);
+
+        // Test unloading
+        let result = backend.unload_model().await;
+        assert!(result.is_ok());
+        assert!(!backend.is_loaded().await);
+    }
+
+    #[tokio::test]
+    async fn test_gguf_inference_without_model() {
+        let config = BackendConfig::default();
+        let mut backend = GgufBackend::new(config).unwrap();
+
+        let params = InferenceParams::default();
+        let result = backend.infer("test input", &params).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Model not loaded"));
+    }
+
+    #[tokio::test]
+    async fn test_gguf_estimate_token_count() {
+        let config = BackendConfig::default();
+        let backend = GgufBackend::new(config).unwrap();
+
+        let count = backend.estimate_token_count("hello world test");
+        assert!(count > 0);
+        assert!(count <= 10); // Should be reasonable for 3 words
+
+        let count_empty = backend.estimate_token_count("");
+        assert_eq!(count_empty, 1); // Minimum count
     }
 }
