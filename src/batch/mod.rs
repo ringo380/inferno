@@ -3,22 +3,21 @@ pub mod scheduler;
 
 use crate::{
     backends::{Backend, InferenceParams},
-    config::Config,
     metrics::{InferenceEvent, MetricsCollector},
 };
 use anyhow::Result;
-use futures::{stream, StreamExt};
+// Futures support for parallel processing (if needed in future)
 use serde::{Deserialize, Serialize};
 use std::{
-    path::{Path, PathBuf},
+    path::Path,
     sync::{
-        atomic::{AtomicUsize, Ordering},
+        atomic::AtomicUsize,
         Arc,
     },
     time::{Duration, Instant},
 };
-use tokio::sync::Semaphore;
-use tracing::{error, info, warn};
+// use tokio::sync::Semaphore; // Reserved for future concurrent processing
+use tracing::{info, warn};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BatchConfig {
@@ -180,7 +179,7 @@ impl BatchProcessor {
             self.save_results(output_path, &results).await?;
         }
 
-        let elapsed = chrono::Utc::now().signed_duration_since(start_time);
+        let elapsed = chrono::Utc::now() - start_time;
         let elapsed_seconds = elapsed.num_seconds().max(1);
 
         info!(

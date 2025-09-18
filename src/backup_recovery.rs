@@ -77,7 +77,7 @@ impl Default for BackupStrategy {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum BackupType {
     Full,
     Incremental,
@@ -86,7 +86,7 @@ pub enum BackupType {
     ContinuousDataProtection,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum IncrementalStrategy {
     FileLevel,
     BlockLevel,
@@ -94,7 +94,7 @@ pub enum IncrementalStrategy {
     DatabaseLog,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum SnapshotStrategy {
     FileSystem,
     ApplicationConsistent,
@@ -160,7 +160,7 @@ impl Default for CompressionConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum CompressionAlgorithm {
     Gzip,
     Zstd,
@@ -194,7 +194,7 @@ impl Default for EncryptionConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum EncryptionAlgorithm {
     Aes256Gcm,
     Aes256Cbc,
@@ -202,7 +202,7 @@ pub enum EncryptionAlgorithm {
     Aes128Gcm,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum KeyManagement {
     Internal,
     Aws,
@@ -223,7 +223,7 @@ pub struct BackupDestination {
     pub retry_config: RetryConfig,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum DestinationType {
     LocalFileSystem,
     NetworkFileSystem,
@@ -319,7 +319,7 @@ pub struct MaintenanceWindow {
     pub allow_recovery: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum SchedulingPriority {
     Low,
     Normal,
@@ -377,7 +377,7 @@ pub struct NotificationChannel {
     pub enabled: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum NotificationChannelType {
     Email,
     Slack,
@@ -399,7 +399,7 @@ pub struct AlertRule {
     pub throttle_minutes: Option<u32>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum AlertSeverity {
     Info,
     Warning,
@@ -456,7 +456,7 @@ impl Default for LoggingConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum LogOutput {
     Console,
     File,
@@ -491,7 +491,7 @@ pub struct HealthCheck {
     pub critical: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum HealthCheckType {
     DiskSpace,
     NetworkConnectivity,
@@ -526,7 +526,7 @@ impl Default for ReportingConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum ReportFrequency {
     Daily,
     Weekly,
@@ -534,7 +534,7 @@ pub enum ReportFrequency {
     Quarterly,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum ReportFormat {
     Html,
     Pdf,
@@ -571,7 +571,7 @@ impl Default for DisasterRecoveryConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum ReplicationStrategy {
     Synchronous,
     Asynchronous,
@@ -579,7 +579,7 @@ pub enum ReplicationStrategy {
     Snapshot,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum FailoverStrategy {
     Manual,
     Automatic,
@@ -609,7 +609,7 @@ impl Default for DisasterRecoveryTesting {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum TestFrequency {
     Monthly,
     Quarterly,
@@ -617,7 +617,7 @@ pub enum TestFrequency {
     Annually,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum TestType {
     Tabletop,
     Simulation,
@@ -648,7 +648,7 @@ impl Default for DocumentationConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum UpdateFrequency {
     AfterChanges,
     Weekly,
@@ -677,7 +677,7 @@ impl Default for AutomationConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum OrchestrationTool {
     Internal,
     Ansible,
@@ -696,7 +696,7 @@ pub struct AutomationScript {
     pub retry_count: u32,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum ScriptType {
     Shell,
     Python,
@@ -714,7 +714,7 @@ pub struct AutomationTrigger {
     pub enabled: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum TriggerType {
     Alert,
     Metric,
@@ -777,7 +777,7 @@ pub struct CommunicationChannel {
     pub priority: u8,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum CommunicationChannelType {
     Email,
     Sms,
@@ -797,7 +797,7 @@ pub struct MessageTemplate {
     pub channels: Vec<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum MessageTemplateType {
     Incident,
     Update,
@@ -829,7 +829,7 @@ impl Default for ReplicationConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum ReplicationType {
     Synchronous,
     Asynchronous,
@@ -854,21 +854,21 @@ pub struct ReplicationFilter {
     pub action: FilterAction,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum FilterType {
     Include,
     Exclude,
     Transform,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum FilterAction {
     Allow,
     Deny,
     Modify,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum ConflictResolution {
     LastWriterWins,
     FirstWriterWins,
@@ -955,7 +955,7 @@ pub struct NotificationTemplate {
     pub variables: HashMap<String, String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum EventType {
     BackupStarted,
     BackupCompleted,
@@ -970,7 +970,7 @@ pub enum EventType {
     Custom(String),
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum TemplateFormat {
     PlainText,
     Html,
@@ -1039,7 +1039,7 @@ impl Default for MetadataStorageConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum MetadataStorageType {
     Sqlite,
     PostgreSQL,
@@ -1073,7 +1073,7 @@ impl Default for ValidationConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum ValidationLevel {
     Basic,
     Standard,
@@ -1129,14 +1129,14 @@ impl Default for PerformanceConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum IoPriority {
     Low,
     Normal,
     High,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum CpuPriority {
     Low,
     Normal,
@@ -1187,14 +1187,14 @@ impl Default for CachingConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum CacheType {
     Memory,
     Disk,
     Hybrid,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum EvictionPolicy {
     Lru,
     Lfu,
@@ -1220,7 +1220,7 @@ pub struct BackupJob {
     pub error: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum BackupStatus {
     Pending,
     Running,
@@ -1268,7 +1268,7 @@ pub struct RestoreJob {
     pub error: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum RestoreStatus {
     Pending,
     Running,
@@ -1277,7 +1277,7 @@ pub enum RestoreStatus {
     Cancelled,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum RestoreType {
     Full,
     Partial,
@@ -1633,7 +1633,7 @@ pub struct BackupSystemStatus {
     pub replication_lag_seconds: Option<u64>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum SystemHealth {
     Healthy,
     Warning,
@@ -1669,7 +1669,7 @@ pub struct DisasterRecoveryTestResult {
     pub report_path: Option<PathBuf>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum TestStatus {
     Running,
     Passed,
@@ -1733,7 +1733,7 @@ pub struct EncryptionKey {
     pub status: KeyStatus,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum KeyStatus {
     Active,
     Inactive,
@@ -1770,7 +1770,7 @@ pub struct HealthCheckResult {
     pub checked_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum HealthStatus {
     Healthy,
     Warning,

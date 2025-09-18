@@ -1,8 +1,7 @@
 use crate::{
-    config::Config,
+    ab_testing_config::{ABTestingConfig, TrafficRampStrategy},
     metrics::MetricsCollector,
-    models::{ModelInfo, ModelManager},
-    monitoring::{PerformanceMetric, Alert},
+    models::ModelManager,
 };
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
@@ -12,50 +11,14 @@ use std::{
     time::{Duration, SystemTime},
 };
 use tokio::{
-    sync::{Mutex, RwLock},
+    sync::RwLock,
     time::interval,
 };
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info};
+
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ABTestingConfig {
-    pub enabled: bool,
-    pub default_test_duration_hours: u64,
-    pub min_sample_size: usize,
-    pub confidence_level: f64,
-    pub auto_promote_threshold: f64,
-    pub auto_rollback_threshold: f64,
-    pub max_concurrent_tests: usize,
-    pub traffic_ramp_strategy: TrafficRampStrategy,
-    pub monitoring_interval_ms: u64,
-}
-
-impl Default for ABTestingConfig {
-    fn default() -> Self {
-        Self {
-            enabled: true,
-            default_test_duration_hours: 24,
-            min_sample_size: 1000,
-            confidence_level: 0.95,
-            auto_promote_threshold: 0.05, // 5% improvement
-            auto_rollback_threshold: -0.10, // 10% degradation
-            max_concurrent_tests: 5,
-            traffic_ramp_strategy: TrafficRampStrategy::Gradual,
-            monitoring_interval_ms: 5000,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum TrafficRampStrategy {
-    Immediate,   // All traffic goes to new version immediately
-    Gradual,     // Traffic increases gradually over time
-    Canary,      // Small percentage of traffic for extended period
-    BlueGreen,   // Switch all traffic at once after validation
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ABTest {
+struct ABTest {
     pub id: String,
     pub name: String,
     pub description: String,
@@ -73,7 +36,7 @@ pub struct ABTest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ModelVariant {
+struct ModelVariant {
     pub model_id: String,
     pub model_version: String,
     pub model_path: String,
@@ -83,7 +46,7 @@ pub struct ModelVariant {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum VariantHealth {
+enum VariantHealth {
     Healthy,
     Degraded,
     Unhealthy,
@@ -92,7 +55,7 @@ pub enum VariantHealth {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub enum TestStatus {
+enum TestStatus {
     Draft,
     Starting,
     Running,
@@ -104,7 +67,7 @@ pub enum TestStatus {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ABTestConfig {
+struct ABTestConfig {
     pub duration_hours: u64,
     pub target_sample_size: usize,
     pub significance_level: f64,
@@ -117,14 +80,14 @@ pub struct ABTestConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TrafficRampStep {
+struct TrafficRampStep {
     pub time_offset_hours: f64,
     pub control_percentage: f64,
     pub treatment_percentage: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GuardMetric {
+struct GuardMetric {
     pub metric_name: String,
     pub threshold_type: ThresholdType,
     pub threshold_value: f64,
@@ -132,7 +95,7 @@ pub struct GuardMetric {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum ThresholdType {
+enum ThresholdType {
     Maximum,
     Minimum,
     Percentage,
@@ -140,7 +103,7 @@ pub enum ThresholdType {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum GuardAction {
+enum GuardAction {
     Pause,
     Rollback,
     Alert,
@@ -148,7 +111,7 @@ pub enum GuardAction {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TrafficAllocation {
+struct TrafficAllocation {
     pub control_percentage: f64,
     pub treatment_percentage: f64,
     pub current_ramp_step: usize,
@@ -156,7 +119,7 @@ pub struct TrafficAllocation {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TestMetrics {
+struct TestMetrics {
     pub control_metrics: VariantMetrics,
     pub treatment_metrics: VariantMetrics,
     pub samples_collected: usize,
@@ -164,7 +127,7 @@ pub struct TestMetrics {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct VariantMetrics {
+struct VariantMetrics {
     pub request_count: u64,
     pub success_count: u64,
     pub error_count: u64,
@@ -193,7 +156,7 @@ impl Default for VariantMetrics {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct StatisticalResults {
+struct StatisticalResults {
     pub control_mean: f64,
     pub treatment_mean: f64,
     pub effect_size: f64,
@@ -206,7 +169,7 @@ pub struct StatisticalResults {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum TestRecommendation {
+enum TestRecommendation {
     Promote,
     Rollback,
     Continue,
@@ -216,7 +179,7 @@ pub enum TestRecommendation {
 }
 
 #[derive(Debug, Clone)]
-pub struct CanaryDeployment {
+struct CanaryDeployment {
     pub id: String,
     pub name: String,
     pub model_id: String,
@@ -231,7 +194,7 @@ pub struct CanaryDeployment {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub enum CanaryStatus {
+enum CanaryStatus {
     Preparing,
     Deploying,
     Monitoring,
@@ -242,7 +205,7 @@ pub enum CanaryStatus {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CanaryConfig {
+struct CanaryConfig {
     pub traffic_percentage: f64,
     pub duration_minutes: u64,
     pub success_threshold: f64,
@@ -254,7 +217,7 @@ pub struct CanaryConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PromotionCriterion {
+struct PromotionCriterion {
     pub metric_name: String,
     pub comparison: ComparisonOperator,
     pub threshold_value: f64,
@@ -262,7 +225,7 @@ pub struct PromotionCriterion {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum ComparisonOperator {
+enum ComparisonOperator {
     GreaterThan,
     LessThan,
     GreaterThanOrEqual,
@@ -272,7 +235,7 @@ pub enum ComparisonOperator {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CanaryMetrics {
+struct CanaryMetrics {
     pub canary_requests: u64,
     pub stable_requests: u64,
     pub canary_success_rate: f64,
@@ -283,7 +246,7 @@ pub struct CanaryMetrics {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct HealthCheck {
+struct HealthCheck {
     pub check_type: HealthCheckType,
     pub status: HealthCheckStatus,
     pub last_check: SystemTime,
@@ -292,7 +255,7 @@ pub struct HealthCheck {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum HealthCheckType {
+enum HealthCheckType {
     ModelLoad,
     InferenceLatency,
     ErrorRate,
@@ -301,7 +264,7 @@ pub enum HealthCheckType {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum HealthCheckStatus {
+enum HealthCheckStatus {
     Pass,
     Fail,
     Warning,
@@ -309,7 +272,7 @@ pub enum HealthCheckStatus {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RollbackTrigger {
+struct RollbackTrigger {
     pub trigger_type: RollbackTriggerType,
     pub threshold: f64,
     pub evaluation_window_minutes: u64,
@@ -318,7 +281,7 @@ pub struct RollbackTrigger {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum RollbackTriggerType {
+enum RollbackTriggerType {
     ErrorRate,
     LatencyIncrease,
     SuccessRateDecrease,
@@ -326,7 +289,7 @@ pub enum RollbackTriggerType {
     ManualTrigger,
 }
 
-pub struct ABTestingManager {
+struct ABTestingManager {
     config: ABTestingConfig,
     active_tests: Arc<RwLock<HashMap<String, ABTest>>>,
     test_history: Arc<RwLock<Vec<ABTest>>>,
@@ -706,7 +669,7 @@ impl ABTestingManager {
                     .collect();
                 drop(tests_guard);
 
-                for (test_id, test) in running_tests {
+                for (test_id, _test) in running_tests {
                     // Check if test should be automatically promoted or rolled back
                     if config.auto_promote_threshold > 0.0 || config.auto_rollback_threshold < 0.0 {
                         debug!("Evaluating A/B test for auto-actions: {}", test_id);
@@ -742,13 +705,13 @@ impl Drop for ABTestingManager {
 }
 
 // Traffic routing logic for A/B tests
-pub struct TrafficRouter {
+struct TrafficRouter {
     ab_testing_manager: Arc<ABTestingManager>,
     routing_strategy: RoutingStrategy,
 }
 
 #[derive(Debug, Clone)]
-pub enum RoutingStrategy {
+enum RoutingStrategy {
     Random,
     Hash,
     Sticky,
@@ -816,7 +779,7 @@ impl TrafficRouter {
 }
 
 // Utility functions for creating test configurations
-pub fn create_gradual_ramp_schedule(steps: usize, max_treatment_percentage: f64) -> Vec<TrafficRampStep> {
+fn create_gradual_ramp_schedule(steps: usize, max_treatment_percentage: f64) -> Vec<TrafficRampStep> {
     let mut schedule = Vec::new();
     let step_size = max_treatment_percentage / steps as f64;
     let time_step = 24.0 / steps as f64; // Spread over 24 hours
@@ -835,7 +798,7 @@ pub fn create_gradual_ramp_schedule(steps: usize, max_treatment_percentage: f64)
     schedule
 }
 
-pub fn create_canary_config(traffic_percentage: f64, duration_minutes: u64) -> CanaryConfig {
+fn create_canary_config(traffic_percentage: f64, duration_minutes: u64) -> CanaryConfig {
     CanaryConfig {
         traffic_percentage,
         duration_minutes,

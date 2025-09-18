@@ -2,7 +2,7 @@ use crate::batch::queue::{
     BatchJob, JobSchedule, ScheduleType, JobQueueManager, QueueStatus
 };
 use anyhow::Result;
-use chrono::{DateTime, Utc, TimeZone, Datelike, Timelike, Weekday};
+use chrono::{DateTime, Utc, Datelike, Timelike, Weekday};
 use cron::Schedule;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -13,9 +13,9 @@ use std::{
 };
 use tokio::{
     sync::{RwLock, mpsc},
-    time::{interval, sleep_until, Instant},
+    time::interval,
 };
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScheduledJobEntry {
@@ -137,7 +137,7 @@ impl JobScheduler {
         // Read jobs and identify which ones need to run
         {
             let jobs = scheduled_jobs.read().await;
-            for (job_id, entry) in jobs.iter() {
+            for (_job_id, entry) in jobs.iter() {
                 if !entry.enabled {
                     continue;
                 }
