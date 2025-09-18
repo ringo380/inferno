@@ -2082,7 +2082,7 @@ async fn handle_anomaly_command(command: AnomalyCommand, system: &DataPipelineSy
                 println!("Found {} anomalies:", anomalies.len());
                 println!("{:<20} {:<15} {:<30} {:<10}", "TIMESTAMP", "TYPE", "DESCRIPTION", "SEVERITY");
                 println!("{}", "-".repeat(75));
-                for (i, anomaly) in anomalies.iter().enumerate() {
+                for (_i, anomaly) in anomalies.iter().enumerate() {
                     println!("{:<20} {:<15} {:<30} {:<10}",
                             anomaly.timestamp.format("%Y-%m-%d %H:%M:%S"),
                             format!("{:?}", anomaly.anomaly_type),
