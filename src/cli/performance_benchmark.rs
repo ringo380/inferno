@@ -7,11 +7,12 @@ use std::{
 };
 use crate::{
     performance_baseline::{PerformanceBaseline, PerformanceTarget, PerformanceMetrics},
-    backends::{Backend, BackendConfig, BackendType, InferenceParams},
+    backends::{Backend, BackendHandle, BackendConfig, BackendType, InferenceParams},
     models::{ModelInfo, ModelManager},
     cache::CacheConfig,
     metrics::MetricsCollector,
 };
+use sysinfo::{System, SystemExt, CpuExt};
 
 #[derive(Debug, Args)]
 pub struct PerformanceBenchmarkArgs {
@@ -259,6 +260,7 @@ async fn run_inference_benchmark(
     let backend_config = BackendConfig::default();
     let mut backend = Backend::new(BackendType::Gguf, &backend_config)?;
     backend.load_model(&model).await?;
+    let backend_handle = BackendHandle::new(backend);
 
     let inference_params = InferenceParams {
         max_tokens: 50,
@@ -285,7 +287,7 @@ async fn run_inference_benchmark(
         let prompt = &test_prompts[i as usize % test_prompts.len()];
         let inference_start = Instant::now();
 
-        match backend.infer(prompt, &inference_params).await {
+        match backend_handle.infer(prompt, &inference_params).await {
             Ok(_) => {
                 latencies.push(inference_start.elapsed());
                 successful_requests += 1;
@@ -348,7 +350,7 @@ async fn run_memory_benchmark(
 ) -> Result<()> {
     tracing::info!("Running memory benchmark");
 
-    let mut system = sysinfo::System::new_all();
+    let mut system = System::new_all();
     system.refresh_all();
 
     let initial_memory = system.used_memory();
@@ -388,6 +390,7 @@ async fn run_memory_benchmark(
 
             let mut backend = Backend::new(BackendType::Gguf, &backend_config)?;
             backend.load_model(&model).await?;
+            let backend_handle = BackendHandle::new(backend);
 
             system.refresh_memory();
             let loaded_memory = system.used_memory();
@@ -402,12 +405,12 @@ async fn run_memory_benchmark(
             };
 
             for _ in 0..5 {
-                let _ = backend.infer("Test prompt", &inference_params).await;
+                let _ = backend_handle.infer("Test prompt", &inference_params).await;
                 system.refresh_memory();
                 peak_memory = peak_memory.max(system.used_memory());
             }
 
-            backend.unload_model().await?;
+            backend_handle.unload_model().await?;
 
             system.refresh_memory();
             let cycle_end_memory = system.used_memory();
@@ -488,6 +491,7 @@ async fn run_concurrent_benchmark(
         let backend_config = BackendConfig::default();
         let mut backend = Backend::new(BackendType::Gguf, &backend_config)?;
         backend.load_model(&model).await?;
+        let backend_handle = BackendHandle::new(backend);
 
         let inference_params = InferenceParams {
             max_tokens: 30,
@@ -504,8 +508,9 @@ async fn run_concurrent_benchmark(
             .map(|i| {
                 let prompt = format!("Concurrent test request {}", i);
                 let params = inference_params.clone();
+                let backend_clone = backend_handle.clone();
                 tokio::spawn(async move {
-                    backend.infer(&prompt, &params).await
+                    backend_clone.infer(&prompt, &params).await
                 })
             })
             .collect();
@@ -529,7 +534,7 @@ async fn run_concurrent_benchmark(
             "avg_latency_ms": (duration.as_secs_f64() * 1000.0) / successful_requests as f64,
         }));
 
-        backend.unload_model().await?;
+        backend_handle.unload_model().await?;
     }
 
     let benchmark_results = serde_json::json!({
@@ -635,7 +640,7 @@ async fn monitor_performance(
 ) -> Result<()> {
     tracing::info!("Starting performance monitoring for {}s", duration);
 
-    let mut system = sysinfo::System::new_all();
+    let mut system = System::new_all();
     let end_time = if duration == 0 {
         None
     } else {
@@ -677,10 +682,6 @@ async fn monitor_performance(
             _ => {
                 samples.push(sample);
             }
-        }
-
-        if format != "console" && format != "json" {
-            samples.push(sample);
         }
 
         tokio::time::sleep(Duration::from_secs(interval)).await;

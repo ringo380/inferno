@@ -199,9 +199,10 @@ impl DynamicBatcher {
         });
 
         let processor = Arc::new(self.clone());
+        let processor_clone = Arc::clone(&processor);
         tokio::spawn(async move {
             if let Some(receiver) = processor.batch_receiver.write().await.take() {
-                DynamicBatcher::batch_execution_loop(Arc::clone(&processor), receiver).await;
+                DynamicBatcher::batch_execution_loop(processor_clone, receiver).await;
             }
         });
 
@@ -342,10 +343,10 @@ impl DynamicBatcher {
     /// Batch execution loop
     async fn batch_execution_loop(batcher: Arc<Self>, mut receiver: mpsc::UnboundedReceiver<Batch>) {
         while let Some(batch) = receiver.recv().await {
-            let permit = batcher.processing_semaphore.acquire().await.unwrap();
             let batcher_clone = Arc::clone(&batcher);
 
             tokio::spawn(async move {
+                let permit = batcher_clone.processing_semaphore.acquire().await.unwrap();
                 let _permit = permit;
                 batcher_clone.process_batch(batch).await;
             });

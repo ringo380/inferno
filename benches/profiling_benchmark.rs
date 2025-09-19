@@ -5,6 +5,7 @@ use inferno::{
     metrics::MetricsCollector,
 };
 use std::{path::PathBuf, time::Duration, sync::Arc};
+use sysinfo::{System, SystemExt, CpuExt};
 use tempfile::tempdir;
 use tokio::{runtime::Runtime, time::Instant};
 
@@ -320,7 +321,7 @@ fn bench_profile_system_resource_monitoring(c: &mut Criterion) {
     group.bench_function("system_resource_collection_with_profiling", |b| {
         b.to_async(&rt).iter(|| async {
             // Simulate intensive system monitoring
-            let mut system = sysinfo::System::new_all();
+            let mut system = System::new_all();
 
             for _ in 0..100 {
                 system.refresh_all();
