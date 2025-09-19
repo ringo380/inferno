@@ -1,0 +1,223 @@
+# Pre-commit configuration for Inferno
+# Install pre-commit: pip install pre-commit
+# Setup hooks: pre-commit install
+# Run manually: pre-commit run --all-files
+
+repos:
+  # Rust-specific checks
+  - repo: local
+    hooks:
+      - id: cargo-fmt
+        name: cargo fmt
+        entry: cargo fmt
+        language: system
+        types: [rust]
+        args: ["--all", "--", "--check"]
+        pass_filenames: false
+        description: "Check Rust code formatting with rustfmt"
+
+      - id: cargo-clippy
+        name: cargo clippy
+        entry: cargo clippy
+        language: system
+        types: [rust]
+        args: ["--workspace", "--all-targets", "--all-features", "--", "-D", "warnings"]
+        pass_filenames: false
+        description: "Run Clippy linter on Rust code"
+
+      - id: cargo-check
+        name: cargo check
+        entry: cargo check
+        language: system
+        types: [rust]
+        args: ["--workspace", "--all-targets", "--all-features"]
+        pass_filenames: false
+        description: "Check Rust code compilation"
+
+      - id: cargo-test-fast
+        name: cargo test (fast)
+        entry: cargo test
+        language: system
+        types: [rust]
+        args: ["--workspace", "--lib", "--bins"]
+        pass_filenames: false
+        description: "Run fast Rust unit tests"
+
+      - id: cargo-doc
+        name: cargo doc
+        entry: cargo doc
+        language: system
+        types: [rust]
+        args: ["--workspace", "--all-features", "--no-deps", "--document-private-items"]
+        pass_filenames: false
+        description: "Check documentation generation"
+
+      - id: cargo-audit
+        name: cargo audit
+        entry: cargo audit
+        language: system
+        files: "Cargo\\.(toml|lock)$"
+        pass_filenames: false
+        description: "Security audit of Rust dependencies"
+
+      - id: toml-sort
+        name: Sort TOML files
+        entry: bash -c 'for file in "$@"; do if command -v toml-sort >/dev/null 2>&1; then toml-sort "$file" --in-place; fi; done'
+        language: system
+        files: "\\.toml$"
+        description: "Sort TOML files for consistency"
+
+  # General file checks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.4.0
+    hooks:
+      - id: trailing-whitespace
+        args: [--markdown-linebreak-ext=md]
+      - id: end-of-file-fixer
+      - id: check-yaml
+        args: [--allow-multiple-documents]
+      - id: check-toml
+      - id: check-json
+      - id: check-xml
+      - id: check-merge-conflict
+      - id: check-case-conflict
+      - id: check-symlinks
+      - id: check-executables-have-shebangs
+      - id: check-shebang-scripts-are-executable
+      - id: fix-byte-order-marker
+      - id: mixed-line-ending
+        args: [--fix=lf]
+
+  # Security checks
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.4.0
+    hooks:
+      - id: detect-secrets
+        args: ['--baseline', '.secrets.baseline']
+        additional_dependencies: ["gibberish-detector"]
+        description: "Detect hardcoded secrets"
+
+  # Markdown formatting
+  - repo: https://github.com/igorshubovych/markdownlint-cli
+    rev: v0.37.0
+    hooks:
+      - id: markdownlint
+        args: [--fix]
+        description: "Lint and fix Markdown files"
+
+  # YAML formatting
+  - repo: https://github.com/adrienverge/yamllint
+    rev: v1.32.0
+    hooks:
+      - id: yamllint
+        args: [-c=.yamllint.yml]
+        description: "Lint YAML files"
+
+  # Docker file linting
+  - repo: https://github.com/hadolint/hadolint
+    rev: v2.12.0
+    hooks:
+      - id: hadolint-docker
+        description: "Lint Dockerfiles"
+
+  # Shell script checks
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.9.0.6
+    hooks:
+      - id: shellcheck
+        description: "Lint shell scripts"
+
+  # License header checks
+  - repo: https://github.com/Lucas-C/pre-commit-hooks
+    rev: v1.5.4
+    hooks:
+      - id: insert-license
+        files: "\\.(rs|py|js|ts)$"
+        args:
+          - --license-filepath
+          - LICENSE-HEADER
+          - --comment-style
+          - //
+        description: "Ensure license headers are present"
+
+  # Conventional commit messages
+  - repo: https://github.com/compilerla/conventional-pre-commit
+    rev: v3.0.0
+    hooks:
+      - id: conventional-pre-commit
+        stages: [commit-msg]
+        description: "Enforce conventional commit messages"
+
+  # Performance checks
+  - repo: local
+    hooks:
+      - id: check-binary-size
+        name: Check binary size
+        entry: bash -c '
+          if [ -f "target/release/inferno" ]; then
+            SIZE=$(stat -c%s target/release/inferno 2>/dev/null || stat -f%z target/release/inferno 2>/dev/null || echo 0)
+            SIZE_MB=$((SIZE / 1024 / 1024))
+            if [ $SIZE_MB -gt 200 ]; then
+              echo "Warning: Binary size is ${SIZE_MB}MB, consider optimizing"
+              exit 1
+            fi
+          fi
+        '
+        language: system
+        files: "Cargo\\.(toml|lock)$|src/.*\\.rs$"
+        pass_filenames: false
+        description: "Check release binary size"
+
+  # Documentation checks
+  - repo: local
+    hooks:
+      - id: check-readme-sync
+        name: Check README sync
+        entry: bash -c '
+          if command -v cargo-readme >/dev/null 2>&1; then
+            cargo readme --output README_generated.md
+            if ! cmp -s README.md README_generated.md; then
+              echo "README.md is out of sync with lib.rs"
+              echo "Run: cargo readme --output README.md"
+              rm README_generated.md
+              exit 1
+            fi
+            rm README_generated.md
+          fi
+        '
+        language: system
+        files: "src/lib\\.rs|README\\.md"
+        pass_filenames: false
+        description: "Check README is in sync with lib.rs"
+
+      - id: check-changelog
+        name: Check changelog updated
+        entry: bash -c '
+          if [[ "$PRE_COMMIT_FROM_REF" != "$PRE_COMMIT_TO_REF" ]]; then
+            if ! git diff --name-only "$PRE_COMMIT_FROM_REF" "$PRE_COMMIT_TO_REF" | grep -q "CHANGELOG\\.md"; then
+              echo "Please update CHANGELOG.md for this change"
+              exit 1
+            fi
+          fi
+        '
+        language: system
+        files: "src/.*\\.rs$"
+        pass_filenames: false
+        description: "Ensure changelog is updated for source changes"
+        stages: [push]
+
+# Configure specific tools
+default_language_version:
+  python: python3
+
+# Global excludes
+exclude: |
+  (?x)^(
+    target/.*|
+    \\.git/.*|
+    \\.idea/.*|
+    \\.vscode/.*|
+    node_modules/.*|
+    vendor/.*|
+    temp_wiki/.*
+  )$

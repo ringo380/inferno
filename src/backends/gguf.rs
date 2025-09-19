@@ -128,7 +128,7 @@ impl GgufBackend {
             params.max_tokens,
             params.temperature,
             params.top_p,
-            self.model_path.as_ref().map(|p| p.display().to_string()).unwrap_or("Unknown".to_string()),
+            self.model_path.as_ref().map(|p| p.display().to_string()).unwrap_or_else(|| "Unknown".to_string()),
             self.config.context_size,
             self.config.batch_size,
             self.config.gpu_enabled,
@@ -232,7 +232,7 @@ impl InferenceBackend for GgufBackend {
 
         self.model_loaded = true;
         self.model_info = Some(model_info.clone());
-        self.model_path = Some(model_info.path.clone());
+        self.model_path = Some(model_info.path.to_path_buf());
 
         info!("GGUF model loaded successfully");
         Ok(())
@@ -252,7 +252,7 @@ impl InferenceBackend for GgufBackend {
     }
 
     async fn get_model_info(&self) -> Option<ModelInfo> {
-        self.model_info.clone()
+        self.model_info.as_ref().cloned()
     }
 
     async fn infer(&mut self, input: &str, params: &InferenceParams) -> Result<String> {
@@ -344,7 +344,7 @@ impl InferenceBackend for GgufBackend {
     }
 
     fn get_metrics(&self) -> Option<InferenceMetrics> {
-        self.metrics.clone()
+        self.metrics.as_ref().cloned()
     }
 }
 
@@ -362,7 +362,7 @@ mod tests {
         let backend = GgufBackend::new(config);
         assert!(backend.is_ok());
 
-        let backend = backend.unwrap();
+        let backend = backend.expect("Failed to create GgufBackend for test");
         assert_eq!(backend.get_backend_type(), BackendType::Gguf);
         assert!(!backend.is_loaded().await);
     }
@@ -379,7 +379,7 @@ mod tests {
     #[tokio::test]
     async fn test_gguf_tokenization() {
         let config = BackendConfig::default();
-        let backend = GgufBackend::new(config).unwrap();
+        let backend = GgufBackend::new(config).expect("Failed to create GgufBackend for test");
 
         // Test tokenization without loading a model (should fail)
         let result = backend.real_tokenize("hello world").await;
@@ -389,7 +389,7 @@ mod tests {
     #[tokio::test]
     async fn test_gguf_model_loading_invalid_file() {
         let config = BackendConfig::default();
-        let mut backend = GgufBackend::new(config).unwrap();
+        let mut backend = GgufBackend::new(config).expect("Failed to create GgufBackend for test");
 
         // Test with non-existent file
         let model_info = ModelInfo {
@@ -408,12 +408,12 @@ mod tests {
     #[tokio::test]
     async fn test_gguf_model_loading_invalid_magic() {
         let config = BackendConfig::default();
-        let mut backend = GgufBackend::new(config).unwrap();
+        let mut backend = GgufBackend::new(config).expect("Failed to create GgufBackend for test");
 
         // Create a temporary file with wrong magic bytes
-        let dir = tempdir().unwrap();
+        let dir = tempdir().expect("Failed to create temporary directory for test");
         let model_path = dir.path().join("fake.gguf");
-        std::fs::write(&model_path, b"FAKE model file content").unwrap();
+        std::fs::write(&model_path, b"FAKE model file content").expect("Failed to write fake model file for test");
 
         let model_info = ModelInfo {
             path: model_path,
@@ -432,14 +432,14 @@ mod tests {
     #[tokio::test]
     async fn test_gguf_model_loading_valid_magic() {
         let config = BackendConfig::default();
-        let mut backend = GgufBackend::new(config).unwrap();
+        let mut backend = GgufBackend::new(config).expect("Failed to create GgufBackend for test");
 
         // Create a temporary file with correct GGUF magic bytes
-        let dir = tempdir().unwrap();
+        let dir = tempdir().expect("Failed to create temporary directory for test");
         let model_path = dir.path().join("valid.gguf");
         let mut content = b"GGUF".to_vec();
         content.extend_from_slice(&[0u8; 1024]); // Add padding to meet size requirements
-        std::fs::write(&model_path, &content).unwrap();
+        std::fs::write(&model_path, &content).expect("Failed to write valid model file for test");
 
         let model_info = ModelInfo {
             path: model_path,
@@ -463,7 +463,7 @@ mod tests {
     #[tokio::test]
     async fn test_gguf_inference_without_model() {
         let config = BackendConfig::default();
-        let mut backend = GgufBackend::new(config).unwrap();
+        let mut backend = GgufBackend::new(config).expect("Failed to create GgufBackend for test");
 
         let params = InferenceParams::default();
         let result = backend.infer("test input", &params).await;
@@ -474,7 +474,7 @@ mod tests {
     #[tokio::test]
     async fn test_gguf_estimate_token_count() {
         let config = BackendConfig::default();
-        let backend = GgufBackend::new(config).unwrap();
+        let backend = GgufBackend::new(config).expect("Failed to create GgufBackend for test");
 
         let count = backend.estimate_token_count("hello world test");
         assert!(count > 0);

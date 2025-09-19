@@ -226,9 +226,9 @@ impl ResponseCache {
         // Check deduplication map first
         let actual_key = if self.config.deduplication_enabled {
             let dedup_map = self.deduplication_map.read().await;
-            dedup_map.get(&cache_key).unwrap_or(&cache_key).clone()
+            dedup_map.get(&cache_key).unwrap_or(&cache_key).to_owned()
         } else {
-            cache_key.clone()
+            cache_key
         };
 
         let cache = self.cache.read().await;
@@ -253,7 +253,7 @@ impl ResponseCache {
                 match self.decompress_data(&cached_response.response_data, &cached_response.compression_algorithm) {
                     Ok(decompressed) => decompressed,
                     Err(e) => {
-                        warn!("Decompression failed for key {}: {}, removing entry", cache_key, e);
+                        warn!("Decompression failed for key {}: {}, removing entry", actual_key, e);
                         drop(cache);
                         self.remove_expired_entry(&actual_key).await;
                         return None;
@@ -263,13 +263,13 @@ impl ResponseCache {
                 cached_response.response_data.clone()
             };
 
-            debug!("Cache hit for key: {}", cache_key);
+            debug!("Cache hit for key: {}", actual_key);
             return Some(response_data);
         }
 
         stats.cache_misses += 1;
         stats.hit_rate = stats.cache_hits as f32 / stats.total_requests as f32;
-        debug!("Cache miss for key: {}", cache_key);
+        debug!("Cache miss for key: {:?}", key);
 
         None
     }

@@ -1,0 +1,47 @@
+# yamllint configuration for Inferno project
+# https://yamllint.readthedocs.io/en/stable/configuration.html
+
+extends: default
+
+rules:
+  # Allow longer lines for readability
+  line-length:
+    max: 120
+    level: warning
+
+  # Allow multiple spaces for alignment in GitHub Actions
+  indentation:
+    spaces: 2
+    indent-sequences: true
+    check-multi-line-strings: false
+
+  # Be more flexible with comments
+  comments:
+    min-spaces-from-content: 1
+
+  # Allow truthy values in YAML (for GitHub Actions)
+  truthy:
+    allowed-values: ['true', 'false', 'on', 'off', 'yes', 'no']
+    check-keys: true
+
+  # Allow empty values (common in CI configurations)
+  empty-values:
+    forbid-in-block-mappings: false
+    forbid-in-flow-mappings: false
+
+  # Allow multiple documents (useful for Kubernetes manifests)
+  document-start: disable
+
+  # More flexible bracket spacing
+  brackets:
+    min-spaces-inside: 0
+    max-spaces-inside: 1
+    min-spaces-inside-empty: 0
+    max-spaces-inside-empty: 0
+
+  # More flexible brace spacing
+  braces:
+    min-spaces-inside: 0
+    max-spaces-inside: 1
+    min-spaces-inside-empty: 0
+    max-spaces-inside-empty: 0

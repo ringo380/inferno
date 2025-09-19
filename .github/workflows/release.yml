@@ -1,0 +1,485 @@
+name: Release Pipeline
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version_type:
+        description: 'Version bump type'
+        required: true
+        default: 'patch'
+        type: choice
+        options:
+        - patch
+        - minor
+        - major
+        - prerelease
+      prerelease_type:
+        description: 'Prerelease type (alpha, beta, rc)'
+        required: false
+        default: 'alpha'
+        type: choice
+        options:
+        - alpha
+        - beta
+        - rc
+      dry_run:
+        description: 'Dry run (do not create release)'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  # Determine release version and create tag if workflow_dispatch
+  version-management:
+    name: Version Management
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+      is_prerelease: ${{ steps.version.outputs.is_prerelease }}
+      changelog: ${{ steps.changelog.outputs.changelog }}
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Install cargo-release
+      if: github.event_name == 'workflow_dispatch'
+      run: cargo install cargo-release --locked
+
+    - name: Install conventional commits tools
+      run: |
+        cargo install git-cliff --locked
+        npm install -g conventional-changelog-cli
+
+    - name: Determine version
+      id: version
+      run: |
+        if [[ "${{ github.event_name }}" == "push" ]]; then
+          # Extract version from tag
+          VERSION=${GITHUB_REF#refs/tags/v}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag=$GITHUB_REF_NAME" >> $GITHUB_OUTPUT
+          if [[ "$VERSION" =~ (alpha|beta|rc) ]]; then
+            echo "is_prerelease=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_prerelease=false" >> $GITHUB_OUTPUT
+          fi
+        else
+          # Workflow dispatch - calculate new version
+          CURRENT_VERSION=$(cargo metadata --format-version 1 | jq -r '.packages[] | select(.name == "inferno") | .version')
+          echo "Current version: $CURRENT_VERSION"
+
+          case "${{ github.event.inputs.version_type }}" in
+            "major")
+              NEW_VERSION=$(cargo release version --execute major --no-confirm 2>&1 | grep "new version" | cut -d' ' -f3)
+              ;;
+            "minor")
+              NEW_VERSION=$(cargo release version --execute minor --no-confirm 2>&1 | grep "new version" | cut -d' ' -f3)
+              ;;
+            "patch")
+              NEW_VERSION=$(cargo release version --execute patch --no-confirm 2>&1 | grep "new version" | cut -d' ' -f3)
+              ;;
+            "prerelease")
+              NEW_VERSION="${CURRENT_VERSION}-${{ github.event.inputs.prerelease_type }}.1"
+              ;;
+          esac
+
+          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "tag=v$NEW_VERSION" >> $GITHUB_OUTPUT
+
+          if [[ "$NEW_VERSION" =~ (alpha|beta|rc) ]]; then
+            echo "is_prerelease=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_prerelease=false" >> $GITHUB_OUTPUT
+          fi
+        fi
+
+    - name: Generate changelog
+      id: changelog
+      run: |
+        if [[ "${{ github.event_name }}" == "push" ]]; then
+          # For tag push, generate changelog from last tag
+          PREVIOUS_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          if [[ -n "$PREVIOUS_TAG" ]]; then
+            git-cliff --config .github/cliff.toml --strip header --unreleased
+          else
+            git-cliff --config .github/cliff.toml --strip header
+          fi
+        else
+          # For workflow dispatch, generate unreleased changes
+          git-cliff --config .github/cliff.toml --strip header --unreleased
+        fi > changelog.md
+
+        # Set multiline output
+        {
+          echo 'changelog<<EOF'
+          cat changelog.md
+          echo EOF
+        } >> $GITHUB_OUTPUT
+
+    - name: Update version in Cargo.toml
+      if: github.event_name == 'workflow_dispatch' && !github.event.inputs.dry_run
+      run: |
+        cargo release version ${{ steps.version.outputs.version }} --execute --no-confirm
+
+    - name: Commit version bump
+      if: github.event_name == 'workflow_dispatch' && !github.event.inputs.dry_run
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        git add Cargo.toml Cargo.lock
+        git commit -m "chore: bump version to ${{ steps.version.outputs.version }}"
+        git tag ${{ steps.version.outputs.tag }}
+        git push origin main
+        git push origin ${{ steps.version.outputs.tag }}
+
+  # Pre-release validation
+  pre-release-validation:
+    name: Pre-Release Validation
+    runs-on: ubuntu-latest
+    needs: version-management
+    timeout-minutes: 20
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        ref: ${{ needs.version-management.outputs.tag }}
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        components: clippy, rustfmt
+
+    - name: Cache dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: release-${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          release-${{ runner.os }}-cargo-
+
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y pkg-config libssl-dev
+
+    - name: Validate workspace
+      run: |
+        cargo check --workspace --all-targets --all-features
+        cargo fmt --all -- --check
+        cargo clippy --workspace --all-targets --all-features -- -D warnings
+
+    - name: Run comprehensive tests
+      run: |
+        cargo test --workspace --all-features --release
+        cargo test --test integration_tests --release
+        cargo test --test end_to_end_tests --release
+
+    - name: Validate documentation
+      run: |
+        cargo doc --workspace --all-features --no-deps --document-private-items
+
+  # Build release artifacts for all platforms
+  build-release-artifacts:
+    name: Build Release Artifacts
+    runs-on: ${{ matrix.os }}
+    needs: [version-management, pre-release-validation]
+    timeout-minutes: 45
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            artifact_name: inferno
+            asset_name: inferno-linux-x86_64
+            cross: false
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            artifact_name: inferno
+            asset_name: inferno-linux-aarch64
+            cross: true
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact_name: inferno.exe
+            asset_name: inferno-windows-x86_64.exe
+            cross: false
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            artifact_name: inferno
+            asset_name: inferno-macos-x86_64
+            cross: false
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            artifact_name: inferno
+            asset_name: inferno-macos-aarch64
+            cross: false
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        ref: ${{ needs.version-management.outputs.tag }}
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: ${{ matrix.target }}
+
+    - name: Cache dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: build-release-${{ matrix.os }}-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          build-release-${{ matrix.os }}-${{ matrix.target }}-
+
+    - name: Install system dependencies (Ubuntu)
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y pkg-config libssl-dev
+
+    - name: Install cross-compilation tools
+      if: matrix.cross
+      run: cargo install cross --locked
+
+    - name: Build release binary
+      run: |
+        if [[ "${{ matrix.cross }}" == "true" ]]; then
+          cross build --release --target ${{ matrix.target }} --all-features
+        else
+          cargo build --release --target ${{ matrix.target }} --all-features
+        fi
+
+    - name: Strip binary (Unix)
+      if: matrix.os != 'windows-latest'
+      run: |
+        strip target/${{ matrix.target }}/release/${{ matrix.artifact_name }} || true
+
+    - name: Create release archive
+      shell: bash
+      run: |
+        cd target/${{ matrix.target }}/release
+        if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
+          7z a ../../../${{ matrix.asset_name }}.zip ${{ matrix.artifact_name }}
+        else
+          tar czf ../../../${{ matrix.asset_name }}.tar.gz ${{ matrix.artifact_name }}
+        fi
+
+    - name: Generate checksums
+      shell: bash
+      run: |
+        if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
+          sha256sum ${{ matrix.asset_name }}.zip > ${{ matrix.asset_name }}.zip.sha256
+        else
+          sha256sum ${{ matrix.asset_name }}.tar.gz > ${{ matrix.asset_name }}.tar.gz.sha256
+        fi
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: release-${{ matrix.target }}
+        path: |
+          ${{ matrix.asset_name }}.*
+        retention-days: 30
+
+  # Create GitHub release
+  create-release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    needs: [version-management, build-release-artifacts]
+    if: github.event_name == 'push' || !github.event.inputs.dry_run
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        ref: ${{ needs.version-management.outputs.tag }}
+
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: artifacts
+
+    - name: Prepare release assets
+      run: |
+        mkdir -p release_assets
+        find artifacts -name "inferno-*" -type f | while read file; do
+          cp "$file" release_assets/
+        done
+        ls -la release_assets/
+
+    - name: Create GitHub release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ needs.version-management.outputs.tag }}
+        name: "Inferno ${{ needs.version-management.outputs.version }}"
+        body: |
+          # Inferno ${{ needs.version-management.outputs.version }}
+
+          ${{ needs.version-management.outputs.changelog }}
+
+          ## Installation
+
+          ### Quick Install (Linux/macOS)
+          ```bash
+          curl -L https://github.com/inferno-ai/inferno/releases/download/${{ needs.version-management.outputs.tag }}/inferno-linux-x86_64.tar.gz | tar xz
+          sudo mv inferno /usr/local/bin/
+          ```
+
+          ### Manual Download
+          Download the appropriate binary for your platform from the assets below.
+
+          ## Verification
+
+          All release binaries include SHA256 checksums for verification:
+          ```bash
+          sha256sum -c inferno-*.sha256
+          ```
+
+          ## What's Changed
+          See the changelog above for detailed changes in this release.
+        files: release_assets/*
+        draft: false
+        prerelease: ${{ needs.version-management.outputs.is_prerelease }}
+        generate_release_notes: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Publish to cargo registry
+  publish-cargo:
+    name: Publish to Cargo
+    runs-on: ubuntu-latest
+    needs: [version-management, create-release]
+    if: needs.version-management.outputs.is_prerelease == 'false' && (github.event_name == 'push' || !github.event.inputs.dry_run)
+    timeout-minutes: 10
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        ref: ${{ needs.version-management.outputs.tag }}
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Cache dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: publish-${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y pkg-config libssl-dev
+
+    - name: Verify package
+      run: cargo package --verbose
+
+    - name: Publish to crates.io
+      run: cargo publish --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+  # Update package managers
+  update-package-managers:
+    name: Update Package Managers
+    runs-on: ubuntu-latest
+    needs: [version-management, create-release]
+    if: needs.version-management.outputs.is_prerelease == 'false' && (github.event_name == 'push' || !github.event.inputs.dry_run)
+    timeout-minutes: 15
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Update Homebrew formula
+      uses: mislav/bump-homebrew-formula-action@v3
+      with:
+        formula-name: inferno
+        formula-path: Formula/inferno.rb
+        homebrew-tap: inferno-ai/homebrew-tap
+        download-url: https://github.com/inferno-ai/inferno/releases/download/${{ needs.version-management.outputs.tag }}/inferno-macos-x86_64.tar.gz
+        commit-message: |
+          Bump inferno to ${{ needs.version-management.outputs.version }}
+
+          Updated by automated release pipeline
+      env:
+        COMMITTER_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+
+  # Post-release tasks
+  post-release:
+    name: Post-Release Tasks
+    runs-on: ubuntu-latest
+    needs: [version-management, create-release, publish-cargo, update-package-managers]
+    if: always() && (github.event_name == 'push' || !github.event.inputs.dry_run)
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Update development version
+      if: needs.version-management.outputs.is_prerelease == 'false'
+      run: |
+        # Bump to next dev version
+        CURRENT_VERSION="${{ needs.version-management.outputs.version }}"
+        NEXT_VERSION=$(echo $CURRENT_VERSION | awk -F. '{print $1"."$2"."($3+1)"-dev"}')
+
+        sed -i "s/version = \"$CURRENT_VERSION\"/version = \"$NEXT_VERSION\"/" Cargo.toml
+
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        git add Cargo.toml
+        git commit -m "chore: bump version to $NEXT_VERSION"
+        git push origin main
+
+    - name: Create GitHub milestone
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const version = '${{ needs.version-management.outputs.version }}';
+          const nextVersion = version.split('.').map((v, i) => i === 2 ? parseInt(v) + 1 : v).join('.');
+
+          try {
+            await github.rest.issues.createMilestone({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `v${nextVersion}`,
+              description: `Next release milestone for version ${nextVersion}`,
+              state: 'open'
+            });
+            console.log(`Created milestone for v${nextVersion}`);
+          } catch (error) {
+            console.log(`Milestone may already exist: ${error.message}`);
+          }
+
+    - name: Notify team
+      run: |
+        echo "Release ${{ needs.version-management.outputs.version }} completed successfully!"
+        echo "Release URL: https://github.com/${{ github.repository }}/releases/tag/${{ needs.version-management.outputs.tag }}"
+
+        # In production, this would send notifications to:
+        # - Slack/Discord channels
+        # - Email lists
+        # - Status page updates
+        # - Customer communication systems

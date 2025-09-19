@@ -1,0 +1,555 @@
+name: Documentation Generation & Deployment
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'docs/**'
+      - 'README.md'
+      - 'Cargo.toml'
+      - '.github/workflows/documentation.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'docs/**'
+      - 'README.md'
+      - 'Cargo.toml'
+  workflow_dispatch:
+    inputs:
+      deploy_preview:
+        description: 'Deploy preview documentation'
+        required: false
+        default: true
+        type: boolean
+      generate_api_docs:
+        description: 'Generate API documentation'
+        required: false
+        default: true
+        type: boolean
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # Build and validate documentation
+  build-docs:
+    name: Build Documentation
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        components: rust-docs
+
+    - name: Cache dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: docs-${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          docs-${{ runner.os }}-cargo-
+
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y pkg-config libssl-dev
+
+    - name: Install documentation tools
+      run: |
+        cargo install mdbook --locked
+        cargo install mdbook-admonish --locked
+        cargo install mdbook-mermaid --locked
+        cargo install mdbook-linkcheck --locked
+        cargo install cargo-readme --locked
+
+    - name: Generate API documentation
+      if: github.event.inputs.generate_api_docs != 'false'
+      run: |
+        mkdir -p docs/api
+
+        # Generate rustdoc with all features
+        cargo doc \
+          --workspace \
+          --all-features \
+          --no-deps \
+          --document-private-items \
+          --target-dir docs/api
+
+        # Copy to main docs directory
+        cp -r docs/api/doc/* docs/api/ || true
+
+    - name: Generate README from lib.rs
+      run: |
+        cargo readme --output README_generated.md
+
+        # Compare with existing README
+        if ! cmp -s README.md README_generated.md; then
+          echo "::warning::README.md differs from generated version"
+          echo "Consider running 'cargo readme --output README.md' locally"
+        fi
+
+    - name: Build user guide with mdBook
+      run: |
+        # Create book structure if it doesn't exist
+        if [ ! -f "docs/book.toml" ]; then
+          cat > docs/book.toml << 'EOF'
+        [book]
+        authors = ["Inferno Developers"]
+        language = "en"
+        multilingual = false
+        src = "src"
+        title = "Inferno User Guide"
+        description = "Complete guide to using Inferno AI/ML platform"
+
+        [preprocessor.admonish]
+        command = "mdbook-admonish"
+        assets_version = "3.0.0"
+
+        [preprocessor.mermaid]
+        command = "mdbook-mermaid"
+
+        [preprocessor.linkcheck]
+        command = "mdbook-linkcheck"
+
+        [output.html]
+        additional-css = ["theme/custom.css"]
+        additional-js = ["theme/custom.js"]
+        git-repository-url = "https://github.com/inferno-ai/inferno"
+        edit-url-template = "https://github.com/inferno-ai/inferno/edit/main/docs/{path}"
+
+        [output.html.search]
+        enable = true
+        limit-results = 30
+        teaser-word-count = 30
+        use-boolean-and = true
+        boost-title = 2
+        boost-hierarchy = 1
+        boost-paragraph = 1
+        expand = true
+        heading-split-level = 3
+
+        [output.html.print]
+        enable = true
+        EOF
+        fi
+
+        # Create basic book structure
+        mkdir -p docs/src/{user-guide,developer-guide,api-reference,tutorials}
+
+        # Generate SUMMARY.md if it doesn't exist
+        if [ ! -f "docs/src/SUMMARY.md" ]; then
+          cat > docs/src/SUMMARY.md << 'EOF'
+        # Summary
+
+        [Introduction](./introduction.md)
+
+        # User Guide
+        - [Getting Started](./user-guide/getting-started.md)
+        - [Installation](./user-guide/installation.md)
+        - [Configuration](./user-guide/configuration.md)
+        - [Basic Usage](./user-guide/basic-usage.md)
+        - [Advanced Features](./user-guide/advanced-features.md)
+
+        # Developer Guide
+        - [Architecture](./developer-guide/architecture.md)
+        - [Building from Source](./developer-guide/building.md)
+        - [Contributing](./developer-guide/contributing.md)
+        - [Testing](./developer-guide/testing.md)
+
+        # API Reference
+        - [CLI Commands](./api-reference/cli.md)
+        - [HTTP API](./api-reference/http.md)
+        - [WebSocket API](./api-reference/websocket.md)
+        - [Configuration Format](./api-reference/config.md)
+
+        # Tutorials
+        - [First Inference](./tutorials/first-inference.md)
+        - [Model Conversion](./tutorials/model-conversion.md)
+        - [Performance Tuning](./tutorials/performance-tuning.md)
+        - [Deployment](./tutorials/deployment.md)
+
+        # Appendices
+        - [Troubleshooting](./appendices/troubleshooting.md)
+        - [FAQ](./appendices/faq.md)
+        - [Changelog](./appendices/changelog.md)
+        EOF
+        fi
+
+        # Auto-generate documentation from CLI help
+        mkdir -p generated_docs
+        cargo build --release
+
+        # Generate CLI documentation
+        ./target/release/inferno --help > generated_docs/cli_help.txt
+        ./target/release/inferno models --help > generated_docs/models_help.txt || true
+        ./target/release/inferno run --help > generated_docs/run_help.txt || true
+        ./target/release/inferno serve --help > generated_docs/serve_help.txt || true
+
+        # Convert CLI help to markdown
+        python3 << 'EOFILE'
+        import os
+        import re
+
+        def convert_help_to_md(input_file, output_file, title):
+            if not os.path.exists(input_file):
+                return
+
+            with open(input_file, 'r') as f:
+                content = f.read()
+
+            # Basic conversion of CLI help to markdown
+            lines = content.split('\n')
+            md_lines = [f"# {title}\n"]
+
+            in_usage = False
+            in_options = False
+
+            for line in lines:
+                if line.strip().startswith('Usage:'):
+                    md_lines.append("## Usage\n")
+                    md_lines.append("```")
+                    in_usage = True
+                elif line.strip().startswith('Options:') or line.strip().startswith('Arguments:'):
+                    if in_usage:
+                        md_lines.append("```\n")
+                        in_usage = False
+                    md_lines.append(f"## {line.strip()}\n")
+                    in_options = True
+                elif line.strip() and in_options and line.startswith('  '):
+                    # Format option lines
+                    md_lines.append(f"- `{line.strip()}`")
+                elif line.strip() and not line.startswith(' '):
+                    if in_usage:
+                        md_lines.append("```\n")
+                        in_usage = False
+                    if in_options:
+                        in_options = False
+                    md_lines.append(f"## {line.strip()}\n")
+                else:
+                    md_lines.append(line)
+
+            if in_usage:
+                md_lines.append("```")
+
+            with open(output_file, 'w') as f:
+                f.write('\n'.join(md_lines))
+
+        # Convert help files
+        convert_help_to_md('generated_docs/cli_help.txt', 'docs/src/api-reference/cli.md', 'CLI Reference')
+        EOFILE
+
+        # Build the book
+        cd docs && mdbook build
+
+    - name: Generate changelog
+      run: |
+        # Install git-cliff if not already present
+        cargo install git-cliff --locked
+
+        # Generate changelog
+        git-cliff --config .github/cliff.toml --output docs/src/appendices/changelog.md
+
+    - name: Validate documentation
+      run: |
+        # Check for broken links in markdown files
+        find docs -name "*.md" -exec markdown-link-check {} \; || echo "Link check completed with warnings"
+
+        # Validate mdbook build
+        cd docs && mdbook test
+
+    - name: Generate documentation metrics
+      run: |
+        cat > docs/metrics.json << 'EOF'
+        {
+          "generated_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+          "commit": "${{ github.sha }}",
+          "branch": "${{ github.ref_name }}",
+          "stats": {
+            "total_markdown_files": $(find docs -name "*.md" | wc -l),
+            "total_rust_files": $(find src -name "*.rs" | wc -l),
+            "documented_functions": $(grep -r "/// " src --include="*.rs" | wc -l),
+            "doc_coverage": "$(cargo doc 2>&1 | grep -o '[0-9]*% documented' | head -1 || echo '0% documented')"
+          }
+        }
+        EOF
+
+    - name: Upload documentation artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: documentation-${{ github.sha }}
+        path: |
+          docs/book/
+          docs/api/
+          docs/metrics.json
+          generated_docs/
+        retention-days: 30
+
+  # Deploy documentation to GitHub Pages
+  deploy-docs:
+    name: Deploy Documentation
+    runs-on: ubuntu-latest
+    needs: build-docs
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    timeout-minutes: 10
+
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+    - name: Download documentation artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: documentation-${{ github.sha }}
+        path: docs
+
+    - name: Setup Pages
+      uses: actions/configure-pages@v4
+
+    - name: Prepare pages content
+      run: |
+        mkdir -p pages
+
+        # Copy user guide
+        cp -r docs/book/* pages/ || mkdir -p pages
+
+        # Copy API docs to /api subdirectory
+        mkdir -p pages/api
+        cp -r docs/api/* pages/api/ || true
+
+        # Create index.html if it doesn't exist
+        if [ ! -f "pages/index.html" ]; then
+          cat > pages/index.html << 'EOF'
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Inferno Documentation</title>
+            <style>
+                body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+                .nav { background: #f5f5f5; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
+                .nav a { display: inline-block; margin-right: 20px; padding: 10px 15px; background: #007acc; color: white; text-decoration: none; border-radius: 4px; }
+                .nav a:hover { background: #005a99; }
+            </style>
+        </head>
+        <body>
+            <h1>Inferno Documentation</h1>
+            <div class="nav">
+                <a href="./book.html">User Guide</a>
+                <a href="./api/inferno/index.html">API Documentation</a>
+                <a href="https://github.com/inferno-ai/inferno">GitHub Repository</a>
+            </div>
+            <p>Welcome to the Inferno AI/ML platform documentation.</p>
+            <ul>
+                <li><strong>User Guide:</strong> Complete guide for end users</li>
+                <li><strong>API Documentation:</strong> Rust API documentation</li>
+                <li><strong>GitHub:</strong> Source code and issue tracking</li>
+            </ul>
+        </body>
+        </html>
+        EOF
+        fi
+
+    - name: Upload to GitHub Pages
+      uses: actions/upload-pages-artifact@v3
+      with:
+        path: pages
+
+    - name: Deploy to GitHub Pages
+      id: deployment
+      uses: actions/deploy-pages@v4
+
+  # Preview documentation for PRs
+  deploy-preview:
+    name: Deploy Preview
+    runs-on: ubuntu-latest
+    needs: build-docs
+    if: github.event_name == 'pull_request' && (github.event.inputs.deploy_preview != 'false')
+    timeout-minutes: 10
+
+    steps:
+    - name: Download documentation artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: documentation-${{ github.sha }}
+        path: docs
+
+    - name: Deploy to Netlify Preview
+      uses: nwtgck/actions-netlify@v2.1
+      with:
+        publish-dir: './docs/book'
+        production-branch: main
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        deploy-message: "Deploy from GitHub Actions - PR #${{ github.event.number }}"
+        enable-pull-request-comment: true
+        enable-commit-comment: false
+        overwrites-pull-request-comment: true
+      env:
+        NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+        NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+
+  # Documentation quality checks
+  docs-quality:
+    name: Documentation Quality
+    runs-on: ubuntu-latest
+    needs: build-docs
+    timeout-minutes: 15
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Download documentation artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: documentation-${{ github.sha }}
+        path: docs_artifacts
+
+    - name: Install quality tools
+      run: |
+        npm install -g alex
+        npm install -g write-good
+        pip install doc8
+
+    - name: Check documentation quality
+      run: |
+        # Check for insensitive, inconsiderate writing
+        alex docs/ || echo "Alex completed with suggestions"
+
+        # Check for writing quality
+        find docs -name "*.md" -exec write-good {} \; || echo "Write-good completed with suggestions"
+
+        # Check documentation style
+        doc8 docs/ || echo "Doc8 completed with suggestions"
+
+    - name: Analyze documentation coverage
+      run: |
+        python3 << 'EOF'
+        import json
+        import os
+
+        # Load metrics
+        if os.path.exists('docs_artifacts/metrics.json'):
+            with open('docs_artifacts/metrics.json', 'r') as f:
+                metrics = json.load(f)
+
+            print(f"Documentation Metrics:")
+            print(f"- Total Markdown files: {metrics['stats']['total_markdown_files']}")
+            print(f"- Total Rust files: {metrics['stats']['total_rust_files']}")
+            print(f"- Documented functions: {metrics['stats']['documented_functions']}")
+            print(f"- Doc coverage: {metrics['stats']['doc_coverage']}")
+
+            # Calculate documentation ratio
+            md_files = metrics['stats']['total_markdown_files']
+            rs_files = metrics['stats']['total_rust_files']
+
+            if rs_files > 0:
+                ratio = md_files / rs_files
+                print(f"- Documentation ratio: {ratio:.2f} MD files per RS file")
+
+                if ratio < 0.1:
+                    print("::warning::Low documentation ratio - consider adding more documentation")
+                elif ratio > 0.5:
+                    print("✅ Good documentation ratio")
+        EOF
+
+    - name: Check for documentation TODOs
+      run: |
+        TODO_COUNT=$(grep -r "TODO\|FIXME\|XXX" docs/ --include="*.md" | wc -l || echo "0")
+        echo "Documentation TODOs found: $TODO_COUNT"
+
+        if [ "$TODO_COUNT" -gt 0 ]; then
+          echo "::warning::Found $TODO_COUNT TODOs in documentation"
+          grep -r "TODO\|FIXME\|XXX" docs/ --include="*.md" || true
+        fi
+
+  # Generate API documentation diff for PRs
+  api-docs-diff:
+    name: API Documentation Diff
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    timeout-minutes: 15
+
+    steps:
+    - name: Checkout PR branch
+      uses: actions/checkout@v4
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Cache dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: api-diff-${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y pkg-config libssl-dev
+
+    - name: Generate current API docs
+      run: |
+        cargo doc --workspace --all-features --no-deps --target-dir current_docs
+
+    - name: Checkout main branch
+      run: |
+        git fetch origin main
+        git checkout origin/main
+
+    - name: Generate main API docs
+      run: |
+        cargo doc --workspace --all-features --no-deps --target-dir main_docs
+
+    - name: Compare API documentation
+      run: |
+        # Simple diff of public API structure
+        find current_docs/doc -name "*.html" | sort > current_files.txt
+        find main_docs/doc -name "*.html" | sort > main_files.txt
+
+        echo "## API Documentation Changes" > api_diff.md
+        echo "" >> api_diff.md
+
+        if ! cmp -s current_files.txt main_files.txt; then
+          echo "### New/Removed Documentation Files:" >> api_diff.md
+          diff main_files.txt current_files.txt >> api_diff.md || true
+        else
+          echo "No new or removed documentation files." >> api_diff.md
+        fi
+
+    - name: Post API diff comment
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const fs = require('fs');
+          if (fs.existsSync('api_diff.md')) {
+            const diff = fs.readFileSync('api_diff.md', 'utf8');
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: diff
+            });
+          }

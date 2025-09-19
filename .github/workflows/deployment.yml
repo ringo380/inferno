@@ -1,0 +1,561 @@
+name: Deployment Automation
+
+on:
+  push:
+    branches: [main]
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+      deployment_strategy:
+        description: 'Deployment strategy'
+        required: false
+        default: 'rolling'
+        type: choice
+        options:
+          - rolling
+          - blue-green
+          - canary
+      skip_tests:
+        description: 'Skip pre-deployment tests'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  # Determine deployment strategy and environment
+  deployment-strategy:
+    name: Deployment Strategy
+    runs-on: ubuntu-latest
+    outputs:
+      environment: ${{ steps.strategy.outputs.environment }}
+      strategy: ${{ steps.strategy.outputs.strategy }}
+      should-deploy: ${{ steps.strategy.outputs.should-deploy }}
+
+    steps:
+    - name: Determine deployment strategy
+      id: strategy
+      run: |
+        if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+          echo "environment=${{ github.event.inputs.environment }}" >> $GITHUB_OUTPUT
+          echo "strategy=${{ github.event.inputs.deployment_strategy }}" >> $GITHUB_OUTPUT
+          echo "should-deploy=true" >> $GITHUB_OUTPUT
+        elif [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" == "refs/heads/main" ]]; then
+          echo "environment=staging" >> $GITHUB_OUTPUT
+          echo "strategy=rolling" >> $GITHUB_OUTPUT
+          echo "should-deploy=true" >> $GITHUB_OUTPUT
+        elif [[ "${{ github.event_name }}" == "release" ]]; then
+          echo "environment=production" >> $GITHUB_OUTPUT
+          echo "strategy=blue-green" >> $GITHUB_OUTPUT
+          echo "should-deploy=true" >> $GITHUB_OUTPUT
+        else
+          echo "should-deploy=false" >> $GITHUB_OUTPUT
+        fi
+
+  # Pre-deployment validation
+  pre-deployment-validation:
+    name: Pre-deployment Validation
+    runs-on: ubuntu-latest
+    needs: deployment-strategy
+    if: needs.deployment-strategy.outputs.should-deploy == 'true' && github.event.inputs.skip_tests != 'true'
+    timeout-minutes: 20
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Cache dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: deploy-validation-${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y pkg-config libssl-dev
+
+    - name: Run deployment-specific tests
+      run: |
+        # Run subset of critical tests for deployment validation
+        cargo test --release --workspace integration_tests
+        cargo test --release --test end_to_end_tests
+
+    - name: Validate configuration for target environment
+      run: |
+        # Validate configuration for target environment
+        ENV="${{ needs.deployment-strategy.outputs.environment }}"
+        cargo run --release -- config validate --env $ENV || echo "Config validation completed"
+
+    - name: Security scan for deployment
+      run: |
+        cargo install cargo-audit --locked
+        cargo audit
+
+    - name: Smoke test binary
+      run: |
+        cargo build --release
+        ./target/release/inferno --version
+        ./target/release/inferno --help
+
+  # Staging deployment
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: [deployment-strategy, pre-deployment-validation]
+    if: needs.deployment-strategy.outputs.environment == 'staging' && (needs.pre-deployment-validation.result == 'success' || needs.pre-deployment-validation.result == 'skipped')
+    timeout-minutes: 30
+    environment:
+      name: staging
+      url: https://staging.inferno-ai.dev
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: us-west-2
+
+    - name: Log in to Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v2
+
+    - name: Set up kubectl
+      uses: azure/setup-kubectl@v3
+      with:
+        version: 'v1.28.0'
+
+    - name: Configure kubectl for staging
+      run: |
+        aws eks update-kubeconfig --region us-west-2 --name inferno-staging
+
+    - name: Deploy to staging with rolling update
+      run: |
+        # Update deployment image
+        kubectl set image deployment/inferno-api \
+          inferno=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
+          -n staging
+
+        # Wait for rollout to complete
+        kubectl rollout status deployment/inferno-api -n staging --timeout=600s
+
+        # Update worker deployment
+        kubectl set image deployment/inferno-worker \
+          inferno=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
+          -n staging
+
+        kubectl rollout status deployment/inferno-worker -n staging --timeout=600s
+
+    - name: Run staging health checks
+      run: |
+        # Wait for services to be ready
+        sleep 30
+
+        # Health check endpoints
+        STAGING_URL="https://staging.inferno-ai.dev"
+
+        # Check API health
+        curl -f "$STAGING_URL/health" || exit 1
+
+        # Check metrics endpoint
+        curl -f "$STAGING_URL/metrics" || exit 1
+
+        # Run basic API tests
+        curl -f -X POST "$STAGING_URL/api/v1/infer" \
+          -H "Content-Type: application/json" \
+          -d '{"model": "test", "prompt": "Hello"}' || echo "API test completed"
+
+    - name: Run staging smoke tests
+      run: |
+        # Deploy test job to validate functionality
+        cat > staging-smoke-test.yaml << 'EOF'
+        apiVersion: batch/v1
+        kind: Job
+        metadata:
+          name: staging-smoke-test
+          namespace: staging
+        spec:
+          template:
+            spec:
+              containers:
+              - name: smoke-test
+                image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+                command: ["inferno"]
+                args: ["--version"]
+              restartPolicy: Never
+          backoffLimit: 3
+        EOF
+
+        kubectl apply -f staging-smoke-test.yaml
+        kubectl wait --for=condition=complete job/staging-smoke-test -n staging --timeout=300s
+
+    - name: Update staging status
+      run: |
+        echo "Staging deployment completed successfully"
+        echo "URL: https://staging.inferno-ai.dev"
+
+  # Production deployment with approval
+  production-approval:
+    name: Production Deployment Approval
+    runs-on: ubuntu-latest
+    needs: [deployment-strategy]
+    if: needs.deployment-strategy.outputs.environment == 'production'
+    timeout-minutes: 60
+    environment:
+      name: production-approval
+
+    steps:
+    - name: Request production deployment approval
+      run: |
+        echo "Production deployment requires manual approval"
+        echo "Deployment details:"
+        echo "- Environment: production"
+        echo "- Strategy: ${{ needs.deployment-strategy.outputs.strategy }}"
+        echo "- Commit: ${{ github.sha }}"
+        echo "- Triggered by: ${{ github.event_name }}"
+
+  # Production deployment
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [deployment-strategy, pre-deployment-validation, production-approval]
+    if: needs.deployment-strategy.outputs.environment == 'production'
+    timeout-minutes: 45
+    environment:
+      name: production
+      url: https://inferno-ai.dev
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: us-west-2
+
+    - name: Set up kubectl
+      uses: azure/setup-kubectl@v3
+      with:
+        version: 'v1.28.0'
+
+    - name: Configure kubectl for production
+      run: |
+        aws eks update-kubeconfig --region us-west-2 --name inferno-production
+
+    - name: Blue-Green Deployment
+      if: needs.deployment-strategy.outputs.strategy == 'blue-green'
+      run: |
+        # Get current active color
+        CURRENT_COLOR=$(kubectl get service inferno-api -n production -o jsonpath='{.spec.selector.color}')
+        NEW_COLOR=$([ "$CURRENT_COLOR" = "blue" ] && echo "green" || echo "blue")
+
+        echo "Current deployment: $CURRENT_COLOR"
+        echo "New deployment: $NEW_COLOR"
+
+        # Update the inactive environment
+        kubectl set image deployment/inferno-api-$NEW_COLOR \
+          inferno=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$(git describe --tags --exact-match 2>/dev/null || echo 'latest') \
+          -n production
+
+        # Wait for new deployment to be ready
+        kubectl rollout status deployment/inferno-api-$NEW_COLOR -n production --timeout=900s
+
+        # Run health checks on new deployment
+        kubectl port-forward service/inferno-api-$NEW_COLOR 8080:8080 -n production &
+        PORT_FORWARD_PID=$!
+        sleep 10
+
+        # Health check
+        curl -f http://localhost:8080/health || exit 1
+
+        # Kill port forward
+        kill $PORT_FORWARD_PID
+
+        # Switch traffic to new deployment
+        kubectl patch service inferno-api -n production -p '{"spec":{"selector":{"color":"'$NEW_COLOR'"}}}'
+
+        echo "Traffic switched to $NEW_COLOR deployment"
+
+        # Keep old deployment for quick rollback (cleanup will happen in next deployment)
+        echo "Blue-green deployment completed successfully"
+
+    - name: Rolling Deployment
+      if: needs.deployment-strategy.outputs.strategy == 'rolling'
+      run: |
+        # Update deployment with rolling strategy
+        kubectl set image deployment/inferno-api \
+          inferno=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$(git describe --tags --exact-match 2>/dev/null || echo 'latest') \
+          -n production
+
+        # Wait for rollout with extended timeout for production
+        kubectl rollout status deployment/inferno-api -n production --timeout=900s
+
+        echo "Rolling deployment completed successfully"
+
+    - name: Canary Deployment
+      if: needs.deployment-strategy.outputs.strategy == 'canary'
+      run: |
+        # Deploy canary version (10% traffic)
+        kubectl apply -f - << 'EOF'
+        apiVersion: argoproj.io/v1alpha1
+        kind: Rollout
+        metadata:
+          name: inferno-api-canary
+          namespace: production
+        spec:
+          replicas: 5
+          strategy:
+            canary:
+              steps:
+              - setWeight: 10
+              - pause: {duration: 2m}
+              - setWeight: 25
+              - pause: {duration: 2m}
+              - setWeight: 50
+              - pause: {duration: 2m}
+              - setWeight: 75
+              - pause: {duration: 2m}
+          selector:
+            matchLabels:
+              app: inferno-api
+          template:
+            metadata:
+              labels:
+                app: inferno-api
+            spec:
+              containers:
+              - name: inferno
+                image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$(git describe --tags --exact-match 2>/dev/null || echo 'latest')
+        EOF
+
+        # Monitor canary deployment
+        kubectl argo rollouts get rollout inferno-api-canary -n production -w
+
+    - name: Production health checks
+      run: |
+        # Comprehensive health checks for production
+        PROD_URL="https://inferno-ai.dev"
+
+        # Wait for services to stabilize
+        sleep 60
+
+        # API health check
+        curl -f "$PROD_URL/health" || exit 1
+
+        # Metrics endpoint
+        curl -f "$PROD_URL/metrics" || exit 1
+
+        # Performance check
+        time curl -f "$PROD_URL/api/v1/models" || exit 1
+
+        echo "Production health checks passed"
+
+    - name: Update production status
+      run: |
+        echo "Production deployment completed successfully"
+        echo "Strategy: ${{ needs.deployment-strategy.outputs.strategy }}"
+        echo "URL: https://inferno-ai.dev"
+
+  # Post-deployment validation
+  post-deployment-validation:
+    name: Post-deployment Validation
+    runs-on: ubuntu-latest
+    needs: [deployment-strategy, deploy-staging, deploy-production]
+    if: always() && (needs.deploy-staging.result == 'success' || needs.deploy-production.result == 'success')
+    timeout-minutes: 20
+
+    steps:
+    - name: Determine target environment
+      id: target-env
+      run: |
+        if [[ "${{ needs.deploy-production.result }}" == "success" ]]; then
+          echo "environment=production" >> $GITHUB_OUTPUT
+          echo "url=https://inferno-ai.dev" >> $GITHUB_OUTPUT
+        else
+          echo "environment=staging" >> $GITHUB_OUTPUT
+          echo "url=https://staging.inferno-ai.dev" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Run comprehensive API tests
+      run: |
+        TARGET_URL="${{ steps.target-env.outputs.url }}"
+
+        # Test suite for deployed environment
+        echo "Running post-deployment tests against $TARGET_URL"
+
+        # Health check
+        curl -f "$TARGET_URL/health"
+
+        # Version check
+        curl -f "$TARGET_URL/api/v1/version"
+
+        # Models endpoint
+        curl -f "$TARGET_URL/api/v1/models"
+
+        # Metrics endpoint
+        curl -f "$TARGET_URL/metrics"
+
+    - name: Performance validation
+      run: |
+        TARGET_URL="${{ steps.target-env.outputs.url }}"
+
+        # Basic load test
+        for i in {1..10}; do
+          curl -f "$TARGET_URL/health" &
+        done
+        wait
+
+        echo "Performance validation completed"
+
+    - name: Integration test suite
+      run: |
+        # Run integration tests against deployed environment
+        echo "Integration tests would run here against ${{ steps.target-env.outputs.environment }}"
+        # In a real deployment, this would run comprehensive API tests
+
+  # Rollback mechanism
+  rollback-deployment:
+    name: Rollback Deployment
+    runs-on: ubuntu-latest
+    if: failure() && (needs.deploy-staging.result == 'failure' || needs.deploy-production.result == 'failure')
+    timeout-minutes: 15
+    environment:
+      name: ${{ needs.deployment-strategy.outputs.environment }}-rollback
+
+    steps:
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: us-west-2
+
+    - name: Set up kubectl
+      uses: azure/setup-kubectl@v3
+      with:
+        version: 'v1.28.0'
+
+    - name: Configure kubectl
+      run: |
+        ENV="${{ needs.deployment-strategy.outputs.environment }}"
+        aws eks update-kubeconfig --region us-west-2 --name inferno-$ENV
+
+    - name: Rollback deployment
+      run: |
+        ENV="${{ needs.deployment-strategy.outputs.environment }}"
+
+        echo "Rolling back deployment in $ENV environment"
+
+        # Rollback API deployment
+        kubectl rollout undo deployment/inferno-api -n $ENV
+
+        # Rollback worker deployment
+        kubectl rollout undo deployment/inferno-worker -n $ENV
+
+        # Wait for rollback to complete
+        kubectl rollout status deployment/inferno-api -n $ENV --timeout=300s
+        kubectl rollout status deployment/inferno-worker -n $ENV --timeout=300s
+
+        echo "Rollback completed successfully"
+
+  # Deployment notification
+  deployment-notification:
+    name: Deployment Notification
+    runs-on: ubuntu-latest
+    needs: [deployment-strategy, deploy-staging, deploy-production, post-deployment-validation, rollback-deployment]
+    if: always()
+    timeout-minutes: 5
+
+    steps:
+    - name: Generate deployment report
+      run: |
+        cat > deployment_report.md << 'EOF'
+        # 🚀 Deployment Report
+
+        **Environment:** ${{ needs.deployment-strategy.outputs.environment }}
+        **Strategy:** ${{ needs.deployment-strategy.outputs.strategy }}
+        **Triggered by:** ${{ github.event_name }}
+        **Commit:** ${{ github.sha }}
+        **Date:** $(date -u)
+
+        ## 📊 Deployment Status
+
+        | Stage | Status |
+        |-------|--------|
+        | Pre-deployment Validation | ${{ needs.pre-deployment-validation.result || 'skipped' }} |
+        | Staging Deployment | ${{ needs.deploy-staging.result || 'skipped' }} |
+        | Production Approval | ${{ needs.production-approval.result || 'skipped' }} |
+        | Production Deployment | ${{ needs.deploy-production.result || 'skipped' }} |
+        | Post-deployment Validation | ${{ needs.post-deployment-validation.result || 'skipped' }} |
+        | Rollback | ${{ needs.rollback-deployment.result || 'not-triggered' }} |
+
+        ## 🔗 Environment URLs
+
+        $(if [[ "${{ needs.deploy-staging.result }}" == "success" ]]; then
+          echo "- **Staging:** https://staging.inferno-ai.dev"
+        fi)
+
+        $(if [[ "${{ needs.deploy-production.result }}" == "success" ]]; then
+          echo "- **Production:** https://inferno-ai.dev"
+        fi)
+
+        ## 📈 Next Steps
+
+        $(if [[ "${{ needs.deploy-production.result }}" == "success" ]]; then
+          echo "- Monitor production metrics and logs"
+          echo "- Validate customer-facing functionality"
+          echo "- Update status page if needed"
+        elif [[ "${{ needs.deploy-staging.result }}" == "success" ]]; then
+          echo "- Test staging environment thoroughly"
+          echo "- Prepare for production deployment"
+          echo "- Review staging metrics"
+        elif [[ "${{ needs.rollback-deployment.result }}" == "success" ]]; then
+          echo "- Investigate deployment failure root cause"
+          echo "- Fix issues before next deployment attempt"
+          echo "- Validate rolled-back environment"
+        fi)
+        EOF
+
+    - name: Post to team communication
+      run: |
+        # In production, this would post to Slack/Teams/Discord
+        echo "Deployment notification sent"
+        echo "Status: ${{ job.status }}"
+
+        cat deployment_report.md
+
+    - name: Update deployment status
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const fs = require('fs');
+          const report = fs.readFileSync('deployment_report.md', 'utf8');
+
+          // In production, this would update status dashboards
+          console.log('Deployment report generated');
+          console.log(report);

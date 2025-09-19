@@ -137,7 +137,7 @@ impl InferenceBackend for OnnxBackend {
     }
 
     async fn get_model_info(&self) -> Option<ModelInfo> {
-        self.model_info.clone()
+        self.model_info.as_ref().cloned()
     }
 
     async fn infer(&mut self, input: &str, _params: &InferenceParams) -> Result<String> {
@@ -268,6 +268,6 @@ impl InferenceBackend for OnnxBackend {
     }
 
     fn get_metrics(&self) -> Option<InferenceMetrics> {
-        self.metrics.clone()
+        self.metrics.as_ref().cloned()
     }
 }

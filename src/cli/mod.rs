@@ -41,6 +41,7 @@ pub mod serve;
 pub mod streaming;
 pub mod validate;
 pub mod versioning;
+pub mod performance_benchmark;
 
 use clap::{Parser, Subcommand};
 
@@ -190,6 +191,9 @@ pub enum Commands {
 
     #[command(about = "Comprehensive testing and quality assurance framework")]
     QAFramework(qa_framework::QAFrameworkArgs),
+
+    #[command(about = "Performance benchmarking and baseline establishment")]
+    PerformanceBenchmark(performance_benchmark::PerformanceBenchmarkArgs),
 
     #[command(about = "Launch terminal user interface")]
     Tui,

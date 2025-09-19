@@ -54,7 +54,7 @@ async fn main() -> Result<()> {
         Commands::Streaming(args) => inferno::cli::streaming::execute(args, &config).await,
         Commands::Security(args) => inferno::cli::security::execute(args, &config).await,
         Commands::Observability(args) => inferno::cli::observability::execute(args, &config).await,
-        Commands::Optimization(args) => inferno::cli::optimization::handle_optimization_command(args).await.map_err(|e| anyhow::anyhow!(e)),
+        Commands::Optimization(args) => inferno::cli::optimization::execute_optimization_command(args).await,
         Commands::MultiModal(args) => inferno::cli::multimodal::handle_multimodal_command(args).await.map_err(|e| anyhow::anyhow!(e)),
         Commands::Deployment(args) => inferno::cli::deployment::handle_deployment_command(args).await,
         Commands::Marketplace(args) => inferno::cli::marketplace::handle_marketplace_command(args).await,
@@ -81,6 +81,7 @@ async fn main() -> Result<()> {
         Commands::MultiTenancy(args) => inferno::cli::multi_tenancy::execute(args, &config).await,
         Commands::AdvancedCache(args) => inferno::cli::advanced_cache::execute(args, &config).await,
         Commands::QAFramework(args) => inferno::cli::qa_framework::execute(args, &config).await,
+        Commands::PerformanceBenchmark(args) => inferno::cli::performance_benchmark::execute_performance_benchmark(args).await,
         Commands::Tui => inferno::tui::launch(&config).await,
     };
 

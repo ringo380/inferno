@@ -1558,10 +1558,15 @@ async fn handle_audit_command(command: AuditCommand, system: &LoggingAuditSystem
             severity, outcome, text, limit, offset, sort_by, sort_order,
             format, export
         } => {
-            println!("Searching audit events...");
+            println!("Searching audit events with validation...");
+
+            // Validate input parameters
+            validate_search_parameters(&event_types, &severity, &text, limit, offset)?;
 
             let (start_time, end_time) = if from.is_some() || to.is_some() {
-                parse_date_range(from.as_deref(), to.as_deref())?
+                let (start, end) = parse_date_range(from.as_deref(), to.as_deref())?;
+                validate_date_range(start, end)?;
+                (start, end)
             } else {
                 (None, None)
             };
@@ -1577,47 +1582,98 @@ async fn handle_audit_command(command: AuditCommand, system: &LoggingAuditSystem
                 } else {
                     Some(severity.into_iter().map(|s| parse_severity(&s)).collect::<Result<Vec<_>>>()?)
                 },
-                actors: user_id.map(|id| vec![id]),
-                resources: resource_id.map(|id| vec![id]),
+                actors: if let Some(id) = user_id {
+                    Some(vec![sanitize_input(&id)?])
+                } else {
+                    None
+                },
+                resources: if let Some(id) = resource_id {
+                    Some(vec![sanitize_input(&id)?])
+                } else {
+                    None
+                },
                 start_time,
                 end_time,
-                limit,
+                limit: limit.map(|l| std::cmp::min(l, 10000)), // Cap at 10K
                 offset,
                 sort_by: sort_by.map(|s| parse_sort_field(&s)).transpose()?,
                 sort_order: sort_order.map(|o| parse_sort_order(&o)).transpose()?,
-                search_text: text.clone(),
+                search_text: text.as_ref().map(|t| sanitize_search_text(t)).transpose()?,
                 date_range: if let (Some(start), Some(end)) = (start_time, end_time) {
                     Some((start, end))
                 } else {
                     None
                 },
                 actor_filter: None,
-                resource_filter: None,
+                resource_filter: if let Some(rt) = resource_type {
+                    Some(sanitize_input(&rt)?)
+                } else {
+                    None
+                },
                 severity_filter: None,
-                outcome_filter: None,
-                text_search: text,
+                outcome_filter: if let Some(first_outcome) = outcome.first() {
+                    Some(sanitize_input(first_outcome)?)
+                } else {
+                    None
+                },
+                text_search: if let Some(ref t) = text {
+                    Some(sanitize_search_text(t)?)
+                } else {
+                    None
+                },
             };
 
-            let events = system.search_audit_events(query).await?;
+            // Execute search with timeout
+            let start_time = std::time::Instant::now();
+            let events = match tokio::time::timeout(
+                std::time::Duration::from_secs(60),
+                system.search_audit_events(query)
+            ).await {
+                Ok(result) => result?,
+                Err(_) => {
+                    return Err(anyhow::anyhow!("Search query timed out after 60 seconds. Please refine your search criteria."));
+                }
+            };
+            let search_duration = start_time.elapsed();
+
             display_audit_events(&events, format.as_deref())?;
 
             if let Some(export_path) = export {
+                validate_export_path(&export_path)?;
                 export_audit_events(&events, &export_path, format.as_deref().unwrap_or("json"))?;
                 println!("✓ Results exported to: {}", export_path.display());
             }
 
-            println!("Found {} audit events", events.len());
+            println!("Found {} audit events in {:.2}s", events.len(), search_duration.as_secs_f64());
         },
 
         AuditCommand::Stats { range, group_by, format, trends, export } => {
             println!("Generating audit statistics...");
 
-            let date_range = parse_time_range(range.as_deref().unwrap_or("24h"))?;
-            let stats = system.get_audit_statistics(Some((date_range.start, date_range.end))).await?;
+            // Validate range parameter
+            let range_str = range.as_deref().unwrap_or("24h");
+            validate_time_range_string(range_str)?;
+
+            let date_range = parse_time_range(range_str)?;
+            validate_date_range(Some(date_range.start), Some(date_range.end))?;
+
+            // Validate group_by parameters
+            validate_group_by_fields(&group_by)?;
+
+            let stats = match tokio::time::timeout(
+                std::time::Duration::from_secs(30),
+                system.get_audit_statistics(Some((date_range.start, date_range.end)))
+            ).await {
+                Ok(result) => result?,
+                Err(_) => {
+                    return Err(anyhow::anyhow!("Statistics generation timed out. Try a smaller time range."));
+                }
+            };
 
             display_audit_statistics(&stats, format.as_deref(), &group_by, trends)?;
 
             if let Some(export_path) = export {
+                validate_export_path(&export_path)?;
                 export_audit_statistics(&stats, &export_path, format.as_deref().unwrap_or("json"))?;
                 println!("✓ Statistics exported to: {}", export_path.display());
             }
@@ -1626,7 +1682,27 @@ async fn handle_audit_command(command: AuditCommand, system: &LoggingAuditSystem
         AuditCommand::Validate { from, to, detailed, fix, report, output } => {
             println!("Validating audit trail integrity...");
 
-            let integrity_report = system.validate_audit_integrity().await?;
+            // Validate date range if provided
+            if from.is_some() || to.is_some() {
+                let (start_time, end_time) = parse_date_range(from.as_deref(), to.as_deref())?;
+                validate_date_range(start_time, end_time)?;
+            }
+
+            // Validate output path if provided
+            if let Some(ref output_path) = output {
+                validate_export_path(output_path)?;
+            }
+
+            let integrity_report = match tokio::time::timeout(
+                std::time::Duration::from_secs(120), // 2 minutes for validation
+                system.validate_audit_integrity()
+            ).await {
+                Ok(result) => result?,
+                Err(_) => {
+                    return Err(anyhow::anyhow!("Integrity validation timed out after 2 minutes."));
+                }
+            };
+
             display_integrity_report(&integrity_report, detailed)?;
 
             if report {
@@ -1641,10 +1717,177 @@ async fn handle_audit_command(command: AuditCommand, system: &LoggingAuditSystem
             let has_violations = !integrity_report.hash_mismatches.is_empty() ||
                                 !integrity_report.missing_files.is_empty() ||
                                 !integrity_report.errors.is_empty();
+
             if fix && has_violations {
                 println!("Attempting to fix integrity issues...");
-                // This would implement integrity fixing logic
-                println!("✓ Integrity issues fixed");
+                // Validate fix operation
+                if integrity_report.files_checked > 10000 {
+                    return Err(anyhow::anyhow!("Too many files to fix safely. Manual intervention required."));
+                }
+                // This would implement integrity fixing logic with proper validation
+                println!("✓ Integrity issues analysis completed (actual fixes would be implemented here)");
+            }
+        },
+
+        AuditCommand::Show { event_id, format, full, related } => {
+            // Validate event ID
+            let sanitized_id = sanitize_input(&event_id)?;
+            if sanitized_id.len() > 100 {
+                return Err(anyhow::anyhow!("Event ID too long"));
+            }
+
+            println!("Retrieving audit event: {}", sanitized_id);
+
+            // Search for specific event
+            let query = AuditSearchQuery {
+                search_text: Some(sanitized_id.clone()),
+                limit: Some(1),
+                ..Default::default()
+            };
+
+            let events = system.search_audit_events(query).await?;
+            if events.is_empty() {
+                println!("Event not found: {}", sanitized_id);
+                return Ok(());
+            }
+
+            let event = &events[0];
+            match format.as_deref().unwrap_or("json") {
+                "json" => println!("{}", serde_json::to_string_pretty(event)?),
+                "yaml" => println!("{}", serde_yaml::to_string(event)?),
+                _ => {
+                    println!("Event Details:");
+                    println!("==============");
+                    println!("ID: {}", event.id);
+                    println!("Type: {:?}", event.event_type);
+                    println!("Severity: {:?}", event.severity);
+                    println!("Actor: {} ({})", event.actor.name, event.actor.actor_type);
+                    println!("Resource: {} ({:?})", event.resource.name, event.resource.resource_type);
+                    println!("Action: {}", event.action);
+                    println!("Success: {}", event.outcome.success);
+                    if let Some(duration) = event.outcome.duration_ms {
+                        println!("Duration: {}ms", duration);
+                    }
+                    println!("Description: {}", event.details.description);
+
+                    if full {
+                        println!("\nFull Details:");
+                        println!("Context: {:?}", event.context);
+                        println!("Metadata: {:?}", event.metadata);
+                    }
+                }
+            }
+
+            if related {
+                println!("\nSearching for related events...");
+                let related_query = AuditSearchQuery {
+                    actors: Some(vec![event.actor.id.clone()]),
+                    resources: Some(vec![event.resource.id.clone()]),
+                    limit: Some(10),
+                    ..Default::default()
+                };
+                let related_events = system.search_audit_events(related_query).await?;
+                println!("Found {} related events", related_events.len());
+                display_audit_events(&related_events, Some("table"))?;
+            }
+        },
+
+        AuditCommand::Create { event_type, action, resource_type, resource_id, severity, outcome, details, metadata } => {
+            println!("Creating manual audit event...");
+
+            // Validate and sanitize inputs
+            let sanitized_action = sanitize_input(&action)?;
+            let sanitized_resource_type = sanitize_input(&resource_type)?;
+            let sanitized_resource_id = sanitize_input(&resource_id)?;
+
+            if sanitized_action.is_empty() || sanitized_resource_id.is_empty() {
+                return Err(anyhow::anyhow!("Action and resource ID cannot be empty"));
+            }
+
+            // Parse and validate optional fields
+            let event_severity = if let Some(sev) = severity {
+                parse_severity(&sev)?
+            } else {
+                EventSeverity::Info
+            };
+
+            let event_outcome = if let Some(out) = outcome {
+                match out.to_lowercase().as_str() {
+                    "success" => true,
+                    "failure" | "failed" => false,
+                    _ => return Err(anyhow::anyhow!("Invalid outcome: {}", out)),
+                }
+            } else {
+                true
+            };
+
+            // Parse metadata if provided
+            let event_metadata = if let Some(meta_str) = metadata {
+                serde_json::from_str::<HashMap<String, serde_json::Value>>(&meta_str)
+                    .map_err(|e| anyhow::anyhow!("Invalid metadata JSON: {}", e))?
+            } else {
+                HashMap::new()
+            };
+
+            println!("✓ Manual audit event creation validated (implementation would create actual event here)");
+        },
+
+        AuditCommand::Archive { before, dry_run, destination, compression, confirm } => {
+            if !confirm && !dry_run {
+                return Err(anyhow::anyhow!("Archive operation requires --confirm flag or --dry-run"));
+            }
+
+            // Validate date
+            let archive_date = chrono::DateTime::parse_from_rfc3339(&before)
+                .map_err(|e| anyhow::anyhow!("Invalid date format: {}", e))?;
+
+            let now = chrono::Utc::now();
+            if archive_date > now {
+                return Err(anyhow::anyhow!("Archive date cannot be in the future"));
+            }
+
+            // Validate compression level if specified
+            if let Some(level) = compression {
+                if level > 9 {
+                    return Err(anyhow::anyhow!("Compression level must be 0-9"));
+                }
+            }
+
+            if dry_run {
+                println!("DRY RUN: Would archive events before {}", archive_date);
+            } else {
+                println!("Archiving events before {} (implementation would archive here)", archive_date);
+            }
+        },
+
+        AuditCommand::Delete { event_ids, before, event_types, dry_run, force, confirm } => {
+            if !confirm && !dry_run {
+                return Err(anyhow::anyhow!("Delete operation requires --confirm flag or --dry-run"));
+            }
+
+            if !force {
+                return Err(anyhow::anyhow!("Delete operation requires --force flag for safety"));
+            }
+
+            // Validate parameters
+            if event_ids.is_empty() && before.is_none() && event_types.is_empty() {
+                return Err(anyhow::anyhow!("Must specify event IDs, date, or event types to delete"));
+            }
+
+            // Validate event IDs if provided
+            if !event_ids.is_empty() {
+                if event_ids.len() > 1000 {
+                    return Err(anyhow::anyhow!("Too many event IDs specified (max 1000)"));
+                }
+                for id in &event_ids {
+                    sanitize_input(id)?;
+                }
+            }
+
+            if dry_run {
+                println!("DRY RUN: Would delete {} events based on criteria", event_ids.len());
+            } else {
+                println!("Deleting events (implementation would delete here)");
             }
         },
 
@@ -1992,6 +2235,185 @@ async fn handle_search_command(command: SearchCommand, system: &LoggingAuditSyst
 }
 
 // Helper functions
+
+// Validation helper functions
+
+fn validate_search_parameters(
+    event_types: &[String],
+    severities: &[String],
+    text: &Option<String>,
+    limit: Option<usize>,
+    offset: Option<usize>
+) -> Result<()> {
+    // Validate event types count
+    if event_types.len() > 50 {
+        return Err(anyhow::anyhow!("Too many event types specified (max 50)"));
+    }
+
+    // Validate severities count
+    if severities.len() > 10 {
+        return Err(anyhow::anyhow!("Too many severities specified (max 10)"));
+    }
+
+    // Validate search text
+    if let Some(search_text) = text {
+        if search_text.is_empty() {
+            return Err(anyhow::anyhow!("Search text cannot be empty"));
+        }
+        if search_text.len() > 1000 {
+            return Err(anyhow::anyhow!("Search text too long (max 1000 characters)"));
+        }
+        // Check for potential injection patterns
+        if search_text.contains("';") || search_text.contains("--") || search_text.contains("/*") {
+            return Err(anyhow::anyhow!("Search text contains potentially unsafe characters"));
+        }
+    }
+
+    // Validate limit
+    if let Some(l) = limit {
+        if l == 0 {
+            return Err(anyhow::anyhow!("Limit must be greater than 0"));
+        }
+        if l > 10000 {
+            return Err(anyhow::anyhow!("Limit too large (max 10,000)"));
+        }
+    }
+
+    // Validate offset
+    if let Some(o) = offset {
+        if o > 1_000_000 {
+            return Err(anyhow::anyhow!("Offset too large (max 1,000,000)"));
+        }
+    }
+
+    Ok(())
+}
+
+fn validate_date_range(start: Option<SystemTime>, end: Option<SystemTime>) -> Result<()> {
+    if let (Some(start_time), Some(end_time)) = (start, end) {
+        if start_time > end_time {
+            return Err(anyhow::anyhow!("Start time cannot be after end time"));
+        }
+
+        let duration = end_time.duration_since(start_time).unwrap_or_default();
+        if duration > std::time::Duration::from_secs(365 * 24 * 3600) {
+            return Err(anyhow::anyhow!("Date range too large (max 1 year)"));
+        }
+
+        // Check if dates are too far in the future
+        let now = SystemTime::now();
+        if start_time > now + std::time::Duration::from_secs(24 * 3600) {
+            return Err(anyhow::anyhow!("Start time cannot be more than 1 day in the future"));
+        }
+    }
+    Ok(())
+}
+
+fn validate_time_range_string(range: &str) -> Result<()> {
+    match range {
+        "1h" | "24h" | "7d" | "30d" | "1y" => Ok(()),
+        _ => {
+            // Try to parse as duration
+            if range.ends_with('h') || range.ends_with('d') || range.ends_with('m') {
+                let number_part = &range[..range.len()-1];
+                match number_part.parse::<u32>() {
+                    Ok(num) => {
+                        if range.ends_with('h') && num > 8760 { // Max 1 year in hours
+                            Err(anyhow::anyhow!("Time range too large"))
+                        } else if range.ends_with('d') && num > 365 { // Max 1 year in days
+                            Err(anyhow::anyhow!("Time range too large"))
+                        } else if range.ends_with('m') && num > 525600 { // Max 1 year in minutes
+                            Err(anyhow::anyhow!("Time range too large"))
+                        } else {
+                            Ok(())
+                        }
+                    },
+                    Err(_) => Err(anyhow::anyhow!("Invalid time range format: {}", range))
+                }
+            } else {
+                Err(anyhow::anyhow!("Invalid time range format: {}", range))
+            }
+        }
+    }
+}
+
+fn validate_group_by_fields(fields: &[String]) -> Result<()> {
+    if fields.len() > 5 {
+        return Err(anyhow::anyhow!("Too many group by fields (max 5)"));
+    }
+
+    let valid_fields = ["type", "severity", "actor", "resource", "outcome", "time"];
+    for field in fields {
+        if !valid_fields.contains(&field.as_str()) {
+            return Err(anyhow::anyhow!("Invalid group by field: {}", field));
+        }
+    }
+
+    Ok(())
+}
+
+fn validate_export_path(path: &PathBuf) -> Result<()> {
+    // Check if parent directory exists
+    if let Some(parent) = path.parent() {
+        if !parent.exists() {
+            return Err(anyhow::anyhow!("Export directory does not exist: {}", parent.display()));
+        }
+    }
+
+    // Check file extension
+    if let Some(extension) = path.extension() {
+        let ext_str = extension.to_string_lossy().to_lowercase();
+        match ext_str.as_str() {
+            "json" | "yaml" | "yml" | "csv" | "txt" => Ok(()),
+            _ => Err(anyhow::anyhow!("Unsupported export file extension: {}", ext_str))
+        }
+    } else {
+        Err(anyhow::anyhow!("Export file must have an extension"))
+    }
+}
+
+fn sanitize_input(input: &str) -> Result<String> {
+    if input.is_empty() {
+        return Err(anyhow::anyhow!("Input cannot be empty"));
+    }
+
+    if input.len() > 1000 {
+        return Err(anyhow::anyhow!("Input too long (max 1000 characters)"));
+    }
+
+    // Remove potentially dangerous characters
+    let sanitized = input
+        .chars()
+        .filter(|c| c.is_alphanumeric() || " -_.@".contains(*c))
+        .collect::<String>();
+
+    if sanitized.is_empty() {
+        return Err(anyhow::anyhow!("Input contains only invalid characters"));
+    }
+
+    Ok(sanitized)
+}
+
+fn sanitize_search_text(text: &str) -> Result<String> {
+    if text.is_empty() {
+        return Err(anyhow::anyhow!("Search text cannot be empty"));
+    }
+
+    if text.len() > 1000 {
+        return Err(anyhow::anyhow!("Search text too long (max 1000 characters)"));
+    }
+
+    // Check for injection patterns
+    let dangerous_patterns = ["';", "--", "/*", "*/", "union", "select", "drop", "delete", "insert", "update"];
+    let text_lower = text.to_lowercase();
+    for pattern in dangerous_patterns {
+        if text_lower.contains(pattern) {
+            return Err(anyhow::anyhow!("Search text contains potentially unsafe pattern: {}", pattern));
+        }
+    }
+
+    Ok(text.to_string())
+}
 
 async fn display_system_status(system: &LoggingAuditSystem, detailed: bool, format: Option<&str>, health: bool, performance: bool) -> Result<()> {
     println!("Logging & Audit System Status");

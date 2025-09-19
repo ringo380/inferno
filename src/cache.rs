@@ -375,10 +375,11 @@ impl ModelCache {
             warmup_priority: self.calculate_warmup_priority(model_name).await,
         });
 
-        // Add to cache
+        // Add to cache and keep Arc reference for return
+        let cached_model_ref = Arc::clone(&cached_model);
         {
             let mut cached_models = self.cached_models.write().await;
-            cached_models.insert(model_name.to_string(), cached_model.clone());
+            cached_models.insert(model_name.to_string(), cached_model);
             self.total_memory.fetch_add(memory_estimate, Ordering::Relaxed);
         }
 
@@ -397,7 +398,7 @@ impl ModelCache {
             });
         }
 
-        Ok(cached_model)
+        Ok(cached_model_ref)
     }
 
     /// Update usage statistics for a model

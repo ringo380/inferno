@@ -156,7 +156,7 @@ impl App {
     fn draw_header(&self, f: &mut Frame, area: Rect) {
         let title = format!(
             " Inferno AI/ML Runner v{} ",
-            env!("CARGO_PKG_VERSION")
+            std::env::var("CARGO_PKG_VERSION").unwrap_or_else(|_| "0.1.0".to_string())
         );
 
         let header = Paragraph::new(title)

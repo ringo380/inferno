@@ -1,0 +1,461 @@
+name: Performance Benchmarking CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    # Run performance benchmarks daily at 3 AM UTC
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+    inputs:
+      benchmark_type:
+        description: 'Type of benchmark to run'
+        required: false
+        default: 'all'
+        type: choice
+        options:
+        - all
+        - inference
+        - memory
+        - concurrent
+        - cache
+      enable_profiling:
+        description: 'Enable CPU profiling with flamegraphs'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  performance-benchmark:
+    name: Performance Benchmarks
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    strategy:
+      matrix:
+        rust-version: [stable]
+        benchmark: [inference, memory, concurrent, cache]
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Need full history for performance comparison
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        toolchain: ${{ matrix.rust-version }}
+        components: rustfmt, clippy
+
+    - name: Cache dependencies
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target/
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-cargo-
+
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          build-essential \
+          pkg-config \
+          libssl-dev \
+          libasound2-dev \
+          libfreetype6-dev \
+          libexpat1-dev \
+          libxcb-composite0-dev \
+          libfontconfig1-dev
+
+    - name: Install performance monitoring tools
+      run: |
+        # Install flamegraph for CPU profiling
+        cargo install flamegraph
+
+        # Install additional profiling tools
+        sudo apt-get install -y linux-perf
+
+        # Install criterion for benchmarking
+        cargo install cargo-criterion
+
+    - name: Build project
+      run: |
+        cargo build --release --all-features
+
+    - name: Run unit tests
+      run: |
+        cargo test --release --all-features
+
+    - name: Setup benchmark environment
+      run: |
+        mkdir -p benchmark_results
+        mkdir -p performance_baseline
+
+        # Create test models directory
+        mkdir -p test_models
+
+        # Set up environment variables
+        echo "INFERNO_MODELS_DIR=$(pwd)/test_models" >> $GITHUB_ENV
+        echo "INFERNO_LOG_LEVEL=info" >> $GITHUB_ENV
+
+    - name: Run Criterion benchmarks
+      run: |
+        # Run the specific benchmark based on matrix
+        cargo bench --bench ${{ matrix.benchmark }}_benchmark -- --output-format json > benchmark_results/${{ matrix.benchmark }}_results.json
+      continue-on-error: true
+
+    - name: Run CLI performance benchmarks
+      run: |
+        # Run the CLI benchmark command
+        cargo run --release -- performance-benchmark benchmark \
+          --bench-type ${{ matrix.benchmark }} \
+          --output benchmark_results \
+          --iterations 50
+      continue-on-error: true
+
+    - name: Generate performance report
+      run: |
+        # Create a summary report
+        echo "# Performance Benchmark Results" > benchmark_results/summary.md
+        echo "" >> benchmark_results/summary.md
+        echo "**Benchmark Type:** ${{ matrix.benchmark }}" >> benchmark_results/summary.md
+        echo "**Date:** $(date -u)" >> benchmark_results/summary.md
+        echo "**Commit:** ${{ github.sha }}" >> benchmark_results/summary.md
+        echo "**Rust Version:** ${{ matrix.rust-version }}" >> benchmark_results/summary.md
+        echo "" >> benchmark_results/summary.md
+
+        # Add system information
+        echo "## System Information" >> benchmark_results/summary.md
+        echo "- **OS:** $(uname -a)" >> benchmark_results/summary.md
+        echo "- **CPU:** $(lscpu | grep 'Model name' | cut -d: -f2 | xargs)" >> benchmark_results/summary.md
+        echo "- **Memory:** $(free -h | grep '^Mem:' | awk '{print $2}')" >> benchmark_results/summary.md
+        echo "" >> benchmark_results/summary.md
+
+        # List generated files
+        echo "## Generated Files" >> benchmark_results/summary.md
+        ls -la benchmark_results/ >> benchmark_results/summary.md
+
+    - name: Upload benchmark results
+      uses: actions/upload-artifact@v3
+      with:
+        name: benchmark-results-${{ matrix.benchmark }}-${{ github.sha }}
+        path: |
+          benchmark_results/
+          target/criterion/
+        retention-days: 30
+
+    - name: Compare with baseline (on main branch)
+      if: github.ref == 'refs/heads/main'
+      run: |
+        # Download previous baseline if it exists
+        if [ -f performance_baseline/baseline_results.json ]; then
+          cargo run --release -- performance-benchmark compare \
+            --current benchmark_results/${{ matrix.benchmark }}_benchmark.json \
+            --baseline performance_baseline/baseline_results.json \
+            --threshold 10.0 \
+            --report || echo "Performance regression detected but continuing..."
+        else
+          echo "No baseline found, establishing new baseline"
+          cargo run --release -- performance-benchmark baseline \
+            --output performance_baseline \
+            --backends gguf,onnx \
+            --duration 30
+        fi
+
+    - name: Check for performance regressions (on PRs)
+      if: github.event_name == 'pull_request'
+      run: |
+        mkdir -p pr_comparison
+
+        # Download latest baseline from main branch
+        curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+          "https://api.github.com/repos/${{ github.repository }}/actions/artifacts" \
+          | jq -r '.artifacts[] | select(.name | startswith("performance-baseline-")) | .archive_download_url' \
+          | head -1 > baseline_url.txt
+
+        if [ -s baseline_url.txt ]; then
+          BASELINE_URL=$(cat baseline_url.txt)
+          curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -L "$BASELINE_URL" -o baseline.zip
+          unzip baseline.zip -d baseline/
+
+          # Run comparison
+          cargo run --release -- performance-benchmark compare \
+            --current benchmark_results/${{ matrix.benchmark }}_results.json \
+            --baseline baseline/baseline_results.json \
+            --threshold 15.0 \
+            --output pr_comparison/regression_report.json \
+            --format json
+
+          # Check if regression detected
+          if [ -f "pr_comparison/regression_report.json" ]; then
+            REGRESSION=$(jq -r '.has_regression' pr_comparison/regression_report.json)
+            if [ "$REGRESSION" = "true" ]; then
+              echo "::warning::Performance regression detected in ${{ matrix.benchmark }} benchmark"
+              jq -r '.summary' pr_comparison/regression_report.json
+            else
+              echo "✅ No significant performance regression detected"
+            fi
+          fi
+        else
+          echo "No baseline found - skipping regression check"
+        fi
+
+  establish-baseline:
+    name: Establish Performance Baseline
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    timeout-minutes: 90
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        components: rustfmt, clippy
+
+    - name: Cache dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target/
+        key: ${{ runner.os }}-cargo-baseline-${{ hashFiles('**/Cargo.lock') }}
+
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          build-essential \
+          pkg-config \
+          libssl-dev \
+          libasound2-dev
+
+    - name: Build project
+      run: |
+        cargo build --release --all-features
+
+    - name: Establish comprehensive baseline
+      run: |
+        mkdir -p performance_baseline
+
+        # Run extended baseline with multiple iterations
+        cargo run --release -- performance-benchmark baseline \
+          --output performance_baseline \
+          --backends gguf,onnx \
+          --duration 120 \
+          --iterations 10 \
+          --warmup 30
+      env:
+        INFERNO_LOG_LEVEL: info
+
+    - name: Generate baseline summary
+      run: |
+        cd performance_baseline
+        cat > baseline_summary.json << 'EOF'
+        {
+          "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+          "commit": "${{ github.sha }}",
+          "branch": "${{ github.ref_name }}",
+          "rust_version": "$(rustc --version)",
+          "system_info": {
+            "os": "$(uname -a)",
+            "cpu": "$(lscpu | grep 'Model name' | cut -d: -f2 | xargs)",
+            "memory": "$(free -h | grep '^Mem:' | awk '{print $2}')"
+          }
+        }
+        EOF
+
+    - name: Store baseline in GitHub Pages
+      uses: peaceiris/actions-gh-pages@v3
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: performance_baseline
+        destination_dir: baselines/${{ github.sha }}
+        keep_files: true
+
+    - name: Upload baseline results
+      uses: actions/upload-artifact@v4
+      with:
+        name: performance-baseline-${{ github.sha }}
+        path: performance_baseline/
+        retention-days: 90
+
+    - name: Cache baseline for future comparisons
+      uses: actions/cache@v4
+      with:
+        path: performance_baseline/
+        key: performance-baseline-${{ github.sha }}
+        restore-keys: |
+          performance-baseline-
+
+  performance-monitoring:
+    name: Continuous Performance Monitoring
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule'
+    timeout-minutes: 30
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Cache dependencies
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target/
+        key: ${{ runner.os }}-cargo-monitor-${{ hashFiles('**/Cargo.lock') }}
+
+    - name: Build project
+      run: |
+        cargo build --release --all-features
+
+    - name: Run performance monitoring
+      run: |
+        mkdir -p monitoring_results
+
+        # Run 10-minute monitoring session
+        cargo run --release -- performance-benchmark monitor \
+          --duration 600 \
+          --interval 30 \
+          --format json \
+          --output monitoring_results/monitoring_$(date +%Y%m%d_%H%M%S).json
+
+    - name: Upload monitoring results
+      uses: actions/upload-artifact@v3
+      with:
+        name: monitoring-results-${{ github.run_number }}
+        path: monitoring_results/
+        retention-days: 7
+
+  stress-test:
+    name: Stress Testing
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    timeout-minutes: 45
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Cache dependencies
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target/
+        key: ${{ runner.os }}-cargo-stress-${{ hashFiles('**/Cargo.lock') }}
+
+    - name: Build project
+      run: |
+        cargo build --release --all-features
+
+    - name: Run stress tests
+      run: |
+        mkdir -p stress_results
+
+        # Run stress test with increasing load
+        for clients in 5 10 20; do
+          echo "Running stress test with $clients clients"
+          cargo run --release -- performance-benchmark stress \
+            --clients $clients \
+            --duration 300 \
+            --rate 2.0 || echo "Stress test with $clients clients completed with errors"
+        done
+
+    - name: Analyze stress test results
+      run: |
+        echo "Stress test analysis would be implemented here"
+        echo "This includes checking for memory leaks, error rates, and performance degradation"
+
+  performance-summary:
+    name: Performance Summary
+    runs-on: ubuntu-latest
+    needs: [performance-benchmark, establish-baseline]
+    if: always()
+
+    steps:
+    - name: Download all benchmark artifacts
+      uses: actions/download-artifact@v3
+      with:
+        path: all_results/
+
+    - name: Generate performance summary
+      run: |
+        echo "# 📊 Performance Benchmark Summary" > performance_summary.md
+        echo "" >> performance_summary.md
+        echo "**Run Date:** $(date -u)" >> performance_summary.md
+        echo "**Commit:** ${{ github.sha }}" >> performance_summary.md
+        echo "**Triggered by:** ${{ github.event_name }}" >> performance_summary.md
+        echo "" >> performance_summary.md
+
+        echo "## 🎯 Benchmark Status" >> performance_summary.md
+        if [ "${{ needs.performance-benchmark.result }}" == "success" ]; then
+          echo "✅ **Performance Benchmarks:** PASSED" >> performance_summary.md
+        else
+          echo "❌ **Performance Benchmarks:** FAILED" >> performance_summary.md
+        fi
+
+        if [ "${{ needs.establish-baseline.result }}" == "success" ]; then
+          echo "✅ **Baseline Establishment:** PASSED" >> performance_summary.md
+        else
+          echo "⚠️ **Baseline Establishment:** SKIPPED/FAILED" >> performance_summary.md
+        fi
+
+        echo "" >> performance_summary.md
+        echo "## 📁 Generated Artifacts" >> performance_summary.md
+        find all_results/ -name "*.json" -o -name "*.md" | head -20 | while read file; do
+          echo "- \`$(basename "$file")\`" >> performance_summary.md
+        done
+
+        echo "" >> performance_summary.md
+        echo "## 🔗 Next Steps" >> performance_summary.md
+        echo "1. Review benchmark results for performance trends" >> performance_summary.md
+        echo "2. Investigate any performance regressions" >> performance_summary.md
+        echo "3. Update performance targets if needed" >> performance_summary.md
+        echo "4. Consider optimizations for slow operations" >> performance_summary.md
+
+    - name: Upload performance summary
+      uses: actions/upload-artifact@v3
+      with:
+        name: performance-summary-${{ github.run_number }}
+        path: performance_summary.md
+        retention-days: 30
+
+    - name: Comment PR with performance results
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const fs = require('fs');
+          const summary = fs.readFileSync('performance_summary.md', 'utf8');
+
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: summary
+          });

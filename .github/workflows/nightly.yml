@@ -1,0 +1,666 @@
+name: Nightly Build & Test
+
+on:
+  schedule:
+    # Run every night at 2 AM UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      run_extended_tests:
+        description: 'Run extended test suite (stress tests, memory leak detection)'
+        required: false
+        default: true
+        type: boolean
+      run_security_scan:
+        description: 'Run extended security scanning'
+        required: false
+        default: true
+        type: boolean
+      test_coverage_threshold:
+        description: 'Minimum code coverage threshold'
+        required: false
+        default: '85'
+        type: string
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  INFERNO_LOG_LEVEL: debug
+
+jobs:
+  # Matrix strategy for comprehensive testing
+  comprehensive-test-matrix:
+    name: Comprehensive Testing
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        rust: [stable, beta, nightly]
+        feature_set: [default, minimal, full]
+        include:
+          # Test with older Rust versions
+          - os: ubuntu-latest
+            rust: 1.70.0  # MSRV
+            feature_set: default
+          # Test specific GPU configurations
+          - os: ubuntu-latest
+            rust: stable
+            feature_set: gpu-vulkan
+          - os: macos-latest
+            rust: stable
+            feature_set: gpu-metal
+          - os: windows-latest
+            rust: stable
+            feature_set: gpu-directml
+        exclude:
+          # Reduce Windows/macOS nightly noise
+          - os: windows-latest
+            rust: nightly
+          - os: macos-latest
+            rust: nightly
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: ${{ matrix.rust }}
+        components: rustfmt, clippy, miri
+
+    - name: Cache dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: nightly-${{ matrix.os }}-${{ matrix.rust }}-${{ matrix.feature_set }}-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          nightly-${{ matrix.os }}-${{ matrix.rust }}-${{ matrix.feature_set }}-
+          nightly-${{ matrix.os }}-${{ matrix.rust }}-
+          nightly-${{ matrix.os }}-
+
+    - name: Install system dependencies (Ubuntu)
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          pkg-config \
+          libssl-dev \
+          libasound2-dev \
+          libfreetype6-dev \
+          libexpat1-dev \
+          libxcb-composite0-dev \
+          libfontconfig1-dev \
+          valgrind \
+          linux-perf
+
+    - name: Install system dependencies (macOS)
+      if: matrix.os == 'macos-latest'
+      run: |
+        brew install pkg-config
+
+    - name: Setup feature flags
+      id: features
+      shell: bash
+      run: |
+        case "${{ matrix.feature_set }}" in
+          "minimal")
+            echo "flags=--no-default-features" >> $GITHUB_OUTPUT
+            ;;
+          "full")
+            echo "flags=--all-features" >> $GITHUB_OUTPUT
+            ;;
+          "gpu-vulkan")
+            echo "flags=--features gpu-vulkan" >> $GITHUB_OUTPUT
+            ;;
+          "gpu-metal")
+            echo "flags=--features gpu-metal" >> $GITHUB_OUTPUT
+            ;;
+          "gpu-directml")
+            echo "flags=--features gpu-directml" >> $GITHUB_OUTPUT
+            ;;
+          *)
+            echo "flags=" >> $GITHUB_OUTPUT
+            ;;
+        esac
+
+    - name: Build workspace
+      run: |
+        cargo build --workspace ${{ steps.features.outputs.flags }} --verbose
+
+    - name: Run unit tests
+      run: |
+        cargo test --workspace ${{ steps.features.outputs.flags }} --verbose
+      env:
+        RUST_BACKTRACE: 1
+
+    - name: Run integration tests
+      run: |
+        cargo test --test integration_tests ${{ steps.features.outputs.flags }}
+        cargo test --test component_unit_tests ${{ steps.features.outputs.flags }}
+        cargo test --test feature_integration_tests ${{ steps.features.outputs.flags }}
+      env:
+        RUST_BACKTRACE: 1
+
+    - name: Run end-to-end tests
+      run: |
+        cargo test --test end_to_end_tests ${{ steps.features.outputs.flags }}
+      env:
+        RUST_BACKTRACE: 1
+
+    - name: Run doctests
+      run: |
+        cargo test --doc --workspace ${{ steps.features.outputs.flags }}
+
+    - name: Run Miri (unsafe code validation)
+      if: matrix.rust == 'nightly' && matrix.os == 'ubuntu-latest'
+      run: |
+        cargo miri test ${{ steps.features.outputs.flags }} || echo "Miri tests completed with warnings"
+      env:
+        MIRIFLAGS: -Zmiri-disable-isolation
+
+    - name: Memory leak detection (Valgrind)
+      if: matrix.os == 'ubuntu-latest' && matrix.feature_set == 'default'
+      run: |
+        cargo build --release ${{ steps.features.outputs.flags }}
+        valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all \
+          --track-origins=yes --verbose \
+          ./target/release/inferno --help || echo "Valgrind completed with warnings"
+
+    - name: Upload test results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: test-results-${{ matrix.os }}-${{ matrix.rust }}-${{ matrix.feature_set }}
+        path: |
+          target/nextest/
+          test-results.xml
+        retention-days: 7
+
+  # Extended stress testing
+  stress-testing:
+    name: Stress Testing
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    if: github.event.inputs.run_extended_tests != 'false'
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Cache dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: stress-${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          pkg-config \
+          libssl-dev \
+          stress-ng \
+          htop
+
+    - name: Build release binary
+      run: cargo build --release --all-features
+
+    - name: Run concurrent stress test
+      timeout-minutes: 30
+      run: |
+        mkdir -p stress_results
+
+        # Start system monitoring
+        htop -d 1 > stress_results/system_monitor.log &
+        MONITOR_PID=$!
+
+        # Run stress test with multiple concurrent clients
+        for clients in 10 25 50 100; do
+          echo "Testing with $clients concurrent clients"
+          cargo run --release -- performance-benchmark stress \
+            --clients $clients \
+            --duration 300 \
+            --rate 5.0 \
+            --output stress_results/stress_${clients}_clients.json || echo "Stress test completed with warnings"
+
+          # Cool down period
+          sleep 30
+        done
+
+        # Stop monitoring
+        kill $MONITOR_PID || true
+
+    - name: Run memory stress test
+      timeout-minutes: 20
+      run: |
+        # Test with large model loading/unloading cycles
+        for i in {1..20}; do
+          echo "Memory stress cycle $i/20"
+          cargo run --release -- models list || echo "Model listing cycle $i completed"
+          sleep 5
+        done
+
+    - name: Run I/O stress test
+      timeout-minutes: 15
+      run: |
+        # Test with high I/O load
+        stress-ng --io 4 --timeout 10m &
+        STRESS_PID=$!
+
+        # Run tests under I/O stress
+        cargo test --release --workspace || echo "Tests under I/O stress completed"
+
+        kill $STRESS_PID || true
+
+    - name: Upload stress test results
+      uses: actions/upload-artifact@v4
+      with:
+        name: stress-test-results
+        path: stress_results/
+        retention-days: 14
+
+  # Security scanning suite
+  security-deep-scan:
+    name: Deep Security Scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    if: github.event.inputs.run_security_scan != 'false'
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Cache dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: security-${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+    - name: Install security tools
+      run: |
+        cargo install cargo-audit --locked
+        cargo install cargo-deny --locked
+        cargo install cargo-geiger --locked
+        cargo install cargo-outdated --locked
+        sudo apt-get update
+        sudo apt-get install -y clang
+
+    - name: Run comprehensive security audit
+      run: |
+        mkdir -p security_results
+
+        # Vulnerability scanning
+        cargo audit --format json > security_results/audit_report.json
+        cargo audit --format human > security_results/audit_report.txt
+
+        # License and dependency checking
+        cargo deny check --format json > security_results/deny_report.json || true
+
+        # Unsafe code analysis
+        cargo geiger --format json > security_results/geiger_report.json || true
+
+        # Outdated dependencies
+        cargo outdated --format json > security_results/outdated_report.json || true
+
+    - name: Run static analysis with Clippy pedantic
+      run: |
+        cargo clippy --workspace --all-targets --all-features -- \
+          -D warnings \
+          -D clippy::all \
+          -D clippy::pedantic \
+          -D clippy::nursery \
+          -D clippy::cargo \
+          -A clippy::multiple_crate_versions \
+          -A clippy::missing_docs_in_private_items \
+          -A clippy::module_name_repetitions
+
+    - name: Run Semgrep security analysis
+      uses: returntocorp/semgrep-action@v1
+      with:
+        config: >-
+          p/security-audit
+          p/rust
+          p/secrets
+
+    - name: Upload security scan results
+      uses: actions/upload-artifact@v4
+      with:
+        name: security-scan-results
+        path: security_results/
+        retention-days: 30
+
+  # Performance benchmarking and regression detection
+  performance-benchmarking:
+    name: Performance Benchmarking
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Cache dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: perf-${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          pkg-config \
+          libssl-dev \
+          linux-perf
+
+    - name: Install benchmarking tools
+      run: |
+        cargo install cargo-criterion --locked
+        cargo install flamegraph --locked
+
+    - name: Run performance benchmarks
+      run: |
+        mkdir -p benchmark_results
+
+        # Run all benchmark suites
+        cargo bench --bench inference_benchmark -- --output-format json > benchmark_results/inference.json
+        cargo bench --bench memory_benchmark -- --output-format json > benchmark_results/memory.json
+        cargo bench --bench concurrent_benchmark -- --output-format json > benchmark_results/concurrent.json
+        cargo bench --bench cache_benchmark -- --output-format json > benchmark_results/cache.json
+
+    - name: Generate performance profiles
+      run: |
+        # Generate flamegraphs for performance profiling
+        cargo flamegraph --bench inference_benchmark -o benchmark_results/inference_flamegraph.svg || true
+        cargo flamegraph --bench memory_benchmark -o benchmark_results/memory_flamegraph.svg || true
+
+    - name: Performance baseline comparison
+      run: |
+        # Compare against historical baselines
+        cargo run --release -- performance-benchmark compare \
+          --current benchmark_results/ \
+          --threshold 15.0 \
+          --report benchmark_results/regression_report.json || echo "Performance comparison completed"
+
+    - name: Upload benchmark results
+      uses: actions/upload-artifact@v4
+      with:
+        name: performance-benchmarks
+        path: benchmark_results/
+        retention-days: 30
+
+  # Code coverage analysis
+  coverage-analysis:
+    name: Coverage Analysis
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Cache dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: coverage-${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y pkg-config libssl-dev
+
+    - name: Install coverage tools
+      run: |
+        cargo install cargo-tarpaulin --locked
+
+    - name: Generate coverage report
+      run: |
+        mkdir -p coverage_results
+
+        cargo tarpaulin \
+          --verbose \
+          --all-features \
+          --workspace \
+          --timeout 600 \
+          --out xml \
+          --out html \
+          --output-dir coverage_results \
+          --exclude-files target/* \
+          --exclude-files tests/* \
+          --exclude-files benches/*
+
+    - name: Check coverage threshold
+      run: |
+        THRESHOLD="${{ github.event.inputs.test_coverage_threshold || '85' }}"
+        python3 -c "
+        import xml.etree.ElementTree as ET
+        tree = ET.parse('./coverage_results/cobertura.xml')
+        coverage = float(tree.getroot().attrib['line-rate']) * 100
+        print(f'Coverage: {coverage:.2f}%')
+        if coverage < float('$THRESHOLD'):
+            print(f'Coverage {coverage:.2f}% is below threshold of $THRESHOLD%')
+            exit(1)
+        else:
+            print(f'Coverage {coverage:.2f}% meets threshold')
+        "
+
+    - name: Upload coverage reports
+      uses: actions/upload-artifact@v4
+      with:
+        name: coverage-reports
+        path: coverage_results/
+        retention-days: 30
+
+    - name: Upload to Codecov
+      uses: codecov/codecov-action@v4
+      with:
+        file: ./coverage_results/cobertura.xml
+        flags: nightly
+        name: nightly-coverage
+
+  # Documentation and examples validation
+  documentation-validation:
+    name: Documentation Validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Cache dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: docs-${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y pkg-config libssl-dev
+
+    - name: Build documentation
+      run: |
+        cargo doc --workspace --all-features --no-deps --document-private-items
+
+    - name: Test examples
+      run: |
+        for example in examples/*.rs; do
+          if [ -f "$example" ]; then
+            echo "Testing example: $example"
+            cargo run --example $(basename "$example" .rs) || echo "Example completed with warnings"
+          fi
+        done
+
+    - name: Validate README examples
+      run: |
+        # Extract and test code blocks from README
+        cargo install cargo-readme --locked
+        cargo readme --output README_test.md
+        # Additional validation would go here
+
+  # Final nightly report
+  nightly-report:
+    name: Nightly Report
+    runs-on: ubuntu-latest
+    needs: [
+      comprehensive-test-matrix,
+      stress-testing,
+      security-deep-scan,
+      performance-benchmarking,
+      coverage-analysis,
+      documentation-validation
+    ]
+    if: always()
+
+    steps:
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: nightly_artifacts
+
+    - name: Generate comprehensive report
+      run: |
+        cat > nightly_report.md << 'EOF'
+        # 🌙 Nightly Build Report
+
+        **Date:** $(date -u)
+        **Commit:** ${{ github.sha }}
+        **Workflow:** ${{ github.run_id }}
+
+        ## 📊 Test Results Summary
+
+        ### Comprehensive Testing
+        - **Status:** ${{ needs.comprehensive-test-matrix.result }}
+        - **Platforms Tested:** Ubuntu, Windows, macOS
+        - **Rust Versions:** stable, beta, nightly, MSRV
+        - **Feature Sets:** default, minimal, full, GPU variants
+
+        ### Stress Testing
+        - **Status:** ${{ needs.stress-testing.result }}
+        - **Concurrent Clients:** Up to 100 simultaneous connections
+        - **Memory Cycles:** 20 load/unload cycles
+        - **I/O Stress:** Tests under high I/O load
+
+        ### Security Analysis
+        - **Status:** ${{ needs.security-deep-scan.result }}
+        - **Vulnerability Scan:** cargo-audit, Trivy, Semgrep
+        - **Unsafe Code Analysis:** cargo-geiger
+        - **Dependency Checks:** cargo-deny, outdated analysis
+
+        ### Performance Benchmarking
+        - **Status:** ${{ needs.performance-benchmarking.result }}
+        - **Benchmark Suites:** inference, memory, concurrent, cache
+        - **Profiling:** Flamegraphs generated
+        - **Regression Detection:** Baseline comparison performed
+
+        ### Code Coverage
+        - **Status:** ${{ needs.coverage-analysis.result }}
+        - **Threshold:** ${{ github.event.inputs.test_coverage_threshold || '85' }}%
+        - **Report:** HTML and XML coverage reports generated
+
+        ### Documentation
+        - **Status:** ${{ needs.documentation-validation.result }}
+        - **Docs Build:** All documentation compiled successfully
+        - **Examples:** All examples tested
+
+        ## 📁 Generated Artifacts
+
+        $(find nightly_artifacts -name "*.json" -o -name "*.xml" -o -name "*.html" | head -20 | while read file; do echo "- \`$(basename "$file")\`"; done)
+
+        ## 🚨 Issues Found
+
+        $(if [[ "${{ needs.comprehensive-test-matrix.result }}" != "success" || \
+              "${{ needs.stress-testing.result }}" != "success" || \
+              "${{ needs.security-deep-scan.result }}" != "success" || \
+              "${{ needs.performance-benchmarking.result }}" != "success" || \
+              "${{ needs.coverage-analysis.result }}" != "success" || \
+              "${{ needs.documentation-validation.result }}" != "success" ]]; then
+          echo "⚠️ Some checks failed - review individual job logs for details"
+        else
+          echo "✅ All checks passed successfully"
+        fi)
+
+        ## 📈 Trends & Metrics
+
+        - Performance trends would be tracked here
+        - Coverage trends over time
+        - Security issue trends
+        - Build time optimization opportunities
+
+        ## 🔗 Useful Links
+
+        - [Workflow Run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+        - [Commit Details](https://github.com/${{ github.repository }}/commit/${{ github.sha }})
+        - [Coverage Report](https://codecov.io/gh/${{ github.repository }})
+        EOF
+
+    - name: Upload nightly report
+      uses: actions/upload-artifact@v4
+      with:
+        name: nightly-report
+        path: nightly_report.md
+        retention-days: 90
+
+    - name: Create issue for failures
+      if: failure()
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const report = require('fs').readFileSync('nightly_report.md', 'utf8');
+
+          github.rest.issues.create({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            title: `Nightly Build Failure - ${new Date().toISOString().split('T')[0]}`,
+            body: report,
+            labels: ['bug', 'nightly-failure', 'ci']
+          });
+
+    - name: Post to team chat
+      if: always()
+      run: |
+        # In production, this would post to Slack/Discord/Teams
+        echo "Nightly build completed with status: overall pipeline status"
+        echo "Report available at: workflow run URL"

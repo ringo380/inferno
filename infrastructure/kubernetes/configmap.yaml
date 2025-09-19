@@ -1,0 +1,310 @@
+# ConfigMaps for Inferno Application
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: inferno-config
+  namespace: inferno-system
+  labels:
+    app.kubernetes.io/name: inferno-config
+    app.kubernetes.io/part-of: inferno
+data:
+  # Application configuration
+  INFERNO_LOG_LEVEL: "info"
+  INFERNO_LOG_FORMAT: "json"
+  RUST_BACKTRACE: "1"
+
+  # Server configuration
+  INFERNO_HOST: "0.0.0.0"
+  INFERNO_PORT: "8080"
+  INFERNO_METRICS_PORT: "9090"
+
+  # Performance settings
+  INFERNO_WORKER_THREADS: "4"
+  INFERNO_MAX_CONNECTIONS: "1000"
+  INFERNO_REQUEST_TIMEOUT: "30"
+
+  # Feature flags
+  INFERNO_ENABLE_METRICS: "true"
+  INFERNO_ENABLE_TRACING: "true"
+  INFERNO_ENABLE_CACHING: "true"
+
+  # Model configuration
+  INFERNO_MODELS_DIR: "/app/models"
+  INFERNO_MODEL_CACHE_SIZE: "10GB"
+  INFERNO_MODEL_CACHE_TTL: "3600"
+
+  # GPU configuration
+  INFERNO_ENABLE_GPU: "auto"
+  INFERNO_GPU_MEMORY_FRACTION: "0.8"
+
+  # Monitoring and observability
+  INFERNO_PROMETHEUS_ENABLED: "true"
+  INFERNO_JAEGER_ENABLED: "true"
+  INFERNO_HEALTH_CHECK_INTERVAL: "10"
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: inferno-staging-config
+  namespace: inferno-staging
+  labels:
+    app.kubernetes.io/name: inferno-staging-config
+    app.kubernetes.io/part-of: inferno
+    environment: staging
+data:
+  # Staging-specific overrides
+  INFERNO_LOG_LEVEL: "debug"
+  INFERNO_ENABLE_DEBUG_ENDPOINTS: "true"
+  INFERNO_MODEL_CACHE_SIZE: "5GB"
+  INFERNO_MAX_CONNECTIONS: "500"
+
+  # Development features
+  INFERNO_ENABLE_PLAYGROUND: "true"
+  INFERNO_ENABLE_MODEL_UPLOAD: "true"
+  INFERNO_RATE_LIMIT_PER_MINUTE: "1000"
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: inferno-production-config
+  namespace: inferno-production
+  labels:
+    app.kubernetes.io/name: inferno-production-config
+    app.kubernetes.io/part-of: inferno
+    environment: production
+data:
+  # Production-specific settings
+  INFERNO_LOG_LEVEL: "warn"
+  INFERNO_ENABLE_DEBUG_ENDPOINTS: "false"
+  INFERNO_MODEL_CACHE_SIZE: "50GB"
+  INFERNO_MAX_CONNECTIONS: "5000"
+  INFERNO_WORKER_THREADS: "8"
+
+  # Production features
+  INFERNO_ENABLE_PLAYGROUND: "false"
+  INFERNO_ENABLE_MODEL_UPLOAD: "false"
+  INFERNO_RATE_LIMIT_PER_MINUTE: "10000"
+  INFERNO_ENABLE_CIRCUIT_BREAKER: "true"
+
+  # Security settings
+  INFERNO_ENABLE_AUTH: "true"
+  INFERNO_ENABLE_AUDIT_LOG: "true"
+  INFERNO_SESSION_TIMEOUT: "3600"
+
+---
+# Logging configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fluent-bit-config
+  namespace: logging
+  labels:
+    app.kubernetes.io/name: fluent-bit-config
+    app.kubernetes.io/part-of: inferno
+data:
+  fluent-bit.conf: |
+    [SERVICE]
+        Flush         1
+        Log_Level     info
+        Daemon        off
+        Parsers_File  parsers.conf
+        HTTP_Server   On
+        HTTP_Listen   0.0.0.0
+        HTTP_Port     2020
+
+    [INPUT]
+        Name              tail
+        Path              /var/log/containers/inferno*.log
+        Parser            docker
+        Tag               inferno.*
+        Refresh_Interval  5
+        Mem_Buf_Limit     50MB
+        Skip_Long_Lines   On
+
+    [FILTER]
+        Name                kubernetes
+        Match               inferno.*
+        Kube_URL            https://kubernetes.default.svc:443
+        Kube_CA_File        /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        Kube_Token_File     /var/run/secrets/kubernetes.io/serviceaccount/token
+        Kube_Tag_Prefix     inferno.var.log.containers.
+        Merge_Log           On
+        Keep_Log            Off
+        K8S-Logging.Parser  On
+        K8S-Logging.Exclude On
+
+    [OUTPUT]
+        Name  cloudwatch_logs
+        Match inferno.*
+        region us-west-2
+        log_group_name /aws/inferno/kubernetes
+        log_stream_prefix inferno-
+        auto_create_group true
+
+  parsers.conf: |
+    [PARSER]
+        Name   apache
+        Format regex
+        Regex  ^(?<host>[^ ]*) [^ ]* (?<user>[^ ]*) \[(?<time>[^\]]*)\] "(?<method>\S+)(?: +(?<path>[^\"]*?)(?: +\S*)?)?" (?<code>[^ ]*) (?<size>[^ ]*)(?: "(?<referer>[^\"]*)" "(?<agent>[^\"]*)")?$
+        Time_Key time
+        Time_Format %d/%b/%Y:%H:%M:%S %z
+
+    [PARSER]
+        Name   docker
+        Format json
+        Time_Key time
+        Time_Format %Y-%m-%dT%H:%M:%S.%L
+        Time_Keep   On
+
+---
+# Prometheus configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: prometheus-config
+    app.kubernetes.io/part-of: inferno
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+      external_labels:
+        cluster: 'inferno-cluster'
+        environment: 'production'
+
+    rule_files:
+      - "/etc/prometheus/rules/*.yml"
+
+    alerting:
+      alertmanagers:
+        - static_configs:
+            - targets:
+              - alertmanager:9093
+
+    scrape_configs:
+      # Kubernetes API server
+      - job_name: 'kubernetes-apiservers'
+        kubernetes_sd_configs:
+        - role: endpoints
+        scheme: https
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        relabel_configs:
+        - source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_service_name, __meta_kubernetes_endpoint_port_name]
+          action: keep
+          regex: default;kubernetes;https
+
+      # Kubernetes nodes
+      - job_name: 'kubernetes-nodes'
+        scheme: https
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        kubernetes_sd_configs:
+        - role: node
+        relabel_configs:
+        - action: labelmap
+          regex: __meta_kubernetes_node_label_(.+)
+
+      # Kubernetes pods
+      - job_name: 'kubernetes-pods'
+        kubernetes_sd_configs:
+        - role: pod
+        relabel_configs:
+        - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+          action: keep
+          regex: true
+        - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+          action: replace
+          target_label: __metrics_path__
+          regex: (.+)
+        - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+          action: replace
+          regex: ([^:]+)(?::\d+)?;(\d+)
+          replacement: $1:$2
+          target_label: __address__
+        - action: labelmap
+          regex: __meta_kubernetes_pod_label_(.+)
+        - source_labels: [__meta_kubernetes_namespace]
+          action: replace
+          target_label: kubernetes_namespace
+        - source_labels: [__meta_kubernetes_pod_name]
+          action: replace
+          target_label: kubernetes_pod_name
+
+      # Inferno application metrics
+      - job_name: 'inferno-api'
+        kubernetes_sd_configs:
+        - role: service
+        relabel_configs:
+        - source_labels: [__meta_kubernetes_service_label_app]
+          action: keep
+          regex: inferno-api
+        - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scrape]
+          action: keep
+          regex: true
+        - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_path]
+          action: replace
+          target_label: __metrics_path__
+          regex: (.+)
+        - source_labels: [__address__, __meta_kubernetes_service_annotation_prometheus_io_port]
+          action: replace
+          regex: ([^:]+)(?::\d+)?;(\d+)
+          replacement: $1:$2
+          target_label: __address__
+
+  alert_rules.yml: |
+    groups:
+    - name: inferno.rules
+      rules:
+      - alert: InfernoAPIDown
+        expr: up{job="inferno-api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Inferno API is down"
+          description: "Inferno API has been down for more than 1 minute."
+
+      - alert: InfernoHighLatency
+        expr: histogram_quantile(0.95, rate(inferno_request_duration_seconds_bucket[5m])) > 1.0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High request latency"
+          description: "95th percentile latency is above 1s for 5 minutes."
+
+      - alert: InfernoHighErrorRate
+        expr: rate(inferno_requests_total{status=~"5.."}[5m]) / rate(inferno_requests_total[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High error rate"
+          description: "Error rate is above 5% for 5 minutes."
+
+      - alert: InfernoHighMemoryUsage
+        expr: container_memory_usage_bytes{pod=~"inferno-.*"} / container_spec_memory_limit_bytes > 0.8
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage"
+          description: "Memory usage is above 80% for 10 minutes."
+
+      - alert: InfernoHighCPUUsage
+        expr: rate(container_cpu_usage_seconds_total{pod=~"inferno-.*"}[5m]) / container_spec_cpu_quota * 100 > 80
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU usage"
+          description: "CPU usage is above 80% for 10 minutes."
