@@ -474,21 +474,24 @@ impl JobQueueManager {
             job.id = Uuid::new_v4().to_string();
         }
 
+        let job_id = job.id.clone();
+        let has_schedule = job.schedule.is_some();
+
+        // Trigger scheduler if needed (before moving job)
+        if has_schedule {
+            self.schedule_job(queue_id, &job).await?;
+        }
+
         // Add to queue
         let mut queue_jobs = queue.jobs.write().await;
-        queue_jobs.push_back(job.clone());
+        queue_jobs.push_back(job);
 
-        info!("Submitted job '{}' to queue '{}'", job.id, queue_id);
+        info!("Submitted job '{}' to queue '{}'", job_id, queue_id);
 
         // Update metrics
         // TODO: Update queue metrics
 
-        // Trigger scheduler if needed
-        if job.schedule.is_some() {
-            self.schedule_job(queue_id, &job).await?;
-        }
-
-        Ok(job.id)
+        Ok(job_id)
     }
 
     async fn validate_job(&self, job: &BatchJob) -> Result<()> {

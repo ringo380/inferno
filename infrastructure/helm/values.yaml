@@ -1,0 +1,535 @@
+# Default values for Inferno Helm Chart
+
+# Global configuration
+global:
+  imageRegistry: "ghcr.io"
+  imagePullSecrets: []
+  storageClass: "gp3"
+
+# Image configuration
+image:
+  registry: ghcr.io
+  repository: inferno-ai/inferno
+  tag: "latest"
+  pullPolicy: Always
+  # Overrides the image tag whose default is the chart appVersion
+  # tag: ""
+
+# Image variants
+images:
+  api:
+    repository: inferno-ai/inferno
+    tag: "latest"
+  worker:
+    repository: inferno-ai/inferno
+    tag: "latest"
+  gpu:
+    repository: inferno-ai/inferno
+    tag: "gpu"
+
+# Service account configuration
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # Annotations to add to the service account
+  annotations: {}
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: ""
+
+# Pod security context
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+
+# Container security context
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+    - ALL
+
+# API service configuration
+api:
+  enabled: true
+  replicaCount: 3
+
+  image:
+    repository: inferno-ai/inferno
+    tag: "latest"
+    pullPolicy: Always
+
+  service:
+    type: ClusterIP
+    port: 80
+    targetPort: 8080
+    metricsPort: 9090
+
+  # Resource configuration
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "500m"
+      ephemeral-storage: "1Gi"
+    limits:
+      memory: "2Gi"
+      cpu: "2000m"
+      ephemeral-storage: "5Gi"
+
+  # Probes configuration
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: http
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    successThreshold: 1
+    failureThreshold: 3
+
+  readinessProbe:
+    httpGet:
+      path: /ready
+      port: http
+    initialDelaySeconds: 10
+    periodSeconds: 5
+    timeoutSeconds: 3
+    successThreshold: 1
+    failureThreshold: 3
+
+  startupProbe:
+    httpGet:
+      path: /health
+      port: http
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    timeoutSeconds: 5
+    successThreshold: 1
+    failureThreshold: 30
+
+  # Environment variables
+  env:
+    RUST_LOG: "info"
+    RUST_BACKTRACE: "1"
+    INFERNO_HOST: "0.0.0.0"
+    INFERNO_PORT: "8080"
+    INFERNO_METRICS_PORT: "9090"
+
+  # Node selector
+  nodeSelector: {}
+
+  # Tolerations
+  tolerations: []
+
+  # Affinity rules
+  affinity: {}
+
+  # Pod disruption budget
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+
+  # Horizontal Pod Autoscaler
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 20
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+
+# Worker service configuration
+worker:
+  enabled: true
+  replicaCount: 2
+
+  image:
+    repository: inferno-ai/inferno
+    tag: "latest"
+    pullPolicy: Always
+
+  resources:
+    requests:
+      memory: "1Gi"
+      cpu: "1000m"
+      ephemeral-storage: "2Gi"
+    limits:
+      memory: "4Gi"
+      cpu: "4000m"
+      ephemeral-storage: "10Gi"
+
+  # Environment variables
+  env:
+    RUST_LOG: "info"
+    RUST_BACKTRACE: "1"
+
+  # Node selector
+  nodeSelector: {}
+
+  # Tolerations
+  tolerations: []
+
+  # Affinity rules
+  affinity: {}
+
+  # Horizontal Pod Autoscaler
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 80
+    targetMemoryUtilizationPercentage: 85
+
+# GPU worker configuration
+gpu:
+  enabled: false
+  replicaCount: 1
+
+  image:
+    repository: inferno-ai/inferno
+    tag: "gpu"
+    pullPolicy: Always
+
+  resources:
+    requests:
+      memory: "4Gi"
+      cpu: "2000m"
+      nvidia.com/gpu: 1
+      ephemeral-storage: "5Gi"
+    limits:
+      memory: "16Gi"
+      cpu: "8000m"
+      nvidia.com/gpu: 1
+      ephemeral-storage: "20Gi"
+
+  # Node selector for GPU nodes
+  nodeSelector:
+    accelerator: "nvidia-tesla-t4"
+
+  # Tolerations for GPU nodes
+  tolerations:
+    - key: "nvidia.com/gpu"
+      operator: "Exists"
+      effect: "NoSchedule"
+
+  # Environment variables
+  env:
+    RUST_LOG: "info"
+    RUST_BACKTRACE: "1"
+    NVIDIA_VISIBLE_DEVICES: "all"
+    NVIDIA_DRIVER_CAPABILITIES: "compute,utility"
+
+# Ingress configuration
+ingress:
+  enabled: true
+  className: "alb"
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/ssl-redirect: "443"
+    external-dns.alpha.kubernetes.io/hostname: "api.inferno-ai.dev"
+  hosts:
+    - host: api.inferno-ai.dev
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: inferno-tls
+      hosts:
+        - api.inferno-ai.dev
+
+# Persistent storage configuration
+persistence:
+  enabled: true
+  # existingClaim: ""
+  storageClass: "gp3"
+  accessMode: ReadWriteMany
+  size: 100Gi
+  annotations: {}
+
+# Cache storage (ephemeral)
+cache:
+  size: 20Gi
+
+# Configuration
+config:
+  # Database configuration
+  database:
+    host: ""
+    port: 5432
+    name: "inferno"
+    username: "inferno"
+    # password: "" # Set via secret
+
+  # Redis configuration
+  redis:
+    host: ""
+    port: 6379
+    # password: "" # Set via secret
+
+  # Application settings
+  app:
+    logLevel: "info"
+    logFormat: "json"
+    workerThreads: 4
+    maxConnections: 1000
+    requestTimeout: 30
+    enableMetrics: true
+    enableTracing: true
+    enableCaching: true
+
+  # Model settings
+  models:
+    cacheSize: "10GB"
+    cacheTTL: 3600
+    enableGpu: "auto"
+    gpuMemoryFraction: 0.8
+
+  # Security settings
+  security:
+    enableAuth: true
+    enableAuditLog: true
+    sessionTimeout: 3600
+    jwtSecret: "" # Set via secret
+
+# Secrets configuration
+secrets:
+  # Database credentials
+  database:
+    username: "inferno"
+    password: "" # Must be provided
+    url: "" # Generated if not provided
+
+  # Redis credentials
+  redis:
+    password: ""
+    url: "" # Generated if not provided
+
+  # JWT secret
+  jwt:
+    secret: "" # Must be provided
+
+  # External secrets (if using external secret operator)
+  external:
+    enabled: false
+    secretStore: ""
+    refreshInterval: "1h"
+
+# PostgreSQL dependency configuration
+postgresql:
+  enabled: true
+  auth:
+    username: "inferno"
+    database: "inferno"
+    # password: "" # Auto-generated if not set
+  primary:
+    persistence:
+      enabled: true
+      storageClass: "gp3"
+      size: 50Gi
+    resources:
+      requests:
+        memory: "256Mi"
+        cpu: "250m"
+      limits:
+        memory: "1Gi"
+        cpu: "1000m"
+
+# Redis dependency configuration
+redis:
+  enabled: true
+  auth:
+    enabled: true
+    # password: "" # Auto-generated if not set
+  master:
+    persistence:
+      enabled: true
+      storageClass: "gp3"
+      size: 10Gi
+    resources:
+      requests:
+        memory: "256Mi"
+        cpu: "250m"
+      limits:
+        memory: "512Mi"
+        cpu: "500m"
+
+# Monitoring configuration
+monitoring:
+  enabled: true
+
+  # Prometheus configuration
+  prometheus:
+    enabled: true
+    serviceMonitor:
+      enabled: true
+      interval: 30s
+      scrapeTimeout: 10s
+    rules:
+      enabled: true
+
+  # Grafana configuration
+  grafana:
+    enabled: true
+    adminPassword: "" # Auto-generated if not set
+    dashboards:
+      enabled: true
+    datasources:
+      prometheus:
+        enabled: true
+
+  # ServiceMonitor for Prometheus Operator
+  serviceMonitor:
+    enabled: true
+    namespace: monitoring
+    interval: 30s
+    scrapeTimeout: 10s
+    labels: {}
+
+# Logging configuration
+logging:
+  enabled: true
+  # Fluent Bit configuration
+  fluentBit:
+    enabled: true
+    output:
+      cloudWatch:
+        enabled: true
+        region: "us-west-2"
+        logGroup: "/aws/inferno/kubernetes"
+
+# Network policies
+networkPolicy:
+  enabled: true
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 8080
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: monitoring
+      ports:
+        - protocol: TCP
+          port: 9090
+
+# Pod disruption budget
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+  # maxUnavailable: 1
+
+# RBAC configuration
+rbac:
+  create: true
+  # Rules for the service account
+  rules:
+    - apiGroups: [""]
+      resources: ["configmaps", "secrets"]
+      verbs: ["get", "list", "watch"]
+    - apiGroups: [""]
+      resources: ["events"]
+      verbs: ["create"]
+
+# Extra resources (for custom CRDs, etc.)
+extraResources: []
+  # - apiVersion: v1
+  #   kind: ConfigMap
+  #   metadata:
+  #     name: extra-config
+  #   data:
+  #     key: value
+
+# Tests
+tests:
+  enabled: true
+  image:
+    repository: busybox
+    tag: latest
+    pullPolicy: IfNotPresent
+
+# Environment-specific overrides
+environments:
+  development:
+    api:
+      replicaCount: 1
+      resources:
+        requests:
+          memory: "256Mi"
+          cpu: "250m"
+        limits:
+          memory: "1Gi"
+          cpu: "1000m"
+    worker:
+      replicaCount: 1
+    postgresql:
+      primary:
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+    redis:
+      master:
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "250m"
+
+  staging:
+    api:
+      replicaCount: 2
+    worker:
+      replicaCount: 1
+    ingress:
+      hosts:
+        - host: staging-api.inferno-ai.dev
+          paths:
+            - path: /
+              pathType: Prefix
+
+  production:
+    api:
+      replicaCount: 5
+      autoscaling:
+        maxReplicas: 50
+    worker:
+      replicaCount: 3
+      autoscaling:
+        maxReplicas: 20
+    gpu:
+      enabled: true
+      replicaCount: 2
+    postgresql:
+      primary:
+        persistence:
+          size: 200Gi
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+          limits:
+            memory: "4Gi"
+            cpu: "2000m"
+    redis:
+      master:
+        persistence:
+          size: 50Gi
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"

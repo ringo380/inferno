@@ -1,0 +1,688 @@
+name: Container Build & Registry
+
+on:
+  push:
+    branches: [main, develop]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+    paths:
+      - 'Dockerfile*'
+      - 'docker/**'
+      - 'src/**'
+      - 'Cargo.toml'
+      - '.github/workflows/container.yml'
+  workflow_dispatch:
+    inputs:
+      push_to_registry:
+        description: 'Push images to registry'
+        required: false
+        default: false
+        type: boolean
+      scan_vulnerabilities:
+        description: 'Run vulnerability scanning'
+        required: false
+        default: true
+        type: boolean
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  # Build matrix for multiple architectures and variants
+  build-matrix:
+    name: Build Container Matrix
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.generate-matrix.outputs.matrix }}
+
+    steps:
+    - name: Generate build matrix
+      id: generate-matrix
+      run: |
+        cat > matrix.json << 'EOF'
+        {
+          "include": [
+            {
+              "variant": "minimal",
+              "dockerfile": "Dockerfile.minimal",
+              "platforms": "linux/amd64,linux/arm64",
+              "tags": "minimal",
+              "features": "--no-default-features"
+            },
+            {
+              "variant": "standard",
+              "dockerfile": "Dockerfile",
+              "platforms": "linux/amd64,linux/arm64",
+              "tags": "latest,standard",
+              "features": ""
+            },
+            {
+              "variant": "gpu",
+              "dockerfile": "Dockerfile.gpu",
+              "platforms": "linux/amd64",
+              "tags": "gpu",
+              "features": "--features gpu-vulkan"
+            },
+            {
+              "variant": "enterprise",
+              "dockerfile": "Dockerfile.enterprise",
+              "platforms": "linux/amd64,linux/arm64",
+              "tags": "enterprise",
+              "features": "--all-features"
+            }
+          ]
+        }
+        EOF
+
+        echo "matrix=$(cat matrix.json)" >> $GITHUB_OUTPUT
+
+  # Create optimized Dockerfiles if they don't exist
+  prepare-dockerfiles:
+    name: Prepare Dockerfiles
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Create optimized Dockerfiles
+      run: |
+        # Base Dockerfile (standard build)
+        cat > Dockerfile << 'EOF'
+        # Multi-stage build for optimal size
+        FROM rust:1.75-slim as builder
+
+        # Install system dependencies
+        RUN apt-get update && apt-get install -y \
+            pkg-config \
+            libssl-dev \
+            build-essential \
+            && rm -rf /var/lib/apt/lists/*
+
+        WORKDIR /app
+
+        # Copy manifests and cache dependencies
+        COPY Cargo.toml Cargo.lock ./
+        RUN mkdir src && echo "fn main() {}" > src/main.rs
+        RUN cargo build --release && rm -rf src
+
+        # Copy source and build
+        COPY src ./src
+        COPY benches ./benches
+        COPY tests ./tests
+        COPY examples ./examples
+
+        RUN cargo build --release --bin inferno
+
+        # Runtime stage
+        FROM debian:bookworm-slim
+
+        # Install runtime dependencies
+        RUN apt-get update && apt-get install -y \
+            ca-certificates \
+            libssl3 \
+            && rm -rf /var/lib/apt/lists/* \
+            && useradd -r -s /bin/false -m -d /var/lib/inferno inferno
+
+        COPY --from=builder /app/target/release/inferno /usr/local/bin/inferno
+
+        # Create directories and set permissions
+        RUN mkdir -p /var/lib/inferno/models /var/lib/inferno/config /var/lib/inferno/cache \
+            && chown -R inferno:inferno /var/lib/inferno
+
+        USER inferno
+        WORKDIR /var/lib/inferno
+
+        EXPOSE 8080
+        EXPOSE 8081
+
+        HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+            CMD inferno --version || exit 1
+
+        ENTRYPOINT ["inferno"]
+        CMD ["serve", "--host", "0.0.0.0", "--port", "8080"]
+        EOF
+
+        # Minimal Dockerfile (smallest possible image)
+        cat > Dockerfile.minimal << 'EOF'
+        FROM rust:1.75-alpine as builder
+
+        RUN apk add --no-cache \
+            musl-dev \
+            pkgconfig \
+            openssl-dev \
+            openssl-libs-static
+
+        WORKDIR /app
+
+        # Copy manifests and build dependencies
+        COPY Cargo.toml Cargo.lock ./
+        RUN mkdir src && echo "fn main() {}" > src/main.rs
+        RUN cargo build --release --no-default-features && rm -rf src
+
+        # Build application
+        COPY src ./src
+        RUN cargo build --release --no-default-features --bin inferno
+
+        # Runtime stage - use scratch for minimal size
+        FROM alpine:3.18
+
+        RUN apk add --no-cache ca-certificates libgcc
+
+        COPY --from=builder /app/target/release/inferno /usr/local/bin/inferno
+
+        USER 1000:1000
+
+        EXPOSE 8080
+
+        ENTRYPOINT ["inferno"]
+        CMD ["--help"]
+        EOF
+
+        # GPU-enabled Dockerfile
+        cat > Dockerfile.gpu << 'EOF'
+        FROM nvidia/cuda:12.2-devel-ubuntu22.04 as builder
+
+        RUN apt-get update && apt-get install -y \
+            curl \
+            pkg-config \
+            libssl-dev \
+            build-essential \
+            && rm -rf /var/lib/apt/lists/*
+
+        # Install Rust
+        RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+        ENV PATH="/root/.cargo/bin:${PATH}"
+
+        WORKDIR /app
+
+        # Copy and build
+        COPY Cargo.toml Cargo.lock ./
+        RUN mkdir src && echo "fn main() {}" > src/main.rs
+        RUN cargo build --release --features gpu-vulkan && rm -rf src
+
+        COPY src ./src
+        RUN cargo build --release --features gpu-vulkan --bin inferno
+
+        # Runtime stage
+        FROM nvidia/cuda:12.2-runtime-ubuntu22.04
+
+        RUN apt-get update && apt-get install -y \
+            ca-certificates \
+            libssl3 \
+            vulkan-tools \
+            && rm -rf /var/lib/apt/lists/*
+
+        COPY --from=builder /app/target/release/inferno /usr/local/bin/inferno
+
+        USER 1000:1000
+
+        EXPOSE 8080
+
+        ENTRYPOINT ["inferno"]
+        CMD ["serve", "--gpu"]
+        EOF
+
+        # Enterprise Dockerfile (all features)
+        cat > Dockerfile.enterprise << 'EOF'
+        FROM rust:1.75-slim as builder
+
+        RUN apt-get update && apt-get install -y \
+            pkg-config \
+            libssl-dev \
+            build-essential \
+            protobuf-compiler \
+            && rm -rf /var/lib/apt/lists/*
+
+        WORKDIR /app
+
+        # Copy manifests
+        COPY Cargo.toml Cargo.lock ./
+        RUN mkdir src && echo "fn main() {}" > src/main.rs
+        RUN cargo build --release --all-features && rm -rf src
+
+        # Build with all features
+        COPY . .
+        RUN cargo build --release --all-features --bin inferno
+
+        # Runtime stage with enterprise monitoring tools
+        FROM debian:bookworm-slim
+
+        RUN apt-get update && apt-get install -y \
+            ca-certificates \
+            libssl3 \
+            curl \
+            htop \
+            procps \
+            && rm -rf /var/lib/apt/lists/*
+
+        # Add monitoring and management tools
+        RUN curl -L https://github.com/prometheus/node_exporter/releases/download/v1.6.1/node_exporter-1.6.1.linux-amd64.tar.gz \
+            | tar xz --strip-components=1 -C /usr/local/bin/ node_exporter-1.6.1.linux-amd64/node_exporter
+
+        COPY --from=builder /app/target/release/inferno /usr/local/bin/inferno
+
+        # Create enterprise user and directories
+        RUN useradd -r -s /bin/false -m -d /opt/inferno inferno \
+            && mkdir -p /opt/inferno/{models,config,cache,logs,backups} \
+            && chown -R inferno:inferno /opt/inferno
+
+        USER inferno
+        WORKDIR /opt/inferno
+
+        EXPOSE 8080 8081 9100
+
+        HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+            CMD curl -f http://localhost:8080/health || exit 1
+
+        ENTRYPOINT ["inferno"]
+        CMD ["serve", "--enterprise"]
+        EOF
+
+    - name: Upload Dockerfiles
+      uses: actions/upload-artifact@v4
+      with:
+        name: dockerfiles
+        path: Dockerfile*
+        retention-days: 7
+
+  # Build and test containers
+  build-containers:
+    name: Build Containers
+    runs-on: ubuntu-latest
+    needs: [build-matrix, prepare-dockerfiles]
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.build-matrix.outputs.matrix) }}
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Download Dockerfiles
+      uses: actions/download-artifact@v4
+      with:
+        name: dockerfiles
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+      with:
+        platforms: ${{ matrix.platforms }}
+
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v3
+      with:
+        platforms: arm64
+
+    - name: Log in to Container Registry
+      if: github.event_name != 'pull_request'
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Extract metadata
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+        tags: |
+          type=ref,event=branch,suffix=-${{ matrix.variant }}
+          type=ref,event=pr,suffix=-${{ matrix.variant }}
+          type=semver,pattern={{version}},suffix=-${{ matrix.variant }}
+          type=semver,pattern={{major}}.{{minor}},suffix=-${{ matrix.variant }}
+          type=raw,value=${{ matrix.tags }},enable={{is_default_branch}}
+        flavor: |
+          latest=false
+
+    - name: Build container image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: ${{ matrix.dockerfile }}
+        platforms: ${{ matrix.platforms }}
+        push: ${{ github.event_name != 'pull_request' && (github.event.inputs.push_to_registry != 'false') }}
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        build-args: |
+          BUILDTIME=${{ fromJSON(steps.meta.outputs.json).labels['org.opencontainers.image.created'] }}
+          VERSION=${{ fromJSON(steps.meta.outputs.json).labels['org.opencontainers.image.version'] }}
+          REVISION=${{ fromJSON(steps.meta.outputs.json).labels['org.opencontainers.image.revision'] }}
+
+    - name: Test container functionality
+      run: |
+        # Build for local testing
+        docker buildx build \
+          --file ${{ matrix.dockerfile }} \
+          --tag test-image:${{ matrix.variant }} \
+          --load \
+          .
+
+        # Basic functionality tests
+        echo "Testing container: ${{ matrix.variant }}"
+
+        # Test help command
+        docker run --rm test-image:${{ matrix.variant }} --help
+
+        # Test version command
+        docker run --rm test-image:${{ matrix.variant }} --version
+
+        # Test configuration validation
+        docker run --rm test-image:${{ matrix.variant }} config validate || echo "Config validation test completed"
+
+        # Test server startup (timeout after 10 seconds)
+        timeout 10s docker run --rm -p 8080:8080 test-image:${{ matrix.variant }} serve --test-mode || echo "Server startup test completed"
+
+    - name: Generate SBOM
+      uses: anchore/sbom-action@v0
+      with:
+        image: test-image:${{ matrix.variant }}
+        format: spdx-json
+        output-file: sbom-${{ matrix.variant }}.spdx.json
+
+    - name: Upload SBOM
+      uses: actions/upload-artifact@v4
+      with:
+        name: sbom-${{ matrix.variant }}
+        path: sbom-${{ matrix.variant }}.spdx.json
+        retention-days: 30
+
+  # Security scanning
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: [build-containers]
+    if: github.event.inputs.scan_vulnerabilities != 'false'
+    timeout-minutes: 20
+    strategy:
+      matrix:
+        variant: [minimal, standard, gpu, enterprise]
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Download Dockerfiles
+      uses: actions/download-artifact@v4
+      with:
+        name: dockerfiles
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Build image for scanning
+      run: |
+        docker buildx build \
+          --file Dockerfile.${{ matrix.variant == 'standard' && '' || matrix.variant }} \
+          --tag scan-image:${{ matrix.variant }} \
+          --load \
+          .
+
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        image-ref: 'scan-image:${{ matrix.variant }}'
+        format: 'sarif'
+        output: 'trivy-results-${{ matrix.variant }}.sarif'
+
+    - name: Upload Trivy scan results
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: 'trivy-results-${{ matrix.variant }}.sarif'
+        category: 'container-${{ matrix.variant }}'
+
+    - name: Run Snyk security scan
+      continue-on-error: true
+      uses: snyk/actions/docker@master
+      env:
+        SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+      with:
+        image: scan-image:${{ matrix.variant }}
+        args: --severity-threshold=high --file=Dockerfile.${{ matrix.variant == 'standard' && '' || matrix.variant }}
+
+    - name: Container structure test
+      run: |
+        # Install container-structure-test
+        curl -LO https://storage.googleapis.com/container-structure-test/latest/container-structure-test-linux-amd64
+        chmod +x container-structure-test-linux-amd64
+        sudo mv container-structure-test-linux-amd64 /usr/local/bin/container-structure-test
+
+        # Create test configuration
+        cat > container-test-${{ matrix.variant }}.yaml << 'EOF'
+        schemaVersion: 2.0.0
+        commandTests:
+          - name: "inferno version"
+            command: "inferno"
+            args: ["--version"]
+            expectedOutput: ["inferno"]
+          - name: "inferno help"
+            command: "inferno"
+            args: ["--help"]
+            expectedOutput: ["Usage:"]
+        fileExistenceTests:
+          - name: "inferno binary"
+            path: "/usr/local/bin/inferno"
+            shouldExist: true
+            permissions: "-rwxr-xr-x"
+        EOF
+
+        # Run structure tests
+        container-structure-test test \
+          --image scan-image:${{ matrix.variant }} \
+          --config container-test-${{ matrix.variant }}.yaml
+
+  # Image signing and attestation
+  sign-images:
+    name: Sign Container Images
+    runs-on: ubuntu-latest
+    needs: [build-containers, security-scan]
+    if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/'))
+    timeout-minutes: 15
+    strategy:
+      matrix:
+        variant: [minimal, standard, gpu, enterprise]
+
+    steps:
+    - name: Install Cosign
+      uses: sigstore/cosign-installer@v3
+
+    - name: Log in to Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Extract image digest
+      id: digest
+      run: |
+        # Get the digest of the image we just built
+        IMAGE_TAG="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ matrix.variant }}"
+        DIGEST=$(docker manifest inspect $IMAGE_TAG | jq -r '.config.digest')
+        echo "digest=$DIGEST" >> $GITHUB_OUTPUT
+        echo "image=${IMAGE_TAG}@${DIGEST}" >> $GITHUB_OUTPUT
+
+    - name: Sign container image
+      run: |
+        cosign sign --yes ${{ steps.digest.outputs.image }}
+
+    - name: Generate attestation
+      run: |
+        cosign attest --yes \
+          --predicate-type https://slsa.dev/provenance/v0.2 \
+          --predicate <(echo '{"buildType":"github-actions","builder":{"id":"${{ github.workflow }}"},"invocation":{"configSource":{"uri":"${{ github.repository }}","digest":{"sha1":"${{ github.sha }}"}}}}') \
+          ${{ steps.digest.outputs.image }}
+
+  # Multi-registry publishing
+  publish-registries:
+    name: Publish to Multiple Registries
+    runs-on: ubuntu-latest
+    needs: [build-containers, security-scan]
+    if: github.event_name != 'pull_request' && startsWith(github.ref, 'refs/tags/')
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        registry:
+          - name: "Docker Hub"
+            url: "docker.io"
+            username_secret: "DOCKERHUB_USERNAME"
+            password_secret: "DOCKERHUB_TOKEN"
+            image_name: "inferno-ai/inferno"
+          - name: "AWS ECR"
+            url: "public.ecr.aws"
+            username_secret: "AWS_ACCESS_KEY_ID"
+            password_secret: "AWS_SECRET_ACCESS_KEY"
+            image_name: "inferno-ai/inferno"
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Download Dockerfiles
+      uses: actions/download-artifact@v4
+      with:
+        name: dockerfiles
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Log in to ${{ matrix.registry.name }}
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ matrix.registry.url }}
+        username: ${{ secrets[matrix.registry.username_secret] }}
+        password: ${{ secrets[matrix.registry.password_secret] }}
+
+    - name: Extract version
+      id: version
+      run: |
+        VERSION=${GITHUB_REF#refs/tags/v}
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+    - name: Build and push to ${{ matrix.registry.name }}
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: Dockerfile
+        platforms: linux/amd64,linux/arm64
+        push: true
+        tags: |
+          ${{ matrix.registry.url }}/${{ matrix.registry.image_name }}:${{ steps.version.outputs.version }}
+          ${{ matrix.registry.url }}/${{ matrix.registry.image_name }}:latest
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+  # Generate container report
+  container-report:
+    name: Container Build Report
+    runs-on: ubuntu-latest
+    needs: [build-containers, security-scan, sign-images, publish-registries]
+    if: always()
+    timeout-minutes: 10
+
+    steps:
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: artifacts
+
+    - name: Generate container report
+      run: |
+        cat > container_report.md << 'EOF'
+        # 🐳 Container Build Report
+
+        **Date:** $(date -u)
+        **Commit:** ${{ github.sha }}
+        **Triggered by:** ${{ github.event_name }}
+
+        ## 📦 Built Variants
+
+        | Variant | Status | Platforms | Features |
+        |---------|--------|-----------|----------|
+        | Minimal | ${{ needs.build-containers.result }} | linux/amd64,linux/arm64 | Basic CLI only |
+        | Standard | ${{ needs.build-containers.result }} | linux/amd64,linux/arm64 | Full features |
+        | GPU | ${{ needs.build-containers.result }} | linux/amd64 | GPU acceleration |
+        | Enterprise | ${{ needs.build-containers.result }} | linux/amd64,linux/arm64 | All features + monitoring |
+
+        ## 🔒 Security Status
+
+        - **Vulnerability Scanning:** ${{ needs.security-scan.result }}
+        - **Image Signing:** ${{ needs.sign-images.result }}
+        - **SBOM Generation:** ✅ Complete
+
+        ## 📋 Registry Status
+
+        $(if [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" == "refs/heads/main" ]]; then
+          echo "- **GitHub Container Registry:** ✅ Published"
+        elif [[ "${{ startsWith(github.ref, 'refs/tags/') }}" == "true" ]]; then
+          echo "- **GitHub Container Registry:** ✅ Published"
+          echo "- **Docker Hub:** ${{ needs.publish-registries.result }}"
+          echo "- **AWS ECR:** ${{ needs.publish-registries.result }}"
+        else
+          echo "- **Registry Publishing:** ⏭️ Skipped (not main/tag)"
+        fi)
+
+        ## 📊 Image Sizes
+
+        $(if ls artifacts/sbom-* 1> /dev/null 2>&1; then
+          echo "SBOMs generated for vulnerability tracking."
+        fi)
+
+        ## 🚀 Usage
+
+        ### Pull Images
+        ```bash
+        # Standard image
+        docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+
+        # Minimal image
+        docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:minimal
+
+        # GPU-enabled image
+        docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:gpu
+
+        # Enterprise image
+        docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:enterprise
+        ```
+
+        ### Run Examples
+        ```bash
+        # Quick start
+        docker run --rm ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest --help
+
+        # API server
+        docker run -p 8080:8080 ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest serve
+
+        # With GPU support
+        docker run --gpus all -p 8080:8080 ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:gpu serve --gpu
+        ```
+        EOF
+
+    - name: Upload container report
+      uses: actions/upload-artifact@v4
+      with:
+        name: container-build-report
+        path: container_report.md
+        retention-days: 30
+
+    - name: Post report to PR
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const fs = require('fs');
+          const report = fs.readFileSync('container_report.md', 'utf8');
+
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: report
+          });

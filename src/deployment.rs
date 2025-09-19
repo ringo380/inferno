@@ -2430,23 +2430,22 @@ mod tests {
     #[tokio::test]
     async fn test_generate_manifests() {
         let config = DeploymentConfig::default();
-        let manager = DeploymentManager::new(config);
+        let mut manager = DeploymentManager::new(config);
 
-        let temp_dir = TempDir::new().unwrap();
-        let result = manager.generate_manifests("dev", temp_dir.path()).await;
+        let result = manager.generate_manifests("dev", "1.0.0").await;
         assert!(result.is_ok());
 
-        // Check if files were created
-        assert!(temp_dir.path().join("deployment-dev.yaml").exists());
-        assert!(temp_dir.path().join("service-dev.yaml").exists());
-        assert!(temp_dir.path().join("configmap-dev.yaml").exists());
-        assert!(temp_dir.path().join("hpa-dev.yaml").exists());
+        let manifests = result.unwrap();
+        assert!(manifests.contains_key("deployment"));
+        assert!(manifests.contains_key("service"));
+        assert!(manifests.contains_key("configmap"));
+        assert!(manifests.contains_key("hpa"));
     }
 
     #[tokio::test]
     async fn test_generate_helm_chart() {
         let config = DeploymentConfig::default();
-        let manager = DeploymentManager::new(config);
+        let mut manager = DeploymentManager::new(config);
 
         let temp_dir = TempDir::new().unwrap();
         let result = manager.generate_helm_chart(temp_dir.path()).await;

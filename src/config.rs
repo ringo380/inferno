@@ -335,12 +335,12 @@ mod tests {
         assert!(config.validate().is_err()); // Directories don't exist
 
         // Create a config with valid directories
-        let temp_dir = tempdir().unwrap();
+        let temp_dir = tempdir().expect("Failed to create temporary directory for test");
         let mut config = Config::default();
         config.models_dir = temp_dir.path().join("models");
         config.cache_dir = temp_dir.path().join("cache");
-        std::fs::create_dir_all(&config.models_dir).unwrap();
-        std::fs::create_dir_all(&config.cache_dir).unwrap();
+        std::fs::create_dir_all(&config.models_dir).expect("Failed to create models directory for test");
+        std::fs::create_dir_all(&config.cache_dir).expect("Failed to create cache directory for test");
 
         assert!(config.validate().is_ok());
     }

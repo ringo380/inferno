@@ -1,0 +1,160 @@
+# Kubernetes Services for Inferno Application
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: inferno-api
+  namespace: inferno-production
+  labels:
+    app: inferno-api
+    component: api
+    app.kubernetes.io/name: inferno-api
+    app.kubernetes.io/instance: inferno
+    app.kubernetes.io/component: api
+    app.kubernetes.io/part-of: inferno
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+    service.beta.kubernetes.io/aws-load-balancer-cross-zone-load-balancing-enabled: "true"
+    prometheus.io/scrape: "true"
+    prometheus.io/path: "/metrics"
+    prometheus.io/port: "9090"
+spec:
+  type: ClusterIP
+  ports:
+  - name: http
+    port: 80
+    targetPort: http
+    protocol: TCP
+  - name: metrics
+    port: 9090
+    targetPort: metrics
+    protocol: TCP
+  selector:
+    app: inferno-api
+    component: api
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: inferno-worker
+  namespace: inferno-production
+  labels:
+    app: inferno-worker
+    component: worker
+    app.kubernetes.io/name: inferno-worker
+    app.kubernetes.io/instance: inferno
+    app.kubernetes.io/component: worker
+    app.kubernetes.io/part-of: inferno
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/path: "/metrics"
+    prometheus.io/port: "9090"
+spec:
+  type: ClusterIP
+  ports:
+  - name: metrics
+    port: 9090
+    targetPort: metrics
+    protocol: TCP
+  selector:
+    app: inferno-worker
+    component: worker
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: inferno-gpu-worker
+  namespace: inferno-production
+  labels:
+    app: inferno-gpu-worker
+    component: gpu-worker
+    app.kubernetes.io/name: inferno-gpu-worker
+    app.kubernetes.io/instance: inferno
+    app.kubernetes.io/component: gpu-worker
+    app.kubernetes.io/part-of: inferno
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/path: "/metrics"
+    prometheus.io/port: "9090"
+spec:
+  type: ClusterIP
+  ports:
+  - name: metrics
+    port: 9090
+    targetPort: metrics
+    protocol: TCP
+  selector:
+    app: inferno-gpu-worker
+    component: gpu-worker
+
+---
+# Headless service for StatefulSet components (if needed)
+apiVersion: v1
+kind: Service
+metadata:
+  name: inferno-api-headless
+  namespace: inferno-production
+  labels:
+    app: inferno-api
+    component: api
+    app.kubernetes.io/name: inferno-api-headless
+    app.kubernetes.io/instance: inferno
+    app.kubernetes.io/component: api
+    app.kubernetes.io/part-of: inferno
+spec:
+  clusterIP: None
+  ports:
+  - name: http
+    port: 80
+    targetPort: http
+    protocol: TCP
+  - name: metrics
+    port: 9090
+    targetPort: metrics
+    protocol: TCP
+  selector:
+    app: inferno-api
+    component: api
+
+---
+# External load balancer service (optional - for direct access)
+apiVersion: v1
+kind: Service
+metadata:
+  name: inferno-api-external
+  namespace: inferno-production
+  labels:
+    app: inferno-api
+    component: api
+    app.kubernetes.io/name: inferno-api-external
+    app.kubernetes.io/instance: inferno
+    app.kubernetes.io/component: api
+    app.kubernetes.io/part-of: inferno
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+    service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
+    service.beta.kubernetes.io/aws-load-balancer-cross-zone-load-balancing-enabled: "true"
+    service.beta.kubernetes.io/aws-load-balancer-backend-protocol: "tcp"
+    service.beta.kubernetes.io/aws-load-balancer-healthcheck-healthy-threshold: "2"
+    service.beta.kubernetes.io/aws-load-balancer-healthcheck-unhealthy-threshold: "2"
+    service.beta.kubernetes.io/aws-load-balancer-healthcheck-timeout: "5"
+    service.beta.kubernetes.io/aws-load-balancer-healthcheck-interval: "10"
+    external-dns.alpha.kubernetes.io/hostname: "api.inferno-ai.dev"
+spec:
+  type: LoadBalancer
+  ports:
+  - name: http
+    port: 80
+    targetPort: http
+    protocol: TCP
+  - name: https
+    port: 443
+    targetPort: http
+    protocol: TCP
+  selector:
+    app: inferno-api
+    component: api
+  loadBalancerSourceRanges:
+  - 0.0.0.0/0  # Restrict this in production

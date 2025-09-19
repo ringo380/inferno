@@ -397,7 +397,11 @@ impl JobScheduler {
     ) -> Result<DateTime<Utc>> {
         let (hour, minute) = Self::parse_time_string(time_str)?;
 
-        let mut next = from.with_hour(hour).unwrap().with_minute(minute).unwrap().with_second(0).unwrap();
+        let mut next = from
+            .with_hour(hour)
+            .and_then(|dt| dt.with_minute(minute))
+            .and_then(|dt| dt.with_second(0))
+            .ok_or_else(|| anyhow::anyhow!("Invalid time values: {}:{}", hour, minute))?;
 
         // If the time has already passed today, start from tomorrow
         if next <= from {
@@ -431,7 +435,11 @@ impl JobScheduler {
         };
 
         let mut next = from + chrono::Duration::days(days_until_target as i64);
-        next = next.with_hour(hour).unwrap().with_minute(minute).unwrap().with_second(0).unwrap();
+        next = next
+            .with_hour(hour)
+            .and_then(|dt| dt.with_minute(minute))
+            .and_then(|dt| dt.with_second(0))
+            .ok_or_else(|| anyhow::anyhow!("Invalid time values: {}:{}", hour, minute))?;
 
         // If we're on the target day but the time has passed, go to next week
         if days_until_target == 0 && next <= from {
@@ -451,11 +459,16 @@ impl JobScheduler {
         let mut next = from.with_day(day_of_month as u32)
             .unwrap_or_else(|| {
                 // If the day doesn't exist in this month (e.g., Feb 30), use the last day
-                from.with_day(1).unwrap() + chrono::Duration::days(32) - chrono::Duration::days(1)
-            })
-            .with_hour(hour).unwrap()
-            .with_minute(minute).unwrap()
-            .with_second(0).unwrap();
+                from.with_day(1)
+                    .expect("Setting day to 1 should always succeed")
+                    + chrono::Duration::days(32) - chrono::Duration::days(1)
+            });
+
+        next = next
+            .with_hour(hour)
+            .and_then(|dt| dt.with_minute(minute))
+            .and_then(|dt| dt.with_second(0))
+            .ok_or_else(|| anyhow::anyhow!("Invalid time values: {}:{}", hour, minute))?;
 
         // If the time has already passed this month, go to next month
         if next <= from {
@@ -463,7 +476,9 @@ impl JobScheduler {
                 next_month
             } else {
                 // December -> January of next year
-                next.with_year(next.year() + 1).unwrap().with_month(1).unwrap()
+                next.with_year(next.year() + 1)
+                    .and_then(|dt| dt.with_month(1))
+                    .ok_or_else(|| anyhow::anyhow!("Failed to set date to January of next year"))?
             };
         }
 
@@ -552,9 +567,9 @@ mod tests {
 
     #[test]
     fn test_parse_time_string() {
-        assert_eq!(JobScheduler::parse_time_string("09:30").unwrap(), (9, 30));
-        assert_eq!(JobScheduler::parse_time_string("23:59").unwrap(), (23, 59));
-        assert_eq!(JobScheduler::parse_time_string("00:00").unwrap(), (0, 0));
+        assert_eq!(JobScheduler::parse_time_string("09:30").expect("Failed to parse time 09:30"), (9, 30));
+        assert_eq!(JobScheduler::parse_time_string("23:59").expect("Failed to parse time 23:59"), (23, 59));
+        assert_eq!(JobScheduler::parse_time_string("00:00").expect("Failed to parse time 00:00"), (0, 0));
 
         assert!(JobScheduler::parse_time_string("24:00").is_err());
         assert!(JobScheduler::parse_time_string("12:60").is_err());
@@ -575,9 +590,9 @@ mod tests {
         };
 
         let now = SystemTime::now();
-        let next = JobScheduler::calculate_next_run(&Some(schedule), now).unwrap();
+        let next = JobScheduler::calculate_next_run(&Some(schedule), now).expect("Failed to calculate next run");
 
-        let duration = next.duration_since(now).unwrap();
+        let duration = next.duration_since(now).expect("Failed to calculate duration");
         assert!(duration >= Duration::from_secs(3590) && duration <= Duration::from_secs(3610));
     }
 
@@ -593,28 +608,28 @@ mod tests {
         };
 
         let now = SystemTime::now();
-        let next = JobScheduler::calculate_next_run(&Some(schedule), now).unwrap();
+        let next = JobScheduler::calculate_next_run(&Some(schedule), now).expect("Failed to calculate next run for future test");
 
         assert_eq!(next, future_time);
     }
 
     #[test]
     fn test_normalize_cron_expression_keywords() {
-        assert_eq!(JobScheduler::normalize_cron_expression("@yearly").unwrap(), "0 0 0 1 1 * *");
-        assert_eq!(JobScheduler::normalize_cron_expression("@annually").unwrap(), "0 0 0 1 1 * *");
-        assert_eq!(JobScheduler::normalize_cron_expression("@monthly").unwrap(), "0 0 0 1 * * *");
-        assert_eq!(JobScheduler::normalize_cron_expression("@weekly").unwrap(), "0 0 0 * * SUN *");
-        assert_eq!(JobScheduler::normalize_cron_expression("@daily").unwrap(), "0 0 0 * * * *");
-        assert_eq!(JobScheduler::normalize_cron_expression("@midnight").unwrap(), "0 0 0 * * * *");
-        assert_eq!(JobScheduler::normalize_cron_expression("@hourly").unwrap(), "0 0 * * * * *");
+        assert_eq!(JobScheduler::normalize_cron_expression("@yearly").expect("Failed to normalize @yearly"), "0 0 0 1 1 * *");
+        assert_eq!(JobScheduler::normalize_cron_expression("@annually").expect("Failed to normalize @annually"), "0 0 0 1 1 * *");
+        assert_eq!(JobScheduler::normalize_cron_expression("@monthly").expect("Failed to normalize @monthly"), "0 0 0 1 * * *");
+        assert_eq!(JobScheduler::normalize_cron_expression("@weekly").expect("Failed to normalize @weekly"), "0 0 0 * * SUN *");
+        assert_eq!(JobScheduler::normalize_cron_expression("@daily").expect("Failed to normalize @daily"), "0 0 0 * * * *");
+        assert_eq!(JobScheduler::normalize_cron_expression("@midnight").expect("Failed to normalize @midnight"), "0 0 0 * * * *");
+        assert_eq!(JobScheduler::normalize_cron_expression("@hourly").expect("Failed to normalize @hourly"), "0 0 * * * * *");
     }
 
     #[test]
     fn test_normalize_cron_expression_standard() {
-        assert_eq!(JobScheduler::normalize_cron_expression("0 * * * *").unwrap(), "0 0 * * * * *");
-        assert_eq!(JobScheduler::normalize_cron_expression("15 14 1 * *").unwrap(), "0 15 14 1 * * *");
-        assert_eq!(JobScheduler::normalize_cron_expression("0 22 * * 1-5").unwrap(), "0 0 22 * * 1-5 *");
-        assert_eq!(JobScheduler::normalize_cron_expression("*/15 * * * *").unwrap(), "0 */15 * * * * *");
+        assert_eq!(JobScheduler::normalize_cron_expression("0 * * * *").expect("Failed to normalize hourly cron"), "0 0 * * * * *");
+        assert_eq!(JobScheduler::normalize_cron_expression("15 14 1 * *").expect("Failed to normalize specific time cron"), "0 15 14 1 * * *");
+        assert_eq!(JobScheduler::normalize_cron_expression("0 22 * * 1-5").expect("Failed to normalize weekday cron"), "0 0 22 * * 1-5 *");
+        assert_eq!(JobScheduler::normalize_cron_expression("*/15 * * * *").expect("Failed to normalize interval cron"), "0 */15 * * * * *");
     }
 
     #[test]
@@ -662,21 +677,21 @@ mod tests {
 
     #[test]
     fn test_parse_cron_next_basic_expressions() {
-        let base_time = DateTime::parse_from_rfc3339("2024-01-15T10:30:00Z").unwrap().into();
+        let base_time = DateTime::parse_from_rfc3339("2024-01-15T10:30:00Z").expect("Failed to parse test date").into();
 
         // Test hourly: "0 * * * *" - every hour at minute 0
-        let next = JobScheduler::parse_cron_next("0 * * * *", base_time).unwrap();
+        let next = JobScheduler::parse_cron_next("0 * * * *", base_time).expect("Failed to parse hourly cron");
         assert_eq!(next.minute(), 0);
         assert!(next > base_time);
 
         // Test daily: "0 0 * * *" - every day at midnight
-        let next = JobScheduler::parse_cron_next("0 0 * * *", base_time).unwrap();
+        let next = JobScheduler::parse_cron_next("0 0 * * *", base_time).expect("Failed to parse daily cron");
         assert_eq!(next.hour(), 0);
         assert_eq!(next.minute(), 0);
         assert!(next > base_time);
 
         // Test specific time: "30 14 * * *" - every day at 2:30 PM
-        let next = JobScheduler::parse_cron_next("30 14 * * *", base_time).unwrap();
+        let next = JobScheduler::parse_cron_next("30 14 * * *", base_time).expect("Failed to parse specific time cron");
         assert_eq!(next.hour(), 14);
         assert_eq!(next.minute(), 30);
         assert!(next > base_time);
@@ -684,35 +699,35 @@ mod tests {
 
     #[test]
     fn test_parse_cron_next_keywords() {
-        let base_time = DateTime::parse_from_rfc3339("2024-01-15T10:30:00Z").unwrap().into();
+        let base_time = DateTime::parse_from_rfc3339("2024-01-15T10:30:00Z").expect("Failed to parse test date").into();
 
         // Test @hourly
-        let next = JobScheduler::parse_cron_next("@hourly", base_time).unwrap();
+        let next = JobScheduler::parse_cron_next("@hourly", base_time).expect("Failed to parse @hourly cron");
         assert_eq!(next.minute(), 0);
         assert!(next > base_time);
 
         // Test @daily
-        let next = JobScheduler::parse_cron_next("@daily", base_time).unwrap();
+        let next = JobScheduler::parse_cron_next("@daily", base_time).expect("Failed to parse @daily cron");
         assert_eq!(next.hour(), 0);
         assert_eq!(next.minute(), 0);
         assert!(next > base_time);
 
         // Test @weekly
-        let next = JobScheduler::parse_cron_next("@weekly", base_time).unwrap();
+        let next = JobScheduler::parse_cron_next("@weekly", base_time).expect("Failed to parse @weekly cron");
         assert_eq!(next.weekday(), Weekday::Sun);
         assert_eq!(next.hour(), 0);
         assert_eq!(next.minute(), 0);
         assert!(next > base_time);
 
         // Test @monthly
-        let next = JobScheduler::parse_cron_next("@monthly", base_time).unwrap();
+        let next = JobScheduler::parse_cron_next("@monthly", base_time).expect("Failed to parse @monthly cron");
         assert_eq!(next.day(), 1);
         assert_eq!(next.hour(), 0);
         assert_eq!(next.minute(), 0);
         assert!(next > base_time);
 
         // Test @yearly
-        let next = JobScheduler::parse_cron_next("@yearly", base_time).unwrap();
+        let next = JobScheduler::parse_cron_next("@yearly", base_time).expect("Failed to parse @yearly cron");
         assert_eq!(next.month(), 1);
         assert_eq!(next.day(), 1);
         assert_eq!(next.hour(), 0);
@@ -722,15 +737,15 @@ mod tests {
 
     #[test]
     fn test_parse_cron_next_complex_expressions() {
-        let base_time = DateTime::parse_from_rfc3339("2024-01-15T10:30:00Z").unwrap().into();
+        let base_time = DateTime::parse_from_rfc3339("2024-01-15T10:30:00Z").expect("Failed to parse test date").into();
 
         // Test every 15 minutes: "*/15 * * * *"
-        let next = JobScheduler::parse_cron_next("*/15 * * * *", base_time).unwrap();
+        let next = JobScheduler::parse_cron_next("*/15 * * * *", base_time).expect("Failed to parse 15-minute interval cron");
         assert!(next.minute() % 15 == 0);
         assert!(next > base_time);
 
         // Test weekdays at 9 AM: "0 9 * * 1-5"
-        let next = JobScheduler::parse_cron_next("0 9 * * 1-5", base_time).unwrap();
+        let next = JobScheduler::parse_cron_next("0 9 * * 1-5", base_time).expect("Failed to parse weekday cron");
         assert_eq!(next.hour(), 9);
         assert_eq!(next.minute(), 0);
         let weekday = next.weekday().num_days_from_monday();
@@ -738,14 +753,14 @@ mod tests {
         assert!(next > base_time);
 
         // Test multiple specific minutes: "0,30 * * * *"
-        let next = JobScheduler::parse_cron_next("0,30 * * * *", base_time).unwrap();
+        let next = JobScheduler::parse_cron_next("0,30 * * * *", base_time).expect("Failed to parse multi-minute cron");
         assert!(next.minute() == 0 || next.minute() == 30);
         assert!(next > base_time);
     }
 
     #[test]
     fn test_parse_cron_next_invalid_expressions() {
-        let base_time = DateTime::parse_from_rfc3339("2024-01-15T10:30:00Z").unwrap().into();
+        let base_time = DateTime::parse_from_rfc3339("2024-01-15T10:30:00Z").expect("Failed to parse test date").into();
 
         // Test invalid format
         assert!(JobScheduler::parse_cron_next("invalid", base_time).is_err());
@@ -771,10 +786,10 @@ mod tests {
         };
 
         let now = SystemTime::now();
-        let next = JobScheduler::calculate_next_run(&Some(schedule), now).unwrap();
+        let next = JobScheduler::calculate_next_run(&Some(schedule), now).expect("Failed to calculate next run for interval test");
 
         // The next run should be within the next hour
-        let duration = next.duration_since(now).unwrap();
+        let duration = next.duration_since(now).expect("Failed to calculate duration for interval test");
         assert!(duration <= Duration::from_secs(3600));
 
         // Convert to DateTime to check that it's at minute 0

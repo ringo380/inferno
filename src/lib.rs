@@ -37,6 +37,7 @@ pub mod security;
 pub mod streaming;
 pub mod tui;
 pub mod versioning;
+pub mod performance_baseline;
 
 use anyhow::Result;
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};

@@ -351,7 +351,7 @@ impl OpenTelemetryTracer {
         if let Some(span) = spans.iter_mut().find(|s| s.span_id == span_id) {
             span.end_time = Some(Utc::now());
             span.duration_ms = Some(
-                (span.end_time.unwrap() - span.start_time).num_milliseconds() as f64
+                (span.end_time.expect("End time should be set just above") - span.start_time).num_milliseconds() as f64
             );
             span.status = status;
         }
@@ -710,18 +710,18 @@ mod tests {
             "Test counter metric".to_string(),
             MetricType::Counter,
             HashMap::new(),
-        ).await.unwrap();
+        ).await.expect("Failed to register metric in test");
 
         collector.register_metric(
             "test_gauge".to_string(),
             "Test gauge metric".to_string(),
             MetricType::Gauge,
             HashMap::new(),
-        ).await.unwrap();
+        ).await.expect("Failed to register metric in test");
 
         // Update metrics
-        collector.increment_counter("test_counter", 5).await.unwrap();
-        collector.set_gauge("test_gauge", 42.5).await.unwrap();
+        collector.increment_counter("test_counter", 5).await.expect("Failed to increment counter in test");
+        collector.set_gauge("test_gauge", 42.5).await.expect("Failed to set gauge in test");
 
         // Export
         let output = collector.export_prometheus_format().await;
@@ -740,17 +740,17 @@ mod tests {
         // Add attributes
         let mut attributes = HashMap::new();
         attributes.insert("test_key".to_string(), "test_value".to_string());
-        tracer.add_span_attributes(&span_id, attributes).await.unwrap();
+        tracer.add_span_attributes(&span_id, attributes).await.expect("Failed to add span attributes in test");
 
         // Add event
         tracer.add_span_event(
             &span_id,
             "test_event".to_string(),
             HashMap::new(),
-        ).await.unwrap();
+        ).await.expect("Failed to register metric in test");
 
         // End span
-        tracer.end_span(&span_id, SpanStatus::Ok).await.unwrap();
+        tracer.end_span(&span_id, SpanStatus::Ok).await.expect("Failed to end span in test");
 
         // Export
         let spans = tracer.export_otlp_format().await;
@@ -764,14 +764,14 @@ mod tests {
         let manager = ObservabilityManager::new(config);
 
         // Initialize
-        manager.initialize().await.unwrap();
+        manager.initialize().await.expect("Failed to initialize observability manager in test");
 
         // Record inference
         manager.record_inference(
             "test_model",
             Duration::from_millis(100),
             true,
-        ).await.unwrap();
+        ).await.expect("Failed to register metric in test");
 
         // Get metrics
         let metrics = manager.get_prometheus_metrics().await;

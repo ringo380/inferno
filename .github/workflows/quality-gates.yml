@@ -1,0 +1,765 @@
+name: Quality Gates & Compliance
+
+on:
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches: [main]
+  schedule:
+    # Weekly compliance check
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+    inputs:
+      compliance_level:
+        description: 'Compliance level to check'
+        required: false
+        default: 'enterprise'
+        type: choice
+        options:
+          - basic
+          - standard
+          - enterprise
+          - strict
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  # Code quality analysis with detailed metrics
+  code-quality-analysis:
+    name: Code Quality Analysis
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      quality-score: ${{ steps.quality-score.outputs.score }}
+      complexity-score: ${{ steps.complexity.outputs.score }}
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        components: clippy, rustfmt
+
+    - name: Cache dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: quality-${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y pkg-config libssl-dev
+
+    - name: Install code quality tools
+      run: |
+        cargo install cargo-audit --locked
+        cargo install cargo-deny --locked
+        cargo install cargo-geiger --locked
+        cargo install cargo-outdated --locked
+        cargo install cargo-bloat --locked
+        cargo install cargo-machete --locked
+        cargo install cargo-spellcheck --locked
+
+    - name: Run comprehensive Clippy analysis
+      run: |
+        mkdir -p quality_reports
+
+        # Run Clippy with maximum pedantry
+        cargo clippy --workspace --all-targets --all-features --message-format=json -- \
+          -D warnings \
+          -D clippy::all \
+          -D clippy::pedantic \
+          -D clippy::nursery \
+          -D clippy::cargo \
+          -D clippy::complexity \
+          -D clippy::correctness \
+          -D clippy::perf \
+          -D clippy::style \
+          -D clippy::suspicious \
+          -A clippy::multiple_crate_versions \
+          -A clippy::missing_docs_in_private_items \
+          -A clippy::module_name_repetitions \
+          > quality_reports/clippy_detailed.json 2>&1 || true
+
+        # Generate human-readable report
+        cargo clippy --workspace --all-targets --all-features -- \
+          -D warnings \
+          > quality_reports/clippy_report.txt 2>&1 || true
+
+    - name: Code complexity analysis
+      id: complexity
+      run: |
+        # Analyze code complexity
+        python3 << 'EOF'
+        import os
+        import subprocess
+        import json
+        from pathlib import Path
+
+        def count_lines_of_code():
+            """Count lines of code in Rust files"""
+            total_lines = 0
+            code_lines = 0
+            comment_lines = 0
+            blank_lines = 0
+
+            for rust_file in Path('src').rglob('*.rs'):
+                with open(rust_file, 'r', encoding='utf-8', errors='ignore') as f:
+                    lines = f.readlines()
+                    total_lines += len(lines)
+
+                    for line in lines:
+                        stripped = line.strip()
+                        if not stripped:
+                            blank_lines += 1
+                        elif stripped.startswith('//') or stripped.startswith('/*'):
+                            comment_lines += 1
+                        else:
+                            code_lines += 1
+
+            return {
+                'total_lines': total_lines,
+                'code_lines': code_lines,
+                'comment_lines': comment_lines,
+                'blank_lines': blank_lines,
+                'comment_ratio': comment_lines / total_lines if total_lines > 0 else 0
+            }
+
+        def analyze_function_complexity():
+            """Analyze function complexity"""
+            complexity_data = []
+
+            for rust_file in Path('src').rglob('*.rs'):
+                with open(rust_file, 'r', encoding='utf-8', errors='ignore') as f:
+                    content = f.read()
+
+                    # Simple complexity heuristic based on keywords
+                    keywords = ['if', 'else', 'match', 'for', 'while', 'loop']
+                    complexity = sum(content.count(keyword) for keyword in keywords)
+
+                    complexity_data.append({
+                        'file': str(rust_file),
+                        'complexity': complexity,
+                        'lines': len(content.split('\n'))
+                    })
+
+            return complexity_data
+
+        # Generate complexity report
+        loc_data = count_lines_of_code()
+        complexity_data = analyze_function_complexity()
+
+        total_complexity = sum(item['complexity'] for item in complexity_data)
+        avg_complexity = total_complexity / len(complexity_data) if complexity_data else 0
+
+        # Calculate complexity score (0-100, higher is better)
+        complexity_score = max(0, 100 - (avg_complexity * 2))
+
+        report = {
+            'lines_of_code': loc_data,
+            'complexity': {
+                'total_complexity': total_complexity,
+                'average_complexity': avg_complexity,
+                'score': complexity_score,
+                'files': complexity_data[:10]  # Top 10 most complex files
+            }
+        }
+
+        with open('quality_reports/complexity.json', 'w') as f:
+            json.dump(report, f, indent=2)
+
+        print(f"::set-output name=score::{complexity_score:.1f}")
+        print(f"Complexity Score: {complexity_score:.1f}/100")
+        EOF
+
+    - name: Check code formatting consistency
+      run: |
+        # Check if code is properly formatted
+        cargo fmt --all -- --check > quality_reports/format_check.txt 2>&1 || echo "Format issues found"
+
+    - name: Spell check source code
+      run: |
+        cargo spellcheck check > quality_reports/spellcheck.txt 2>&1 || echo "Spelling issues found"
+
+    - name: Unused dependency analysis
+      run: |
+        cargo machete > quality_reports/unused_deps.txt 2>&1 || echo "Unused dependencies found"
+
+    - name: Binary size analysis
+      run: |
+        cargo build --release
+        cargo bloat --release --crates > quality_reports/binary_bloat.txt
+
+    - name: Calculate overall quality score
+      id: quality-score
+      run: |
+        python3 << 'EOF'
+        import json
+        import os
+
+        def calculate_quality_score():
+            score = 100  # Start with perfect score
+
+            # Check Clippy warnings
+            if os.path.exists('quality_reports/clippy_report.txt'):
+                with open('quality_reports/clippy_report.txt', 'r') as f:
+                    clippy_content = f.read()
+                    warning_count = clippy_content.count('warning:')
+                    error_count = clippy_content.count('error:')
+                    score -= (warning_count * 2) + (error_count * 5)
+
+            # Check formatting
+            if os.path.exists('quality_reports/format_check.txt'):
+                with open('quality_reports/format_check.txt', 'r') as f:
+                    if f.read().strip():
+                        score -= 10  # Deduct for formatting issues
+
+            # Check spelling
+            if os.path.exists('quality_reports/spellcheck.txt'):
+                with open('quality_reports/spellcheck.txt', 'r') as f:
+                    spelling_content = f.read()
+                    if 'error:' in spelling_content:
+                        score -= 5
+
+            # Factor in complexity score
+            if os.path.exists('quality_reports/complexity.json'):
+                with open('quality_reports/complexity.json', 'r') as f:
+                    complexity_data = json.load(f)
+                    complexity_score = complexity_data['complexity']['score']
+                    score = (score + complexity_score) / 2
+
+            score = max(0, min(100, score))  # Clamp between 0-100
+            return score
+
+        quality_score = calculate_quality_score()
+        print(f"::set-output name=score::{quality_score:.1f}")
+        print(f"Overall Quality Score: {quality_score:.1f}/100")
+        EOF
+
+    - name: Upload quality reports
+      uses: actions/upload-artifact@v4
+      with:
+        name: quality-reports
+        path: quality_reports/
+        retention-days: 30
+
+  # Security compliance checks
+  security-compliance:
+    name: Security Compliance
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    outputs:
+      security-score: ${{ steps.security-score.outputs.score }}
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Cache dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: security-${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y pkg-config libssl-dev
+
+    - name: Install security tools
+      run: |
+        cargo install cargo-audit --locked
+        cargo install cargo-deny --locked
+        cargo install cargo-geiger --locked
+
+    - name: Security audit
+      run: |
+        mkdir -p security_reports
+
+        # Vulnerability scanning
+        cargo audit --format json > security_reports/audit.json 2>&1 || true
+        cargo audit > security_reports/audit.txt 2>&1 || true
+
+        # License and dependency checking
+        cargo deny check all --format json > security_reports/deny.json 2>&1 || true
+        cargo deny check all > security_reports/deny.txt 2>&1 || true
+
+        # Unsafe code analysis
+        cargo geiger --format json > security_reports/geiger.json 2>&1 || true
+        cargo geiger > security_reports/geiger.txt 2>&1 || true
+
+    - name: SAST with Semgrep
+      uses: returntocorp/semgrep-action@v1
+      with:
+        config: >-
+          p/security-audit
+          p/rust
+          p/secrets
+          p/owasp-top-ten
+        generateSarif: "1"
+
+    - name: Upload Semgrep SARIF
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: semgrep.sarif
+
+    - name: Secret scanning with TruffleHog
+      run: |
+        # Install TruffleHog
+        curl -sSfL https://raw.githubusercontent.com/trufflesecurity/trufflehog/main/scripts/install.sh | sh -s -- -b /usr/local/bin
+
+        # Scan for secrets
+        trufflehog git file://. --json > security_reports/secrets.json || true
+
+    - name: Calculate security score
+      id: security-score
+      run: |
+        python3 << 'EOF'
+        import json
+        import os
+
+        def calculate_security_score():
+            score = 100
+
+            # Check vulnerabilities
+            if os.path.exists('security_reports/audit.json'):
+                with open('security_reports/audit.json', 'r') as f:
+                    try:
+                        audit_data = json.load(f)
+                        if 'vulnerabilities' in audit_data:
+                            vuln_count = len(audit_data['vulnerabilities'])
+                            score -= vuln_count * 10  # 10 points per vulnerability
+                    except:
+                        pass
+
+            # Check unsafe code usage
+            if os.path.exists('security_reports/geiger.json'):
+                with open('security_reports/geiger.json', 'r') as f:
+                    try:
+                        geiger_data = json.load(f)
+                        # Deduct points for unsafe code blocks
+                        # This is a simplified check
+                        score -= 5  # Basic deduction for any unsafe usage
+                    except:
+                        pass
+
+            # Check for secrets
+            if os.path.exists('security_reports/secrets.json'):
+                with open('security_reports/secrets.json', 'r') as f:
+                    content = f.read()
+                    if content.strip():  # If file has content, secrets were found
+                        score -= 20
+
+            score = max(0, min(100, score))
+            return score
+
+        security_score = calculate_security_score()
+        print(f"::set-output name=score::{security_score:.1f}")
+        print(f"Security Score: {security_score:.1f}/100")
+        EOF
+
+    - name: Upload security reports
+      uses: actions/upload-artifact@v4
+      with:
+        name: security-reports
+        path: security_reports/
+        retention-days: 30
+
+  # License compliance checking
+  license-compliance:
+    name: License Compliance
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      license-compliant: ${{ steps.license-check.outputs.compliant }}
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Cache dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: license-${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+    - name: Install license tools
+      run: |
+        cargo install cargo-license --locked
+        cargo install cargo-deny --locked
+
+    - name: Generate license report
+      run: |
+        mkdir -p license_reports
+
+        # Generate detailed license report
+        cargo license --json > license_reports/licenses.json
+        cargo license --format table > license_reports/licenses.txt
+
+        # Check for license compatibility
+        cargo deny check licenses > license_reports/deny_licenses.txt 2>&1 || true
+
+    - name: Check license compliance
+      id: license-check
+      run: |
+        python3 << 'EOF'
+        import json
+        import os
+
+        def check_license_compliance():
+            compliant = True
+            issues = []
+
+            # Allowed licenses for enterprise use
+            allowed_licenses = {
+                'MIT', 'Apache-2.0', 'BSD-2-Clause', 'BSD-3-Clause',
+                'ISC', 'Unlicense', 'CC0-1.0', 'WTFPL'
+            }
+
+            # Problematic licenses
+            problematic_licenses = {
+                'GPL-2.0', 'GPL-3.0', 'LGPL-2.1', 'LGPL-3.0',
+                'AGPL-3.0', 'SSPL-1.0', 'Commons-Clause'
+            }
+
+            if os.path.exists('license_reports/licenses.json'):
+                with open('license_reports/licenses.json', 'r') as f:
+                    try:
+                        licenses = json.load(f)
+                        for package in licenses:
+                            license_name = package.get('license', 'Unknown')
+                            package_name = package.get('name', 'Unknown')
+
+                            if license_name in problematic_licenses:
+                                issues.append(f"Problematic license {license_name} in {package_name}")
+                                compliant = False
+                            elif license_name not in allowed_licenses and license_name != 'Unknown':
+                                issues.append(f"Unvetted license {license_name} in {package_name}")
+
+                    except json.JSONDecodeError:
+                        compliant = False
+                        issues.append("Failed to parse license report")
+
+            # Write compliance report
+            with open('license_reports/compliance.json', 'w') as f:
+                json.dump({
+                    'compliant': compliant,
+                    'issues': issues,
+                    'allowed_licenses': list(allowed_licenses),
+                    'problematic_licenses': list(problematic_licenses)
+                }, f, indent=2)
+
+            print(f"::set-output name=compliant::{str(compliant).lower()}")
+
+            if not compliant:
+                print("License compliance issues found:")
+                for issue in issues:
+                    print(f"  - {issue}")
+            else:
+                print("All licenses are compliant for enterprise use")
+
+            return compliant
+
+        check_license_compliance()
+        EOF
+
+    - name: Upload license reports
+      uses: actions/upload-artifact@v4
+      with:
+        name: license-reports
+        path: license_reports/
+        retention-days: 30
+
+  # Performance standards verification
+  performance-standards:
+    name: Performance Standards
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      performance-compliant: ${{ steps.perf-check.outputs.compliant }}
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Cache dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: perf-standards-${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y pkg-config libssl-dev
+
+    - name: Build release binary
+      run: |
+        cargo build --release --all-features
+
+    - name: Performance benchmarks
+      run: |
+        mkdir -p performance_reports
+
+        # Run quick benchmarks
+        cargo bench --bench inference_benchmark -- --quick > performance_reports/inference.txt 2>&1 || true
+        cargo bench --bench memory_benchmark -- --quick > performance_reports/memory.txt 2>&1 || true
+
+        # Binary size check
+        ls -la target/release/inferno > performance_reports/binary_size.txt
+
+        # Startup time check
+        time ./target/release/inferno --version > performance_reports/startup_time.txt 2>&1
+
+    - name: Check performance standards
+      id: perf-check
+      run: |
+        python3 << 'EOF'
+        import os
+        import re
+
+        def check_performance_standards():
+            compliant = True
+            issues = []
+
+            # Check binary size (should be under 100MB for release build)
+            if os.path.exists('performance_reports/binary_size.txt'):
+                with open('performance_reports/binary_size.txt', 'r') as f:
+                    size_line = f.read().strip()
+                    # Extract size in bytes (5th column in ls -la output)
+                    size_bytes = int(size_line.split()[4])
+                    size_mb = size_bytes / (1024 * 1024)
+
+                    if size_mb > 100:
+                        issues.append(f"Binary size {size_mb:.1f}MB exceeds 100MB limit")
+                        compliant = False
+
+            # Check startup time (should be under 1 second)
+            if os.path.exists('performance_reports/startup_time.txt'):
+                with open('performance_reports/startup_time.txt', 'r') as f:
+                    content = f.read()
+                    # Look for time output pattern
+                    time_match = re.search(r'real\s+(\d+)m([\d.]+)s', content)
+                    if time_match:
+                        minutes = int(time_match.group(1))
+                        seconds = float(time_match.group(2))
+                        total_seconds = minutes * 60 + seconds
+
+                        if total_seconds > 1.0:
+                            issues.append(f"Startup time {total_seconds:.2f}s exceeds 1s limit")
+                            compliant = False
+
+            print(f"::set-output name=compliant::{str(compliant).lower()}")
+
+            if not compliant:
+                print("Performance standard violations:")
+                for issue in issues:
+                    print(f"  - {issue}")
+            else:
+                print("All performance standards met")
+
+            return compliant
+
+        check_performance_standards()
+        EOF
+
+    - name: Upload performance reports
+      uses: actions/upload-artifact@v4
+      with:
+        name: performance-reports
+        path: performance_reports/
+        retention-days: 30
+
+  # Quality gate decision
+  quality-gate-decision:
+    name: Quality Gate Decision
+    runs-on: ubuntu-latest
+    needs: [code-quality-analysis, security-compliance, license-compliance, performance-standards]
+    timeout-minutes: 10
+
+    steps:
+    - name: Download all reports
+      uses: actions/download-artifact@v4
+      with:
+        path: all_reports
+
+    - name: Evaluate quality gates
+      id: gate-decision
+      run: |
+        python3 << 'EOF'
+        import json
+
+        # Extract scores and compliance status
+        quality_score = float("${{ needs.code-quality-analysis.outputs.quality-score }}" or "0")
+        complexity_score = float("${{ needs.code-quality-analysis.outputs.complexity-score }}" or "0")
+        security_score = float("${{ needs.security-compliance.outputs.security-score }}" or "0")
+        license_compliant = "${{ needs.license-compliance.outputs.license-compliant }}" == "true"
+        performance_compliant = "${{ needs.performance-standards.outputs.performance-compliant }}" == "true"
+
+        # Set compliance level thresholds
+        compliance_level = "${{ github.event.inputs.compliance_level or 'enterprise' }}"
+
+        thresholds = {
+            'basic': {'quality': 70, 'security': 70, 'complexity': 60},
+            'standard': {'quality': 80, 'security': 80, 'complexity': 70},
+            'enterprise': {'quality': 90, 'security': 90, 'complexity': 80},
+            'strict': {'quality': 95, 'security': 95, 'complexity': 90}
+        }
+
+        threshold = thresholds.get(compliance_level, thresholds['enterprise'])
+
+        # Evaluate each gate
+        gates = {
+            'code_quality': quality_score >= threshold['quality'],
+            'code_complexity': complexity_score >= threshold['complexity'],
+            'security': security_score >= threshold['security'],
+            'license_compliance': license_compliant,
+            'performance_standards': performance_compliant
+        }
+
+        all_passed = all(gates.values())
+
+        # Generate detailed report
+        report = {
+            'compliance_level': compliance_level,
+            'overall_status': 'PASS' if all_passed else 'FAIL',
+            'scores': {
+                'quality': quality_score,
+                'complexity': complexity_score,
+                'security': security_score
+            },
+            'thresholds': threshold,
+            'gates': gates,
+            'summary': {
+                'total_gates': len(gates),
+                'passed_gates': sum(gates.values()),
+                'failed_gates': len(gates) - sum(gates.values())
+            }
+        }
+
+        with open('quality_gate_report.json', 'w') as f:
+            json.dump(report, f, indent=2)
+
+        # Output for GitHub Actions
+        print(f"Quality Gate Status: {'PASS' if all_passed else 'FAIL'}")
+        print(f"Passed: {sum(gates.values())}/{len(gates)} gates")
+
+        for gate, passed in gates.items():
+            status = "✅ PASS" if passed else "❌ FAIL"
+            print(f"  {gate}: {status}")
+
+        if not all_passed:
+            print("\n::error::Quality gates failed. Review the reports and fix issues before merging.")
+            exit(1)
+        else:
+            print("\n✅ All quality gates passed!")
+        EOF
+
+    - name: Generate quality gate summary
+      run: |
+        cat > quality_gate_summary.md << 'EOF'
+        # 🚦 Quality Gate Report
+
+        **Compliance Level:** ${{ github.event.inputs.compliance_level || 'enterprise' }}
+        **Overall Status:** $(cat quality_gate_report.json | jq -r '.overall_status')
+
+        ## 📊 Scores
+
+        | Metric | Score | Threshold | Status |
+        |--------|-------|-----------|--------|
+        | Code Quality | ${{ needs.code-quality-analysis.outputs.quality-score }}% | $(cat quality_gate_report.json | jq -r '.thresholds.quality')% | $([ "${{ needs.code-quality-analysis.outputs.quality-score }}" -ge "$(cat quality_gate_report.json | jq -r '.thresholds.quality')" ] && echo "✅ PASS" || echo "❌ FAIL") |
+        | Code Complexity | ${{ needs.code-quality-analysis.outputs.complexity-score }}% | $(cat quality_gate_report.json | jq -r '.thresholds.complexity')% | $([ "${{ needs.code-quality-analysis.outputs.complexity-score }}" -ge "$(cat quality_gate_report.json | jq -r '.thresholds.complexity')" ] && echo "✅ PASS" || echo "❌ FAIL") |
+        | Security | ${{ needs.security-compliance.outputs.security-score }}% | $(cat quality_gate_report.json | jq -r '.thresholds.security')% | $([ "${{ needs.security-compliance.outputs.security-score }}" -ge "$(cat quality_gate_report.json | jq -r '.thresholds.security')" ] && echo "✅ PASS" || echo "❌ FAIL") |
+
+        ## 🔒 Compliance Checks
+
+        | Check | Status |
+        |-------|--------|
+        | License Compliance | ${{ needs.license-compliance.outputs.license-compliant == 'true' && '✅ COMPLIANT' || '❌ NON-COMPLIANT' }} |
+        | Performance Standards | ${{ needs.performance-standards.outputs.performance-compliant == 'true' && '✅ COMPLIANT' || '❌ NON-COMPLIANT' }} |
+
+        ## 📋 Summary
+
+        - **Total Gates:** $(cat quality_gate_report.json | jq -r '.summary.total_gates')
+        - **Passed:** $(cat quality_gate_report.json | jq -r '.summary.passed_gates')
+        - **Failed:** $(cat quality_gate_report.json | jq -r '.summary.failed_gates')
+
+        ## 📁 Detailed Reports
+
+        Detailed analysis reports are available in the workflow artifacts:
+        - Quality Analysis Report
+        - Security Compliance Report
+        - License Compliance Report
+        - Performance Standards Report
+        EOF
+
+    - name: Upload quality gate report
+      uses: actions/upload-artifact@v4
+      with:
+        name: quality-gate-report
+        path: |
+          quality_gate_report.json
+          quality_gate_summary.md
+        retention-days: 90
+
+    - name: Post quality gate results to PR
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const fs = require('fs');
+          const summary = fs.readFileSync('quality_gate_summary.md', 'utf8');
+
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: summary
+          });
+
+    - name: Update status check
+      if: always()
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const state = '${{ needs.code-quality-analysis.result }}' === 'success' &&
+                        '${{ needs.security-compliance.result }}' === 'success' &&
+                        '${{ needs.license-compliance.result }}' === 'success' &&
+                        '${{ needs.performance-standards.result }}' === 'success' ? 'success' : 'failure';
+
+          github.rest.repos.createCommitStatus({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            sha: context.sha,
+            state: state,
+            context: 'Quality Gates',
+            description: state === 'success' ? 'All quality gates passed' : 'One or more quality gates failed'
+          });

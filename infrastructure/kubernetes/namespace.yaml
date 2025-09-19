@@ -1,0 +1,48 @@
+# Kubernetes Namespaces for Inferno Application
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: inferno-system
+  labels:
+    name: inferno-system
+    app.kubernetes.io/name: inferno-system
+    app.kubernetes.io/part-of: inferno
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: inferno-staging
+  labels:
+    name: inferno-staging
+    app.kubernetes.io/name: inferno-staging
+    app.kubernetes.io/part-of: inferno
+    environment: staging
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: inferno-production
+  labels:
+    name: inferno-production
+    app.kubernetes.io/name: inferno-production
+    app.kubernetes.io/part-of: inferno
+    environment: production
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monitoring
+  labels:
+    name: monitoring
+    app.kubernetes.io/name: monitoring
+    app.kubernetes.io/part-of: inferno
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: logging
+  labels:
+    name: logging
+    app.kubernetes.io/name: logging
+    app.kubernetes.io/part-of: inferno

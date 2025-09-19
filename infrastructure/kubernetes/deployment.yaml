@@ -1,0 +1,474 @@
+# Kubernetes Deployment for Inferno Application
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: inferno-api
+  namespace: inferno-production
+  labels:
+    app: inferno-api
+    component: api
+    version: v1
+    app.kubernetes.io/name: inferno-api
+    app.kubernetes.io/instance: inferno
+    app.kubernetes.io/version: "1.0.0"
+    app.kubernetes.io/component: api
+    app.kubernetes.io/part-of: inferno
+    app.kubernetes.io/managed-by: kubectl
+spec:
+  replicas: 3
+  revisionHistoryLimit: 10
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: inferno-api
+      component: api
+  template:
+    metadata:
+      labels:
+        app: inferno-api
+        component: api
+        version: v1
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/metrics"
+        prometheus.io/port: "9090"
+        # Force pod restart on ConfigMap changes
+        configmap.reloader.stakater.com/reload: "inferno-config,inferno-production-config"
+    spec:
+      serviceAccountName: inferno-api
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      containers:
+      - name: inferno-api
+        image: ghcr.io/inferno-ai/inferno:latest
+        imagePullPolicy: Always
+        args:
+          - "serve"
+          - "--host"
+          - "0.0.0.0"
+          - "--port"
+          - "8080"
+          - "--metrics-port"
+          - "9090"
+        ports:
+        - name: http
+          containerPort: 8080
+          protocol: TCP
+        - name: metrics
+          containerPort: 9090
+          protocol: TCP
+        env:
+        - name: RUST_LOG
+          value: "info"
+        - name: RUST_BACKTRACE
+          value: "1"
+        - name: INFERNO_DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: inferno-secrets
+              key: database-url
+        - name: INFERNO_REDIS_URL
+          valueFrom:
+            secretKeyRef:
+              name: inferno-secrets
+              key: redis-url
+        - name: INFERNO_JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: inferno-secrets
+              key: jwt-secret
+        - name: AWS_REGION
+          value: "us-west-2"
+        envFrom:
+        - configMapRef:
+            name: inferno-config
+        - configMapRef:
+            name: inferno-production-config
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+            ephemeral-storage: "1Gi"
+          limits:
+            memory: "2Gi"
+            cpu: "2000m"
+            ephemeral-storage: "5Gi"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          successThreshold: 1
+          failureThreshold: 3
+        startupProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 30
+        volumeMounts:
+        - name: models-storage
+          mountPath: /app/models
+          readOnly: true
+        - name: cache-storage
+          mountPath: /app/cache
+        - name: tmp-storage
+          mountPath: /tmp
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+      volumes:
+      - name: models-storage
+        persistentVolumeClaim:
+          claimName: inferno-models-pvc
+      - name: cache-storage
+        emptyDir:
+          sizeLimit: 10Gi
+      - name: tmp-storage
+        emptyDir:
+          sizeLimit: 1Gi
+      nodeSelector:
+        kubernetes.io/arch: amd64
+      tolerations:
+      - key: "node.kubernetes.io/not-ready"
+        operator: "Exists"
+        effect: "NoExecute"
+        tolerationSeconds: 300
+      - key: "node.kubernetes.io/unreachable"
+        operator: "Exists"
+        effect: "NoExecute"
+        tolerationSeconds: 300
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - inferno-api
+              topologyKey: kubernetes.io/hostname
+
+---
+# Worker Deployment for background processing
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: inferno-worker
+  namespace: inferno-production
+  labels:
+    app: inferno-worker
+    component: worker
+    version: v1
+    app.kubernetes.io/name: inferno-worker
+    app.kubernetes.io/instance: inferno
+    app.kubernetes.io/version: "1.0.0"
+    app.kubernetes.io/component: worker
+    app.kubernetes.io/part-of: inferno
+    app.kubernetes.io/managed-by: kubectl
+spec:
+  replicas: 2
+  revisionHistoryLimit: 10
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: inferno-worker
+      component: worker
+  template:
+    metadata:
+      labels:
+        app: inferno-worker
+        component: worker
+        version: v1
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/metrics"
+        prometheus.io/port: "9090"
+    spec:
+      serviceAccountName: inferno-worker
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      containers:
+      - name: inferno-worker
+        image: ghcr.io/inferno-ai/inferno:latest
+        imagePullPolicy: Always
+        args:
+          - "worker"
+          - "--metrics-port"
+          - "9090"
+        ports:
+        - name: metrics
+          containerPort: 9090
+          protocol: TCP
+        env:
+        - name: RUST_LOG
+          value: "info"
+        - name: RUST_BACKTRACE
+          value: "1"
+        - name: INFERNO_DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: inferno-secrets
+              key: database-url
+        - name: INFERNO_REDIS_URL
+          valueFrom:
+            secretKeyRef:
+              name: inferno-secrets
+              key: redis-url
+        - name: AWS_REGION
+          value: "us-west-2"
+        envFrom:
+        - configMapRef:
+            name: inferno-config
+        - configMapRef:
+            name: inferno-production-config
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "1000m"
+            ephemeral-storage: "2Gi"
+          limits:
+            memory: "4Gi"
+            cpu: "4000m"
+            ephemeral-storage: "10Gi"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: metrics
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: metrics
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          timeoutSeconds: 3
+          successThreshold: 1
+          failureThreshold: 3
+        volumeMounts:
+        - name: models-storage
+          mountPath: /app/models
+          readOnly: true
+        - name: cache-storage
+          mountPath: /app/cache
+        - name: tmp-storage
+          mountPath: /tmp
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+      volumes:
+      - name: models-storage
+        persistentVolumeClaim:
+          claimName: inferno-models-pvc
+      - name: cache-storage
+        emptyDir:
+          sizeLimit: 20Gi
+      - name: tmp-storage
+        emptyDir:
+          sizeLimit: 2Gi
+      nodeSelector:
+        kubernetes.io/arch: amd64
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - inferno-worker
+              topologyKey: kubernetes.io/hostname
+
+---
+# GPU Worker Deployment (for GPU-accelerated inference)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: inferno-gpu-worker
+  namespace: inferno-production
+  labels:
+    app: inferno-gpu-worker
+    component: gpu-worker
+    version: v1
+    app.kubernetes.io/name: inferno-gpu-worker
+    app.kubernetes.io/instance: inferno
+    app.kubernetes.io/version: "1.0.0"
+    app.kubernetes.io/component: gpu-worker
+    app.kubernetes.io/part-of: inferno
+    app.kubernetes.io/managed-by: kubectl
+spec:
+  replicas: 1
+  revisionHistoryLimit: 10
+  strategy:
+    type: Recreate  # GPU resources don't support rolling updates well
+  selector:
+    matchLabels:
+      app: inferno-gpu-worker
+      component: gpu-worker
+  template:
+    metadata:
+      labels:
+        app: inferno-gpu-worker
+        component: gpu-worker
+        version: v1
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/metrics"
+        prometheus.io/port: "9090"
+    spec:
+      serviceAccountName: inferno-gpu-worker
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      containers:
+      - name: inferno-gpu-worker
+        image: ghcr.io/inferno-ai/inferno:gpu
+        imagePullPolicy: Always
+        args:
+          - "worker"
+          - "--gpu"
+          - "--metrics-port"
+          - "9090"
+        ports:
+        - name: metrics
+          containerPort: 9090
+          protocol: TCP
+        env:
+        - name: RUST_LOG
+          value: "info"
+        - name: RUST_BACKTRACE
+          value: "1"
+        - name: NVIDIA_VISIBLE_DEVICES
+          value: "all"
+        - name: NVIDIA_DRIVER_CAPABILITIES
+          value: "compute,utility"
+        - name: INFERNO_DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: inferno-secrets
+              key: database-url
+        - name: INFERNO_REDIS_URL
+          valueFrom:
+            secretKeyRef:
+              name: inferno-secrets
+              key: redis-url
+        - name: AWS_REGION
+          value: "us-west-2"
+        envFrom:
+        - configMapRef:
+            name: inferno-config
+        - configMapRef:
+            name: inferno-production-config
+        resources:
+          requests:
+            memory: "4Gi"
+            cpu: "2000m"
+            nvidia.com/gpu: 1
+            ephemeral-storage: "5Gi"
+          limits:
+            memory: "16Gi"
+            cpu: "8000m"
+            nvidia.com/gpu: 1
+            ephemeral-storage: "20Gi"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: metrics
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 10
+          successThreshold: 1
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: metrics
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 3
+        volumeMounts:
+        - name: models-storage
+          mountPath: /app/models
+          readOnly: true
+        - name: gpu-cache-storage
+          mountPath: /app/cache
+        - name: tmp-storage
+          mountPath: /tmp
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+      volumes:
+      - name: models-storage
+        persistentVolumeClaim:
+          claimName: inferno-models-pvc
+      - name: gpu-cache-storage
+        emptyDir:
+          sizeLimit: 50Gi
+      - name: tmp-storage
+        emptyDir:
+          sizeLimit: 5Gi
+      nodeSelector:
+        node.kubernetes.io/instance-type: "g4dn.xlarge"
+        accelerator: "nvidia-tesla-t4"
+      tolerations:
+      - key: "nvidia.com/gpu"
+        operator: "Exists"
+        effect: "NoSchedule"
+      - key: "node.kubernetes.io/not-ready"
+        operator: "Exists"
+        effect: "NoExecute"
+        tolerationSeconds: 300
+      - key: "node.kubernetes.io/unreachable"
+        operator: "Exists"
+        effect: "NoExecute"
+        tolerationSeconds: 300

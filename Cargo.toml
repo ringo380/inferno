@@ -176,6 +176,22 @@ opt-level = 1
 name = "inference_benchmark"
 harness = false
 
+[[bench]]
+name = "memory_benchmark"
+harness = false
+
+[[bench]]
+name = "concurrent_benchmark"
+harness = false
+
+[[bench]]
+name = "cache_benchmark"
+harness = false
+
+[[bench]]
+name = "profiling_benchmark"
+harness = false
+
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]

@@ -568,21 +568,21 @@ mod tests {
 
     #[tokio::test]
     async fn test_model_manager() {
-        let temp_dir = tempdir().unwrap();
+        let temp_dir = tempdir().expect("Failed to create temporary directory for test");
         let models_dir = temp_dir.path().join("models");
-        fs::create_dir_all(&models_dir).await.unwrap();
+        fs::create_dir_all(&models_dir).await.expect("Failed to create models directory for test");
 
         let manager = ModelManager::new(&models_dir);
 
         // Initially no models
-        let models = manager.list_models().await.unwrap();
+        let models = manager.list_models().await.expect("Failed to list models in test");
         assert!(models.is_empty());
 
         // Create a mock model file
         let model_path = models_dir.join("test_model.gguf");
-        fs::write(&model_path, b"GGUF\x00\x00\x00\x01mock data").await.unwrap();
+        fs::write(&model_path, b"GGUF\x00\x00\x00\x01mock data").await.expect("Failed to write test model file");
 
-        let models = manager.list_models().await.unwrap();
+        let models = manager.list_models().await.expect("Failed to list models in test");
         assert_eq!(models.len(), 1);
         assert_eq!(models[0].name, "test_model.gguf");
         assert_eq!(models[0].backend_type, "gguf");
@@ -590,46 +590,46 @@ mod tests {
 
     #[tokio::test]
     async fn test_model_validation() {
-        let temp_dir = tempdir().unwrap();
+        let temp_dir = tempdir().expect("Failed to create temporary directory for test");
         let models_dir = temp_dir.path().join("models");
-        fs::create_dir_all(&models_dir).await.unwrap();
+        fs::create_dir_all(&models_dir).await.expect("Failed to create models directory for test");
 
         let manager = ModelManager::new(&models_dir);
 
         // Valid GGUF file
         let gguf_path = models_dir.join("valid.gguf");
-        fs::write(&gguf_path, b"GGUF\x00\x00\x00\x01mock data").await.unwrap();
-        assert!(manager.validate_model(&gguf_path).await.unwrap());
+        fs::write(&gguf_path, b"GGUF\x00\x00\x00\x01mock data").await.expect("Failed to write valid GGUF file");
+        assert!(manager.validate_model(&gguf_path).await.expect("Failed to validate valid GGUF model"));
 
         // Invalid GGUF file (wrong magic bytes)
         let invalid_path = models_dir.join("invalid.gguf");
-        fs::write(&invalid_path, b"INVALID_DATA").await.unwrap();
-        assert!(!manager.validate_model(&invalid_path).await.unwrap());
+        fs::write(&invalid_path, b"INVALID_DATA").await.expect("Failed to write invalid file");
+        assert!(!manager.validate_model(&invalid_path).await.expect("Failed to validate invalid model"));
 
         // Empty file
         let empty_path = models_dir.join("empty.gguf");
-        fs::write(&empty_path, b"").await.unwrap();
-        assert!(!manager.validate_model(&empty_path).await.unwrap());
+        fs::write(&empty_path, b"").await.expect("Failed to write empty file");
+        assert!(!manager.validate_model(&empty_path).await.expect("Failed to validate empty model"));
     }
 
     #[tokio::test]
     async fn test_checksum_computation() {
-        let temp_dir = tempdir().unwrap();
+        let temp_dir = tempdir().expect("Failed to create temporary directory for test");
         let models_dir = temp_dir.path().join("models");
-        fs::create_dir_all(&models_dir).await.unwrap();
+        fs::create_dir_all(&models_dir).await.expect("Failed to create models directory for test");
 
         let manager = ModelManager::new(&models_dir);
 
         let model_path = models_dir.join("test.gguf");
         let test_data = b"test model data for checksum";
-        fs::write(&model_path, test_data).await.unwrap();
+        fs::write(&model_path, test_data).await.expect("Failed to write test data for checksum test");
 
-        let checksum = manager.compute_checksum(&model_path).await.unwrap();
+        let checksum = manager.compute_checksum(&model_path).await.expect("Failed to compute checksum");
         assert!(!checksum.is_empty());
         assert_eq!(checksum.len(), 64); // SHA256 hex string length
 
         // Same data should produce same checksum
-        let checksum2 = manager.compute_checksum(&model_path).await.unwrap();
+        let checksum2 = manager.compute_checksum(&model_path).await.expect("Failed to compute second checksum");
         assert_eq!(checksum, checksum2);
     }
 }

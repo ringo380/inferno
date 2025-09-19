@@ -1,0 +1,212 @@
+# Kubernetes Ingress for Inferno Application
+
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: inferno-api-ingress
+  namespace: inferno-production
+  labels:
+    app: inferno-api
+    component: ingress
+    app.kubernetes.io/name: inferno-api-ingress
+    app.kubernetes.io/instance: inferno
+    app.kubernetes.io/component: ingress
+    app.kubernetes.io/part-of: inferno
+  annotations:
+    # AWS Load Balancer Controller annotations
+    kubernetes.io/ingress.class: "alb"
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/healthcheck-protocol: HTTP
+    alb.ingress.kubernetes.io/healthcheck-path: /health
+    alb.ingress.kubernetes.io/healthcheck-interval-seconds: "15"
+    alb.ingress.kubernetes.io/healthcheck-timeout-seconds: "5"
+    alb.ingress.kubernetes.io/healthy-threshold-count: "2"
+    alb.ingress.kubernetes.io/unhealthy-threshold-count: "2"
+
+    # SSL/TLS configuration
+    alb.ingress.kubernetes.io/ssl-redirect: "443"
+    alb.ingress.kubernetes.io/certificate-arn: "arn:aws:acm:us-west-2:123456789012:certificate/12345678-1234-1234-1234-123456789012"
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
+
+    # Performance and security
+    alb.ingress.kubernetes.io/load-balancer-attributes: |
+      idle_timeout.timeout_seconds=60,
+      deletion_protection.enabled=true,
+      access_logs.s3.enabled=true,
+      access_logs.s3.bucket=inferno-alb-logs,
+      access_logs.s3.prefix=production
+
+    # WAF integration
+    alb.ingress.kubernetes.io/wafv2-acl-arn: "arn:aws:wafv2:us-west-2:123456789012:regional/webacl/inferno-waf/12345678-1234-1234-1234-123456789012"
+
+    # Rate limiting and CORS
+    nginx.ingress.kubernetes.io/rate-limit: "1000"
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    nginx.ingress.kubernetes.io/cors-allow-origin: "https://inferno-ai.dev,https://app.inferno-ai.dev"
+    nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, PUT, DELETE, OPTIONS"
+    nginx.ingress.kubernetes.io/cors-allow-headers: "DNT,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range,Authorization"
+
+    # External DNS
+    external-dns.alpha.kubernetes.io/hostname: "api.inferno-ai.dev"
+
+    # Custom headers
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      add_header X-Frame-Options "SAMEORIGIN" always;
+      add_header X-Content-Type-Options "nosniff" always;
+      add_header X-XSS-Protection "1; mode=block" always;
+      add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+      add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https:; frame-ancestors 'none';" always;
+
+spec:
+  tls:
+  - hosts:
+    - api.inferno-ai.dev
+    - inferno-ai.dev
+    secretName: inferno-tls-secret
+  rules:
+  - host: api.inferno-ai.dev
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: inferno-api
+            port:
+              number: 80
+      - path: /api/v1
+        pathType: Prefix
+        backend:
+          service:
+            name: inferno-api
+            port:
+              number: 80
+      - path: /health
+        pathType: Exact
+        backend:
+          service:
+            name: inferno-api
+            port:
+              number: 80
+      - path: /metrics
+        pathType: Exact
+        backend:
+          service:
+            name: inferno-api
+            port:
+              number: 9090
+  - host: inferno-ai.dev
+    http:
+      paths:
+      - path: /api
+        pathType: Prefix
+        backend:
+          service:
+            name: inferno-api
+            port:
+              number: 80
+
+---
+# Staging Ingress
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: inferno-api-staging-ingress
+  namespace: inferno-staging
+  labels:
+    app: inferno-api
+    component: ingress
+    environment: staging
+    app.kubernetes.io/name: inferno-api-staging-ingress
+    app.kubernetes.io/instance: inferno
+    app.kubernetes.io/component: ingress
+    app.kubernetes.io/part-of: inferno
+  annotations:
+    kubernetes.io/ingress.class: "alb"
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/healthcheck-protocol: HTTP
+    alb.ingress.kubernetes.io/healthcheck-path: /health
+    alb.ingress.kubernetes.io/ssl-redirect: "443"
+    alb.ingress.kubernetes.io/certificate-arn: "arn:aws:acm:us-west-2:123456789012:certificate/staging-cert-id"
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
+    external-dns.alpha.kubernetes.io/hostname: "staging-api.inferno-ai.dev"
+
+    # Staging-specific annotations
+    nginx.ingress.kubernetes.io/rate-limit: "500"
+    nginx.ingress.kubernetes.io/auth-type: basic
+    nginx.ingress.kubernetes.io/auth-secret: staging-basic-auth
+    nginx.ingress.kubernetes.io/auth-realm: "Staging Environment"
+
+spec:
+  tls:
+  - hosts:
+    - staging-api.inferno-ai.dev
+    secretName: inferno-staging-tls-secret
+  rules:
+  - host: staging-api.inferno-ai.dev
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: inferno-api
+            port:
+              number: 80
+
+---
+# Internal Ingress for monitoring and admin endpoints
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: inferno-internal-ingress
+  namespace: inferno-production
+  labels:
+    app: inferno-internal
+    component: ingress
+    access: internal
+    app.kubernetes.io/name: inferno-internal-ingress
+    app.kubernetes.io/instance: inferno
+    app.kubernetes.io/component: ingress
+    app.kubernetes.io/part-of: inferno
+  annotations:
+    kubernetes.io/ingress.class: "alb"
+    alb.ingress.kubernetes.io/scheme: internal
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/ssl-redirect: "443"
+    alb.ingress.kubernetes.io/certificate-arn: "arn:aws:acm:us-west-2:123456789012:certificate/internal-cert-id"
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
+
+    # Internal access only
+    alb.ingress.kubernetes.io/inbound-cidrs: "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
+
+    # Authentication for admin endpoints
+    nginx.ingress.kubernetes.io/auth-type: basic
+    nginx.ingress.kubernetes.io/auth-secret: admin-basic-auth
+    nginx.ingress.kubernetes.io/auth-realm: "Admin Access Required"
+
+spec:
+  tls:
+  - hosts:
+    - internal.inferno-ai.dev
+    secretName: inferno-internal-tls-secret
+  rules:
+  - host: internal.inferno-ai.dev
+    http:
+      paths:
+      - path: /metrics
+        pathType: Prefix
+        backend:
+          service:
+            name: inferno-api
+            port:
+              number: 9090
+      - path: /admin
+        pathType: Prefix
+        backend:
+          service:
+            name: inferno-api
+            port:
+              number: 80
