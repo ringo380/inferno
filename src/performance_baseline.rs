@@ -12,7 +12,7 @@ use crate::{
     cache::CacheConfig,
     metrics::MetricsCollector,
 };
-use sysinfo::{System, SystemExt, ProcessExt};
+use sysinfo::{System, SystemExt, ProcessExt, CpuExt};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PerformanceTarget {
@@ -202,7 +202,7 @@ impl PerformanceBaseline {
 
     async fn measure_backend_performance(&self, backend_type: BackendType, model: &ModelInfo) -> Result<PerformanceMetrics> {
         let test_start = Instant::now();
-        let mut system = sysinfo::System::new_all();
+        let mut system = System::new_all();
         system.refresh_all();
 
         let initial_memory = system.used_memory();
