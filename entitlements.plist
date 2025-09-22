@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Allow network access for downloading models -->
+    <key>com.apple.security.network.client</key>
+    <true/>
+
+    <!-- Allow file system access for model management -->
+    <key>com.apple.security.files.user-selected.read-write</key>
+    <true/>
+
+    <!-- Allow downloads folder access -->
+    <key>com.apple.security.files.downloads.read-write</key>
+    <true/>
+
+    <!-- Allow document folder access -->
+    <key>com.apple.security.files.user-selected.read-only</key>
+    <true/>
+
+    <!-- Hardware acceleration entitlements -->
+    <key>com.apple.security.cs.allow-jit</key>
+    <true/>
+
+    <!-- Metal for GPU acceleration -->
+    <key>com.apple.security.device.metal</key>
+    <true/>
+
+    <!-- Camera access if needed for multimodal AI -->
+    <key>com.apple.security.device.camera</key>
+    <false/>
+
+    <!-- Microphone access if needed for audio processing -->
+    <key>com.apple.security.device.microphone</key>
+    <false/>
+
+    <!-- Disable sandboxing for full system access -->
+    <key>com.apple.security.app-sandbox</key>
+    <false/>
+
+    <!-- Allow unsigned executable memory for ML frameworks -->
+    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+    <true/>
+
+    <!-- Allow dyld environment variables for ML frameworks -->
+    <key>com.apple.security.cs.allow-dyld-environment-variables</key>
+    <true/>
+
+    <!-- Debugging entitlement -->
+    <key>com.apple.security.get-task-allow</key>
+    <true/>
+</dict>
+</plist>
