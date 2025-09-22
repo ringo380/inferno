@@ -1,12 +1,10 @@
 use anyhow::Result;
-use clap::Parser;
 use inferno::{
-    cli::{Cli, Commands, enhanced_parser::EnhancedCliParser, help::HelpSystem},
+    cli::{Commands, enhanced_parser::EnhancedCliParser, help::HelpSystem},
     config::Config,
     setup_logging,
 };
-use std::env;
-use tracing::{error, info, warn};
+use tracing::{error, info};
 
 #[tokio::main]
 async fn main() -> Result<()> {
