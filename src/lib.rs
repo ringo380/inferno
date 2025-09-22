@@ -39,6 +39,14 @@ pub mod tui;
 pub mod versioning;
 pub mod performance_baseline;
 
+pub mod icon_generator;
+
+#[cfg(feature = "tauri-app")]
+pub mod tauri_app;
+
+#[cfg(feature = "tauri-app")]
+pub mod macos_integration;
+
 use anyhow::Result;
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
