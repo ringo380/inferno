@@ -21,6 +21,17 @@ exclude = [
 name = "inferno"
 path = "src/main.rs"
 
+[[bin]]
+name = "generate_icons"
+path = "src/bin/generate_icons.rs"
+
+[[bin]]
+name = "inferno_app"
+path = "src/bin/inferno_app.rs"
+required-features = ["tauri-app"]
+
+# Universal binary configuration moved to .cargo/config.toml
+
 [dependencies]
 # CLI and argument parsing
 clap = { version = "4.4", features = ["derive", "env"] }
@@ -152,6 +163,10 @@ zstd = "0.13"
 # Temporary file handling
 tempfile = "3.8"
 
+# Tauri native app support
+tauri = { version = "1.5", features = ["api-all", "macos-private-api"], optional = true }
+tauri-build = { version = "1.5", optional = true }
+
 [dev-dependencies]
 tempfile = "3.8"
 assert_cmd = "2.0"
@@ -165,6 +180,7 @@ gpu-metal = []
 gpu-vulkan = []
 gpu-directml = []
 pytorch = ["tch"]  # Enable PyTorch support
+tauri-app = ["tauri", "tauri-build"]  # Enable Tauri native app
 
 [profile.release]
 lto = true
