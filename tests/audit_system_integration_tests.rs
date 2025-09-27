@@ -1,19 +1,18 @@
+use anyhow::Result;
+use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use inferno::{
     audit::{
-        AuditSystem, AuditConfig, AuditEvent, EventType, Severity, Actor, ActorType,
-        Resource, ResourceType, EventDetails, EventContext, EventOutcome,
-        AlertRule, AlertCondition, AlertAction, AlertConfig, CompressionType,
-        EncryptionConfig, RetentionPolicy, ComplianceConfig, AlertingConfig,
-        QueryFilter, AuditQuery, EventExportFormat, AuditMetrics,
+        Actor, ActorType, AlertAction, AlertCondition, AlertConfig, AlertRule, AlertingConfig,
+        AuditConfig, AuditEvent, AuditMetrics, AuditQuery, AuditSystem, ComplianceConfig,
+        CompressionType, EncryptionConfig, EventContext, EventDetails, EventExportFormat,
+        EventOutcome, EventType, QueryFilter, Resource, ResourceType, RetentionPolicy, Severity,
     },
-    models::{ModelInfo, ModelManager},
     backends::{BackendConfig, BackendType},
-    cache::{ModelCache, CacheConfig},
-    security::{SecurityManager, SecurityConfig},
+    cache::{CacheConfig, ModelCache},
+    models::{ModelInfo, ModelManager},
+    security::{SecurityConfig, SecurityManager},
     InfernoError,
 };
-use anyhow::Result;
-use chrono::{DateTime, Utc, Duration as ChronoDuration};
 use std::{
     collections::HashMap,
     path::PathBuf,
@@ -144,12 +143,19 @@ mod audit_test_utils {
             },
             metadata: HashMap::from([
                 ("test_run".to_string(), serde_json::Value::Bool(true)),
-                ("test_id".to_string(), serde_json::Value::String(Uuid::new_v4().to_string())),
+                (
+                    "test_id".to_string(),
+                    serde_json::Value::String(Uuid::new_v4().to_string()),
+                ),
             ]),
         }
     }
 
-    pub fn create_test_alert_rule(name: &str, event_type: EventType, severity: Severity) -> AlertRule {
+    pub fn create_test_alert_rule(
+        name: &str,
+        event_type: EventType,
+        severity: Severity,
+    ) -> AlertRule {
         AlertRule {
             id: Uuid::new_v4().to_string(),
             name: name.to_string(),
@@ -187,13 +193,17 @@ mod audit_test_utils {
         }
     }
 
-    pub async fn wait_for_audit_file(audit_dir: &PathBuf, timeout_duration: Duration) -> Result<bool> {
+    pub async fn wait_for_audit_file(
+        audit_dir: &PathBuf,
+        timeout_duration: Duration,
+    ) -> Result<bool> {
         let start = std::time::Instant::now();
         while start.elapsed() < timeout_duration {
             if let Ok(mut entries) = fs::read_dir(audit_dir).await {
                 while let Some(entry) = entries.next_entry().await? {
-                    if entry.file_name().to_string_lossy().ends_with(".audit") ||
-                       entry.file_name().to_string_lossy().ends_with(".audit.zst") {
+                    if entry.file_name().to_string_lossy().ends_with(".audit")
+                        || entry.file_name().to_string_lossy().ends_with(".audit.zst")
+                    {
                         return Ok(true);
                     }
                 }
@@ -266,10 +276,9 @@ async fn test_audit_event_logging() -> Result<()> {
     sleep(Duration::from_secs(6)).await; // Wait longer than flush_interval_seconds
 
     // Verify audit files were created
-    let audit_files_exist = audit_test_utils::wait_for_audit_file(
-        &config.log_directory,
-        Duration::from_secs(10),
-    ).await?;
+    let audit_files_exist =
+        audit_test_utils::wait_for_audit_file(&config.log_directory, Duration::from_secs(10))
+            .await?;
 
     assert!(audit_files_exist, "Audit files should be created");
 
@@ -319,12 +328,14 @@ async fn test_audit_compression_encryption() -> Result<()> {
     sleep(Duration::from_secs(2)).await;
 
     // Verify compressed files exist
-    let audit_files_exist = audit_test_utils::wait_for_audit_file(
-        &config.log_directory,
-        Duration::from_secs(10),
-    ).await?;
+    let audit_files_exist =
+        audit_test_utils::wait_for_audit_file(&config.log_directory, Duration::from_secs(10))
+            .await?;
 
-    assert!(audit_files_exist, "Compressed audit files should be created");
+    assert!(
+        audit_files_exist,
+        "Compressed audit files should be created"
+    );
 
     // Check that compressed files are smaller than expected uncompressed size
     if let Ok(mut entries) = fs::read_dir(&config.log_directory).await {
@@ -333,7 +344,11 @@ async fn test_audit_compression_encryption() -> Result<()> {
             if filename.ends_with(".zst") {
                 let file_size = entry.metadata().await?.len();
                 // Compressed file should be smaller than 20KB (20 * 1000 bytes per event)
-                assert!(file_size < 20000, "Compressed file should be smaller: {} bytes", file_size);
+                assert!(
+                    file_size < 20000,
+                    "Compressed file should be smaller: {} bytes",
+                    file_size
+                );
             }
         }
     }
@@ -371,7 +386,8 @@ async fn test_audit_alerting() -> Result<()> {
     audit_system.add_alert_rule(error_alert_rule).await?;
 
     // Generate events that should trigger alerts
-    for i in 0..5 { // Generate enough events to trigger the count-based condition
+    for i in 0..5 {
+        // Generate enough events to trigger the count-based condition
         let security_event = audit_test_utils::create_test_event(
             EventType::SecurityEvent,
             Severity::High,
@@ -400,14 +416,22 @@ async fn test_audit_alerting() -> Result<()> {
 
     // Check alert metrics
     let alert_metrics = audit_system.get_alert_metrics().await?;
-    assert!(alert_metrics.alerts_triggered > 0, "Should have triggered alerts");
-    assert!(alert_metrics.active_rules >= 2, "Should have active alert rules");
+    assert!(
+        alert_metrics.alerts_triggered > 0,
+        "Should have triggered alerts"
+    );
+    assert!(
+        alert_metrics.active_rules >= 2,
+        "Should have active alert rules"
+    );
 
     // Check alert history
-    let alert_history = audit_system.get_alert_history(
-        SystemTime::now() - Duration::from_secs(600),
-        SystemTime::now(),
-    ).await?;
+    let alert_history = audit_system
+        .get_alert_history(
+            SystemTime::now() - Duration::from_secs(600),
+            SystemTime::now(),
+        )
+        .await?;
 
     assert!(!alert_history.is_empty(), "Should have alert history");
 
@@ -537,7 +561,11 @@ async fn test_audit_querying() -> Result<()> {
     };
 
     let complex_results = audit_system.query_events(complex_query).await?;
-    assert_eq!(complex_results.len(), 2, "Should find 2 model management events with specified severity");
+    assert_eq!(
+        complex_results.len(),
+        2,
+        "Should find 2 model management events with specified severity"
+    );
 
     audit_system.shutdown().await?;
 
@@ -583,11 +611,13 @@ async fn test_audit_export() -> Result<()> {
         sort_order: None,
     };
 
-    audit_system.export_events(
-        export_query.clone(),
-        &json_export_path,
-        EventExportFormat::Json,
-    ).await?;
+    audit_system
+        .export_events(
+            export_query.clone(),
+            &json_export_path,
+            EventExportFormat::Json,
+        )
+        .await?;
 
     assert!(json_export_path.exists(), "JSON export file should exist");
 
@@ -596,32 +626,45 @@ async fn test_audit_export() -> Result<()> {
 
     // Test CSV export
     let csv_export_path = export_dir.join("events.csv");
-    audit_system.export_events(
-        export_query.clone(),
-        &csv_export_path,
-        EventExportFormat::Csv,
-    ).await?;
+    audit_system
+        .export_events(
+            export_query.clone(),
+            &csv_export_path,
+            EventExportFormat::Csv,
+        )
+        .await?;
 
     assert!(csv_export_path.exists(), "CSV export file should exist");
 
     let csv_content = fs::read_to_string(&csv_export_path).await?;
     assert!(!csv_content.is_empty(), "CSV export should not be empty");
-    assert!(csv_content.contains("timestamp"), "CSV should contain headers");
+    assert!(
+        csv_content.contains("timestamp"),
+        "CSV should contain headers"
+    );
 
     // Test compressed export
     let compressed_export_path = export_dir.join("events.json.gz");
-    audit_system.export_events_compressed(
-        export_query,
-        &compressed_export_path,
-        EventExportFormat::Json,
-        CompressionType::Gzip,
-    ).await?;
+    audit_system
+        .export_events_compressed(
+            export_query,
+            &compressed_export_path,
+            EventExportFormat::Json,
+            CompressionType::Gzip,
+        )
+        .await?;
 
-    assert!(compressed_export_path.exists(), "Compressed export file should exist");
+    assert!(
+        compressed_export_path.exists(),
+        "Compressed export file should exist"
+    );
 
     let compressed_size = fs::metadata(&compressed_export_path).await?.len();
     let uncompressed_size = fs::metadata(&json_export_path).await?.len();
-    assert!(compressed_size < uncompressed_size, "Compressed file should be smaller");
+    assert!(
+        compressed_size < uncompressed_size,
+        "Compressed file should be smaller"
+    );
 
     audit_system.shutdown().await?;
 
@@ -668,7 +711,10 @@ async fn test_audit_retention_cleanup() -> Result<()> {
 
     // Check that multiple files were created due to rotation
     let initial_file_count = audit_test_utils::count_audit_files(&config.log_directory).await?;
-    assert!(initial_file_count > 1, "Should have multiple audit files due to rotation");
+    assert!(
+        initial_file_count > 1,
+        "Should have multiple audit files due to rotation"
+    );
 
     // Simulate old files by creating files with old timestamps
     let old_file = config.log_directory.join("old_audit.audit");
@@ -773,12 +819,15 @@ async fn test_audit_integration_with_components() -> Result<()> {
     let model_manager = Arc::new(ModelManager::new(models_dir));
     let backend_config = BackendConfig::default();
     let cache_config = CacheConfig::default();
-    let cache = Arc::new(ModelCache::new(
-        cache_config,
-        backend_config.clone(),
-        model_manager.clone(),
-        None,
-    ).await?);
+    let cache = Arc::new(
+        ModelCache::new(
+            cache_config,
+            backend_config.clone(),
+            model_manager.clone(),
+            None,
+        )
+        .await?,
+    );
 
     // Test model management audit events
     let models = model_manager.discover_models().await?;
@@ -829,14 +878,21 @@ async fn test_audit_integration_with_components() -> Result<()> {
     };
 
     let events = audit_system.query_events(query).await?;
-    assert!(events.len() >= 3, "Should have audit events from different components");
+    assert!(
+        events.len() >= 3,
+        "Should have audit events from different components"
+    );
 
     // Check event types are represented
-    let event_types: std::collections::HashSet<_> = events.iter()
+    let event_types: std::collections::HashSet<_> = events
+        .iter()
         .map(|e| std::mem::discriminant(&e.event_type))
         .collect();
 
-    assert!(event_types.len() >= 2, "Should have events of different types");
+    assert!(
+        event_types.len() >= 2,
+        "Should have events of different types"
+    );
 
     audit_system.shutdown().await?;
 
@@ -897,7 +953,11 @@ async fn test_concurrent_audit_operations() -> Result<()> {
     };
 
     let events = audit_system.query_events(query).await?;
-    assert_eq!(events.len(), 100, "Should have 100 concurrent events (5 tasks * 20 events)");
+    assert_eq!(
+        events.len(),
+        100,
+        "Should have 100 concurrent events (5 tasks * 20 events)"
+    );
 
     // Verify no data corruption occurred
     for event in events {

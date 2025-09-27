@@ -1,11 +1,11 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use inferno::{
     backends::{Backend, BackendConfig, BackendType, InferenceParams},
-    models::{ModelInfo, ModelManager},
     metrics::MetricsCollector,
+    models::{ModelInfo, ModelManager},
 };
-use std::{path::PathBuf, time::Duration, sync::Arc};
-use sysinfo::{System, SystemExt, CpuExt};
+use std::{path::PathBuf, sync::Arc, time::Duration};
+use sysinfo::{CpuExt, System, SystemExt};
 use tempfile::tempdir;
 use tokio::{runtime::Runtime, time::Instant};
 
@@ -101,7 +101,9 @@ fn bench_profile_inference_pipeline(c: &mut Criterion) {
                 };
 
                 let start = Instant::now();
-                let result = backend.infer(black_box(prompt), black_box(&inference_params)).await;
+                let result = backend
+                    .infer(black_box(prompt), black_box(&inference_params))
+                    .await;
                 let duration = start.elapsed();
 
                 // Record metrics
@@ -263,7 +265,10 @@ fn bench_profile_cache_compression(c: &mut Criterion) {
                     let key = format!("large_key_{}", i);
 
                     // Write
-                    cache.set(key.clone(), black_box(large_data.clone())).await.unwrap();
+                    cache
+                        .set(key.clone(), black_box(large_data.clone()))
+                        .await
+                        .unwrap();
 
                     // Read
                     let result = cache.get(black_box(&key)).await;

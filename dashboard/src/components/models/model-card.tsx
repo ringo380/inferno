@@ -13,9 +13,13 @@ import {
   Settings,
   Eye,
   Copy,
+  Loader2,
+  Square,
 } from 'lucide-react';
 import { ModelInfo } from '@/types/inferno';
 import { formatBytes, formatTimestamp, getStatusColor } from '@/lib/utils';
+import { useLoadModel, useUnloadModel, useLoadedModels } from '@/hooks/use-tauri-api';
+import { toast } from 'react-hot-toast';
 
 interface ModelCardProps {
   model: ModelInfo;
@@ -26,6 +30,32 @@ interface ModelCardProps {
 
 export function ModelCard({ model, viewMode, onSelect, onQuantize }: ModelCardProps) {
   const isLoading = model.status === 'loading';
+  const isLoaded = model.status === 'loaded';
+
+  const loadModelMutation = useLoadModel();
+  const unloadModelMutation = useUnloadModel();
+  const { data: loadedModels } = useLoadedModels();
+
+  const handleLoadUnload = async () => {
+    if (isLoaded) {
+      // Find the backend ID for this model
+      const backendId = loadedModels?.find(id => id.includes(model.id)) || model.id;
+      try {
+        await unloadModelMutation.mutateAsync(backendId);
+      } catch (error) {
+        console.error('Failed to unload model:', error);
+      }
+    } else {
+      try {
+        await loadModelMutation.mutateAsync({
+          modelName: model.name,
+          backendType: model.format === 'gguf' ? 'gguf' : 'onnx'
+        });
+      } catch (error) {
+        console.error('Failed to load model:', error);
+      }
+    }
+  };
 
   if (viewMode === 'list') {
     return (
@@ -74,8 +104,19 @@ export function ModelCard({ model, viewMode, onSelect, onQuantize }: ModelCardPr
                 <Button variant="ghost" size="sm" onClick={() => onSelect(model)}>
                   <Eye className="h-4 w-4" />
                 </Button>
-                <Button variant="ghost" size="sm">
-                  <Play className="h-4 w-4" />
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={model.status === 'error' || loadModelMutation.isPending || unloadModelMutation.isPending}
+                  onClick={handleLoadUnload}
+                >
+                  {loadModelMutation.isPending || unloadModelMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : isLoaded ? (
+                    <Square className="h-4 w-4" />
+                  ) : (
+                    <Play className="h-4 w-4" />
+                  )}
                 </Button>
                 <Button
                   variant="ghost"
@@ -168,10 +209,19 @@ export function ModelCard({ model, viewMode, onSelect, onQuantize }: ModelCardPr
             <Button
               variant="outline"
               size="sm"
-              disabled={model.status === 'error'}
+              disabled={model.status === 'error' || loadModelMutation.isPending || unloadModelMutation.isPending}
+              onClick={handleLoadUnload}
             >
-              <Play className="h-4 w-4 mr-1" />
-              Run
+              {loadModelMutation.isPending || unloadModelMutation.isPending ? (
+                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+              ) : isLoaded ? (
+                <Square className="h-4 w-4 mr-1" />
+              ) : (
+                <Play className="h-4 w-4 mr-1" />
+              )}
+              {loadModelMutation.isPending ? 'Loading...' :
+               unloadModelMutation.isPending ? 'Unloading...' :
+               isLoaded ? 'Unload' : 'Load'}
             </Button>
             <Button
               variant="outline"

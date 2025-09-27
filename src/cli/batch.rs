@@ -1,6 +1,6 @@
 use crate::{
-    batch::{BatchConfig, BatchOutputFormat, BatchProcessor},
     backends::{Backend, BackendType, InferenceParams},
+    batch::{BatchConfig, BatchOutputFormat, BatchProcessor},
     config::Config,
     metrics::MetricsCollector,
     models::ModelManager,
@@ -42,7 +42,11 @@ pub struct BatchArgs {
     #[arg(long, help = "Number of retry attempts", default_value = "3")]
     pub retries: u32,
 
-    #[arg(long, help = "Checkpoint interval (save progress every N items)", default_value = "100")]
+    #[arg(
+        long,
+        help = "Checkpoint interval (save progress every N items)",
+        default_value = "100"
+    )]
     pub checkpoint: u32,
 
     #[arg(long, help = "Continue processing on individual failures")]
@@ -95,7 +99,10 @@ pub async fn execute(args: BatchArgs, config: &Config) -> Result<()> {
 
     // Validate inputs
     if !args.input.exists() {
-        return Err(anyhow::anyhow!("Input file does not exist: {}", args.input.display()));
+        return Err(anyhow::anyhow!(
+            "Input file does not exist: {}",
+            args.input.display()
+        ));
     }
 
     if args.dry_run {
@@ -127,7 +134,9 @@ pub async fn execute(args: BatchArgs, config: &Config) -> Result<()> {
     let model_info = model_manager.resolve_model(&args.model).await?;
 
     info!("Validating model: {}", model_info.name);
-    let validation_result = model_manager.validate_model_comprehensive(&model_info.path, Some(config)).await?;
+    let validation_result = model_manager
+        .validate_model_comprehensive(&model_info.path, Some(config))
+        .await?;
     if !validation_result.is_valid {
         warn!("Model validation issues:");
         for error in &validation_result.errors {
@@ -138,9 +147,10 @@ pub async fn execute(args: BatchArgs, config: &Config) -> Result<()> {
         }
     }
 
-    let backend_type = args.backend.unwrap_or_else(|| {
-        BackendType::from_model_path(&model_info.path)
-    });
+    let backend_type = args
+        .backend
+        .or_else(|| BackendType::from_model_path(&model_info.path))
+        .ok_or_else(|| anyhow::anyhow!("No suitable backend found for model: {}", model_info.path.display()))?;
 
     let mut backend = Backend::new(backend_type, &config.backend_config)?;
 
@@ -186,7 +196,12 @@ pub async fn execute(args: BatchArgs, config: &Config) -> Result<()> {
 
     // Process the batch
     let progress = processor
-        .process_file(&mut backend, &args.input, Some(output_path), &inference_params)
+        .process_file(
+            &mut backend,
+            &args.input,
+            Some(output_path),
+            &inference_params,
+        )
         .await?;
 
     // Print summary
@@ -203,14 +218,21 @@ async fn validate_batch_inputs(args: &BatchArgs) -> Result<()> {
 
     match processor.load_inputs(&args.input).await {
         Ok(inputs) => {
-            info!("✓ Successfully parsed {} inputs from {}", inputs.len(), args.input.display());
+            info!(
+                "✓ Successfully parsed {} inputs from {}",
+                inputs.len(),
+                args.input.display()
+            );
 
             if args.verbose {
                 info!("Sample inputs:");
                 for (_i, input) in inputs.iter().take(3).enumerate() {
-                    info!("  {}: {} ({})", input.id,
-                          input.content.chars().take(50).collect::<String>(),
-                          if input.content.len() > 50 { "..." } else { "" });
+                    info!(
+                        "  {}: {} ({})",
+                        input.id,
+                        input.content.chars().take(50).collect::<String>(),
+                        if input.content.len() > 50 { "..." } else { "" }
+                    );
                 }
                 if inputs.len() > 3 {
                     info!("  ... and {} more", inputs.len() - 3);
@@ -237,7 +259,10 @@ async fn validate_batch_inputs(args: &BatchArgs) -> Result<()> {
 
 async fn estimate_batch_size(input_path: &std::path::Path) -> Result<usize> {
     let content = tokio::fs::read_to_string(input_path).await?;
-    let extension = input_path.extension().and_then(|s| s.to_str()).unwrap_or("");
+    let extension = input_path
+        .extension()
+        .and_then(|s| s.to_str())
+        .unwrap_or("");
 
     let count = match extension.to_lowercase().as_str() {
         "json" => {
@@ -247,9 +272,10 @@ async fn estimate_batch_size(input_path: &std::path::Path) -> Result<usize> {
                 _ => 1,
             }
         }
-        "jsonl" | "ndjson" => {
-            content.lines().filter(|line| !line.trim().is_empty()).count()
-        }
+        "jsonl" | "ndjson" => content
+            .lines()
+            .filter(|line| !line.trim().is_empty())
+            .count(),
         "csv" | "tsv" => {
             let delimiter = if extension == "tsv" { b'\t' } else { b',' };
             let mut rdr = csv::ReaderBuilder::new()
@@ -257,9 +283,10 @@ async fn estimate_batch_size(input_path: &std::path::Path) -> Result<usize> {
                 .from_reader(content.as_bytes());
             rdr.records().count()
         }
-        _ => {
-            content.lines().filter(|line| !line.trim().is_empty()).count()
-        }
+        _ => content
+            .lines()
+            .filter(|line| !line.trim().is_empty())
+            .count(),
     };
 
     Ok(count)
@@ -283,15 +310,19 @@ fn print_batch_summary(progress: &crate::batch::BatchProgress, args: &BatchArgs)
 
     if let Some(completion_time) = progress.estimated_completion {
         let duration = completion_time - progress.start_time;
-        println!("Processing time: {}", humantime::format_duration(
-            duration.to_std().unwrap_or(std::time::Duration::ZERO)
-        ));
+        println!(
+            "Processing time: {}",
+            humantime::format_duration(duration.to_std().unwrap_or(std::time::Duration::ZERO))
+        );
     }
 
     println!("Average rate: {:.2} items/second", progress.current_rate);
 
     if args.output.is_some() {
-        println!("Output saved to: {}", args.output.as_ref().unwrap().display());
+        println!(
+            "Output saved to: {}",
+            args.output.as_ref().unwrap().display()
+        );
     }
 
     if progress.failed_items > 0 {

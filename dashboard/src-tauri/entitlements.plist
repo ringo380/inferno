@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Network access for AI model downloads and API communication -->
+    <key>com.apple.security.network.client</key>
+    <true/>
+
+    <!-- File system access for model files and configuration -->
+    <key>com.apple.security.files.user-selected.read-write</key>
+    <true/>
+
+    <!-- Required for accessing user's home directory for model storage -->
+    <key>com.apple.security.files.bookmarks.app-scope</key>
+    <true/>
+
+    <!-- Hardware acceleration for ML inference -->
+    <key>com.apple.security.device.gpu</key>
+    <true/>
+
+    <!-- Microphone access for audio processing capabilities -->
+    <key>com.apple.security.device.microphone</key>
+    <true/>
+
+    <!-- Camera access for image processing capabilities -->
+    <key>com.apple.security.device.camera</key>
+    <true/>
+
+    <!-- Enable hardened runtime -->
+    <key>com.apple.security.cs.allow-jit</key>
+    <true/>
+
+    <!-- For dynamic library loading (ONNX Runtime, etc.) -->
+    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+    <true/>
+
+    <!-- For performance monitoring and debugging -->
+    <key>com.apple.security.cs.debugger</key>
+    <true/>
+</dict>
+</plist>

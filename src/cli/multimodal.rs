@@ -1,8 +1,8 @@
-use crate::multimodal::{
-    MultiModalProcessor, MultiModalConfig, ProcessingStatus,
-    ModelCapabilities, VisionFeatures, AudioFeatures
-};
 use crate::backends::InferenceParams;
+use crate::multimodal::{
+    AudioFeatures, ModelCapabilities, MultiModalConfig, MultiModalProcessor, ProcessingStatus,
+    VisionFeatures,
+};
 use crate::InfernoError;
 use clap::{Args, Subcommand};
 use serde_json;
@@ -221,8 +221,9 @@ pub enum MultiModalCommands {
 pub async fn handle_multimodal_command(args: MultiModalArgs) -> Result<(), InfernoError> {
     let config = MultiModalConfig::default();
     let processor = MultiModalProcessor::new(config);
-    processor.initialize().await
-        .map_err(|e| InfernoError::InvalidArgument(format!("Failed to initialize processor: {}", e)))?;
+    processor.initialize().await.map_err(|e| {
+        InfernoError::InvalidArgument(format!("Failed to initialize processor: {}", e))
+    })?;
 
     match args.command {
         MultiModalCommands::Process {
@@ -245,7 +246,8 @@ pub async fn handle_multimodal_command(args: MultiModalArgs) -> Result<(), Infer
                 output_format,
                 output_file,
                 _show_progress,
-            ).await
+            )
+            .await
         }
 
         MultiModalCommands::ProcessBase64 {
@@ -266,7 +268,8 @@ pub async fn handle_multimodal_command(args: MultiModalArgs) -> Result<(), Infer
                 max_tokens,
                 temperature,
                 output_format,
-            ).await
+            )
+            .await
         }
 
         MultiModalCommands::Batch {
@@ -287,7 +290,8 @@ pub async fn handle_multimodal_command(args: MultiModalArgs) -> Result<(), Infer
                 output_dir,
                 max_concurrent,
                 continue_on_error,
-            ).await
+            )
+            .await
         }
 
         MultiModalCommands::Sessions { detailed, refresh } => {
@@ -302,25 +306,34 @@ pub async fn handle_multimodal_command(args: MultiModalArgs) -> Result<(), Infer
             handle_cancel_command(&processor, session_id).await
         }
 
-        MultiModalCommands::Formats { media_type, examples } => {
-            handle_formats_command(&processor, media_type, examples).await
-        }
+        MultiModalCommands::Formats {
+            media_type,
+            examples,
+        } => handle_formats_command(&processor, media_type, examples).await,
 
-        MultiModalCommands::Capabilities { model, media_type, format } => {
-            handle_capabilities_command(&processor, model, media_type, format).await
-        }
+        MultiModalCommands::Capabilities {
+            model,
+            media_type,
+            format,
+        } => handle_capabilities_command(&processor, model, media_type, format).await,
 
         MultiModalCommands::RegisterModel { model, config_file } => {
             handle_register_model_command(&processor, model, config_file).await
         }
 
-        MultiModalCommands::Analyze { input, detailed, format } => {
-            handle_analyze_command(&processor, input, detailed, format).await
-        }
+        MultiModalCommands::Analyze {
+            input,
+            detailed,
+            format,
+        } => handle_analyze_command(&processor, input, detailed, format).await,
 
-        MultiModalCommands::Convert { input, output, format, quality, params } => {
-            handle_convert_command(input, output, format, quality, params).await
-        }
+        MultiModalCommands::Convert {
+            input,
+            output,
+            format,
+            quality,
+            params,
+        } => handle_convert_command(input, output, format, quality, params).await,
     }
 }
 
@@ -344,18 +357,27 @@ async fn handle_process_command(
         stream: false,
     };
 
-    let result = processor.process_file(&model, &input, prompt, params).await
+    let result = processor
+        .process_file(&model, &input, prompt, params)
+        .await
         .map_err(|e| InfernoError::InvalidArgument(format!("Processing failed: {}", e)))?;
 
     let output_content = match output_format.as_str() {
-        "json" => serde_json::to_string_pretty(&result)
-            .map_err(|e| InfernoError::InvalidArgument(format!("JSON serialization failed: {}", e)))?,
+        "json" => serde_json::to_string_pretty(&result).map_err(|e| {
+            InfernoError::InvalidArgument(format!("JSON serialization failed: {}", e))
+        })?,
         "text" => format_text_output(&result),
-        _ => return Err(InfernoError::InvalidArgument(format!("Unsupported output format: {}", output_format))),
+        _ => {
+            return Err(InfernoError::InvalidArgument(format!(
+                "Unsupported output format: {}",
+                output_format
+            )))
+        }
     };
 
     if let Some(output_path) = output_file {
-        tokio::fs::write(&output_path, &output_content).await
+        tokio::fs::write(&output_path, &output_content)
+            .await
             .map_err(|e| InfernoError::IoError(format!("Failed to write output file: {}", e)))?;
         println!("Results saved to: {:?}", output_path);
     } else {
@@ -384,14 +406,22 @@ async fn handle_process_base64_command(
         stream: false,
     };
 
-    let result = processor.process_base64(&model, &data, &media_type, prompt, params).await
+    let result = processor
+        .process_base64(&model, &data, &media_type, prompt, params)
+        .await
         .map_err(|e| InfernoError::InvalidArgument(format!("Processing failed: {}", e)))?;
 
     let output_content = match output_format.as_str() {
-        "json" => serde_json::to_string_pretty(&result)
-            .map_err(|e| InfernoError::InvalidArgument(format!("JSON serialization failed: {}", e)))?,
+        "json" => serde_json::to_string_pretty(&result).map_err(|e| {
+            InfernoError::InvalidArgument(format!("JSON serialization failed: {}", e))
+        })?,
         "text" => format_text_output(&result),
-        _ => return Err(InfernoError::InvalidArgument(format!("Unsupported output format: {}", output_format))),
+        _ => {
+            return Err(InfernoError::InvalidArgument(format!(
+                "Unsupported output format: {}",
+                output_format
+            )))
+        }
     };
 
     println!("{}", output_content);
@@ -415,7 +445,8 @@ async fn handle_batch_command(
     println!("Max concurrent jobs: {}", max_concurrent);
 
     // Create output directory
-    tokio::fs::create_dir_all(&output_dir).await
+    tokio::fs::create_dir_all(&output_dir)
+        .await
         .map_err(|e| InfernoError::IoError(format!("Failed to create output directory: {}", e)))?;
 
     // Find matching files
@@ -449,25 +480,25 @@ async fn handle_batch_command(
             let output_dir_ref = &output_dir;
 
             let task = async move {
-                let result = processor_ref.process_file(
-                    model_ref,
-                    file_path,
-                    prompt_ref.clone(),
-                    params_ref,
-                ).await;
+                let result = processor_ref
+                    .process_file(model_ref, file_path, prompt_ref.clone(), params_ref)
+                    .await;
 
                 match result {
                     Ok(res) => {
                         // Save result to output directory
-                        let file_stem = file_path.file_stem()
+                        let file_stem = file_path
+                            .file_stem()
                             .and_then(|s| s.to_str())
                             .unwrap_or("unknown");
                         let output_file = output_dir_ref.join(format!("{}_result.json", file_stem));
 
                         if let Err(e) = tokio::fs::write(
                             &output_file,
-                            serde_json::to_string_pretty(&res).unwrap_or_default()
-                        ).await {
+                            serde_json::to_string_pretty(&res).unwrap_or_default(),
+                        )
+                        .await
+                        {
                             eprintln!("Failed to save result for {:?}: {}", file_path, e);
                             return false;
                         }
@@ -518,7 +549,10 @@ async fn handle_sessions_command(
         // Live monitoring mode
         loop {
             print!("\x1B[2J\x1B[1;1H"); // Clear screen
-            println!("🔄 Active Processing Sessions (refreshing every {}s)", interval);
+            println!(
+                "🔄 Active Processing Sessions (refreshing every {}s)",
+                interval
+            );
             println!("{}", "=".repeat(60));
 
             display_sessions(processor, detailed).await?;
@@ -533,8 +567,13 @@ async fn handle_sessions_command(
     Ok(())
 }
 
-async fn display_sessions(processor: &MultiModalProcessor, detailed: bool) -> Result<(), InfernoError> {
-    let sessions = processor.list_active_sessions().await
+async fn display_sessions(
+    processor: &MultiModalProcessor,
+    detailed: bool,
+) -> Result<(), InfernoError> {
+    let sessions = processor
+        .list_active_sessions()
+        .await
         .map_err(|e| InfernoError::InvalidArgument(format!("Failed to list sessions: {}", e)))?;
 
     if sessions.is_empty() {
@@ -549,11 +588,20 @@ async fn display_sessions(processor: &MultiModalProcessor, detailed: bool) -> Re
             println!("Model: {}", session.model_id);
             println!("Status: {:?}", session.status);
             println!("Progress: {:.1}%", session.progress);
-            println!("Created: {}", session.created_at.format("%Y-%m-%d %H:%M:%S"));
-            println!("Updated: {}", session.updated_at.format("%Y-%m-%d %H:%M:%S"));
+            println!(
+                "Created: {}",
+                session.created_at.format("%Y-%m-%d %H:%M:%S")
+            );
+            println!(
+                "Updated: {}",
+                session.updated_at.format("%Y-%m-%d %H:%M:%S")
+            );
         }
     } else {
-        println!("{:<15} {:<20} {:<12} {:<8} {:<20}", "Session ID", "Model", "Status", "Progress", "Created");
+        println!(
+            "{:<15} {:<20} {:<12} {:<8} {:<20}",
+            "Session ID", "Model", "Status", "Progress", "Created"
+        );
         println!("{}", "-".repeat(80));
 
         for session in sessions {
@@ -586,17 +634,25 @@ async fn handle_status_command(
         loop {
             match processor.get_session_status(&session_id).await {
                 Ok(Some(session)) => {
-                    print!("\r🔄 Session {} - Status: {:?} - Progress: {:.1}%",
+                    print!(
+                        "\r🔄 Session {} - Status: {:?} - Progress: {:.1}%",
                         &session_id[..8.min(session_id.len())],
                         session.status,
                         session.progress
                     );
                     std::io::Write::flush(&mut std::io::stdout()).unwrap();
 
-                    if matches!(session.status, ProcessingStatus::Completed | ProcessingStatus::Failed | ProcessingStatus::Cancelled) {
+                    if matches!(
+                        session.status,
+                        ProcessingStatus::Completed
+                            | ProcessingStatus::Failed
+                            | ProcessingStatus::Cancelled
+                    ) {
                         println!();
                         match session.status {
-                            ProcessingStatus::Completed => println!("✅ Processing completed successfully!"),
+                            ProcessingStatus::Completed => {
+                                println!("✅ Processing completed successfully!")
+                            }
                             ProcessingStatus::Failed => println!("❌ Processing failed!"),
                             ProcessingStatus::Cancelled => println!("⚠️ Processing was cancelled"),
                             _ => {}
@@ -623,14 +679,23 @@ async fn handle_status_command(
                 println!("Model: {}", session.model_id);
                 println!("Status: {:?}", session.status);
                 println!("Progress: {:.1}%", session.progress);
-                println!("Created: {}", session.created_at.format("%Y-%m-%d %H:%M:%S"));
-                println!("Updated: {}", session.updated_at.format("%Y-%m-%d %H:%M:%S"));
+                println!(
+                    "Created: {}",
+                    session.created_at.format("%Y-%m-%d %H:%M:%S")
+                );
+                println!(
+                    "Updated: {}",
+                    session.updated_at.format("%Y-%m-%d %H:%M:%S")
+                );
             }
             Ok(None) => {
                 println!("Session not found: {}", session_id);
             }
             Err(e) => {
-                return Err(InfernoError::InvalidArgument(format!("Failed to get session status: {}", e)));
+                return Err(InfernoError::InvalidArgument(format!(
+                    "Failed to get session status: {}",
+                    e
+                )));
             }
         }
     }
@@ -642,7 +707,9 @@ async fn handle_cancel_command(
     processor: &MultiModalProcessor,
     session_id: String,
 ) -> Result<(), InfernoError> {
-    processor.cancel_session(&session_id).await
+    processor
+        .cancel_session(&session_id)
+        .await
         .map_err(|e| InfernoError::InvalidArgument(format!("Failed to cancel session: {}", e)))?;
 
     println!("Session {} has been cancelled", session_id);
@@ -665,7 +732,10 @@ async fn handle_formats_command(
                 }
             } else {
                 println!("Unknown media type: {}", mt);
-                println!("Available types: {}", formats.keys().cloned().collect::<Vec<_>>().join(", "));
+                println!(
+                    "Available types: {}",
+                    formats.keys().cloned().collect::<Vec<_>>().join(", ")
+                );
             }
         }
         None => {
@@ -686,9 +756,13 @@ async fn handle_formats_command(
         println!("\n💡 Usage Examples:");
         println!("{}", "=".repeat(20));
         println!("# Process an image with text prompt");
-        println!("inferno multimodal process -m gpt-4-vision -i image.jpg -p \"What's in this image?\"");
+        println!(
+            "inferno multimodal process -m gpt-4-vision -i image.jpg -p \"What's in this image?\""
+        );
         println!("\n# Batch process audio files");
-        println!("inferno multimodal batch -m whisper-large -i ./audio/ -p transcribe -o ./results/");
+        println!(
+            "inferno multimodal batch -m whisper-large -i ./audio/ -p transcribe -o ./results/"
+        );
         println!("\n# Analyze video metadata");
         println!("inferno multimodal analyze -i video.mp4 --detailed");
     }
@@ -705,57 +779,68 @@ async fn handle_capabilities_command(
     // Mock capabilities data since we don't have a real model registry
     let mut capabilities = HashMap::new();
 
-    capabilities.insert("gpt-4-vision".to_string(), ModelCapabilities {
-        supports_text: true,
-        supports_images: true,
-        supports_audio: false,
-        supports_video: false,
-        max_context_length: Some(8000),
-        supported_languages: vec!["en".to_string(), "es".to_string(), "fr".to_string()],
-        vision_features: Some(VisionFeatures {
-            object_detection: true,
-            ocr: true,
-            scene_understanding: true,
-            face_recognition: false,
-            image_generation: false,
-            max_image_size: (2048, 2048),
-        }),
-        audio_features: None,
-    });
+    capabilities.insert(
+        "gpt-4-vision".to_string(),
+        ModelCapabilities {
+            supports_text: true,
+            supports_images: true,
+            supports_audio: false,
+            supports_video: false,
+            max_context_length: Some(8000),
+            supported_languages: vec!["en".to_string(), "es".to_string(), "fr".to_string()],
+            vision_features: Some(VisionFeatures {
+                object_detection: true,
+                ocr: true,
+                scene_understanding: true,
+                face_recognition: false,
+                image_generation: false,
+                max_image_size: (2048, 2048),
+            }),
+            audio_features: None,
+        },
+    );
 
-    capabilities.insert("whisper-large".to_string(), ModelCapabilities {
-        supports_text: true,
-        supports_images: false,
-        supports_audio: true,
-        supports_video: false,
-        max_context_length: None,
-        supported_languages: vec!["en".to_string(), "es".to_string(), "fr".to_string(), "de".to_string()],
-        vision_features: None,
-        audio_features: Some(AudioFeatures {
-            speech_to_text: true,
-            audio_classification: false,
-            music_analysis: false,
-            voice_synthesis: false,
-            noise_reduction: true,
-            max_audio_length_seconds: 3600,
-        }),
-    });
+    capabilities.insert(
+        "whisper-large".to_string(),
+        ModelCapabilities {
+            supports_text: true,
+            supports_images: false,
+            supports_audio: true,
+            supports_video: false,
+            max_context_length: None,
+            supported_languages: vec![
+                "en".to_string(),
+                "es".to_string(),
+                "fr".to_string(),
+                "de".to_string(),
+            ],
+            vision_features: None,
+            audio_features: Some(AudioFeatures {
+                speech_to_text: true,
+                audio_classification: false,
+                music_analysis: false,
+                voice_synthesis: false,
+                noise_reduction: true,
+                max_audio_length_seconds: 3600,
+            }),
+        },
+    );
 
     let filtered_capabilities: HashMap<String, ModelCapabilities> = match (&model, &media_type) {
-        (Some(m), _) => {
-            capabilities.into_iter().filter(|(name, _)| name == m).collect()
-        }
-        (None, Some(mt)) => {
-            capabilities.into_iter().filter(|(_, caps)| {
-                match mt.as_str() {
-                    "text" => caps.supports_text,
-                    "image" => caps.supports_images,
-                    "audio" => caps.supports_audio,
-                    "video" => caps.supports_video,
-                    _ => false,
-                }
-            }).collect()
-        }
+        (Some(m), _) => capabilities
+            .into_iter()
+            .filter(|(name, _)| name == m)
+            .collect(),
+        (None, Some(mt)) => capabilities
+            .into_iter()
+            .filter(|(_, caps)| match mt.as_str() {
+                "text" => caps.supports_text,
+                "image" => caps.supports_images,
+                "audio" => caps.supports_audio,
+                "video" => caps.supports_video,
+                _ => false,
+            })
+            .collect(),
         (None, None) => capabilities,
     };
 
@@ -766,8 +851,12 @@ async fn handle_capabilities_command(
 
     match format.as_str() {
         "json" => {
-            println!("{}", serde_json::to_string_pretty(&filtered_capabilities)
-                .map_err(|e| InfernoError::InvalidArgument(format!("JSON serialization failed: {}", e)))?);
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&filtered_capabilities).map_err(|e| {
+                    InfernoError::InvalidArgument(format!("JSON serialization failed: {}", e))
+                })?
+            );
         }
         "table" => {
             println!("🤖 Model Capabilities:");
@@ -776,9 +865,18 @@ async fn handle_capabilities_command(
             for (model_name, caps) in filtered_capabilities {
                 println!("\n📋 Model: {}", model_name);
                 println!("   Text: {}", if caps.supports_text { "✅" } else { "❌" });
-                println!("   Images: {}", if caps.supports_images { "✅" } else { "❌" });
-                println!("   Audio: {}", if caps.supports_audio { "✅" } else { "❌" });
-                println!("   Video: {}", if caps.supports_video { "✅" } else { "❌" });
+                println!(
+                    "   Images: {}",
+                    if caps.supports_images { "✅" } else { "❌" }
+                );
+                println!(
+                    "   Audio: {}",
+                    if caps.supports_audio { "✅" } else { "❌" }
+                );
+                println!(
+                    "   Video: {}",
+                    if caps.supports_video { "✅" } else { "❌" }
+                );
 
                 if let Some(max_ctx) = caps.max_context_length {
                     println!("   Max Context: {} tokens", max_ctx);
@@ -790,23 +888,59 @@ async fn handle_capabilities_command(
 
                 if let Some(vision) = caps.vision_features {
                     println!("   Vision Features:");
-                    println!("     • Object Detection: {}", if vision.object_detection { "✅" } else { "❌" });
+                    println!(
+                        "     • Object Detection: {}",
+                        if vision.object_detection {
+                            "✅"
+                        } else {
+                            "❌"
+                        }
+                    );
                     println!("     • OCR: {}", if vision.ocr { "✅" } else { "❌" });
-                    println!("     • Scene Understanding: {}", if vision.scene_understanding { "✅" } else { "❌" });
-                    println!("     • Max Image Size: {}x{}", vision.max_image_size.0, vision.max_image_size.1);
+                    println!(
+                        "     • Scene Understanding: {}",
+                        if vision.scene_understanding {
+                            "✅"
+                        } else {
+                            "❌"
+                        }
+                    );
+                    println!(
+                        "     • Max Image Size: {}x{}",
+                        vision.max_image_size.0, vision.max_image_size.1
+                    );
                 }
 
                 if let Some(audio) = caps.audio_features {
                     println!("   Audio Features:");
-                    println!("     • Speech to Text: {}", if audio.speech_to_text { "✅" } else { "❌" });
-                    println!("     • Audio Classification: {}", if audio.audio_classification { "✅" } else { "❌" });
-                    println!("     • Music Analysis: {}", if audio.music_analysis { "✅" } else { "❌" });
-                    println!("     • Max Audio Length: {}s", audio.max_audio_length_seconds);
+                    println!(
+                        "     • Speech to Text: {}",
+                        if audio.speech_to_text { "✅" } else { "❌" }
+                    );
+                    println!(
+                        "     • Audio Classification: {}",
+                        if audio.audio_classification {
+                            "✅"
+                        } else {
+                            "❌"
+                        }
+                    );
+                    println!(
+                        "     • Music Analysis: {}",
+                        if audio.music_analysis { "✅" } else { "❌" }
+                    );
+                    println!(
+                        "     • Max Audio Length: {}s",
+                        audio.max_audio_length_seconds
+                    );
                 }
             }
         }
         _ => {
-            return Err(InfernoError::InvalidArgument(format!("Unsupported format: {}", format)));
+            return Err(InfernoError::InvalidArgument(format!(
+                "Unsupported format: {}",
+                format
+            )));
         }
     }
 
@@ -818,13 +952,16 @@ async fn handle_register_model_command(
     model: String,
     config_file: PathBuf,
 ) -> Result<(), InfernoError> {
-    let config_content = tokio::fs::read_to_string(&config_file).await
+    let config_content = tokio::fs::read_to_string(&config_file)
+        .await
         .map_err(|e| InfernoError::IoError(format!("Failed to read config file: {}", e)))?;
 
     let capabilities: ModelCapabilities = serde_json::from_str(&config_content)
         .map_err(|e| InfernoError::InvalidArgument(format!("Invalid JSON config: {}", e)))?;
 
-    processor.register_model_capabilities(model.clone(), capabilities).await
+    processor
+        .register_model_capabilities(model.clone(), capabilities)
+        .await
         .map_err(|e| InfernoError::InvalidArgument(format!("Failed to register model: {}", e)))?;
 
     println!("✅ Model '{}' capabilities registered successfully", model);
@@ -840,10 +977,12 @@ async fn handle_analyze_command(
     println!("Analyzing file: {:?}", input);
 
     // Mock analysis - in real implementation would extract actual metadata
-    let file_metadata = tokio::fs::metadata(&input).await
+    let file_metadata = tokio::fs::metadata(&input)
+        .await
         .map_err(|e| InfernoError::IoError(format!("Failed to read file metadata: {}", e)))?;
 
-    let file_extension = input.extension()
+    let file_extension = input
+        .extension()
         .and_then(|ext| ext.to_str())
         .unwrap_or("unknown");
 
@@ -851,14 +990,21 @@ async fn handle_analyze_command(
 
     match format.as_str() {
         "json" => {
-            println!("{}", serde_json::to_string_pretty(&analysis)
-                .map_err(|e| InfernoError::InvalidArgument(format!("JSON serialization failed: {}", e)))?);
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&analysis).map_err(|e| {
+                    InfernoError::InvalidArgument(format!("JSON serialization failed: {}", e))
+                })?
+            );
         }
         "table" => {
             print_analysis_table(&analysis);
         }
         _ => {
-            return Err(InfernoError::InvalidArgument(format!("Unsupported format: {}", format)));
+            return Err(InfernoError::InvalidArgument(format!(
+                "Unsupported format: {}",
+                format
+            )));
         }
     }
 
@@ -872,7 +1018,10 @@ async fn handle_convert_command(
     quality: Option<u32>,
     params: Vec<String>,
 ) -> Result<(), InfernoError> {
-    println!("Converting {:?} to {:?} (format: {})", input, output, format);
+    println!(
+        "Converting {:?} to {:?} (format: {})",
+        input, output, format
+    );
 
     if let Some(q) = quality {
         println!("Quality setting: {}", q);
@@ -883,7 +1032,8 @@ async fn handle_convert_command(
     }
 
     // Mock conversion - in real implementation would use media processing libraries
-    let input_data = tokio::fs::read(&input).await
+    let input_data = tokio::fs::read(&input)
+        .await
         .map_err(|e| InfernoError::IoError(format!("Failed to read input file: {}", e)))?;
 
     // Simulate conversion process
@@ -891,7 +1041,8 @@ async fn handle_convert_command(
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     // Write mock converted data
-    tokio::fs::write(&output, &input_data).await
+    tokio::fs::write(&output, &input_data)
+        .await
         .map_err(|e| InfernoError::IoError(format!("Failed to write output file: {}", e)))?;
 
     println!("✅ Conversion completed: {:?}", output);
@@ -902,11 +1053,15 @@ async fn handle_convert_command(
 
 async fn find_matching_files(dir: &PathBuf, pattern: &str) -> Result<Vec<PathBuf>, InfernoError> {
     let mut files = Vec::new();
-    let mut entries = tokio::fs::read_dir(dir).await
+    let mut entries = tokio::fs::read_dir(dir)
+        .await
         .map_err(|e| InfernoError::IoError(format!("Failed to read directory: {}", e)))?;
 
-    while let Some(entry) = entries.next_entry().await
-        .map_err(|e| InfernoError::IoError(format!("Failed to read directory entry: {}", e)))? {
+    while let Some(entry) = entries
+        .next_entry()
+        .await
+        .map_err(|e| InfernoError::IoError(format!("Failed to read directory entry: {}", e)))?
+    {
         let path = entry.path();
         if path.is_file() {
             if pattern == "*" || path.to_string_lossy().contains(pattern) {
@@ -926,14 +1081,28 @@ fn format_text_output(result: &crate::multimodal::MultiModalResult) -> String {
     output.push_str(&format!("Session ID: {}\n", result.id));
     output.push_str(&format!("Model: {}\n", result.model_used));
     output.push_str(&format!("Input: {}\n", result.input_summary));
-    output.push_str(&format!("Processing Time: {}ms\n", result.processing_time_ms));
-    output.push_str(&format!("Created: {}\n\n", result.created_at.format("%Y-%m-%d %H:%M:%S")));
+    output.push_str(&format!(
+        "Processing Time: {}ms\n",
+        result.processing_time_ms
+    ));
+    output.push_str(&format!(
+        "Created: {}\n\n",
+        result.created_at.format("%Y-%m-%d %H:%M:%S")
+    ));
 
     output.push_str("📋 Processed Components:\n");
     for (i, component) in result.processed_components.iter().enumerate() {
-        output.push_str(&format!("  {}. {} - {}\n", i + 1, component.component_type, component.description));
+        output.push_str(&format!(
+            "  {}. {} - {}\n",
+            i + 1,
+            component.component_type,
+            component.description
+        ));
         if component.processing_time_ms > 0 {
-            output.push_str(&format!("     Processing time: {}ms\n", component.processing_time_ms));
+            output.push_str(&format!(
+                "     Processing time: {}ms\n",
+                component.processing_time_ms
+            ));
         }
     }
 
@@ -1028,7 +1197,11 @@ fn print_analysis_table(analysis: &serde_json::Value) {
 
     if let Some(size) = analysis.get("file_size_bytes") {
         let size_mb = size.as_u64().unwrap_or(0) as f64 / 1024.0 / 1024.0;
-        println!("Size: {:.2} MB ({} bytes)", size_mb, size.as_u64().unwrap_or(0));
+        println!(
+            "Size: {:.2} MB ({} bytes)",
+            size_mb,
+            size.as_u64().unwrap_or(0)
+        );
     }
 
     if let Some(file_type) = analysis.get("file_type") {
@@ -1053,7 +1226,10 @@ fn print_analysis_table(analysis: &serde_json::Value) {
             println!("  Channels: {}", channels.as_u64().unwrap_or(0));
         }
         if let Some(color_space) = img_analysis.get("color_space") {
-            println!("  Color Space: {}", color_space.as_str().unwrap_or("unknown"));
+            println!(
+                "  Color Space: {}",
+                color_space.as_str().unwrap_or("unknown")
+            );
         }
     }
 
@@ -1063,7 +1239,10 @@ fn print_analysis_table(analysis: &serde_json::Value) {
             println!("  Duration: {}", duration.as_str().unwrap_or("unknown"));
         }
         if let Some(sample_rate) = audio_analysis.get("estimated_sample_rate") {
-            println!("  Sample Rate: {}", sample_rate.as_str().unwrap_or("unknown"));
+            println!(
+                "  Sample Rate: {}",
+                sample_rate.as_str().unwrap_or("unknown")
+            );
         }
         if let Some(channels) = audio_analysis.get("estimated_channels") {
             println!("  Channels: {}", channels.as_u64().unwrap_or(0));
@@ -1085,10 +1264,16 @@ fn print_analysis_table(analysis: &serde_json::Value) {
             println!("  Frame Rate: {}", frame_rate.as_str().unwrap_or("unknown"));
         }
         if let Some(video_codec) = video_analysis.get("estimated_video_codec") {
-            println!("  Video Codec: {}", video_codec.as_str().unwrap_or("unknown"));
+            println!(
+                "  Video Codec: {}",
+                video_codec.as_str().unwrap_or("unknown")
+            );
         }
         if let Some(audio_codec) = video_analysis.get("estimated_audio_codec") {
-            println!("  Audio Codec: {}", audio_codec.as_str().unwrap_or("unknown"));
+            println!(
+                "  Audio Codec: {}",
+                audio_codec.as_str().unwrap_or("unknown")
+            );
         }
     }
 }

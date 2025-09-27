@@ -3,11 +3,11 @@
 
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
+use std::alloc::{GlobalAlloc, Layout, System};
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use std::alloc::{GlobalAlloc, Layout, System};
-use std::sync::atomic::{AtomicUsize, Ordering};
 
 /// Memory optimization configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -69,12 +69,16 @@ impl MemoryTracker {
             if new_allocated <= current_peak {
                 break;
             }
-            if self.peak_usage.compare_exchange_weak(
-                current_peak,
-                new_allocated,
-                Ordering::SeqCst,
-                Ordering::SeqCst
-            ).is_ok() {
+            if self
+                .peak_usage
+                .compare_exchange_weak(
+                    current_peak,
+                    new_allocated,
+                    Ordering::SeqCst,
+                    Ordering::SeqCst,
+                )
+                .is_ok()
+            {
                 break;
             }
         }
@@ -118,14 +122,14 @@ pub struct MemoryPool {
 impl MemoryPool {
     pub fn new(max_size_mb: usize) -> Self {
         let pool_sizes = vec![
-            1024,       // 1KB
-            4096,       // 4KB
-            16384,      // 16KB
-            65536,      // 64KB
-            262144,     // 256KB
-            1048576,    // 1MB
-            4194304,    // 4MB
-            16777216,   // 16MB
+            1024,     // 1KB
+            4096,     // 4KB
+            16384,    // 16KB
+            65536,    // 64KB
+            262144,   // 256KB
+            1048576,  // 1MB
+            4194304,  // 4MB
+            16777216, // 16MB
         ];
 
         Self {
@@ -138,7 +142,9 @@ impl MemoryPool {
 
     pub fn allocate(&mut self, size: usize) -> Option<*mut u8> {
         // Find the appropriate pool size
-        let pool_size = self.pool_sizes.iter()
+        let pool_size = self
+            .pool_sizes
+            .iter()
             .find(|&&s| s >= size)
             .copied()
             .unwrap_or_else(|| size.next_power_of_two());
@@ -169,13 +175,18 @@ impl MemoryPool {
     }
 
     pub fn deallocate(&mut self, ptr: *mut u8, size: usize) {
-        let pool_size = self.pool_sizes.iter()
+        let pool_size = self
+            .pool_sizes
+            .iter()
             .find(|&&s| s >= size)
             .copied()
             .unwrap_or_else(|| size.next_power_of_two());
 
         // Return to pool
-        self.pools.entry(pool_size).or_insert_with(Vec::new).push(ptr);
+        self.pools
+            .entry(pool_size)
+            .or_insert_with(Vec::new)
+            .push(ptr);
     }
 }
 
@@ -331,7 +342,10 @@ impl MemoryManager {
             return Ok(model_path.to_string());
         }
 
-        tracing::info!("Optimizing model loading with memory mapping: {}", model_path);
+        tracing::info!(
+            "Optimizing model loading with memory mapping: {}",
+            model_path
+        );
 
         let path = std::path::Path::new(model_path);
         let memory_mapped = MemoryMappedFile::new(path)?;
@@ -398,7 +412,11 @@ impl MemoryManager {
         let chunk_size = self.config.prefetch_size_mb * 1024 * 1024;
         let chunks = (file_size + chunk_size - 1) / chunk_size;
 
-        tracing::debug!("Prefetching {} chunks of {} MB each", chunks, chunk_size / (1024 * 1024));
+        tracing::debug!(
+            "Prefetching {} chunks of {} MB each",
+            chunks,
+            chunk_size / (1024 * 1024)
+        );
 
         // Read chunks in parallel
         let mut handles = Vec::new();
@@ -407,9 +425,8 @@ impl MemoryManager {
             let offset = i * chunk_size;
             let size = std::cmp::min(chunk_size, file_size - offset);
 
-            let handle = tokio::spawn(async move {
-                Self::prefetch_chunk(&file_path, offset, size).await
-            });
+            let handle =
+                tokio::spawn(async move { Self::prefetch_chunk(&file_path, offset, size).await });
             handles.push(handle);
         }
 
@@ -466,7 +483,10 @@ impl MemoryManager {
         let usage_ratio = current_usage / limit;
 
         if usage_ratio > self.config.swap_threshold as f64 {
-            tracing::warn!("Memory pressure detected: {:.1}% usage", usage_ratio * 100.0);
+            tracing::warn!(
+                "Memory pressure detected: {:.1}% usage",
+                usage_ratio * 100.0
+            );
             self.trigger_memory_cleanup().await?;
             return Ok(true);
         }
@@ -514,7 +534,12 @@ impl MemoryManager {
         metrics.memory_saved_ratio = 1.0 - (metrics.current_memory_usage_mb / baseline_usage);
 
         // Calculate pool efficiency
-        let total_allocated = self.memory_pool.read().await.total_allocated.load(Ordering::SeqCst) as f64;
+        let total_allocated = self
+            .memory_pool
+            .read()
+            .await
+            .total_allocated
+            .load(Ordering::SeqCst) as f64;
         let max_size = self.config.memory_pool_size_mb as f64 * 1024.0 * 1024.0;
         metrics.memory_pool_efficiency = total_allocated / max_size;
     }
@@ -527,14 +552,18 @@ impl MemoryManager {
 
     /// Benchmark memory optimization performance
     pub async fn benchmark(&self, _model_path: &str, num_requests: usize) -> Result<f64> {
-        tracing::info!("Benchmarking memory optimization with {} requests", num_requests);
+        tracing::info!(
+            "Benchmarking memory optimization with {} requests",
+            num_requests
+        );
 
         let start_memory = self.get_current_memory_usage().await;
 
         // Simulate memory-intensive operations
         let mut allocations = Vec::new();
         for _ in 0..num_requests {
-            if let Some(ptr) = self.allocate(1024 * 1024).await { // 1MB allocations
+            if let Some(ptr) = self.allocate(1024 * 1024).await {
+                // 1MB allocations
                 allocations.push(ptr);
             }
         }
@@ -561,8 +590,10 @@ impl MemoryManager {
         let pool = self.memory_pool.read().await;
         let mut stats = HashMap::new();
 
-        stats.insert("total_allocated".to_string(),
-                    pool.total_allocated.load(Ordering::SeqCst));
+        stats.insert(
+            "total_allocated".to_string(),
+            pool.total_allocated.load(Ordering::SeqCst),
+        );
         stats.insert("max_size".to_string(), pool.max_size);
         stats.insert("pool_count".to_string(), pool.pools.len());
 

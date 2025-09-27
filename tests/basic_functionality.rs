@@ -22,8 +22,8 @@ fn test_backend_types() {
 
 #[test]
 fn test_model_info() {
-    use models::ModelInfo;
     use backends::BackendType;
+    use models::ModelInfo;
 
     let model = ModelInfo {
         name: "test-model".to_string(),

@@ -921,9 +921,9 @@ impl Default for CompactionConfig {
             enabled: true,
             interval: Duration::from_secs(3600), // 1 hour
             block_ranges: vec![
-                Duration::from_secs(2 * 3600),   // 2 hours
-                Duration::from_secs(12 * 3600),  // 12 hours
-                Duration::from_secs(24 * 3600),  // 1 day
+                Duration::from_secs(2 * 3600),  // 2 hours
+                Duration::from_secs(12 * 3600), // 12 hours
+                Duration::from_secs(24 * 3600), // 1 day
             ],
             retention: Duration::from_secs(90 * 24 * 3600), // 90 days
         }
@@ -1251,7 +1251,10 @@ pub struct AdvancedMonitoringSystem {
 impl AdvancedMonitoringSystem {
     pub fn new(config: AdvancedMonitoringConfig) -> Result<Self> {
         let prometheus_client = Arc::new(PrometheusClient::new(&config.prometheus)?);
-        let metrics_collector = Arc::new(MetricsCollector::new(&config.collection, Arc::clone(&prometheus_client))?);
+        let metrics_collector = Arc::new(MetricsCollector::new(
+            &config.collection,
+            Arc::clone(&prometheus_client),
+        )?);
         let alert_manager = Arc::new(AlertManager::new(&config.alerting)?);
         let dashboard_manager = Arc::new(DashboardManager::new(&config.dashboards)?);
         let export_manager = Arc::new(ExportManager::new(&config.export)?);
@@ -1306,7 +1309,12 @@ impl AdvancedMonitoringSystem {
         self.alert_manager.send_alert(alert).await
     }
 
-    pub async fn get_metrics(&self, query: &str, start: DateTime<Utc>, end: DateTime<Utc>) -> Result<MetricQueryResult> {
+    pub async fn get_metrics(
+        &self,
+        query: &str,
+        start: DateTime<Utc>,
+        end: DateTime<Utc>,
+    ) -> Result<MetricQueryResult> {
         self.prometheus_client.query_range(query, start, end).await
     }
 
@@ -1324,24 +1332,35 @@ impl AdvancedMonitoringSystem {
     pub async fn get_status(&self) -> Result<MonitoringStatus> {
         let health = self.get_health_status().await;
         Ok(MonitoringStatus {
-            healthy: health.collector_healthy && health.alertmanager_healthy && health.dashboards_healthy,
+            healthy: health.collector_healthy
+                && health.alertmanager_healthy
+                && health.dashboards_healthy,
             uptime: Duration::from_secs(3600), // Mock uptime
             components: HashMap::from([
-                ("collector".to_string(), ComponentStatus {
-                    healthy: health.collector_healthy,
-                    message: "OK".to_string(),
-                    response_time: Some(10),
-                }),
-                ("alertmanager".to_string(), ComponentStatus {
-                    healthy: health.alertmanager_healthy,
-                    message: "OK".to_string(),
-                    response_time: Some(15),
-                }),
-                ("dashboards".to_string(), ComponentStatus {
-                    healthy: health.dashboards_healthy,
-                    message: "OK".to_string(),
-                    response_time: Some(8),
-                }),
+                (
+                    "collector".to_string(),
+                    ComponentStatus {
+                        healthy: health.collector_healthy,
+                        message: "OK".to_string(),
+                        response_time: Some(10),
+                    },
+                ),
+                (
+                    "alertmanager".to_string(),
+                    ComponentStatus {
+                        healthy: health.alertmanager_healthy,
+                        message: "OK".to_string(),
+                        response_time: Some(15),
+                    },
+                ),
+                (
+                    "dashboards".to_string(),
+                    ComponentStatus {
+                        healthy: health.dashboards_healthy,
+                        message: "OK".to_string(),
+                        response_time: Some(8),
+                    },
+                ),
             ]),
             active_alerts: 0,
             metrics_collected: 1250,
@@ -1357,17 +1376,15 @@ impl AdvancedMonitoringSystem {
                 evaluation_interval_seconds: self.config.prometheus.evaluation_interval,
                 external_labels: HashMap::new(),
             },
-            scrape_configs: vec![
-                ScrapeConfig {
-                    job_name: "inferno".to_string(),
-                    scrape_interval: 15,
-                    metrics_path: "/metrics".to_string(),
-                    static_configs: vec![StaticConfig {
-                        targets: vec!["localhost:8080".to_string()],
-                        labels: HashMap::new(),
-                    }],
-                }
-            ],
+            scrape_configs: vec![ScrapeConfig {
+                job_name: "inferno".to_string(),
+                scrape_interval: 15,
+                metrics_path: "/metrics".to_string(),
+                static_configs: vec![StaticConfig {
+                    targets: vec!["localhost:8080".to_string()],
+                    labels: HashMap::new(),
+                }],
+            }],
             rule_files: vec![],
             remote_write: self.config.prometheus.remote_write.clone(),
             remote_read: vec![],
@@ -1385,7 +1402,12 @@ impl AdvancedMonitoringSystem {
         Ok(())
     }
 
-    pub fn query_prometheus(&self, query: &str, time: &str, timeout: u64) -> Result<serde_json::Value> {
+    pub fn query_prometheus(
+        &self,
+        query: &str,
+        time: &str,
+        timeout: u64,
+    ) -> Result<serde_json::Value> {
         // Mock Prometheus query
         Ok(serde_json::json!({
             "status": "success",
@@ -1401,7 +1423,13 @@ impl AdvancedMonitoringSystem {
         }))
     }
 
-    pub fn query_range_prometheus(&self, query: &str, start: &str, end: &str, step: &str) -> Result<serde_json::Value> {
+    pub fn query_range_prometheus(
+        &self,
+        query: &str,
+        start: &str,
+        end: &str,
+        step: &str,
+    ) -> Result<serde_json::Value> {
         // Mock Prometheus range query
         Ok(serde_json::json!({
             "status": "success",
@@ -1418,16 +1446,14 @@ impl AdvancedMonitoringSystem {
     }
 
     pub async fn get_prometheus_targets(&self) -> Result<Vec<PrometheusTarget>> {
-        Ok(vec![
-            PrometheusTarget {
-                job: "inferno".to_string(),
-                instance: "localhost:8080".to_string(),
-                health: "up".to_string(),
-                last_scrape: "2023-11-01T12:00:00Z".to_string(),
-                scrape_duration: 0.025,
-                labels: HashMap::from([("job".to_string(), "inferno".to_string())]),
-            }
-        ])
+        Ok(vec![PrometheusTarget {
+            job: "inferno".to_string(),
+            instance: "localhost:8080".to_string(),
+            health: "up".to_string(),
+            last_scrape: "2023-11-01T12:00:00Z".to_string(),
+            scrape_duration: 0.025,
+            labels: HashMap::from([("job".to_string(), "inferno".to_string())]),
+        }])
     }
 
     pub async fn get_prometheus_info(&self) -> Result<PrometheusInfo> {
@@ -1466,20 +1492,31 @@ impl AdvancedMonitoringSystem {
         Ok(())
     }
 
-    pub fn get_alertmanager_alerts(&self, state: Option<&crate::cli::advanced_monitoring::AlertState>, receiver: Option<&str>, labels: &[String]) -> Result<Vec<AlertmanagerAlert>> {
-        Ok(vec![
-            AlertmanagerAlert {
-                name: "HighResponseTime".to_string(),
-                state: "firing".to_string(),
-                started_at: "2023-11-01T12:00:00Z".to_string(),
-                receiver: "default".to_string(),
-                labels: HashMap::from([("severity".to_string(), "warning".to_string())]),
-                annotations: HashMap::from([("description".to_string(), "Response time is high".to_string())]),
-            }
-        ])
+    pub fn get_alertmanager_alerts(
+        &self,
+        state: Option<&crate::cli::advanced_monitoring::AlertState>,
+        receiver: Option<&str>,
+        labels: &[String],
+    ) -> Result<Vec<AlertmanagerAlert>> {
+        Ok(vec![AlertmanagerAlert {
+            name: "HighResponseTime".to_string(),
+            state: "firing".to_string(),
+            started_at: "2023-11-01T12:00:00Z".to_string(),
+            receiver: "default".to_string(),
+            labels: HashMap::from([("severity".to_string(), "warning".to_string())]),
+            annotations: HashMap::from([(
+                "description".to_string(),
+                "Response time is high".to_string(),
+            )]),
+        }])
     }
 
-    pub fn test_alertmanager_receiver(&self, receiver: &str, labels: &[String], annotations: &[String]) -> Result<TestResult> {
+    pub fn test_alertmanager_receiver(
+        &self,
+        receiver: &str,
+        labels: &[String],
+        annotations: &[String],
+    ) -> Result<TestResult> {
         Ok(TestResult {
             success: true,
             error: None,
@@ -1502,29 +1539,47 @@ impl AdvancedMonitoringSystem {
     }
 
     // Dashboard methods
-    pub async fn list_dashboards(&self, tags: &[String], imported: bool) -> Result<Vec<DashboardInfo>> {
-        Ok(vec![
-            DashboardInfo {
-                id: "1".to_string(),
-                name: "Inferno Overview".to_string(),
-                folder: "General".to_string(),
-                tags: vec!["inferno".to_string(), "monitoring".to_string()],
-                url: "/d/inferno-overview".to_string(),
-            }
-        ])
+    pub async fn list_dashboards(
+        &self,
+        _tags: &[String],
+        _imported: bool,
+    ) -> Result<Vec<DashboardInfo>> {
+        Ok(vec![DashboardInfo {
+            id: "1".to_string(),
+            name: "Inferno Overview".to_string(),
+            folder: "General".to_string(),
+            tags: vec!["inferno".to_string(), "monitoring".to_string()],
+            url: "/d/inferno-overview".to_string(),
+        }])
     }
 
-    pub fn import_dashboard(&self, source: &str, name: Option<&str>, folder: Option<&str>, overwrite: bool) -> Result<String> {
+    pub fn import_dashboard(
+        &self,
+        source: &str,
+        name: Option<&str>,
+        folder: Option<&str>,
+        overwrite: bool,
+    ) -> Result<String> {
         info!("Importing dashboard from: {}", source);
         Ok("dashboard-123".to_string())
     }
 
-    pub fn export_dashboard(&self, dashboard: &str, output: &PathBuf, include_variables: bool) -> Result<()> {
+    pub fn export_dashboard(
+        &self,
+        dashboard: &str,
+        output: &PathBuf,
+        include_variables: bool,
+    ) -> Result<()> {
         info!("Exporting dashboard {} to {}", dashboard, output.display());
         Ok(())
     }
 
-    pub fn update_dashboard(&self, dashboard: &str, file: &PathBuf, message: Option<&str>) -> Result<()> {
+    pub fn update_dashboard(
+        &self,
+        dashboard: &str,
+        file: &PathBuf,
+        message: Option<&str>,
+    ) -> Result<()> {
         info!("Updating dashboard {} from {}", dashboard, file.display());
         Ok(())
     }
@@ -1534,12 +1589,24 @@ impl AdvancedMonitoringSystem {
         Ok(())
     }
 
-    pub fn create_dashboard_snapshot(&self, dashboard: &str, name: Option<&str>, expires: Option<u64>) -> Result<String> {
-        let snapshot_url = format!("https://grafana.example.com/dashboard/snapshot/{}", dashboard);
+    pub fn create_dashboard_snapshot(
+        &self,
+        dashboard: &str,
+        name: Option<&str>,
+        expires: Option<u64>,
+    ) -> Result<String> {
+        let snapshot_url = format!(
+            "https://grafana.example.com/dashboard/snapshot/{}",
+            dashboard
+        );
         Ok(snapshot_url)
     }
 
-    pub fn watch_and_provision_dashboards(&self, directory: &PathBuf, folder: Option<&str>) -> Result<()> {
+    pub fn watch_and_provision_dashboards(
+        &self,
+        directory: &PathBuf,
+        folder: Option<&str>,
+    ) -> Result<()> {
         info!("Watching directory for dashboards: {}", directory.display());
         Ok(())
     }
@@ -1550,20 +1617,30 @@ impl AdvancedMonitoringSystem {
     }
 
     // Target management methods
-    pub fn list_monitoring_targets(&self, target_type: Option<&str>, healthy: bool, unhealthy: bool) -> Result<Vec<MonitoringTarget>> {
-        Ok(vec![
-            MonitoringTarget {
-                id: "target-1".to_string(),
-                address: "localhost:8080".to_string(),
-                target_type: "http".to_string(),
-                status: "healthy".to_string(),
-                last_check: "2023-11-01T12:00:00Z".to_string(),
-                labels: HashMap::new(),
-            }
-        ])
+    pub fn list_monitoring_targets(
+        &self,
+        target_type: Option<&str>,
+        healthy: bool,
+        unhealthy: bool,
+    ) -> Result<Vec<MonitoringTarget>> {
+        Ok(vec![MonitoringTarget {
+            id: "target-1".to_string(),
+            address: "localhost:8080".to_string(),
+            target_type: "http".to_string(),
+            status: "healthy".to_string(),
+            last_check: "2023-11-01T12:00:00Z".to_string(),
+            labels: HashMap::new(),
+        }])
     }
 
-    pub fn add_monitoring_target(&self, address: &str, target_type: &str, labels: &[String], interval: Option<&str>, timeout: Option<&str>) -> Result<String> {
+    pub fn add_monitoring_target(
+        &self,
+        address: &str,
+        target_type: &str,
+        labels: &[String],
+        interval: Option<&str>,
+        timeout: Option<&str>,
+    ) -> Result<String> {
         info!("Adding monitoring target: {} ({})", address, target_type);
         Ok("target-123".to_string())
     }
@@ -1573,7 +1650,13 @@ impl AdvancedMonitoringSystem {
         Ok(())
     }
 
-    pub fn update_monitoring_target(&self, target: &str, labels: &[String], interval: Option<&str>, timeout: Option<&str>) -> Result<()> {
+    pub fn update_monitoring_target(
+        &self,
+        target: &str,
+        labels: &[String],
+        interval: Option<&str>,
+        timeout: Option<&str>,
+    ) -> Result<()> {
         info!("Updating monitoring target: {}", target);
         Ok(())
     }
@@ -1590,14 +1673,16 @@ impl AdvancedMonitoringSystem {
         })
     }
 
-    pub fn discover_targets(&self, method: Option<&crate::cli::advanced_monitoring::DiscoveryMethod>, config_file: Option<&std::path::Path>) -> Result<Vec<DiscoveredTarget>> {
-        Ok(vec![
-            DiscoveredTarget {
-                address: "192.168.1.100:8080".to_string(),
-                target_type: "http".to_string(),
-                labels: HashMap::from([("discovered".to_string(), "true".to_string())]),
-            }
-        ])
+    pub fn discover_targets(
+        &self,
+        method: Option<&crate::cli::advanced_monitoring::DiscoveryMethod>,
+        config_file: Option<&std::path::Path>,
+    ) -> Result<Vec<DiscoveredTarget>> {
+        Ok(vec![DiscoveredTarget {
+            address: "192.168.1.100:8080".to_string(),
+            target_type: "http".to_string(),
+            labels: HashMap::from([("discovered".to_string(), "true".to_string())]),
+        }])
     }
 
     pub fn auto_add_discovered_targets(&self, targets: &[DiscoveredTarget]) -> Result<u32> {
@@ -1605,17 +1690,19 @@ impl AdvancedMonitoringSystem {
     }
 
     // Alert rules methods
-    pub fn list_alert_rules(&self, group: Option<&str>, firing: bool) -> Result<Vec<AlertRuleInfo>> {
-        Ok(vec![
-            AlertRuleInfo {
-                name: "HighResponseTime".to_string(),
-                group: "inferno.rules".to_string(),
-                state: "inactive".to_string(),
-                severity: "warning".to_string(),
-                firing_duration: None,
-                labels: HashMap::new(),
-            }
-        ])
+    pub fn list_alert_rules(
+        &self,
+        group: Option<&str>,
+        firing: bool,
+    ) -> Result<Vec<AlertRuleInfo>> {
+        Ok(vec![AlertRuleInfo {
+            name: "HighResponseTime".to_string(),
+            group: "inferno.rules".to_string(),
+            state: "inactive".to_string(),
+            severity: "warning".to_string(),
+            firing_duration: None,
+            labels: HashMap::new(),
+        }])
     }
 
     pub async fn validate_alert_rules(&self, file: &PathBuf) -> Result<()> {
@@ -1628,12 +1715,17 @@ impl AdvancedMonitoringSystem {
         Ok("rule-123".to_string())
     }
 
-    pub async fn remove_alert_rule(&self, name: &str, group: Option<&str>) -> Result<()> {
+    pub async fn remove_alert_rule(&self, name: &str, _group: Option<&str>) -> Result<()> {
         info!("Removing alert rule: {}", name);
         Ok(())
     }
 
-    pub fn test_alert_rule(&self, rule: &str, data: Option<&std::path::Path>, duration: Option<&str>) -> Result<TestResult> {
+    pub fn test_alert_rule(
+        &self,
+        rule: &str,
+        data: Option<&std::path::Path>,
+        duration: Option<&str>,
+    ) -> Result<TestResult> {
         Ok(TestResult {
             success: true,
             error: None,
@@ -1645,51 +1737,86 @@ impl AdvancedMonitoringSystem {
         })
     }
 
-    pub fn get_active_alerts(&self, severity: Option<&str>, labels: &[String]) -> Result<Vec<ActiveAlert>> {
-        Ok(vec![
-            ActiveAlert {
-                name: "HighMemoryUsage".to_string(),
-                severity: "warning".to_string(),
-                started_at: "2023-11-01T12:00:00Z".to_string(),
-                duration: "5m".to_string(),
-                labels: HashMap::from([("instance".to_string(), "localhost:8080".to_string())]),
-            }
-        ])
+    pub fn get_active_alerts(
+        &self,
+        severity: Option<&str>,
+        labels: &[String],
+    ) -> Result<Vec<ActiveAlert>> {
+        Ok(vec![ActiveAlert {
+            name: "HighMemoryUsage".to_string(),
+            severity: "warning".to_string(),
+            started_at: "2023-11-01T12:00:00Z".to_string(),
+            duration: "5m".to_string(),
+            labels: HashMap::from([("instance".to_string(), "localhost:8080".to_string())]),
+        }])
     }
 
-    pub fn get_alert_history(&self, start: Option<&str>, end: Option<&str>, rule: Option<&str>, limit: Option<usize>) -> Result<Vec<AlertHistoryEntry>> {
-        Ok(vec![
-            AlertHistoryEntry {
-                name: "HighResponseTime".to_string(),
-                state: "resolved".to_string(),
-                timestamp: "2023-11-01T11:00:00Z".to_string(),
-                duration: "10m".to_string(),
-            }
-        ])
+    pub fn get_alert_history(
+        &self,
+        start: Option<&str>,
+        end: Option<&str>,
+        rule: Option<&str>,
+        limit: Option<usize>,
+    ) -> Result<Vec<AlertHistoryEntry>> {
+        Ok(vec![AlertHistoryEntry {
+            name: "HighResponseTime".to_string(),
+            state: "resolved".to_string(),
+            timestamp: "2023-11-01T11:00:00Z".to_string(),
+            duration: "10m".to_string(),
+        }])
     }
 
-    pub fn acknowledge_alert(&self, alert: &str, comment: Option<&str>, expires: Option<&str>) -> Result<()> {
+    pub fn acknowledge_alert(
+        &self,
+        alert: &str,
+        comment: Option<&str>,
+        expires: Option<&str>,
+    ) -> Result<()> {
         info!("Acknowledging alert: {}", alert);
         Ok(())
     }
 
     // Export methods
-    pub fn export_metrics(&self, output: &PathBuf, start: Option<&str>, end: Option<&str>, metrics: &[String], format: &crate::cli::advanced_monitoring::ExportFormat, compress: bool) -> Result<()> {
+    pub fn export_metrics(
+        &self,
+        output: &PathBuf,
+        start: Option<&str>,
+        end: Option<&str>,
+        metrics: &[String],
+        format: &crate::cli::advanced_monitoring::ExportFormat,
+        compress: bool,
+    ) -> Result<()> {
         info!("Exporting metrics to: {}", output.display());
         Ok(())
     }
 
-    pub fn export_alerts(&self, output: &PathBuf, start: Option<&str>, end: Option<&str>, format: &crate::cli::advanced_monitoring::ExportFormat) -> Result<()> {
+    pub fn export_alerts(
+        &self,
+        output: &PathBuf,
+        start: Option<&str>,
+        end: Option<&str>,
+        format: &crate::cli::advanced_monitoring::ExportFormat,
+    ) -> Result<()> {
         info!("Exporting alerts to: {}", output.display());
         Ok(())
     }
 
-    pub fn export_configuration(&self, output: &PathBuf, include_secrets: bool, format: &crate::cli::advanced_monitoring::ExportFormat) -> Result<()> {
+    pub fn export_configuration(
+        &self,
+        output: &PathBuf,
+        include_secrets: bool,
+        format: &crate::cli::advanced_monitoring::ExportFormat,
+    ) -> Result<()> {
         info!("Exporting configuration to: {}", output.display());
         Ok(())
     }
 
-    pub fn export_dashboards(&self, output: &PathBuf, dashboards: &[String], format: &crate::cli::advanced_monitoring::ExportFormat) -> Result<()> {
+    pub fn export_dashboards(
+        &self,
+        output: &PathBuf,
+        dashboards: &[String],
+        format: &crate::cli::advanced_monitoring::ExportFormat,
+    ) -> Result<()> {
         info!("Exporting dashboards to: {}", output.display());
         Ok(())
     }
@@ -1700,16 +1827,22 @@ impl AdvancedMonitoringSystem {
             healthy: true,
             timestamp: Utc::now(),
             components: HashMap::from([
-                ("prometheus".to_string(), ComponentStatus {
-                    healthy: true,
-                    message: "OK".to_string(),
-                    response_time: Some(25),
-                }),
-                ("alertmanager".to_string(), ComponentStatus {
-                    healthy: true,
-                    message: "OK".to_string(),
-                    response_time: Some(30),
-                }),
+                (
+                    "prometheus".to_string(),
+                    ComponentStatus {
+                        healthy: true,
+                        message: "OK".to_string(),
+                        response_time: Some(25),
+                    },
+                ),
+                (
+                    "alertmanager".to_string(),
+                    ComponentStatus {
+                        healthy: true,
+                        message: "OK".to_string(),
+                        response_time: Some(30),
+                    },
+                ),
             ]),
             memory_usage: Some(512),
             cpu_usage: Some(45.2),
@@ -1722,13 +1855,14 @@ impl AdvancedMonitoringSystem {
         Ok(HealthCheckResult {
             healthy: true,
             timestamp: Utc::now(),
-            components: HashMap::from([
-                (component.to_string(), ComponentStatus {
+            components: HashMap::from([(
+                component.to_string(),
+                ComponentStatus {
                     healthy: true,
                     message: "OK".to_string(),
                     response_time: Some(20),
-                }),
-            ]),
+                },
+            )]),
             memory_usage: None,
             cpu_usage: None,
             disk_usage: None,
@@ -1768,22 +1902,34 @@ impl AdvancedMonitoringSystem {
         ])
     }
 
-    pub fn update_retention_policies(&self, metrics: Option<&str>, alerts: Option<&str>, logs: Option<&str>, auto_cleanup: Option<bool>) -> Result<()> {
+    pub fn update_retention_policies(
+        &self,
+        metrics: Option<&str>,
+        alerts: Option<&str>,
+        logs: Option<&str>,
+        auto_cleanup: Option<bool>,
+    ) -> Result<()> {
         info!("Updating retention policies");
         Ok(())
     }
 
-    pub fn preview_cleanup(&self, cleanup_type: Option<&crate::cli::advanced_monitoring::CleanupType>, older_than: Option<&str>) -> Result<Vec<CleanupPreviewItem>> {
-        Ok(vec![
-            CleanupPreviewItem {
-                path: "/data/metrics/old_data.db".to_string(),
-                size_mb: 256,
-                age: "45d".to_string(),
-            }
-        ])
+    pub fn preview_cleanup(
+        &self,
+        cleanup_type: Option<&crate::cli::advanced_monitoring::CleanupType>,
+        older_than: Option<&str>,
+    ) -> Result<Vec<CleanupPreviewItem>> {
+        Ok(vec![CleanupPreviewItem {
+            path: "/data/metrics/old_data.db".to_string(),
+            size_mb: 256,
+            age: "45d".to_string(),
+        }])
     }
 
-    pub fn perform_cleanup(&self, cleanup_type: Option<&crate::cli::advanced_monitoring::CleanupType>, older_than: Option<&str>) -> Result<CleanupResult> {
+    pub fn perform_cleanup(
+        &self,
+        cleanup_type: Option<&crate::cli::advanced_monitoring::CleanupType>,
+        older_than: Option<&str>,
+    ) -> Result<CleanupResult> {
         Ok(CleanupResult {
             deleted_count: 5,
             freed_space_mb: 1024,
@@ -1791,7 +1937,12 @@ impl AdvancedMonitoringSystem {
         })
     }
 
-    pub fn compact_data(&self, level: Option<u32>, start: Option<&str>, end: Option<&str>) -> Result<CompactionResult> {
+    pub fn compact_data(
+        &self,
+        level: Option<u32>,
+        start: Option<&str>,
+        end: Option<&str>,
+    ) -> Result<CompactionResult> {
         Ok(CompactionResult {
             processed_blocks: 100,
             space_saved_mb: 512,
@@ -1800,7 +1951,11 @@ impl AdvancedMonitoringSystem {
     }
 
     // Test methods
-    pub async fn test_component_config(&self, component: &str, config_file: Option<&std::path::Path>) -> Result<TestResult> {
+    pub async fn test_component_config(
+        &self,
+        _component: &str,
+        _config_file: Option<&std::path::Path>,
+    ) -> Result<TestResult> {
         Ok(TestResult {
             success: true,
             error: None,
@@ -1812,7 +1967,10 @@ impl AdvancedMonitoringSystem {
         })
     }
 
-    pub async fn test_full_config(&self, config_file: Option<&std::path::Path>) -> Result<TestResult> {
+    pub async fn test_full_config(
+        &self,
+        _config_file: Option<&std::path::Path>,
+    ) -> Result<TestResult> {
         Ok(TestResult {
             success: true,
             error: None,
@@ -1839,7 +1997,11 @@ impl AdvancedMonitoringSystem {
         Ok(())
     }
 
-    pub fn test_alert_rules_file(&self, file: &std::path::Path, data: Option<&std::path::Path>) -> Result<TestResult> {
+    pub fn test_alert_rules_file(
+        &self,
+        file: &std::path::Path,
+        data: Option<&std::path::Path>,
+    ) -> Result<TestResult> {
         Ok(TestResult {
             success: true,
             error: None,
@@ -1851,7 +2013,11 @@ impl AdvancedMonitoringSystem {
         })
     }
 
-    pub fn test_notification_channel(&self, receiver: &str, message: Option<&str>) -> Result<TestResult> {
+    pub fn test_notification_channel(
+        &self,
+        receiver: &str,
+        message: Option<&str>,
+    ) -> Result<TestResult> {
         Ok(TestResult {
             success: true,
             error: None,
@@ -1863,7 +2029,12 @@ impl AdvancedMonitoringSystem {
         })
     }
 
-    pub fn run_load_test(&self, concurrency: u32, duration: u64, rate: f64) -> Result<LoadTestResult> {
+    pub fn run_load_test(
+        &self,
+        concurrency: u32,
+        duration: u64,
+        rate: f64,
+    ) -> Result<LoadTestResult> {
         Ok(LoadTestResult {
             total_requests: (duration * rate as u64),
             successful_requests: (duration * rate as u64 * 95 / 100),
@@ -1876,28 +2047,33 @@ impl AdvancedMonitoringSystem {
     }
 
     // Recording rules methods
-    pub async fn list_recording_rules(&self, group: Option<&str>) -> Result<Vec<RecordingRuleInfo>> {
-        Ok(vec![
-            RecordingRuleInfo {
-                name: "inferno:response_time_p95".to_string(),
-                group: "inferno.rules".to_string(),
-                interval: 30,
-                expression: "histogram_quantile(0.95, response_time_bucket)".to_string(),
-            }
-        ])
+    pub async fn list_recording_rules(
+        &self,
+        _group: Option<&str>,
+    ) -> Result<Vec<RecordingRuleInfo>> {
+        Ok(vec![RecordingRuleInfo {
+            name: "inferno:response_time_p95".to_string(),
+            group: "inferno.rules".to_string(),
+            interval: 30,
+            expression: "histogram_quantile(0.95, response_time_bucket)".to_string(),
+        }])
     }
 
-    pub async fn add_recording_rule(&self, file: &PathBuf, group: Option<&str>) -> Result<String> {
+    pub async fn add_recording_rule(&self, file: &PathBuf, _group: Option<&str>) -> Result<String> {
         info!("Adding recording rule from: {}", file.display());
         Ok("recording-rule-123".to_string())
     }
 
-    pub async fn remove_recording_rule(&self, name: &str, group: Option<&str>) -> Result<()> {
+    pub async fn remove_recording_rule(&self, name: &str, _group: Option<&str>) -> Result<()> {
         info!("Removing recording rule: {}", name);
         Ok(())
     }
 
-    pub fn test_recording_rule(&self, file: &PathBuf, duration: Option<&str>) -> Result<TestResult> {
+    pub fn test_recording_rule(
+        &self,
+        file: &PathBuf,
+        duration: Option<&str>,
+    ) -> Result<TestResult> {
         Ok(TestResult {
             success: true,
             error: None,
@@ -1911,16 +2087,20 @@ impl AdvancedMonitoringSystem {
 
     // Remote write methods
     pub async fn list_remote_write_endpoints(&self) -> Result<Vec<RemoteWriteEndpoint>> {
-        Ok(vec![
-            RemoteWriteEndpoint {
-                name: "remote-storage".to_string(),
-                url: "https://remote.example.com/write".to_string(),
-                status: "active".to_string(),
-            }
-        ])
+        Ok(vec![RemoteWriteEndpoint {
+            name: "remote-storage".to_string(),
+            url: "https://remote.example.com/write".to_string(),
+            status: "active".to_string(),
+        }])
     }
 
-    pub fn add_remote_write_endpoint(&self, url: &str, name: Option<&str>, auth: Option<&str>, queue_config: Option<&std::path::Path>) -> Result<String> {
+    pub fn add_remote_write_endpoint(
+        &self,
+        url: &str,
+        name: Option<&str>,
+        auth: Option<&str>,
+        queue_config: Option<&std::path::Path>,
+    ) -> Result<String> {
         info!("Adding remote write endpoint: {}", url);
         Ok("endpoint-123".to_string())
     }
@@ -1943,19 +2123,23 @@ impl AdvancedMonitoringSystem {
     }
 
     // Silence methods
-    pub async fn list_silences(&self, expired: bool) -> Result<Vec<SilenceInfo>> {
-        Ok(vec![
-            SilenceInfo {
-                id: "silence-123".to_string(),
-                matcher: "alertname=HighResponseTime".to_string(),
-                expires_at: "2023-11-02T12:00:00Z".to_string(),
-                created_by: "admin".to_string(),
-                comment: "Maintenance window".to_string(),
-            }
-        ])
+    pub async fn list_silences(&self, _expired: bool) -> Result<Vec<SilenceInfo>> {
+        Ok(vec![SilenceInfo {
+            id: "silence-123".to_string(),
+            matcher: "alertname=HighResponseTime".to_string(),
+            expires_at: "2023-11-02T12:00:00Z".to_string(),
+            created_by: "admin".to_string(),
+            comment: "Maintenance window".to_string(),
+        }])
     }
 
-    pub fn create_silence(&self, matcher: &str, duration: &str, comment: Option<&str>, created_by: Option<&str>) -> Result<String> {
+    pub fn create_silence(
+        &self,
+        matcher: &str,
+        duration: &str,
+        comment: Option<&str>,
+        created_by: Option<&str>,
+    ) -> Result<String> {
         info!("Creating silence for: {}", matcher);
         Ok("silence-456".to_string())
     }
@@ -1988,7 +2172,10 @@ pub struct MetricsCollector {
 }
 
 impl MetricsCollector {
-    pub fn new(config: &MetricsCollectionConfig, prometheus_client: Arc<PrometheusClient>) -> Result<Self> {
+    pub fn new(
+        config: &MetricsCollectionConfig,
+        prometheus_client: Arc<PrometheusClient>,
+    ) -> Result<Self> {
         Ok(Self {
             config: config.clone(),
             prometheus_client,
@@ -2017,7 +2204,9 @@ impl MetricsCollector {
             while *running.read().await {
                 interval.tick().await;
 
-                if let Err(e) = Self::collect_metrics(&config, &prometheus_client, &custom_metrics).await {
+                if let Err(e) =
+                    Self::collect_metrics(&config, &prometheus_client, &custom_metrics).await
+                {
                     error!("Failed to collect metrics: {}", e);
                 }
             }
@@ -2051,7 +2240,7 @@ impl MetricsCollector {
     }
 
     async fn collect_metrics<'a>(
-        config: &'a MetricsCollectionConfig,
+        _config: &'a MetricsCollectionConfig,
         prometheus_client: &'a PrometheusClient,
         custom_metrics: &'a Arc<RwLock<HashMap<String, CustomMetricDefinition>>>,
     ) -> Result<()> {
@@ -2112,7 +2301,9 @@ impl AlertManager {
             loop {
                 interval.tick().await;
 
-                if let Err(e) = Self::evaluate_alerts(&alert_rules, &active_alerts, &alert_sender).await {
+                if let Err(e) =
+                    Self::evaluate_alerts(&alert_rules, &active_alerts, &alert_sender).await
+                {
                     error!("Failed to evaluate alerts: {}", e);
                 }
             }
@@ -2124,7 +2315,9 @@ impl AlertManager {
 
         tokio::spawn(async move {
             while let Ok(alert) = alert_receiver.recv().await {
-                if let Err(e) = Self::handle_alert_notification(&alert, &notification_channels).await {
+                if let Err(e) =
+                    Self::handle_alert_notification(&alert, &notification_channels).await
+                {
                     error!("Failed to send alert notification: {}", e);
                 }
             }
@@ -2283,7 +2476,10 @@ impl DashboardManager {
         dashboards: &Arc<RwLock<HashMap<String, DashboardDefinition>>>,
     ) {
         // Mock implementation - real implementation would use file system watcher
-        info!("Watching dashboard directory: {}", config.directory.display());
+        info!(
+            "Watching dashboard directory: {}",
+            config.directory.display()
+        );
     }
 
     async fn import_dashboards(
@@ -2375,10 +2571,12 @@ impl PrometheusClient {
         })
     }
 
+    #[cfg(feature = "reqwest")]
     pub async fn query(&self, query: &str) -> Result<MetricQueryResult> {
         let url = format!("{}/api/v1/query", self.config.endpoint);
 
-        let response = self.client
+        let response = self
+            .client
             .get(&url)
             .query(&[("query", query)])
             .send()
@@ -2393,10 +2591,22 @@ impl PrometheusClient {
         })
     }
 
-    pub async fn query_range(&self, query: &str, start: DateTime<Utc>, end: DateTime<Utc>) -> Result<MetricQueryResult> {
+    #[cfg(not(feature = "reqwest"))]
+    pub async fn query(&self, _query: &str) -> Result<MetricQueryResult> {
+        Err(anyhow::anyhow!("HTTP client support not enabled. Compile with --features reqwest"))
+    }
+
+    #[cfg(feature = "reqwest")]
+    pub async fn query_range(
+        &self,
+        query: &str,
+        start: DateTime<Utc>,
+        end: DateTime<Utc>,
+    ) -> Result<MetricQueryResult> {
         let url = format!("{}/api/v1/query_range", self.config.endpoint);
 
-        let response = self.client
+        let response = self
+            .client
             .get(&url)
             .query(&[
                 ("query", query),
@@ -2415,6 +2625,17 @@ impl PrometheusClient {
         })
     }
 
+    #[cfg(not(feature = "reqwest"))]
+    pub async fn query_range(
+        &self,
+        _query: &str,
+        _start: DateTime<Utc>,
+        _end: DateTime<Utc>,
+    ) -> Result<MetricQueryResult> {
+        Err(anyhow::anyhow!("HTTP client support not enabled. Compile with --features reqwest"))
+    }
+
+    #[cfg(feature = "reqwest")]
     pub async fn push_metrics(&self, metrics: Vec<Metric>) -> Result<()> {
         if let Some(push_gateway) = &self.config.push_gateway {
             let url = format!("{}/metrics/job/inferno", push_gateway);
@@ -2432,6 +2653,13 @@ impl PrometheusClient {
         Ok(())
     }
 
+    #[cfg(not(feature = "reqwest"))]
+    pub async fn push_metrics(&self, _metrics: Vec<Metric>) -> Result<()> {
+        warn!("HTTP client support not enabled - metrics push skipped");
+        Ok(())
+    }
+
+    #[cfg(feature = "reqwest")]
     pub async fn is_healthy(&self) -> bool {
         let url = format!("{}/api/v1/query", self.config.endpoint);
 
@@ -2439,6 +2667,12 @@ impl PrometheusClient {
             Ok(response) => response.status().is_success(),
             Err(_) => false,
         }
+    }
+
+    #[cfg(not(feature = "reqwest"))]
+    pub async fn is_healthy(&self) -> bool {
+        warn!("HTTP client support not enabled - health check skipped");
+        false
     }
 }
 
@@ -2480,25 +2714,23 @@ async fn collect_system_metrics() -> Result<Vec<Metric>> {
 
 async fn collect_application_metrics() -> Result<Vec<Metric>> {
     // Mock application metrics collection
-    Ok(vec![
-        Metric {
-            name: "inference_requests_total".to_string(),
-            value: 1250.0,
-            labels: HashMap::from([("model".to_string(), "llama-7b".to_string())]),
-            timestamp: Utc::now(),
-            metric_type: MetricType::Counter,
-        },
-    ])
+    Ok(vec![Metric {
+        name: "inference_requests_total".to_string(),
+        value: 1250.0,
+        labels: HashMap::from([("model".to_string(), "llama-7b".to_string())]),
+        timestamp: Utc::now(),
+        metric_type: MetricType::Counter,
+    }])
 }
 
 async fn collect_custom_metrics(
-    custom_metrics: &Arc<RwLock<HashMap<String, CustomMetricDefinition>>>,
+    _custom_metrics: &Arc<RwLock<HashMap<String, CustomMetricDefinition>>>,
 ) -> Result<Vec<Metric>> {
     // Mock custom metrics collection
     Ok(vec![])
 }
 
-async fn evaluate_alert_rule(rule: &AlertRule) -> Result<bool> {
+async fn evaluate_alert_rule(_rule: &AlertRule) -> Result<bool> {
     // Mock alert rule evaluation
     Ok(false)
 }
@@ -2515,7 +2747,10 @@ async fn send_notification(channel: &NotificationChannel, alert: &Alert) -> Resu
             info!("Sending webhook notification for alert: {}", alert.name);
         }
         _ => {
-            info!("Sending {:?} notification for alert: {}", channel.channel_type, alert.name);
+            info!(
+                "Sending {:?} notification for alert: {}",
+                channel.channel_type, alert.name
+            );
         }
     }
     Ok(())
@@ -2525,7 +2760,10 @@ fn create_exporter(target: &ExportTarget) -> Result<Arc<dyn MetricsExporter>> {
     match target.target_type {
         ExportTargetType::File => Ok(Arc::new(FileExporter::new(&target.config)?)),
         ExportTargetType::Http => Ok(Arc::new(HttpExporter::new(&target.config)?)),
-        _ => Err(anyhow::anyhow!("Unsupported export target type: {:?}", target.target_type)),
+        _ => Err(anyhow::anyhow!(
+            "Unsupported export target type: {:?}",
+            target.target_type
+        )),
     }
 }
 
@@ -2536,14 +2774,16 @@ fn format_metrics_for_prometheus(metrics: Vec<Metric>) -> String {
         let labels = if metric.labels.is_empty() {
             String::new()
         } else {
-            let label_pairs: Vec<String> = metric.labels
+            let label_pairs: Vec<String> = metric
+                .labels
                 .iter()
                 .map(|(k, v)| format!("{}=\"{}\"", k, v))
                 .collect();
             format!("{{{}}}", label_pairs.join(","))
         };
 
-        output.push_str(&format!("{}{} {} {}\n",
+        output.push_str(&format!(
+            "{}{} {} {}\n",
             metric.name,
             labels,
             metric.value,
@@ -2561,16 +2801,26 @@ struct FileExporter {
 
 impl FileExporter {
     fn new(config: &ExportTargetConfig) -> Result<Self> {
-        Ok(Self { config: config.clone() })
+        Ok(Self {
+            config: config.clone(),
+        })
     }
 }
 
 #[async_trait::async_trait]
 impl MetricsExporter for FileExporter {
-    async fn start(&self) -> Result<()> { Ok(()) }
-    async fn stop(&self) -> Result<()> { Ok(()) }
-    async fn export(&self, _metrics: Vec<Metric>) -> Result<()> { Ok(()) }
-    async fn is_healthy(&self) -> bool { true }
+    async fn start(&self) -> Result<()> {
+        Ok(())
+    }
+    async fn stop(&self) -> Result<()> {
+        Ok(())
+    }
+    async fn export(&self, _metrics: Vec<Metric>) -> Result<()> {
+        Ok(())
+    }
+    async fn is_healthy(&self) -> bool {
+        true
+    }
 }
 
 struct HttpExporter {
@@ -2579,16 +2829,26 @@ struct HttpExporter {
 
 impl HttpExporter {
     fn new(config: &ExportTargetConfig) -> Result<Self> {
-        Ok(Self { config: config.clone() })
+        Ok(Self {
+            config: config.clone(),
+        })
     }
 }
 
 #[async_trait::async_trait]
 impl MetricsExporter for HttpExporter {
-    async fn start(&self) -> Result<()> { Ok(()) }
-    async fn stop(&self) -> Result<()> { Ok(()) }
-    async fn export(&self, _metrics: Vec<Metric>) -> Result<()> { Ok(()) }
-    async fn is_healthy(&self) -> bool { true }
+    async fn start(&self) -> Result<()> {
+        Ok(())
+    }
+    async fn stop(&self) -> Result<()> {
+        Ok(())
+    }
+    async fn export(&self, _metrics: Vec<Metric>) -> Result<()> {
+        Ok(())
+    }
+    async fn is_healthy(&self) -> bool {
+        true
+    }
 }
 
 // Implement conversion from MonitoringConfig to AdvancedMonitoringConfig

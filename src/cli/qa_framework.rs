@@ -1,28 +1,20 @@
-use crate::qa_framework::{
-    QAFrameworkSystem, QAFrameworkConfig, TestCase, TestRun, TestType, TestPriority,
-    TestEnvironment, PerformanceTest, SecurityTest,
-    ChaosTest, LoadProfile, SecurityTestType, LoadGenerationStrategy,
-    TestRunner, TestExecutionMode,
-    TestCategory, TestData, TestDataType, DataSource, DataGenerationStrategy,
-    DataCleanupStrategy, TestMetadata, RunTrigger, RunConfiguration,
-    TestSelection, TestFilters, TestExclusions, RunStatus, RunStatistics,
-    RetryPolicy, MLModelTest, MLTestType,
-    ChaosFaultType, ChaosTarget,
-    PerformanceMetric,
-};
 use crate::config::Config;
+use crate::qa_framework::{
+    ChaosFaultType, ChaosTarget, ChaosTest, DataCleanupStrategy, DataGenerationStrategy,
+    DataSource, LoadGenerationStrategy, LoadProfile, MLModelTest, MLTestType, PerformanceMetric,
+    PerformanceTest, QAFrameworkConfig, QAFrameworkSystem, RetryPolicy, RunConfiguration,
+    RunStatistics, RunStatus, RunTrigger, SecurityTest, SecurityTestType, TestCase, TestCategory,
+    TestData, TestDataType, TestEnvironment, TestExclusions, TestExecutionMode, TestFilters,
+    TestMetadata, TestPriority, TestRun, TestRunner, TestSelection, TestType,
+};
 use anyhow::Result;
 use clap::{Args, Subcommand};
 use serde_json;
 use serde_yaml;
-use std::path::PathBuf;
 use std::collections::HashMap;
+use std::path::PathBuf;
 use tokio::time::Duration;
 use uuid::Uuid;
-
-
-
-
 
 #[derive(Args)]
 pub struct QAFrameworkArgs {
@@ -554,38 +546,88 @@ pub async fn execute(args: QAFrameworkArgs, _config: &Config) -> Result<()> {
     let qa_system = QAFrameworkSystem::new(qa_config);
 
     match args.command {
-        QAFrameworkCommands::Init { output, enable_all, timeout } => {
-            handle_init(&qa_system, output, enable_all, timeout).await
-        }
+        QAFrameworkCommands::Init {
+            output,
+            enable_all,
+            timeout,
+        } => handle_init(&qa_system, output, enable_all, timeout).await,
         QAFrameworkCommands::CreateTest {
-            name, description, test_type, priority, environment,
-            runner, timeout, tags, config_file
+            name,
+            description,
+            test_type,
+            priority,
+            environment,
+            runner,
+            timeout,
+            tags,
+            config_file,
         } => {
             handle_create_test(
-                &qa_system, name, description, test_type, priority,
-                environment, runner, timeout, tags, config_file
-            ).await
+                &qa_system,
+                name,
+                description,
+                test_type,
+                priority,
+                environment,
+                runner,
+                timeout,
+                tags,
+                config_file,
+            )
+            .await
         }
         QAFrameworkCommands::Run {
-            test, name, environment, mode, parallel, tags,
-            test_type, fail_fast, detailed_report
+            test,
+            name,
+            environment,
+            mode,
+            parallel,
+            tags,
+            test_type,
+            fail_fast,
+            detailed_report,
         } => {
             handle_run_tests(
-                &qa_system, test, name, environment, mode, parallel,
-                tags, test_type, fail_fast, detailed_report
-            ).await
+                &qa_system,
+                test,
+                name,
+                environment,
+                mode,
+                parallel,
+                tags,
+                test_type,
+                fail_fast,
+                detailed_report,
+            )
+            .await
         }
-        QAFrameworkCommands::List { test_type, environment, status, detailed, format } => {
-            handle_list_tests(&qa_system, test_type, environment, status, detailed, format).await
-        }
+        QAFrameworkCommands::List {
+            test_type,
+            environment,
+            status,
+            detailed,
+            format,
+        } => handle_list_tests(&qa_system, test_type, environment, status, detailed, format).await,
         QAFrameworkCommands::Report {
-            report_type, run_id, output, format, include_history,
-            include_performance, include_security
+            report_type,
+            run_id,
+            output,
+            format,
+            include_history,
+            include_performance,
+            include_security,
         } => {
             handle_generate_report(
-                &qa_system, report_type, run_id, output, format,
-                include_history, include_performance, include_security
-            ).await
+                &qa_system,
+                report_type,
+                run_id,
+                output,
+                format,
+                include_history,
+                include_performance,
+                include_security,
+            )
+            .await
         }
         QAFrameworkCommands::Performance { command } => {
             handle_performance_commands(&qa_system, command).await
@@ -596,9 +638,7 @@ pub async fn execute(args: QAFrameworkArgs, _config: &Config) -> Result<()> {
         QAFrameworkCommands::MLModel { command } => {
             handle_ml_model_commands(&qa_system, command).await
         }
-        QAFrameworkCommands::Chaos { command } => {
-            handle_chaos_commands(&qa_system, command).await
-        }
+        QAFrameworkCommands::Chaos { command } => handle_chaos_commands(&qa_system, command).await,
         QAFrameworkCommands::QualityGates { command } => {
             handle_quality_gate_commands(&qa_system, command).await
         }
@@ -611,9 +651,11 @@ pub async fn execute(args: QAFrameworkArgs, _config: &Config) -> Result<()> {
         QAFrameworkCommands::Dashboard { command } => {
             handle_dashboard_commands(&qa_system, command).await
         }
-        QAFrameworkCommands::Status { detailed, metrics, active_runs } => {
-            handle_status(&qa_system, detailed, metrics, active_runs).await
-        }
+        QAFrameworkCommands::Status {
+            detailed,
+            metrics,
+            active_runs,
+        } => handle_status(&qa_system, detailed, metrics, active_runs).await,
     }
 }
 
@@ -693,14 +735,14 @@ async fn handle_create_test(
 
     let environment = if let Some(env) = environment {
         match env.to_lowercase().as_str() {
-            "development" | "dev" => TestEnvironment::Development(),
-            "staging" => TestEnvironment::Staging(),
-            "production" | "prod" => TestEnvironment::Production(),
-            "testing" | "test" => TestEnvironment::Testing(),
-            _ => TestEnvironment::Testing(),
+            "development" | "dev" => TestEnvironment::development(),
+            "staging" => TestEnvironment::staging(),
+            "production" | "prod" => TestEnvironment::production(),
+            "testing" | "test" => TestEnvironment::testing(),
+            _ => TestEnvironment::testing(),
         }
     } else {
-        TestEnvironment::Testing()
+        TestEnvironment::testing()
     };
 
     let runner = if let Some(r) = runner {
@@ -803,10 +845,10 @@ async fn handle_run_tests(
 
     let target_environment = if let Some(env) = environment {
         match env.to_lowercase().as_str() {
-            "development" | "dev" => Some(TestEnvironment::Development()),
-            "staging" => Some(TestEnvironment::Staging()),
-            "production" | "prod" => Some(TestEnvironment::Production()),
-            "testing" | "test" => Some(TestEnvironment::Testing()),
+            "development" | "dev" => Some(TestEnvironment::development()),
+            "staging" => Some(TestEnvironment::staging()),
+            "production" | "prod" => Some(TestEnvironment::production()),
+            "testing" | "test" => Some(TestEnvironment::testing()),
             _ => None,
         }
     } else {
@@ -836,10 +878,11 @@ async fn handle_run_tests(
 
     let test_run = TestRun {
         run_id: Uuid::new_v4(),
-        name: name.unwrap_or_else(|| format!("Test Run {}", chrono::Utc::now().format("%Y%m%d_%H%M%S"))),
+        name: name
+            .unwrap_or_else(|| format!("Test Run {}", chrono::Utc::now().format("%Y%m%d_%H%M%S"))),
         description: "CLI-generated test run".to_string(),
         trigger: RunTrigger::Manual,
-        environment: target_environment.unwrap_or_else(|| TestEnvironment::Testing()),
+        environment: target_environment.unwrap_or_else(|| TestEnvironment::testing()),
         configuration: RunConfiguration {
             parallel_execution: execution_mode == TestExecutionMode::Parallel,
             max_concurrency: parallel.unwrap_or(1),
@@ -974,18 +1017,29 @@ async fn handle_performance_commands(
     command: PerformanceCommands,
 ) -> Result<()> {
     match command {
-        PerformanceCommands::Create { name, target, load_profile, duration, users, rps, ramp_up, thresholds: _thresholds } => {
+        PerformanceCommands::Create {
+            name,
+            target,
+            load_profile,
+            duration,
+            users,
+            rps,
+            ramp_up,
+            thresholds: _thresholds,
+        } => {
             let load_profile_type = match load_profile.to_lowercase().as_str() {
-                "constant" => LoadProfile::Constant { rps: rps.unwrap_or(10) },
+                "constant" => LoadProfile::Constant {
+                    rps: rps.unwrap_or(10),
+                },
                 "ramp" => LoadProfile::Ramp {
                     start_rps: 1,
                     end_rps: rps.unwrap_or(100),
-                    duration: Duration::from_secs(ramp_up.unwrap_or(60))
+                    duration: Duration::from_secs(ramp_up.unwrap_or(60)),
                 },
                 "spike" => LoadProfile::Spike {
                     base_rps: 10,
                     spike_rps: rps.unwrap_or(200),
-                    spike_duration: Duration::from_secs(30)
+                    spike_duration: Duration::from_secs(30),
                 },
                 _ => LoadProfile::Constant { rps: 10 },
             };
@@ -1010,15 +1064,26 @@ async fn handle_performance_commands(
 
             let result = qa_system.run_performance_test(perf_test).await?;
             println!("Performance test completed:");
-            println!("- Average Response Time: {:.2}ms", result.metrics.average_response_time.as_millis());
+            println!(
+                "- Average Response Time: {:.2}ms",
+                result.metrics.average_response_time.as_millis()
+            );
             println!("- Total Requests: {}", result.metrics.total_requests);
             println!("- Error Rate: {:.2}%", result.metrics.error_rate);
         }
-        PerformanceCommands::Run { test_id, duration: _duration, live_metrics: _live_metrics } => {
+        PerformanceCommands::Run {
+            test_id,
+            duration: _duration,
+            live_metrics: _live_metrics,
+        } => {
             println!("Running performance test: {}", test_id);
             // Implementation would retrieve and execute the test
         }
-        PerformanceCommands::Results { test_id: _test_id, date_range: _date_range, trends: _trends } => {
+        PerformanceCommands::Results {
+            test_id: _test_id,
+            date_range: _date_range,
+            trends: _trends,
+        } => {
             println!("Performance test results:");
             // Implementation would query and display results
         }
@@ -1032,7 +1097,13 @@ async fn handle_security_commands(
     command: SecurityCommands,
 ) -> Result<()> {
     match command {
-        SecurityCommands::Create { name, test_type, target, scanner_config: _scanner_config, scripts } => {
+        SecurityCommands::Create {
+            name,
+            test_type,
+            target,
+            scanner_config: _scanner_config,
+            scripts,
+        } => {
             let security_type = match test_type.to_lowercase().as_str() {
                 "vulnerability" => SecurityTestType::VulnerabilityScanning,
                 "penetration" => SecurityTestType::PenetrationTesting,
@@ -1059,14 +1130,29 @@ async fn handle_security_commands(
             let result = qa_system.run_security_test(security_test).await?;
             println!("Security test completed:");
             println!("- Vulnerabilities Found: {}", result.vulnerabilities.len());
-            println!("- High Severity: {}", result.vulnerabilities.iter().filter(|v| matches!(v.severity, crate::qa_framework::SeverityLevel::Critical)).count());
+            println!(
+                "- High Severity: {}",
+                result
+                    .vulnerabilities
+                    .iter()
+                    .filter(|v| matches!(v.severity, crate::qa_framework::SeverityLevel::Critical))
+                    .count()
+            );
             println!("- Compliance Score: {:.2}%", result.compliance_score);
         }
-        SecurityCommands::Scan { test_id, intensity: _intensity, detailed: _detailed } => {
+        SecurityCommands::Scan {
+            test_id,
+            intensity: _intensity,
+            detailed: _detailed,
+        } => {
             println!("Running security scan: {}", test_id);
             // Implementation would execute the security scan
         }
-        SecurityCommands::Vulnerabilities { severity: _severity, status: _status, export: _export } => {
+        SecurityCommands::Vulnerabilities {
+            severity: _severity,
+            status: _status,
+            export: _export,
+        } => {
             println!("Security vulnerabilities:");
             // Implementation would list vulnerabilities
         }
@@ -1080,7 +1166,13 @@ async fn handle_ml_model_commands(
     command: MLModelCommands,
 ) -> Result<()> {
     match command {
-        MLModelCommands::Create { name, model_path, test_type, dataset, thresholds: _thresholds } => {
+        MLModelCommands::Create {
+            name,
+            model_path,
+            test_type,
+            dataset,
+            thresholds: _thresholds,
+        } => {
             let ml_test_type = match test_type.to_lowercase().as_str() {
                 "accuracy" => MLTestType::AccuracyTesting,
                 "performance" => MLTestType::PerformanceTesting,
@@ -1107,14 +1199,29 @@ async fn handle_ml_model_commands(
             let result = qa_system.run_ml_model_test(ml_test).await?;
             println!("ML model test completed:");
             println!("- Accuracy: {:.2}%", result.accuracy_score * 100.0);
-            println!("- Performance Score: {:.2}", result.performance_metrics.get("score").unwrap_or(&0.0));
-            println!("- Fairness Score: {:.2}", result.fairness_metrics.get("score").unwrap_or(&0.0));
+            println!(
+                "- Performance Score: {:.2}",
+                result.performance_metrics.get("score").unwrap_or(&0.0)
+            );
+            println!(
+                "- Fairness Score: {:.2}",
+                result.fairness_metrics.get("score").unwrap_or(&0.0)
+            );
         }
-        MLModelCommands::Validate { test_id, dataset: _dataset, fairness: _fairness, robustness: _robustness } => {
+        MLModelCommands::Validate {
+            test_id,
+            dataset: _dataset,
+            fairness: _fairness,
+            robustness: _robustness,
+        } => {
             println!("Validating ML model: {}", test_id);
             // Implementation would run validation
         }
-        MLModelCommands::Compare { model_a, model_b, metrics: _metrics } => {
+        MLModelCommands::Compare {
+            model_a,
+            model_b,
+            metrics: _metrics,
+        } => {
             println!("Comparing models: {} vs {}", model_a, model_b);
             // Implementation would compare models
         }
@@ -1128,7 +1235,14 @@ async fn handle_chaos_commands(
     command: ChaosCommands,
 ) -> Result<()> {
     match command {
-        ChaosCommands::Create { name, fault_type, target, intensity: _intensity, duration, verify_recovery } => {
+        ChaosCommands::Create {
+            name,
+            fault_type,
+            target,
+            intensity: _intensity,
+            duration,
+            verify_recovery,
+        } => {
             let chaos_fault_type = match fault_type.to_lowercase().as_str() {
                 "network_latency" => ChaosFaultType::NetworkLatency,
                 "network_partition" => ChaosFaultType::NetworkPartition,
@@ -1164,16 +1278,27 @@ async fn handle_chaos_commands(
             let result = qa_system.run_chaos_test(chaos_test).await?;
             println!("Chaos experiment completed:");
             println!("- Fault Injected: {}", result.fault_injected);
-            println!("- System Recovery: {}", if result.system_recovered { "Yes" } else { "No" });
+            println!(
+                "- System Recovery: {}",
+                if result.system_recovered { "Yes" } else { "No" }
+            );
             println!("- Recovery Time: {:?}", result.recovery_time);
         }
-        ChaosCommands::Run { test_id, dry_run, monitor: _monitor } => {
+        ChaosCommands::Run {
+            test_id,
+            dry_run,
+            monitor: _monitor,
+        } => {
             println!("Running chaos experiment: {}", test_id);
             if dry_run {
                 println!("Running in dry-run mode...");
             }
         }
-        ChaosCommands::List { fault_type: _fault_type, target: _target, results: _results } => {
+        ChaosCommands::List {
+            fault_type: _fault_type,
+            target: _target,
+            results: _results,
+        } => {
             println!("Chaos experiments:");
             // Implementation would list experiments
         }
@@ -1187,15 +1312,26 @@ async fn handle_quality_gate_commands(
     command: QualityGateCommands,
 ) -> Result<()> {
     match command {
-        QualityGateCommands::Create { name, thresholds: _thresholds, criteria: _criteria } => {
+        QualityGateCommands::Create {
+            name,
+            thresholds: _thresholds,
+            criteria: _criteria,
+        } => {
             println!("Creating quality gate: {}", name);
             // Implementation would create quality gate
         }
-        QualityGateCommands::Evaluate { gate_id, run_id, override_thresholds: _override_thresholds } => {
+        QualityGateCommands::Evaluate {
+            gate_id,
+            run_id,
+            override_thresholds: _override_thresholds,
+        } => {
             println!("Evaluating quality gate: {} for run: {}", gate_id, run_id);
             // Implementation would evaluate gate
         }
-        QualityGateCommands::List { status: _status, history: _history } => {
+        QualityGateCommands::List {
+            status: _status,
+            history: _history,
+        } => {
             println!("Quality gates:");
             // Implementation would list gates
         }
@@ -1209,15 +1345,25 @@ async fn handle_automation_commands(
     command: AutomationCommands,
 ) -> Result<()> {
     match command {
-        AutomationCommands::Configure { level: _level, triggers: _triggers, schedule: _schedule } => {
+        AutomationCommands::Configure {
+            level: _level,
+            triggers: _triggers,
+            schedule: _schedule,
+        } => {
             println!("Configuring test automation...");
             // Implementation would configure automation
         }
-        AutomationCommands::Status { scheduled: _scheduled, history: _history } => {
+        AutomationCommands::Status {
+            scheduled: _scheduled,
+            history: _history,
+        } => {
             println!("Automation status:");
             // Implementation would show status
         }
-        AutomationCommands::Trigger { automation_id, parameters: _parameters } => {
+        AutomationCommands::Trigger {
+            automation_id,
+            parameters: _parameters,
+        } => {
             println!("Triggering automation: {}", automation_id);
             // Implementation would trigger automation
         }
@@ -1231,15 +1377,27 @@ async fn handle_analytics_commands(
     command: AnalyticsCommands,
 ) -> Result<()> {
     match command {
-        AnalyticsCommands::Generate { analytics_type, time_range: _time_range, predictions: _predictions, export: _export } => {
+        AnalyticsCommands::Generate {
+            analytics_type,
+            time_range: _time_range,
+            predictions: _predictions,
+            export: _export,
+        } => {
             println!("Generating analytics: {}", analytics_type);
             // Implementation would generate analytics
         }
-        AnalyticsCommands::Trends { metric, period: _period, forecast: _forecast } => {
+        AnalyticsCommands::Trends {
+            metric,
+            period: _period,
+            forecast: _forecast,
+        } => {
             println!("Showing trends for: {}", metric);
             // Implementation would show trends
         }
-        AnalyticsCommands::Insights { scope: _scope, recommendations: _recommendations } => {
+        AnalyticsCommands::Insights {
+            scope: _scope,
+            recommendations: _recommendations,
+        } => {
             println!("Generating insights...");
             // Implementation would generate insights
         }
@@ -1253,16 +1411,28 @@ async fn handle_dashboard_commands(
     command: DashboardCommands,
 ) -> Result<()> {
     match command {
-        DashboardCommands::Start { port, realtime: _realtime, config: _config } => {
+        DashboardCommands::Start {
+            port,
+            realtime: _realtime,
+            config: _config,
+        } => {
             let dashboard_port = port.unwrap_or(3000);
             println!("Starting QA dashboard on port: {}", dashboard_port);
             // Implementation would start dashboard server
         }
-        DashboardCommands::Snapshot { format: _format, metrics: _metrics, output: _output } => {
+        DashboardCommands::Snapshot {
+            format: _format,
+            metrics: _metrics,
+            output: _output,
+        } => {
             println!("Generating dashboard snapshot...");
             // Implementation would generate snapshot
         }
-        DashboardCommands::Configure { layout: _layout, widgets: _widgets, theme: _theme } => {
+        DashboardCommands::Configure {
+            layout: _layout,
+            widgets: _widgets,
+            theme: _theme,
+        } => {
             println!("Configuring dashboard...");
             // Implementation would configure dashboard
         }

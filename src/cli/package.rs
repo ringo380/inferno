@@ -1,6 +1,6 @@
-use crate::config::Config;
-use crate::marketplace::{ModelMarketplace, MarketplaceConfig};
 use crate::cli::enhanced_parser::execute_with_prerequisites;
+use crate::config::Config;
+use crate::marketplace::{MarketplaceConfig, ModelMarketplace};
 use anyhow::{Context, Result};
 use clap::{Args, Subcommand};
 use std::path::PathBuf;
@@ -217,29 +217,45 @@ pub async fn handle_package_command(args: PackageArgs) -> Result<()> {
     let marketplace = ModelMarketplace::new(marketplace_config)?;
 
     match args.command {
-        PackageCommand::Install { package, no_deps, target: _, yes, auto_update } => {
-            handle_install(&marketplace, &package, !no_deps, yes, auto_update).await
-        }
+        PackageCommand::Install {
+            package,
+            no_deps,
+            target: _,
+            yes,
+            auto_update,
+        } => handle_install(&marketplace, &package, !no_deps, yes, auto_update).await,
 
-        PackageCommand::Remove { package, no_deps, yes, keep_config: _ } => {
-            handle_remove(&marketplace, &package, !no_deps, yes).await
-        }
+        PackageCommand::Remove {
+            package,
+            no_deps,
+            yes,
+            keep_config: _,
+        } => handle_remove(&marketplace, &package, !no_deps, yes).await,
 
-        PackageCommand::Search { query, repo, limit, detailed } => {
-            handle_search(&marketplace, &query, repo.as_deref(), limit, detailed).await
-        }
+        PackageCommand::Search {
+            query,
+            repo,
+            limit,
+            detailed,
+        } => handle_search(&marketplace, &query, repo.as_deref(), limit, detailed).await,
 
-        PackageCommand::Info { package, deps, detailed } => {
-            handle_info(&marketplace, &package, deps, detailed).await
-        }
+        PackageCommand::Info {
+            package,
+            deps,
+            detailed,
+        } => handle_info(&marketplace, &package, deps, detailed).await,
 
-        PackageCommand::List { filter, detailed, auto_only } => {
-            handle_list(&marketplace, filter.as_deref(), detailed, auto_only).await
-        }
+        PackageCommand::List {
+            filter,
+            detailed,
+            auto_only,
+        } => handle_list(&marketplace, filter.as_deref(), detailed, auto_only).await,
 
-        PackageCommand::Update { package, yes, check_only } => {
-            handle_update(&marketplace, package.as_deref(), yes, check_only).await
-        }
+        PackageCommand::Update {
+            package,
+            yes,
+            check_only,
+        } => handle_update(&marketplace, package.as_deref(), yes, check_only).await,
 
         PackageCommand::Upgrade { yes, dry_run } => {
             handle_upgrade(&marketplace, yes, dry_run).await
@@ -249,18 +265,25 @@ pub async fn handle_package_command(args: PackageArgs) -> Result<()> {
             handle_autoremove(&marketplace, yes, dry_run).await
         }
 
-        PackageCommand::Clean { all, packages, metadata } => {
-            handle_clean(&marketplace, all, packages, metadata).await
-        }
+        PackageCommand::Clean {
+            all,
+            packages,
+            metadata,
+        } => handle_clean(&marketplace, all, packages, metadata).await,
 
-        PackageCommand::History { package: _, limit: _ } => {
+        PackageCommand::History {
+            package: _,
+            limit: _,
+        } => {
             println!("Package history feature not yet implemented");
             Ok(())
         }
 
-        PackageCommand::Depends { package, reverse, tree } => {
-            handle_depends(&marketplace, &package, reverse, tree).await
-        }
+        PackageCommand::Depends {
+            package,
+            reverse,
+            tree,
+        } => handle_depends(&marketplace, &package, reverse, tree).await,
 
         PackageCommand::Check { package, deep, fix } => {
             handle_check(&marketplace, package.as_deref(), deep, fix).await
@@ -276,8 +299,16 @@ pub async fn handle_install_simple(args: InstallArgs) -> Result<()> {
         let marketplace_config = MarketplaceConfig::from_config(&config)?;
         let marketplace = ModelMarketplace::new(marketplace_config)?;
 
-        handle_install(&marketplace, &args.package, !args.no_deps, args.yes, args.auto_update).await
-    }).await
+        handle_install(
+            &marketplace,
+            &args.package,
+            !args.no_deps,
+            args.yes,
+            args.auto_update,
+        )
+        .await
+    })
+    .await
 }
 
 pub async fn handle_remove_simple(args: RemoveArgs) -> Result<()> {
@@ -294,8 +325,16 @@ pub async fn handle_search_simple(args: SearchArgs) -> Result<()> {
         let marketplace_config = MarketplaceConfig::from_config(&config)?;
         let marketplace = ModelMarketplace::new(marketplace_config)?;
 
-        handle_search(&marketplace, &args.query, args.repo.as_deref(), args.limit, false).await
-    }).await
+        handle_search(
+            &marketplace,
+            &args.query,
+            args.repo.as_deref(),
+            args.limit,
+            false,
+        )
+        .await
+    })
+    .await
 }
 
 pub async fn handle_list_simple(args: ListArgs) -> Result<()> {
@@ -369,7 +408,10 @@ async fn handle_install(
                 println!("\n💡 Try these troubleshooting steps:");
                 println!("   • Check package name: inferno search {}", package);
                 println!("   • Clean cache: inferno package clean --all");
-                println!("   • Check logs: INFERNO_LOG_LEVEL=debug inferno install {}", package);
+                println!(
+                    "   • Check logs: INFERNO_LOG_LEVEL=debug inferno install {}",
+                    package
+                );
             }
 
             return Err(e);
@@ -472,11 +514,15 @@ async fn handle_search(
             }
         }
     } else {
-        println!("{:<40} {:<20} {:<15} {:<10}", "PACKAGE", "PUBLISHER", "VERSION", "SIZE");
+        println!(
+            "{:<40} {:<20} {:<15} {:<10}",
+            "PACKAGE", "PUBLISHER", "VERSION", "SIZE"
+        );
         println!("{}", "-".repeat(85));
 
         for model in &results {
-            println!("{:<40} {:<20} {:<15} {:<10}",
+            println!(
+                "{:<40} {:<20} {:<15} {:<10}",
                 truncate(&model.name, 38),
                 truncate(&model.publisher, 18),
                 truncate(&model.version, 13),
@@ -528,12 +574,21 @@ async fn handle_info(
 
             if detailed {
                 println!("\nCompatibility:");
-                println!("  Minimum RAM: {:.1} GB", model.compatibility.minimum_ram_gb);
+                println!(
+                    "  Minimum RAM: {:.1} GB",
+                    model.compatibility.minimum_ram_gb
+                );
                 if let Some(vram) = model.compatibility.minimum_vram_gb {
                     println!("  Minimum VRAM: {:.1} GB", vram);
                 }
-                println!("  Platforms: {}", model.compatibility.supported_platforms.join(", "));
-                println!("  Backends: {}", model.compatibility.supported_backends.join(", "));
+                println!(
+                    "  Platforms: {}",
+                    model.compatibility.supported_platforms.join(", ")
+                );
+                println!(
+                    "  Backends: {}",
+                    model.compatibility.supported_backends.join(", ")
+                );
             }
         }
         Err(_e) => {
@@ -547,8 +602,14 @@ async fn handle_info(
                         println!("ID: {}", pkg.model_id);
                         println!("Version: {}", pkg.version);
                         println!("Repository: {}", pkg.repository);
-                        println!("Installed: {}", pkg.install_date.format("%Y-%m-%d %H:%M:%S"));
-                        println!("Auto-installed: {}", if pkg.auto_installed { "Yes" } else { "No" });
+                        println!(
+                            "Installed: {}",
+                            pkg.install_date.format("%Y-%m-%d %H:%M:%S")
+                        );
+                        println!(
+                            "Auto-installed: {}",
+                            if pkg.auto_installed { "Yes" } else { "No" }
+                        );
                         println!("Local path: {}", pkg.local_path.display());
 
                         if show_deps && !pkg.dependencies.is_empty() {
@@ -600,19 +661,29 @@ async fn handle_list(
             println!("  ID: {}", pkg.model_id);
             println!("  Version: {}", pkg.version);
             println!("  Repository: {}", pkg.repository);
-            println!("  Installed: {}", pkg.install_date.format("%Y-%m-%d %H:%M:%S"));
-            println!("  Auto-installed: {}", if pkg.auto_installed { "Yes" } else { "No" });
+            println!(
+                "  Installed: {}",
+                pkg.install_date.format("%Y-%m-%d %H:%M:%S")
+            );
+            println!(
+                "  Auto-installed: {}",
+                if pkg.auto_installed { "Yes" } else { "No" }
+            );
             println!("  Path: {}", pkg.local_path.display());
             if !pkg.dependencies.is_empty() {
                 println!("  Dependencies: {}", pkg.dependencies.join(", "));
             }
         }
     } else {
-        println!("{:<40} {:<15} {:<12} {:<20}", "PACKAGE", "VERSION", "REPOSITORY", "INSTALLED");
+        println!(
+            "{:<40} {:<15} {:<12} {:<20}",
+            "PACKAGE", "VERSION", "REPOSITORY", "INSTALLED"
+        );
         println!("{}", "-".repeat(87));
 
         for pkg in &packages {
-            println!("{:<40} {:<15} {:<12} {:<20}",
+            println!(
+                "{:<40} {:<15} {:<12} {:<20}",
                 truncate(&pkg.name, 38),
                 truncate(&pkg.version, 13),
                 truncate(&pkg.repository, 10),
@@ -884,7 +955,9 @@ fn confirm(message: &str) -> Result<bool> {
     io::stdout().flush().context("Failed to flush stdout")?;
 
     let mut input = String::new();
-    io::stdin().read_line(&mut input).context("Failed to read input")?;
+    io::stdin()
+        .read_line(&mut input)
+        .context("Failed to read input")?;
 
     Ok(input.trim().to_lowercase().starts_with('y'))
 }

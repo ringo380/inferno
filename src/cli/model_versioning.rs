@@ -1,11 +1,11 @@
 use crate::{
-    model_versioning::{ModelVersioningSystem, ModelVersioningConfig, ExperimentVariant, RolloutStrategy},
     config::Config,
+    model_versioning::{ExperimentVariant, ModelVersioningSystem, RolloutStrategy},
 };
 use anyhow::Result;
 use clap::{Args, Subcommand};
 use std::path::PathBuf;
-use tracing::{info, warn, error};
+use tracing::{info, warn};
 
 #[derive(Debug, Args)]
 pub struct ModelVersioningArgs {
@@ -816,69 +816,111 @@ pub async fn execute(args: ModelVersioningArgs, config: &Config) -> Result<()> {
             created_by,
         } => {
             handle_create_command(
-                config, model, version, file, description, model_type, format, tags, created_by
-            ).await
+                config,
+                model,
+                version,
+                file,
+                description,
+                model_type,
+                format,
+                tags,
+                created_by,
+            )
+            .await
         }
 
-        ModelVersioningCommand::List { model, status, limit, format } => {
-            handle_list_command(config, model, status, limit, format).await
-        }
+        ModelVersioningCommand::List {
+            model,
+            status,
+            limit,
+            format,
+        } => handle_list_command(config, model, status, limit, format).await,
 
-        ModelVersioningCommand::Show { version_id, validation, deployment, lineage, format } => {
-            handle_show_command(config, version_id, validation, deployment, lineage, format).await
-        }
+        ModelVersioningCommand::Show {
+            version_id,
+            validation,
+            deployment,
+            lineage,
+            format,
+        } => handle_show_command(config, version_id, validation, deployment, lineage, format).await,
 
-        ModelVersioningCommand::Validate { version_id, test, skip_benchmarks, skip_data } => {
-            handle_validate_command(config, version_id, test, skip_benchmarks, skip_data).await
-        }
+        ModelVersioningCommand::Validate {
+            version_id,
+            test,
+            skip_benchmarks,
+            skip_data,
+        } => handle_validate_command(config, version_id, test, skip_benchmarks, skip_data).await,
 
-        ModelVersioningCommand::Deploy { version_id, environment, strategy, traffic, force } => {
-            handle_deploy_command(config, version_id, environment, strategy, traffic, force).await
-        }
+        ModelVersioningCommand::Deploy {
+            version_id,
+            environment,
+            strategy,
+            traffic,
+            force,
+        } => handle_deploy_command(config, version_id, environment, strategy, traffic, force).await,
 
-        ModelVersioningCommand::Rollback { version_id, environment, to_version, force } => {
-            handle_rollback_command(config, version_id, environment, to_version, force).await
-        }
+        ModelVersioningCommand::Rollback {
+            version_id,
+            environment,
+            to_version,
+            force,
+        } => handle_rollback_command(config, version_id, environment, to_version, force).await,
 
-        ModelVersioningCommand::Compare { versions, metrics, visualize, format } => {
-            handle_compare_command(config, versions, metrics, visualize, format).await
-        }
+        ModelVersioningCommand::Compare {
+            versions,
+            metrics,
+            visualize,
+            format,
+        } => handle_compare_command(config, versions, metrics, visualize, format).await,
 
-        ModelVersioningCommand::ABTest { action } => {
-            handle_ab_test_command(config, action).await
-        }
+        ModelVersioningCommand::ABTest { action } => handle_ab_test_command(config, action).await,
 
         ModelVersioningCommand::Registry { action } => {
             handle_registry_command(config, action).await
         }
 
-        ModelVersioningCommand::Canary { action } => {
-            handle_canary_command(config, action).await
-        }
+        ModelVersioningCommand::Canary { action } => handle_canary_command(config, action).await,
 
-        ModelVersioningCommand::Lineage { action } => {
-            handle_lineage_command(config, action).await
-        }
+        ModelVersioningCommand::Lineage { action } => handle_lineage_command(config, action).await,
 
         ModelVersioningCommand::Performance { action } => {
             handle_performance_command(config, action).await
         }
 
-        ModelVersioningCommand::Export { output, format, versions, experiments, metrics, date_range } => {
-            handle_export_command(config, output, format, versions, experiments, metrics, date_range).await
+        ModelVersioningCommand::Export {
+            output,
+            format,
+            versions,
+            experiments,
+            metrics,
+            date_range,
+        } => {
+            handle_export_command(
+                config,
+                output,
+                format,
+                versions,
+                experiments,
+                metrics,
+                date_range,
+            )
+            .await
         }
 
-        ModelVersioningCommand::Import { input, merge, backup } => {
-            handle_import_command(config, input, merge, backup).await
-        }
+        ModelVersioningCommand::Import {
+            input,
+            merge,
+            backup,
+        } => handle_import_command(config, input, merge, backup).await,
 
-        ModelVersioningCommand::Cleanup { dry_run, force, strategy, older_than } => {
-            handle_cleanup_command(config, dry_run, force, strategy, older_than).await
-        }
+        ModelVersioningCommand::Cleanup {
+            dry_run,
+            force,
+            strategy,
+            older_than,
+        } => handle_cleanup_command(config, dry_run, force, strategy, older_than).await,
 
-        ModelVersioningCommand::Report { action } => {
-            handle_report_command(config, action).await
-        }
+        ModelVersioningCommand::Report { action } => handle_report_command(config, action).await,
     }
 }
 
@@ -916,31 +958,32 @@ async fn handle_create_command(
     };
 
     // Create version storage and tracker (mocks for now)
-    let version_storage = std::sync::Arc::new(
-        crate::model_versioning::FileSystemVersionStorage::new(
-            config.model_versioning.storage.base_path.clone()
-        )
-    );
-    let experiment_tracker = std::sync::Arc::new(
-        crate::model_versioning::InMemoryExperimentTracker::new()
-    );
+    let version_storage =
+        std::sync::Arc::new(crate::model_versioning::FileSystemVersionStorage::new(
+            config.model_versioning.storage.base_path.clone(),
+        ));
+    let experiment_tracker =
+        std::sync::Arc::new(crate::model_versioning::InMemoryExperimentTracker::new());
 
     // Initialize versioning system
     let versioning_system = ModelVersioningSystem::new(
         config.model_versioning.clone(),
         version_storage,
         experiment_tracker,
-    ).await?;
+    )
+    .await?;
 
     // Create version
-    let version_id = versioning_system.create_version(
-        &model,
-        &version,
-        &description.unwrap_or_else(|| format!("Version {} of {}", version, model)),
-        file,
-        metadata,
-        &created_by.unwrap_or_else(|| "unknown".to_string()),
-    ).await?;
+    let version_id = versioning_system
+        .create_version(
+            &model,
+            &version,
+            &description.unwrap_or_else(|| format!("Version {} of {}", version, model)),
+            file,
+            metadata,
+            &created_by.unwrap_or_else(|| "unknown".to_string()),
+        )
+        .await?;
 
     println!("Model version created successfully!");
     println!("Version ID: {}", version_id);
@@ -963,20 +1006,19 @@ async fn handle_list_command(
 ) -> Result<()> {
     info!("Listing model versions");
 
-    let version_storage = std::sync::Arc::new(
-        crate::model_versioning::FileSystemVersionStorage::new(
-            config.model_versioning.storage.base_path.clone()
-        )
-    );
-    let experiment_tracker = std::sync::Arc::new(
-        crate::model_versioning::InMemoryExperimentTracker::new()
-    );
+    let version_storage =
+        std::sync::Arc::new(crate::model_versioning::FileSystemVersionStorage::new(
+            config.model_versioning.storage.base_path.clone(),
+        ));
+    let experiment_tracker =
+        std::sync::Arc::new(crate::model_versioning::InMemoryExperimentTracker::new());
 
     let versioning_system = ModelVersioningSystem::new(
         config.model_versioning.clone(),
         version_storage,
         experiment_tracker,
-    ).await?;
+    )
+    .await?;
 
     let output_format = format.unwrap_or(OutputFormat::Table);
 
@@ -1005,9 +1047,13 @@ async fn handle_list_command(
                     println!("Model Versions for: {}", model_name);
                     println!("=============================================");
                     for version in &filtered_versions {
-                        println!("ID: {} | Version: {} | Status: {:?} | Created: {}",
-                                 &version.id[..8], version.version, version.status,
-                                 version.created_at.format("%Y-%m-%d %H:%M:%S"));
+                        println!(
+                            "ID: {} | Version: {} | Status: {:?} | Created: {}",
+                            &version.id[..8],
+                            version.version,
+                            version.status,
+                            version.created_at.format("%Y-%m-%d %H:%M:%S")
+                        );
                     }
                 }
                 _ => {
@@ -1039,20 +1085,19 @@ async fn handle_show_command(
 ) -> Result<()> {
     info!("Showing version details: {}", version_id);
 
-    let version_storage = std::sync::Arc::new(
-        crate::model_versioning::FileSystemVersionStorage::new(
-            config.model_versioning.storage.base_path.clone()
-        )
-    );
-    let experiment_tracker = std::sync::Arc::new(
-        crate::model_versioning::InMemoryExperimentTracker::new()
-    );
+    let version_storage =
+        std::sync::Arc::new(crate::model_versioning::FileSystemVersionStorage::new(
+            config.model_versioning.storage.base_path.clone(),
+        ));
+    let experiment_tracker =
+        std::sync::Arc::new(crate::model_versioning::InMemoryExperimentTracker::new());
 
     let versioning_system = ModelVersioningSystem::new(
         config.model_versioning.clone(),
         version_storage,
         experiment_tracker,
-    ).await?;
+    )
+    .await?;
 
     let version = versioning_system.get_version_status(&version_id).await?;
     let output_format = format.unwrap_or(OutputFormat::Table);
@@ -1069,7 +1114,10 @@ async fn handle_show_command(
             println!("Version: {}", version.version);
             println!("Status: {:?}", version.status);
             println!("Description: {}", version.description);
-            println!("Created: {}", version.created_at.format("%Y-%m-%d %H:%M:%S"));
+            println!(
+                "Created: {}",
+                version.created_at.format("%Y-%m-%d %H:%M:%S")
+            );
             println!("Created by: {}", version.created_by);
             println!("File: {}", version.file_path.display());
             println!("Size: {} bytes", version.metadata.size_bytes);
@@ -1092,7 +1140,10 @@ async fn handle_show_command(
             if deployment {
                 println!("\nDeployment Status:");
                 println!("  Stage: {:?}", version.deployment_status.stage);
-                println!("  Traffic: {}%", version.deployment_status.traffic_percentage);
+                println!(
+                    "  Traffic: {}%",
+                    version.deployment_status.traffic_percentage
+                );
                 println!("  Environment: {}", version.deployment_status.environment);
                 println!("  Health: {:?}", version.deployment_status.health_status);
             }
@@ -1110,8 +1161,10 @@ async fn handle_show_command(
             }
         }
         _ => {
-            println!("Version: {} | Model: {} | Status: {:?}",
-                     version.version, version.model_name, version.status);
+            println!(
+                "Version: {} | Model: {} | Status: {:?}",
+                version.version, version.model_name, version.status
+            );
         }
     }
 
@@ -1127,20 +1180,19 @@ async fn handle_validate_command(
 ) -> Result<()> {
     info!("Validating version: {}", version_id);
 
-    let version_storage = std::sync::Arc::new(
-        crate::model_versioning::FileSystemVersionStorage::new(
-            config.model_versioning.storage.base_path.clone()
-        )
-    );
-    let experiment_tracker = std::sync::Arc::new(
-        crate::model_versioning::InMemoryExperimentTracker::new()
-    );
+    let version_storage =
+        std::sync::Arc::new(crate::model_versioning::FileSystemVersionStorage::new(
+            config.model_versioning.storage.base_path.clone(),
+        ));
+    let experiment_tracker =
+        std::sync::Arc::new(crate::model_versioning::InMemoryExperimentTracker::new());
 
     let versioning_system = ModelVersioningSystem::new(
         config.model_versioning.clone(),
         version_storage,
         experiment_tracker,
-    ).await?;
+    )
+    .await?;
 
     println!("Starting validation for version: {}", version_id);
 
@@ -1167,7 +1219,10 @@ async fn handle_validate_command(
                 crate::model_versioning::ValidationStatus::Warning => "⚠",
                 crate::model_versioning::ValidationStatus::Skipped => "⊘",
             };
-            println!("  {} {} ({:.2}s)", status_icon, test_result.name, test_result.duration_seconds);
+            println!(
+                "  {} {} ({:.2}s)",
+                status_icon, test_result.name, test_result.duration_seconds
+            );
         }
 
         if !skip_benchmarks {
@@ -1178,18 +1233,36 @@ async fn handle_validate_command(
                     crate::model_versioning::ValidationStatus::Failed => "✗",
                     _ => "⚠",
                 };
-                println!("  {} {}: {:.4} {} (threshold: {:.4})",
-                         status_icon, benchmark.name, benchmark.value,
-                         benchmark.unit, benchmark.threshold);
+                println!(
+                    "  {} {}: {:.4} {} (threshold: {:.4})",
+                    status_icon,
+                    benchmark.name,
+                    benchmark.value,
+                    benchmark.unit,
+                    benchmark.threshold
+                );
             }
         }
 
         if !skip_data {
             println!("\nData Validation:");
             println!("  Schema: {:?}", results.data_validation.schema_status);
-            println!("  Quality checks: {}", results.data_validation.quality_results.len());
-            println!("  Data drift: {}",
-                     if results.data_validation.statistical_results.data_drift_detected { "Detected" } else { "None" });
+            println!(
+                "  Quality checks: {}",
+                results.data_validation.quality_results.len()
+            );
+            println!(
+                "  Data drift: {}",
+                if results
+                    .data_validation
+                    .statistical_results
+                    .data_drift_detected
+                {
+                    "Detected"
+                } else {
+                    "None"
+                }
+            );
         }
     }
 
@@ -1204,22 +1277,24 @@ async fn handle_deploy_command(
     traffic: Option<f64>,
     force: bool,
 ) -> Result<()> {
-    info!("Deploying version {} to environment: {}", version_id, environment);
+    info!(
+        "Deploying version {} to environment: {}",
+        version_id, environment
+    );
 
-    let version_storage = std::sync::Arc::new(
-        crate::model_versioning::FileSystemVersionStorage::new(
-            config.model_versioning.storage.base_path.clone()
-        )
-    );
-    let experiment_tracker = std::sync::Arc::new(
-        crate::model_versioning::InMemoryExperimentTracker::new()
-    );
+    let version_storage =
+        std::sync::Arc::new(crate::model_versioning::FileSystemVersionStorage::new(
+            config.model_versioning.storage.base_path.clone(),
+        ));
+    let experiment_tracker =
+        std::sync::Arc::new(crate::model_versioning::InMemoryExperimentTracker::new());
 
     let versioning_system = ModelVersioningSystem::new(
         config.model_versioning.clone(),
         version_storage,
         experiment_tracker,
-    ).await?;
+    )
+    .await?;
 
     // Parse strategy
     let deployment_strategy = match strategy.as_deref() {
@@ -1251,7 +1326,9 @@ async fn handle_deploy_command(
     println!("Starting deployment...");
 
     // Deploy the version
-    versioning_system.deploy_version(&version_id, &environment, deployment_strategy).await?;
+    versioning_system
+        .deploy_version(&version_id, &environment, deployment_strategy)
+        .await?;
 
     println!("✓ Deployment completed successfully");
     println!("Version {} is now deployed to {}", version_id, environment);
@@ -1260,7 +1337,10 @@ async fn handle_deploy_command(
     let version = versioning_system.get_version_status(&version_id).await?;
     println!("\nDeployment Status:");
     println!("  Stage: {:?}", version.deployment_status.stage);
-    println!("  Traffic: {}%", version.deployment_status.traffic_percentage);
+    println!(
+        "  Traffic: {}%",
+        version.deployment_status.traffic_percentage
+    );
     println!("  Health: {:?}", version.deployment_status.health_status);
 
     Ok(())
@@ -1301,7 +1381,10 @@ async fn handle_rollback_command(
     println!("✓ Health checks passed");
     println!("✓ Rollback completed successfully");
 
-    println!("Version {} has been rolled back in environment: {}", version_id, environment);
+    println!(
+        "Version {} has been rolled back in environment: {}",
+        version_id, environment
+    );
 
     Ok(())
 }
@@ -1318,23 +1401,24 @@ async fn handle_compare_command(
     let version_ids: Vec<String> = versions.split(',').map(|s| s.trim().to_string()).collect();
 
     if version_ids.len() < 2 {
-        return Err(anyhow::anyhow!("At least 2 versions required for comparison"));
+        return Err(anyhow::anyhow!(
+            "At least 2 versions required for comparison"
+        ));
     }
 
-    let version_storage = std::sync::Arc::new(
-        crate::model_versioning::FileSystemVersionStorage::new(
-            config.model_versioning.storage.base_path.clone()
-        )
-    );
-    let experiment_tracker = std::sync::Arc::new(
-        crate::model_versioning::InMemoryExperimentTracker::new()
-    );
+    let version_storage =
+        std::sync::Arc::new(crate::model_versioning::FileSystemVersionStorage::new(
+            config.model_versioning.storage.base_path.clone(),
+        ));
+    let experiment_tracker =
+        std::sync::Arc::new(crate::model_versioning::InMemoryExperimentTracker::new());
 
     let versioning_system = ModelVersioningSystem::new(
         config.model_versioning.clone(),
         version_storage,
         experiment_tracker,
-    ).await?;
+    )
+    .await?;
 
     let comparison = versioning_system.compare_versions(&version_ids).await?;
     let output_format = format.unwrap_or(OutputFormat::Table);
@@ -1346,12 +1430,21 @@ async fn handle_compare_command(
         OutputFormat::Table => {
             println!("Version Comparison");
             println!("=================");
-            println!("Compared at: {}", comparison.compared_at.format("%Y-%m-%d %H:%M:%S"));
-            println!("Confidence level: {:.2}%", comparison.confidence_level * 100.0);
+            println!(
+                "Compared at: {}",
+                comparison.compared_at.format("%Y-%m-%d %H:%M:%S")
+            );
+            println!(
+                "Confidence level: {:.2}%",
+                comparison.confidence_level * 100.0
+            );
 
             println!("\nVersions compared:");
             for version in &comparison.versions {
-                println!("  - {} v{} ({})", version.model_name, version.version, version.id);
+                println!(
+                    "  - {} v{} ({})",
+                    version.model_name, version.version, version.id
+                );
             }
 
             if let Some(metric_filter) = metrics {
@@ -1373,7 +1466,10 @@ async fn handle_compare_command(
             }
         }
         _ => {
-            println!("Comparison completed - {} versions analyzed", comparison.versions.len());
+            println!(
+                "Comparison completed - {} versions analyzed",
+                comparison.versions.len()
+            );
         }
     }
 
@@ -1394,20 +1490,19 @@ async fn handle_ab_test_command(config: &Config, action: ABTestAction) -> Result
         } => {
             info!("Creating A/B test: {}", name);
 
-            let version_storage = std::sync::Arc::new(
-                crate::model_versioning::FileSystemVersionStorage::new(
-                    config.model_versioning.storage.base_path.clone()
-                )
-            );
-            let experiment_tracker = std::sync::Arc::new(
-                crate::model_versioning::InMemoryExperimentTracker::new()
-            );
+            let version_storage =
+                std::sync::Arc::new(crate::model_versioning::FileSystemVersionStorage::new(
+                    config.model_versioning.storage.base_path.clone(),
+                ));
+            let experiment_tracker =
+                std::sync::Arc::new(crate::model_versioning::InMemoryExperimentTracker::new());
 
             let versioning_system = ModelVersioningSystem::new(
                 config.model_versioning.clone(),
                 version_storage,
                 experiment_tracker,
-            ).await?;
+            )
+            .await?;
 
             let variants = vec![
                 ExperimentVariant {
@@ -1428,45 +1523,53 @@ async fn handle_ab_test_command(config: &Config, action: ABTestAction) -> Result
                 },
             ];
 
-            let experiment_id = versioning_system.create_experiment(
-                &name,
-                &description.unwrap_or_else(|| format!("A/B test: {}", name)),
-                variants,
-                duration.unwrap_or(7),
-                "user",
-            ).await?;
+            let experiment_id = versioning_system
+                .create_experiment(
+                    &name,
+                    &description.unwrap_or_else(|| format!("A/B test: {}", name)),
+                    variants,
+                    duration.unwrap_or(7),
+                    "user",
+                )
+                .await?;
 
             println!("A/B test experiment created successfully!");
             println!("Experiment ID: {}", experiment_id);
             println!("Name: {}", name);
             println!("Control version: {}", control_version);
             println!("Treatment version: {}", treatment_version);
-            println!("Traffic split: {}%/{}%",
-                     100.0 - traffic_split.unwrap_or(50.0), traffic_split.unwrap_or(50.0));
+            println!(
+                "Traffic split: {}%/{}%",
+                100.0 - traffic_split.unwrap_or(50.0),
+                traffic_split.unwrap_or(50.0)
+            );
 
             if let Some(success_metrics) = metrics {
                 println!("Success metrics: {}", success_metrics);
             }
         }
 
-        ABTestAction::List { status, active, format } => {
+        ABTestAction::List {
+            status,
+            active,
+            format,
+        } => {
             println!("A/B Test Experiments");
             println!("===================");
 
-            let version_storage = std::sync::Arc::new(
-                crate::model_versioning::FileSystemVersionStorage::new(
-                    config.model_versioning.storage.base_path.clone()
-                )
-            );
-            let experiment_tracker = std::sync::Arc::new(
-                crate::model_versioning::InMemoryExperimentTracker::new()
-            );
+            let version_storage =
+                std::sync::Arc::new(crate::model_versioning::FileSystemVersionStorage::new(
+                    config.model_versioning.storage.base_path.clone(),
+                ));
+            let experiment_tracker =
+                std::sync::Arc::new(crate::model_versioning::InMemoryExperimentTracker::new());
 
             let versioning_system = ModelVersioningSystem::new(
                 config.model_versioning.clone(),
                 version_storage,
                 experiment_tracker,
-            ).await?;
+            )
+            .await?;
 
             let experiments = versioning_system.list_experiments().await?;
             let output_format = format.unwrap_or(OutputFormat::Table);
@@ -1477,18 +1580,29 @@ async fn handle_ab_test_command(config: &Config, action: ABTestAction) -> Result
                 }
                 OutputFormat::Table => {
                     for experiment in &experiments {
-                        if active && !matches!(experiment.status, crate::model_versioning::ExperimentStatus::Running) {
+                        if active
+                            && !matches!(
+                                experiment.status,
+                                crate::model_versioning::ExperimentStatus::Running
+                            )
+                        {
                             continue;
                         }
                         if let Some(status_filter) = &status {
-                            if format!("{:?}", experiment.status).to_lowercase() != status_filter.to_lowercase() {
+                            if format!("{:?}", experiment.status).to_lowercase()
+                                != status_filter.to_lowercase()
+                            {
                                 continue;
                             }
                         }
 
-                        println!("ID: {} | Name: {} | Status: {:?} | Started: {}",
-                                 &experiment.id[..8], experiment.name, experiment.status,
-                                 experiment.start_date.format("%Y-%m-%d"));
+                        println!(
+                            "ID: {} | Name: {} | Status: {:?} | Started: {}",
+                            &experiment.id[..8],
+                            experiment.name,
+                            experiment.status,
+                            experiment.start_date.format("%Y-%m-%d")
+                        );
                     }
                 }
                 _ => {
@@ -1500,20 +1614,19 @@ async fn handle_ab_test_command(config: &Config, action: ABTestAction) -> Result
         ABTestAction::Start { experiment_id } => {
             info!("Starting experiment: {}", experiment_id);
 
-            let version_storage = std::sync::Arc::new(
-                crate::model_versioning::FileSystemVersionStorage::new(
-                    config.model_versioning.storage.base_path.clone()
-                )
-            );
-            let experiment_tracker = std::sync::Arc::new(
-                crate::model_versioning::InMemoryExperimentTracker::new()
-            );
+            let version_storage =
+                std::sync::Arc::new(crate::model_versioning::FileSystemVersionStorage::new(
+                    config.model_versioning.storage.base_path.clone(),
+                ));
+            let experiment_tracker =
+                std::sync::Arc::new(crate::model_versioning::InMemoryExperimentTracker::new());
 
             let versioning_system = ModelVersioningSystem::new(
                 config.model_versioning.clone(),
                 version_storage,
                 experiment_tracker,
-            ).await?;
+            )
+            .await?;
 
             versioning_system.start_experiment(&experiment_id).await?;
 
@@ -1523,23 +1636,25 @@ async fn handle_ab_test_command(config: &Config, action: ABTestAction) -> Result
             println!("Metrics collection started");
         }
 
-        ABTestAction::Stop { experiment_id, report } => {
+        ABTestAction::Stop {
+            experiment_id,
+            report,
+        } => {
             info!("Stopping experiment: {}", experiment_id);
 
-            let version_storage = std::sync::Arc::new(
-                crate::model_versioning::FileSystemVersionStorage::new(
-                    config.model_versioning.storage.base_path.clone()
-                )
-            );
-            let experiment_tracker = std::sync::Arc::new(
-                crate::model_versioning::InMemoryExperimentTracker::new()
-            );
+            let version_storage =
+                std::sync::Arc::new(crate::model_versioning::FileSystemVersionStorage::new(
+                    config.model_versioning.storage.base_path.clone(),
+                ));
+            let experiment_tracker =
+                std::sync::Arc::new(crate::model_versioning::InMemoryExperimentTracker::new());
 
             let versioning_system = ModelVersioningSystem::new(
                 config.model_versioning.clone(),
                 version_storage,
                 experiment_tracker,
-            ).await?;
+            )
+            .await?;
 
             let results = versioning_system.stop_experiment(&experiment_id).await?;
 
@@ -1553,34 +1668,44 @@ async fn handle_ab_test_command(config: &Config, action: ABTestAction) -> Result
                     println!("Winner: {}", winner);
                 }
                 println!("Confidence: {:.2}%", results.confidence * 100.0);
-                println!("Statistical significance: {}", results.statistical_significance);
+                println!(
+                    "Statistical significance: {}",
+                    results.statistical_significance
+                );
                 println!("Practical significance: {}", results.practical_significance);
 
                 println!("\nVariant Results:");
                 for (variant_id, result) in &results.variant_results {
-                    println!("  {}: {:.3} conversion rate ({} samples)",
-                             variant_id, result.conversion_rate, result.sample_size);
+                    println!(
+                        "  {}: {:.3} conversion rate ({} samples)",
+                        variant_id, result.conversion_rate, result.sample_size
+                    );
                 }
             }
         }
 
-        ABTestAction::Status { experiment_id, detailed, format } => {
-            let version_storage = std::sync::Arc::new(
-                crate::model_versioning::FileSystemVersionStorage::new(
-                    config.model_versioning.storage.base_path.clone()
-                )
-            );
-            let experiment_tracker = std::sync::Arc::new(
-                crate::model_versioning::InMemoryExperimentTracker::new()
-            );
+        ABTestAction::Status {
+            experiment_id,
+            detailed,
+            format,
+        } => {
+            let version_storage =
+                std::sync::Arc::new(crate::model_versioning::FileSystemVersionStorage::new(
+                    config.model_versioning.storage.base_path.clone(),
+                ));
+            let experiment_tracker =
+                std::sync::Arc::new(crate::model_versioning::InMemoryExperimentTracker::new());
 
             let versioning_system = ModelVersioningSystem::new(
                 config.model_versioning.clone(),
                 version_storage,
                 experiment_tracker,
-            ).await?;
+            )
+            .await?;
 
-            let experiment = versioning_system.get_experiment_status(&experiment_id).await?;
+            let experiment = versioning_system
+                .get_experiment_status(&experiment_id)
+                .await?;
             let output_format = format.unwrap_or(OutputFormat::Table);
 
             match output_format {
@@ -1594,18 +1719,26 @@ async fn handle_ab_test_command(config: &Config, action: ABTestAction) -> Result
                     println!("Name: {}", experiment.name);
                     println!("Status: {:?}", experiment.status);
                     println!("Duration: {} days", experiment.duration_days);
-                    println!("Started: {}", experiment.start_date.format("%Y-%m-%d %H:%M:%S"));
+                    println!(
+                        "Started: {}",
+                        experiment.start_date.format("%Y-%m-%d %H:%M:%S")
+                    );
 
                     if detailed {
                         println!("\nVariants:");
                         for variant in &experiment.variants {
-                            println!("  {} ({}%): {}",
-                                     variant.name, variant.traffic_percentage, variant.model_version_id);
+                            println!(
+                                "  {} ({}%): {}",
+                                variant.name, variant.traffic_percentage, variant.model_version_id
+                            );
                         }
 
                         println!("\nConfiguration:");
                         println!("  Min sample size: {}", experiment.config.min_sample_size);
-                        println!("  Significance level: {}", experiment.config.significance_level);
+                        println!(
+                            "  Significance level: {}",
+                            experiment.config.significance_level
+                        );
                         println!("  Early stopping: {}", experiment.config.early_stopping);
                     }
                 }

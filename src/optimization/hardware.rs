@@ -310,8 +310,10 @@ impl SimdOptimizer {
             match instruction_set {
                 SimdInstructionSet::AVX512 => return 64, // 512 bits = 64 bytes
                 SimdInstructionSet::AVX2 | SimdInstructionSet::AVX => return 32, // 256 bits = 32 bytes
-                SimdInstructionSet::SSE4_2 | SimdInstructionSet::SSE4_1 |
-                SimdInstructionSet::SSE3 | SimdInstructionSet::SSE2 => return 16, // 128 bits = 16 bytes
+                SimdInstructionSet::SSE4_2
+                | SimdInstructionSet::SSE4_1
+                | SimdInstructionSet::SSE3
+                | SimdInstructionSet::SSE2 => return 16, // 128 bits = 16 bytes
                 SimdInstructionSet::NEON => return 16, // 128 bits = 16 bytes
             }
         }
@@ -319,14 +321,19 @@ impl SimdOptimizer {
     }
 
     pub async fn optimize_tensor_operations(&self, data: &[f32]) -> Result<Vec<f32>> {
-        tracing::debug!("Applying SIMD optimizations with vector size: {}", self.optimal_vector_size);
+        tracing::debug!(
+            "Applying SIMD optimizations with vector size: {}",
+            self.optimal_vector_size
+        );
 
         // Simulate SIMD-optimized operations
         let mut optimized_data = Vec::with_capacity(data.len());
 
         // Vectorized operations (simplified simulation)
-        for chunk in data.chunks(self.optimal_vector_size / 4) { // f32 = 4 bytes
-            let processed_chunk: Vec<f32> = chunk.iter()
+        for chunk in data.chunks(self.optimal_vector_size / 4) {
+            // f32 = 4 bytes
+            let processed_chunk: Vec<f32> = chunk
+                .iter()
                 .map(|&x| x * 1.1 + 0.01) // Simulate some computation
                 .collect();
             optimized_data.extend(processed_chunk);
@@ -354,7 +361,10 @@ impl SimdOptimizer {
 
         characteristics.insert("simd_speedup".to_string(), base_performance);
         characteristics.insert("vector_size".to_string(), self.optimal_vector_size as f64);
-        characteristics.insert("instruction_sets".to_string(), self.supported_instruction_sets.len() as f64);
+        characteristics.insert(
+            "instruction_sets".to_string(),
+            self.supported_instruction_sets.len() as f64,
+        );
 
         characteristics
     }
@@ -447,10 +457,11 @@ impl HardwareOptimizer {
         // Get system memory (simplified)
         let total_memory_mb = 16384; // Mock 16GB - in practice, use sysinfo crate
 
-        let supports_mixed_precision = !gpu_devices.is_empty() &&
-            gpu_devices.iter().any(|d| d.supports_fp16);
+        let supports_mixed_precision =
+            !gpu_devices.is_empty() && gpu_devices.iter().any(|d| d.supports_fp16);
 
-        let supports_tensor_cores = gpu_devices.iter()
+        let supports_tensor_cores = gpu_devices
+            .iter()
             .any(|d| matches!(d.vendor, GpuVendor::Nvidia) && d.supports_fp16);
 
         Ok(HardwareCapabilities {
@@ -526,17 +537,16 @@ impl HardwareOptimizer {
         }
 
         // Select best device based on memory and compute capability
-        self.capabilities.gpu_devices.iter()
-            .max_by(|a, b| {
-                // Primary: memory size
-                let memory_cmp = a.memory_mb.cmp(&b.memory_mb);
-                if memory_cmp != std::cmp::Ordering::Equal {
-                    return memory_cmp;
-                }
+        self.capabilities.gpu_devices.iter().max_by(|a, b| {
+            // Primary: memory size
+            let memory_cmp = a.memory_mb.cmp(&b.memory_mb);
+            if memory_cmp != std::cmp::Ordering::Equal {
+                return memory_cmp;
+            }
 
-                // Secondary: multiprocessor count
-                a.multiprocessor_count.cmp(&b.multiprocessor_count)
-            })
+            // Secondary: multiprocessor count
+            a.multiprocessor_count.cmp(&b.multiprocessor_count)
+        })
     }
 
     /// Configure mixed precision settings
@@ -562,11 +572,16 @@ impl HardwareOptimizer {
         metrics.cpu_utilization = 45.0; // Mock 45% CPU utilization
         metrics.memory_bandwidth_utilization = 70.0;
         metrics.tensor_throughput_gops = 500.0; // Mock 500 GOPS
-        metrics.mixed_precision_speedup = if self.config.mixed_precision { 1.8 } else { 1.0 };
+        metrics.mixed_precision_speedup = if self.config.mixed_precision {
+            1.8
+        } else {
+            1.0
+        };
 
         // Calculate SIMD performance
         let simd_chars = self.simd_optimizer.get_performance_characteristics();
-        metrics.simd_operations_per_second = simd_chars.get("simd_speedup").unwrap_or(&1.0) * 1000000.0;
+        metrics.simd_operations_per_second =
+            simd_chars.get("simd_speedup").unwrap_or(&1.0) * 1000000.0;
 
         // GPU memory usage
         if let Some(device) = self.get_optimal_device() {
@@ -586,7 +601,10 @@ impl HardwareOptimizer {
 
     /// Benchmark hardware optimization performance
     pub async fn benchmark(&self, _model_path: &str, num_requests: usize) -> Result<f64> {
-        tracing::info!("Benchmarking hardware optimization with {} requests", num_requests);
+        tracing::info!(
+            "Benchmarking hardware optimization with {} requests",
+            num_requests
+        );
 
         let start_time = std::time::Instant::now();
 
@@ -609,8 +627,11 @@ impl HardwareOptimizer {
         let baseline_rps = 10.0; // Baseline requests per second
         let performance_multiplier = requests_per_second / baseline_rps;
 
-        tracing::info!("Hardware benchmark completed: {:.2} requests/second ({:.2}x speedup)",
-                      requests_per_second, performance_multiplier);
+        tracing::info!(
+            "Hardware benchmark completed: {:.2} requests/second ({:.2}x speedup)",
+            requests_per_second,
+            performance_multiplier
+        );
 
         Ok(performance_multiplier)
     }

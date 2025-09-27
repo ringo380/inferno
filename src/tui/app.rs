@@ -9,9 +9,7 @@ use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
-    widgets::{
-        Block, Borders, Clear, List, ListItem, ListState, Paragraph, Wrap,
-    },
+    widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph, Wrap},
     Frame,
 };
 use std::collections::VecDeque;
@@ -160,7 +158,11 @@ impl App {
         );
 
         let header = Paragraph::new(title)
-            .style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
+            .style(
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            )
             .block(Block::default().borders(Borders::ALL));
 
         f.render_widget(header, area);
@@ -183,17 +185,21 @@ impl App {
     }
 
     fn draw_models_list(&mut self, f: &mut Frame, area: Rect) {
-        let items: Vec<ListItem> = self.models
+        let items: Vec<ListItem> = self
+            .models
             .iter()
             .enumerate()
             .map(|(i, model)| {
                 let style = if Some(i) == self.selected_model {
-                    Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+                    Style::default()
+                        .fg(Color::Yellow)
+                        .add_modifier(Modifier::BOLD)
                 } else {
                     Style::default()
                 };
 
-                let indicator = if self.loaded_model.as_ref().map(|m| &m.name) == Some(&model.name) {
+                let indicator = if self.loaded_model.as_ref().map(|m| &m.name) == Some(&model.name)
+                {
                     "● "
                 } else {
                     "  "
@@ -212,7 +218,7 @@ impl App {
                         Style::default().fg(Color::Cyan)
                     } else {
                         Style::default()
-                    })
+                    }),
             )
             .highlight_style(Style::default().add_modifier(Modifier::REVERSED));
 
@@ -220,7 +226,8 @@ impl App {
     }
 
     fn draw_logs(&self, f: &mut Frame, area: Rect) {
-        let log_items: Vec<ListItem> = self.logs
+        let log_items: Vec<ListItem> = self
+            .logs
             .iter()
             .rev()
             .take(area.height.saturating_sub(2) as usize)
@@ -237,13 +244,14 @@ impl App {
                     log.timestamp.format("%H:%M:%S"),
                     log.level.to_uppercase(),
                     log.message
-                )).style(style)
+                ))
+                .style(style)
             })
             .rev()
             .collect();
 
-        let logs_list = List::new(log_items)
-            .block(Block::default().title(" Logs ").borders(Borders::ALL));
+        let logs_list =
+            List::new(log_items).block(Block::default().title(" Logs ").borders(Borders::ALL));
 
         f.render_widget(logs_list, area);
     }
@@ -307,8 +315,8 @@ impl App {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Min(3),     // Input
-                Constraint::Length(8),  // Instructions
+                Constraint::Min(3),    // Input
+                Constraint::Length(8), // Instructions
             ])
             .split(area);
 
@@ -317,7 +325,7 @@ impl App {
                 Block::default()
                     .title(" Input Prompt ")
                     .borders(Borders::ALL)
-                    .border_style(Style::default().fg(Color::Cyan))
+                    .border_style(Style::default().fg(Color::Cyan)),
             )
             .wrap(Wrap { trim: false });
 
@@ -329,9 +337,13 @@ impl App {
              - Type to enter prompt\n\
              - Enter: Run inference\n\
              - Esc: Back to model selection\n\
-             - Ctrl+C: Quit"
+             - Ctrl+C: Quit",
         )
-        .block(Block::default().title(" Instructions ").borders(Borders::ALL));
+        .block(
+            Block::default()
+                .title(" Instructions ")
+                .borders(Borders::ALL),
+        );
 
         f.render_widget(instructions, chunks[1]);
     }
@@ -340,8 +352,8 @@ impl App {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Length(8),  // Stats
-                Constraint::Min(3),     // Streaming output
+                Constraint::Length(8), // Stats
+                Constraint::Min(3),    // Streaming output
             ])
             .split(area);
 
@@ -352,19 +364,21 @@ impl App {
              Tokens generated: {}\n\
              Time elapsed: {:.1}s\n\
              Speed: {:.1} tokens/sec",
-            self.loaded_model.as_ref().map(|m| &m.name).unwrap_or(&"Unknown".to_string()),
+            self.loaded_model
+                .as_ref()
+                .map(|m| &m.name)
+                .unwrap_or(&"Unknown".to_string()),
             self.inference_stats.tokens_generated,
             self.inference_stats.time_elapsed.as_secs_f32(),
             self.inference_stats.tokens_per_second
         );
 
-        let stats = Paragraph::new(stats_content)
-            .block(
-                Block::default()
-                    .title(" Inference Stats ")
-                    .borders(Borders::ALL)
-                    .border_style(Style::default().fg(Color::Yellow))
-            );
+        let stats = Paragraph::new(stats_content).block(
+            Block::default()
+                .title(" Inference Stats ")
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Yellow)),
+        );
 
         f.render_widget(stats, chunks[0]);
 
@@ -380,7 +394,7 @@ impl App {
                 Block::default()
                     .title(" Live Output (Press Esc to cancel) ")
                     .borders(Borders::ALL)
-                    .border_style(Style::default().fg(Color::Green))
+                    .border_style(Style::default().fg(Color::Green)),
             )
             .wrap(Wrap { trim: false });
 
@@ -388,10 +402,7 @@ impl App {
     }
 
     fn draw_loading_progress(&self, f: &mut Frame, area: Rect) {
-        let progress_bar = ProgressBar::new(
-            "Loading model...".to_string(),
-            self.loading_progress,
-        );
+        let progress_bar = ProgressBar::new("Loading model...".to_string(), self.loading_progress);
 
         progress_bar.render(f, area);
     }
@@ -400,8 +411,8 @@ impl App {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Min(3),     // Output
-                Constraint::Length(6),  // Controls
+                Constraint::Min(3),    // Output
+                Constraint::Length(6), // Controls
             ])
             .split(area);
 
@@ -416,7 +427,7 @@ impl App {
              - 'i': New input prompt\n\
              - 'm': Back to model selection\n\
              - Esc: Back to previous screen\n\
-             - 'q': Quit"
+             - 'q': Quit",
         )
         .block(Block::default().title(" Controls ").borders(Borders::ALL));
 
@@ -428,7 +439,10 @@ impl App {
             " State: {:?} | Models: {} | Loaded: {} | Press 'h' for help ",
             self.state,
             self.models.len(),
-            self.loaded_model.as_ref().map(|m| &m.name).unwrap_or(&"None".to_string())
+            self.loaded_model
+                .as_ref()
+                .map(|m| &m.name)
+                .unwrap_or(&"None".to_string())
         );
 
         let status_bar = Paragraph::new(status)
@@ -443,8 +457,7 @@ impl App {
 
         f.render_widget(Clear, area);
 
-        let help_text =
-            "Inferno TUI Help\n\n\
+        let help_text = "Inferno TUI Help\n\n\
              Global Keys:\n\
              - h: Show/hide this help\n\
              - q: Quit application\n\
@@ -467,7 +480,7 @@ impl App {
                 Block::default()
                     .title(" Help ")
                     .borders(Borders::ALL)
-                    .border_style(Style::default().fg(Color::Yellow))
+                    .border_style(Style::default().fg(Color::Yellow)),
             )
             .wrap(Wrap { trim: true });
 
@@ -641,11 +654,14 @@ impl App {
                 StreamMessage::Complete => {
                     if let Some(start_time) = self.inference_start_time {
                         let elapsed = start_time.elapsed();
-                        self.add_log("info", &format!(
-                            "Streaming inference completed in {:.1}s ({:.1} tok/s)",
-                            elapsed.as_secs_f32(),
-                            self.inference_stats.tokens_per_second
-                        ));
+                        self.add_log(
+                            "info",
+                            &format!(
+                                "Streaming inference completed in {:.1}s ({:.1} tok/s)",
+                                elapsed.as_secs_f32(),
+                                self.inference_stats.tokens_per_second
+                            ),
+                        );
                     }
                     self.state = AppState::ViewingOutput;
                     self.stream_receiver = None;
@@ -667,13 +683,19 @@ impl App {
 
             // First, validate the model comprehensively
             let model_manager = crate::models::ModelManager::new(&self.config.models_dir);
-            match model_manager.validate_model_comprehensive(&model.path, Some(&self.config)).await {
+            match model_manager
+                .validate_model_comprehensive(&model.path, Some(&self.config))
+                .await
+            {
                 Ok(validation_result) => {
                     if !validation_result.is_valid {
                         let error_msg = if validation_result.errors.is_empty() {
                             "Model validation failed".to_string()
                         } else {
-                            format!("Model validation failed: {}", validation_result.errors.join(", "))
+                            format!(
+                                "Model validation failed: {}",
+                                validation_result.errors.join(", ")
+                            )
                         };
                         self.add_log("error", &error_msg);
                         self.state = AppState::ModelSelection;
@@ -690,7 +712,14 @@ impl App {
 
             self.loading_progress = 0.3;
 
-            let backend_type = BackendType::from_model_path(&model.path);
+            let backend_type = match BackendType::from_model_path(&model.path) {
+                Some(bt) => bt,
+                None => {
+                    self.add_log("error", &format!("No suitable backend found for model: {}", model.path.display()));
+                    self.state = AppState::ModelSelection;
+                    return Ok(());
+                }
+            };
             let mut backend = match Backend::new(backend_type, &self.config.backend_config) {
                 Ok(b) => b,
                 Err(e) => {
@@ -707,11 +736,17 @@ impl App {
                     self.loading_progress = 1.0;
                     self.backend = Some(Arc::new(Mutex::new(backend)));
                     self.loaded_model = Some(model.clone());
-                    self.add_log("info", &format!("Model loaded successfully: {}", model.name));
+                    self.add_log(
+                        "info",
+                        &format!("Model loaded successfully: {}", model.name),
+                    );
                     self.state = AppState::InputPrompt;
                 }
                 Err(e) => {
-                    self.add_log("error", &format!("Failed to load model into backend: {}", e));
+                    self.add_log(
+                        "error",
+                        &format!("Failed to load model into backend: {}", e),
+                    );
                     self.state = AppState::ModelSelection;
                 }
             }

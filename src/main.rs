@@ -1,6 +1,6 @@
 use anyhow::Result;
 use inferno::{
-    cli::{Commands, enhanced_parser::EnhancedCliParser, help::HelpSystem},
+    cli::{enhanced_parser::EnhancedCliParser, help::HelpSystem, Commands},
     config::Config,
     setup_logging,
 };
@@ -27,7 +27,10 @@ async fn main() -> Result<()> {
     });
 
     setup_logging(&config.log_level, &config.log_format)?;
-    info!("Starting Inferno AI/ML model runner v{}", std::env::var("CARGO_PKG_VERSION").unwrap_or_else(|_| "0.1.0".to_string()));
+    info!(
+        "Starting Inferno AI/ML model runner v{}",
+        std::env::var("CARGO_PKG_VERSION").unwrap_or_else(|_| "0.1.0".to_string())
+    );
 
     let result = match cli.command {
         Commands::Run(args) => inferno::cli::run::execute(args, &config).await,
@@ -52,10 +55,18 @@ async fn main() -> Result<()> {
         Commands::Streaming(args) => inferno::cli::streaming::execute(args, &config).await,
         Commands::Security(args) => inferno::cli::security::execute(args, &config).await,
         Commands::Observability(args) => inferno::cli::observability::execute(args, &config).await,
-        Commands::Optimization(args) => inferno::cli::optimization::execute_optimization_command(args).await,
-        Commands::MultiModal(args) => inferno::cli::multimodal::handle_multimodal_command(args).await.map_err(|e| anyhow::anyhow!(e)),
-        Commands::Deployment(args) => inferno::cli::deployment::handle_deployment_command(args).await,
-        Commands::Marketplace(args) => inferno::cli::marketplace::handle_marketplace_command(args).await,
+        Commands::Optimization(args) => {
+            inferno::cli::optimization::execute_optimization_command(args).await
+        }
+        Commands::MultiModal(args) => inferno::cli::multimodal::handle_multimodal_command(args)
+            .await
+            .map_err(|e| anyhow::anyhow!(e)),
+        Commands::Deployment(args) => {
+            inferno::cli::deployment::handle_deployment_command(args).await
+        }
+        Commands::Marketplace(args) => {
+            inferno::cli::marketplace::handle_marketplace_command(args).await
+        }
         Commands::Package(args) => inferno::cli::package::handle_package_command(args).await,
 
         // Simplified package manager aliases
@@ -66,20 +77,30 @@ async fn main() -> Result<()> {
         Commands::Repo(args) => inferno::cli::repo::handle_repo_command(args).await,
         Commands::Federated(args) => inferno::cli::federated::handle_federated_command(args).await,
         Commands::Dashboard(args) => inferno::cli::dashboard::handle_dashboard_command(args).await,
-        Commands::AdvancedMonitoring(args) => inferno::cli::advanced_monitoring::execute(args, &config).await,
+        Commands::AdvancedMonitoring(args) => {
+            inferno::cli::advanced_monitoring::execute(args, &config).await
+        }
         Commands::ApiGateway(args) => inferno::cli::api_gateway::execute(args, &config).await,
-        Commands::ModelVersioning(args) => inferno::cli::model_versioning::execute(args, &config).await,
+        Commands::ModelVersioning(args) => {
+            inferno::cli::model_versioning::execute(args, &config).await
+        }
         Commands::DataPipeline(_args) => {
             println!("Data pipeline command is temporarily disabled due to implementation issues");
             Ok(())
-        },
-        Commands::BackupRecovery(args) => inferno::cli::backup_recovery::execute(args, &config).await,
+        }
+        Commands::BackupRecovery(args) => {
+            inferno::cli::backup_recovery::execute(args, &config).await
+        }
         Commands::LoggingAudit(args) => inferno::cli::logging_audit::execute(args, &config).await,
-        Commands::PerformanceOptimization(args) => inferno::cli::performance_optimization::execute(args, &config).await,
+        Commands::PerformanceOptimization(args) => {
+            inferno::cli::performance_optimization::execute(args, &config).await
+        }
         Commands::MultiTenancy(args) => inferno::cli::multi_tenancy::execute(args, &config).await,
         Commands::AdvancedCache(args) => inferno::cli::advanced_cache::execute(args, &config).await,
         Commands::QAFramework(args) => inferno::cli::qa_framework::execute(args, &config).await,
-        Commands::PerformanceBenchmark(args) => inferno::cli::performance_benchmark::execute_performance_benchmark(args).await,
+        Commands::PerformanceBenchmark(args) => {
+            inferno::cli::performance_benchmark::execute_performance_benchmark(args).await
+        }
         Commands::Tui => inferno::tui::launch(&config).await,
     };
 

@@ -6,11 +6,11 @@ import { cn } from '@/lib/utils';
 
 interface MetricCardProps {
   title: string;
-  value: string;
+  value: string | React.ReactNode;
   description: string;
   icon: LucideIcon;
   trend: 'up' | 'down' | 'stable';
-  color: 'blue' | 'green' | 'yellow' | 'red';
+  color: 'blue' | 'green' | 'yellow' | 'red' | 'purple';
 }
 
 const colorVariants = {
@@ -18,6 +18,7 @@ const colorVariants = {
   green: 'text-green-600 dark:text-green-400',
   yellow: 'text-yellow-600 dark:text-yellow-400',
   red: 'text-red-600 dark:text-red-400',
+  purple: 'text-purple-600 dark:text-purple-400',
 };
 
 const trendVariants = {

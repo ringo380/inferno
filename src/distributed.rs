@@ -1,7 +1,7 @@
 use crate::{
-    backends::{BackendHandle, BackendConfig, BackendType, InferenceParams},
-    models::ModelManager,
+    backends::{BackendConfig, BackendHandle, BackendType, InferenceParams},
     metrics::MetricsCollector,
+    models::ModelManager,
 };
 use anyhow::{anyhow, Result};
 use futures::{Stream, StreamExt};
@@ -132,9 +132,15 @@ struct WorkerHandle {
 #[derive(Debug)]
 enum WorkerMessage {
     InferenceRequest(InferenceRequest),
-    PreloadModel { model_name: String },
-    UnloadModel { model_name: String },
-    GetStats { response_tx: oneshot::Sender<WorkerStats> },
+    PreloadModel {
+        model_name: String,
+    },
+    UnloadModel {
+        model_name: String,
+    },
+    GetStats {
+        response_tx: oneshot::Sender<WorkerStats>,
+    },
     Shutdown,
 }
 
@@ -157,7 +163,10 @@ impl DistributedInference {
         model_manager: Arc<ModelManager>,
         metrics: Option<Arc<MetricsCollector>>,
     ) -> Result<Self> {
-        info!("Initializing distributed inference with {} workers", config.worker_count);
+        info!(
+            "Initializing distributed inference with {} workers",
+            config.worker_count
+        );
 
         let stats = Arc::new(RwLock::new(HashMap::new()));
         let next_worker = Arc::new(AtomicUsize::new(0));
@@ -174,7 +183,8 @@ impl DistributedInference {
                 config.max_concurrent_per_worker,
                 config.max_models_per_worker,
                 stats.clone(),
-            ).await?;
+            )
+            .await?;
 
             workers.push(worker_handle);
         }
@@ -227,9 +237,7 @@ impl DistributedInference {
             max_models,
         };
 
-        let join_handle = tokio::spawn(
-            Self::worker_loop(worker, request_rx, streaming_rx, stats)
-        );
+        let join_handle = tokio::spawn(Self::worker_loop(worker, request_rx, streaming_rx, stats));
 
         Ok(WorkerHandle {
             worker_id,
@@ -303,8 +311,9 @@ impl DistributedInference {
         // Acquire semaphore permit
         let _permit = timeout(
             Duration::from_secs(self.config.request_timeout_seconds),
-            worker.semaphore.acquire()
-        ).await
+            worker.semaphore.acquire(),
+        )
+        .await
         .map_err(|_| anyhow!("Request timed out waiting for worker availability"))?
         .map_err(|_| anyhow!("Worker semaphore closed"))?;
 
@@ -317,13 +326,16 @@ impl DistributedInference {
             response_tx,
         };
 
-        worker.request_tx.send(WorkerMessage::InferenceRequest(request))
+        worker
+            .request_tx
+            .send(WorkerMessage::InferenceRequest(request))
             .map_err(|_| anyhow!("Failed to send request to worker"))?;
 
         let response = timeout(
             Duration::from_secs(self.config.request_timeout_seconds),
-            response_rx
-        ).await
+            response_rx,
+        )
+        .await
         .map_err(|_| anyhow!("Request timed out"))?
         .map_err(|_| anyhow!("Worker response channel closed"))??;
 
@@ -349,7 +361,9 @@ impl DistributedInference {
             response_tx,
         };
 
-        worker.streaming_tx.send(request)
+        worker
+            .streaming_tx
+            .send(request)
             .map_err(|_| anyhow!("Failed to send streaming request to worker"))?;
 
         let stream = tokio_stream::wrappers::UnboundedReceiverStream::new(response_rx);
@@ -360,12 +374,11 @@ impl DistributedInference {
     async fn select_worker(&self, model_name: &str) -> Result<usize> {
         match self.config.pool_strategy {
             PoolStrategy::RoundRobin => {
-                let worker_id = self.next_worker.fetch_add(1, Ordering::Relaxed) % self.workers.len();
+                let worker_id =
+                    self.next_worker.fetch_add(1, Ordering::Relaxed) % self.workers.len();
                 Ok(worker_id)
             }
-            PoolStrategy::LeastLoaded => {
-                self.select_least_loaded_worker().await
-            }
+            PoolStrategy::LeastLoaded => self.select_least_loaded_worker().await,
             PoolStrategy::Sticky => {
                 // Use consistent hashing to assign model to worker
                 use std::collections::hash_map::DefaultHasher;
@@ -427,7 +440,11 @@ impl DistributedInference {
 
         for worker in &self.workers {
             let (tx, rx) = oneshot::channel();
-            if worker.request_tx.send(WorkerMessage::GetStats { response_tx: tx }).is_ok() {
+            if worker
+                .request_tx
+                .send(WorkerMessage::GetStats { response_tx: tx })
+                .is_ok()
+            {
                 if let Ok(stats) = timeout(Duration::from_secs(5), rx).await {
                     if let Ok(stats) = stats {
                         detailed_stats.insert(worker.worker_id, stats);
@@ -452,7 +469,10 @@ impl DistributedInference {
         let handles = std::mem::take(&mut self.workers);
         for worker in handles {
             if let Err(e) = worker.join_handle.await {
-                warn!("Worker {} failed to shutdown cleanly: {}", worker.worker_id, e);
+                warn!(
+                    "Worker {} failed to shutdown cleanly: {}",
+                    worker.worker_id, e
+                );
             }
         }
 
@@ -468,7 +488,9 @@ impl Worker {
         self.stats.active_requests += 1;
         self.stats.total_requests += 1;
 
-        let result = self.process_inference(&request.model_name, &request.input, &request.params).await;
+        let result = self
+            .process_inference(&request.model_name, &request.input, &request.params)
+            .await;
 
         let duration = start_time.elapsed();
         self.stats.active_requests = self.stats.active_requests.saturating_sub(1);
@@ -512,12 +534,14 @@ impl Worker {
         self.stats.active_requests += 1;
         self.stats.total_requests += 1;
 
-        let result = self.process_streaming_inference(
-            &request.model_name,
-            &request.input,
-            &request.params,
-            request.response_tx.clone(),
-        ).await;
+        let result = self
+            .process_streaming_inference(
+                &request.model_name,
+                &request.input,
+                &request.params,
+                request.response_tx.clone(),
+            )
+            .await;
 
         self.stats.active_requests = self.stats.active_requests.saturating_sub(1);
 
@@ -525,7 +549,10 @@ impl Worker {
             Ok(_) => self.stats.successful_requests += 1,
             Err(e) => {
                 self.stats.failed_requests += 1;
-                error!("Streaming inference failed on worker {}: {}", self.worker_id, e);
+                error!(
+                    "Streaming inference failed on worker {}: {}",
+                    self.worker_id, e
+                );
                 let _ = request.response_tx.send(Err(e));
             }
         }
@@ -572,7 +599,8 @@ impl Worker {
             }
 
             let model_info = self.model_manager.resolve_model(model_name).await?;
-            let backend_type = BackendType::from_model_path(&model_info.path);
+            let backend_type = BackendType::from_model_path(&model_info.path)
+                .ok_or_else(|| anyhow::anyhow!("No suitable backend found for model: {}", model_info.path.display()))?;
             let backend_handle = BackendHandle::new_shared(backend_type, &self.backend_config)?;
             backend_handle.load_model(&model_info).await?;
 
@@ -588,8 +616,10 @@ impl Worker {
     /// Preload a model
     async fn preload_model(&mut self, model_name: &str) {
         if let Err(e) = self.get_or_load_backend(model_name).await {
-            warn!("Failed to preload model {} on worker {}: {}",
-                  model_name, self.worker_id, e);
+            warn!(
+                "Failed to preload model {} on worker {}: {}",
+                model_name, self.worker_id, e
+            );
         }
     }
 
@@ -597,7 +627,10 @@ impl Worker {
     async fn unload_model(&mut self, model_name: &str) {
         if self.backends.remove(model_name).is_some() {
             self.stats.loaded_models.retain(|m| m != model_name);
-            info!("Unloaded model {} from worker {}", model_name, self.worker_id);
+            info!(
+                "Unloaded model {} from worker {}",
+                model_name, self.worker_id
+            );
         }
     }
 

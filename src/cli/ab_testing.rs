@@ -1,6 +1,4 @@
-use crate::{
-    config::Config,
-};
+use crate::config::Config;
 use anyhow::Result;
 use clap::{Args, Subcommand};
 
@@ -39,9 +37,15 @@ pub async fn execute(args: ABTestingArgs, _config: &Config) -> Result<()> {
     println!("A/B testing functionality is not yet implemented");
 
     match args.command {
-        ABTestingCommand::Start { name, control_model, treatment_model } => {
-            println!("Would start A/B test '{}' with control '{}' and treatment '{}'",
-                     name, control_model, treatment_model);
+        ABTestingCommand::Start {
+            name,
+            control_model,
+            treatment_model,
+        } => {
+            println!(
+                "Would start A/B test '{}' with control '{}' and treatment '{}'",
+                name, control_model, treatment_model
+            );
         }
         ABTestingCommand::Stop { test_name } => {
             println!("Would stop A/B test '{}'", test_name);

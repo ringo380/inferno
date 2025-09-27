@@ -1,19 +1,14 @@
+use anyhow::Result;
 use inferno::{
+    config::Config,
     conversion::{
-        ModelConverter, ModelFormat, ConversionConfig, OptimizationLevel, OptimizationOptions,
-        QuantizationType, Precision, GgmlType, GgufType,
+        ConversionConfig, GgmlType, GgufType, ModelConverter, ModelFormat, OptimizationLevel,
+        OptimizationOptions, Precision, QuantizationType,
     },
     models::{ModelInfo, ModelManager, ModelMetadata},
-    config::Config,
     InfernoError,
 };
-use anyhow::Result;
-use std::{
-    collections::HashMap,
-    fs,
-    path::PathBuf,
-    sync::Arc,
-};
+use std::{collections::HashMap, fs, path::PathBuf, sync::Arc};
 use tempfile::TempDir;
 use tokio::fs as async_fs;
 
@@ -38,7 +33,12 @@ mod conversion_test_utils {
         write_metadata_entry(&mut file, "llama.context_length", &2048u32)?;
 
         // Write tensor info
-        write_tensor_info(&mut file, "token_embd.weight", &[32000, 4096], GgmlType::F16)?;
+        write_tensor_info(
+            &mut file,
+            "token_embd.weight",
+            &[32000, 4096],
+            GgmlType::F16,
+        )?;
         write_tensor_info(&mut file, "output.weight", &[32000, 4096], GgmlType::F16)?;
 
         // Write tensor data (dummy data)
@@ -78,8 +78,14 @@ mod conversion_test_utils {
         let embedding_data: Vec<f32> = (0..32000 * 512).map(|i| (i as f32) * 0.001).collect();
         let output_data: Vec<f32> = (0..32000 * 512).map(|i| (i as f32) * 0.001).collect();
 
-        tensors.insert("token_embd.weight".to_string(), (Dtype::F32, vec![32000, 512], embedding_data.as_slice()));
-        tensors.insert("output.weight".to_string(), (Dtype::F32, vec![32000, 512], output_data.as_slice()));
+        tensors.insert(
+            "token_embd.weight".to_string(),
+            (Dtype::F32, vec![32000, 512], embedding_data.as_slice()),
+        );
+        tensors.insert(
+            "output.weight".to_string(),
+            (Dtype::F32, vec![32000, 512], output_data.as_slice()),
+        );
 
         let serialized = serialize(&tensors, &None)?;
         fs::write(path, serialized)?;
@@ -87,7 +93,11 @@ mod conversion_test_utils {
         Ok(())
     }
 
-    fn write_metadata_entry<W: Write>(writer: &mut W, key: &str, value: &dyn MetadataValue) -> Result<()> {
+    fn write_metadata_entry<W: Write>(
+        writer: &mut W,
+        key: &str,
+        value: &dyn MetadataValue,
+    ) -> Result<()> {
         // Write key
         writer.write_u64::<LittleEndian>(key.len() as u64)?;
         writer.write_all(key.as_bytes())?;
@@ -98,7 +108,12 @@ mod conversion_test_utils {
         Ok(())
     }
 
-    fn write_tensor_info<W: Write>(writer: &mut W, name: &str, dims: &[u64], ggml_type: GgmlType) -> Result<()> {
+    fn write_tensor_info<W: Write>(
+        writer: &mut W,
+        name: &str,
+        dims: &[u64],
+        ggml_type: GgmlType,
+    ) -> Result<()> {
         // Write tensor name
         writer.write_u64::<LittleEndian>(name.len() as u64)?;
         writer.write_all(name.as_bytes())?;
@@ -186,7 +201,7 @@ mod conversion_test_utils {
                 batch_size: Some(32),
                 preserve_metadata: true,
             },
-            input_format: None,  // Auto-detect
+            input_format: None, // Auto-detect
             output_format: ModelFormat::Gguf,
             validate_conversion: true,
             backup_original: false,
@@ -213,10 +228,22 @@ async fn test_format_detection() -> Result<()> {
     let converter = ModelConverter::new();
 
     // Test format detection
-    assert_eq!(converter.detect_format(&gguf_path).await?, ModelFormat::Gguf);
-    assert_eq!(converter.detect_format(&onnx_path).await?, ModelFormat::Onnx);
-    assert_eq!(converter.detect_format(&pytorch_path).await?, ModelFormat::PyTorch);
-    assert_eq!(converter.detect_format(&safetensors_path).await?, ModelFormat::SafeTensors);
+    assert_eq!(
+        converter.detect_format(&gguf_path).await?,
+        ModelFormat::Gguf
+    );
+    assert_eq!(
+        converter.detect_format(&onnx_path).await?,
+        ModelFormat::Onnx
+    );
+    assert_eq!(
+        converter.detect_format(&pytorch_path).await?,
+        ModelFormat::PyTorch
+    );
+    assert_eq!(
+        converter.detect_format(&safetensors_path).await?,
+        ModelFormat::SafeTensors
+    );
 
     Ok(())
 }
@@ -236,12 +263,17 @@ async fn test_gguf_to_onnx_conversion() -> Result<()> {
 
     let converter = ModelConverter::new();
 
-    let result = converter.convert_model(&input_path, &output_path, &config).await;
+    let result = converter
+        .convert_model(&input_path, &output_path, &config)
+        .await;
     assert!(result.is_ok(), "Conversion should succeed: {:?}", result);
 
     // Verify output file exists and has correct format
     assert!(output_path.exists());
-    assert_eq!(converter.detect_format(&output_path).await?, ModelFormat::Onnx);
+    assert_eq!(
+        converter.detect_format(&output_path).await?,
+        ModelFormat::Onnx
+    );
 
     // Verify metadata preservation if requested
     if config.optimization.preserve_metadata {
@@ -267,12 +299,17 @@ async fn test_onnx_to_gguf_conversion() -> Result<()> {
 
     let converter = ModelConverter::new();
 
-    let result = converter.convert_model(&input_path, &output_path, &config).await;
+    let result = converter
+        .convert_model(&input_path, &output_path, &config)
+        .await;
     assert!(result.is_ok(), "Conversion should succeed: {:?}", result);
 
     // Verify output file exists and has correct format
     assert!(output_path.exists());
-    assert_eq!(converter.detect_format(&output_path).await?, ModelFormat::Gguf);
+    assert_eq!(
+        converter.detect_format(&output_path).await?,
+        ModelFormat::Gguf
+    );
 
     Ok(())
 }
@@ -292,12 +329,17 @@ async fn test_pytorch_to_safetensors_conversion() -> Result<()> {
 
     let converter = ModelConverter::new();
 
-    let result = converter.convert_model(&input_path, &output_path, &config).await;
+    let result = converter
+        .convert_model(&input_path, &output_path, &config)
+        .await;
     assert!(result.is_ok(), "Conversion should succeed: {:?}", result);
 
     // Verify output file exists and has correct format
     assert!(output_path.exists());
-    assert_eq!(converter.detect_format(&output_path).await?, ModelFormat::SafeTensors);
+    assert_eq!(
+        converter.detect_format(&output_path).await?,
+        ModelFormat::SafeTensors
+    );
 
     Ok(())
 }
@@ -318,8 +360,14 @@ async fn test_quantization_conversion() -> Result<()> {
 
     let converter = ModelConverter::new();
 
-    let result = converter.convert_model(&input_path, &output_path, &config).await;
-    assert!(result.is_ok(), "Quantization conversion should succeed: {:?}", result);
+    let result = converter
+        .convert_model(&input_path, &output_path, &config)
+        .await;
+    assert!(
+        result.is_ok(),
+        "Quantization conversion should succeed: {:?}",
+        result
+    );
 
     // Verify output file is smaller (quantized)
     let input_size = fs::metadata(&input_path)?.len();
@@ -349,8 +397,14 @@ async fn test_precision_conversion() -> Result<()> {
 
     let converter = ModelConverter::new();
 
-    let result = converter.convert_model(&input_path, &output_path, &config).await;
-    assert!(result.is_ok(), "Precision conversion should succeed: {:?}", result);
+    let result = converter
+        .convert_model(&input_path, &output_path, &config)
+        .await;
+    assert!(
+        result.is_ok(),
+        "Precision conversion should succeed: {:?}",
+        result
+    );
 
     assert!(output_path.exists());
 
@@ -393,7 +447,12 @@ async fn test_batch_conversion() -> Result<()> {
     let results = futures::future::join_all(conversion_tasks).await;
 
     for (i, result) in results.into_iter().enumerate() {
-        assert!(result.is_ok(), "Conversion {} should succeed: {:?}", i, result);
+        assert!(
+            result.is_ok(),
+            "Conversion {} should succeed: {:?}",
+            i,
+            result
+        );
     }
 
     // Verify all output files exist
@@ -421,11 +480,19 @@ async fn test_conversion_validation() -> Result<()> {
 
     let converter = ModelConverter::new();
 
-    let result = converter.convert_model(&input_path, &output_path, &config).await;
-    assert!(result.is_ok(), "Validated conversion should succeed: {:?}", result);
+    let result = converter
+        .convert_model(&input_path, &output_path, &config)
+        .await;
+    assert!(
+        result.is_ok(),
+        "Validated conversion should succeed: {:?}",
+        result
+    );
 
     // Verify validation occurred by checking the validation report
-    let validation_report = converter.validate_conversion(&input_path, &output_path).await;
+    let validation_report = converter
+        .validate_conversion(&input_path, &output_path)
+        .await;
     assert!(validation_report.is_ok(), "Validation should succeed");
 
     Ok(())
@@ -445,7 +512,9 @@ async fn test_invalid_input_handling() -> Result<()> {
     let config = conversion_test_utils::create_conversion_config();
     let converter = ModelConverter::new();
 
-    let result = converter.convert_model(&invalid_path, &output_path, &config).await;
+    let result = converter
+        .convert_model(&invalid_path, &output_path, &config)
+        .await;
     assert!(result.is_err(), "Should fail with invalid input file");
 
     Ok(())
@@ -470,7 +539,9 @@ async fn test_metadata_preservation() -> Result<()> {
     // Get original metadata
     let original_info = converter.analyze_model(&input_path).await?;
 
-    let result = converter.convert_model(&input_path, &output_path, &config).await;
+    let result = converter
+        .convert_model(&input_path, &output_path, &config)
+        .await;
     assert!(result.is_ok(), "Conversion should succeed: {:?}", result);
 
     // Get converted metadata
@@ -479,7 +550,10 @@ async fn test_metadata_preservation() -> Result<()> {
     // Check that key metadata was preserved
     if let Some(original_name) = original_info.metadata.get("general.name") {
         if let Some(converted_name) = converted_info.metadata.get("general.name") {
-            assert_eq!(original_name, converted_name, "Model name should be preserved");
+            assert_eq!(
+                original_name, converted_name,
+                "Model name should be preserved"
+            );
         }
     }
 
@@ -512,8 +586,15 @@ async fn test_optimization_levels() -> Result<()> {
         config.optimization.level = *level;
         config.output_format = ModelFormat::Gguf;
 
-        let result = converter.convert_model(&input_path, &output_path, &config).await;
-        assert!(result.is_ok(), "Conversion with {:?} optimization should succeed: {:?}", level, result);
+        let result = converter
+            .convert_model(&input_path, &output_path, &config)
+            .await;
+        assert!(
+            result.is_ok(),
+            "Conversion with {:?} optimization should succeed: {:?}",
+            level,
+            result
+        );
 
         assert!(output_path.exists());
     }
@@ -541,7 +622,9 @@ async fn test_concurrent_conversions() -> Result<()> {
 
         let converter = ModelConverter::new();
         let task = tokio::spawn(async move {
-            converter.convert_model(&input_path, &output_path, &config).await
+            converter
+                .convert_model(&input_path, &output_path, &config)
+                .await
         });
 
         tasks.push(task);
@@ -552,7 +635,12 @@ async fn test_concurrent_conversions() -> Result<()> {
 
     for (i, task_result) in results.into_iter().enumerate() {
         let conversion_result = task_result?;
-        assert!(conversion_result.is_ok(), "Concurrent conversion {} should succeed: {:?}", i, conversion_result);
+        assert!(
+            conversion_result.is_ok(),
+            "Concurrent conversion {} should succeed: {:?}",
+            i,
+            conversion_result
+        );
     }
 
     Ok(())
@@ -582,7 +670,9 @@ async fn test_conversion_progress() -> Result<()> {
         }
     });
 
-    let conversion_result = converter.convert_model(&input_path, &output_path, &config).await;
+    let conversion_result = converter
+        .convert_model(&input_path, &output_path, &config)
+        .await;
     assert!(conversion_result.is_ok(), "Conversion should succeed");
 
     let progress_result = progress_handle.await?;

@@ -1,14 +1,10 @@
 use crate::{
     config::Config,
-    resilience::{
-        CircuitBreakerConfig, RetryConfig, HealthCheckConfig,
-        ResilienceManager, CircuitState, HealthStatus
-    },
+    resilience::{CircuitBreakerConfig, HealthStatus, ResilienceManager, RetryConfig},
 };
 use anyhow::Result;
 use clap::{Args, Subcommand};
 use serde_json;
-use std::collections::HashMap;
 
 #[derive(Args)]
 pub struct ResilienceArgs {
@@ -132,24 +128,21 @@ pub enum MetricsFormat {
 
 pub async fn execute(args: ResilienceArgs, _config: &Config) -> Result<()> {
     match args.command {
-        ResilienceCommand::Status => {
-            show_resilience_status().await
-        }
-        ResilienceCommand::CircuitBreaker { action } => {
-            handle_circuit_breaker_action(action).await
-        }
-        ResilienceCommand::Bulkhead { action } => {
-            handle_bulkhead_action(action).await
-        }
-        ResilienceCommand::Test { pattern, requests, failure_rate } => {
-            test_resilience_pattern(pattern, requests.unwrap_or(10), failure_rate.unwrap_or(0.2)).await
+        ResilienceCommand::Status => show_resilience_status().await,
+        ResilienceCommand::CircuitBreaker { action } => handle_circuit_breaker_action(action).await,
+        ResilienceCommand::Bulkhead { action } => handle_bulkhead_action(action).await,
+        ResilienceCommand::Test {
+            pattern,
+            requests,
+            failure_rate,
+        } => {
+            test_resilience_pattern(pattern, requests.unwrap_or(10), failure_rate.unwrap_or(0.2))
+                .await
         }
         ResilienceCommand::Metrics { format, output } => {
             export_resilience_metrics(format.unwrap_or(MetricsFormat::Json), output).await
         }
-        ResilienceCommand::Configure { action } => {
-            handle_configure_action(action).await
-        }
+        ResilienceCommand::Configure { action } => handle_configure_action(action).await,
     }
 }
 
@@ -163,26 +156,36 @@ async fn show_resilience_status() -> Result<()> {
     // Add some sample configurations
     manager.add_circuit_breaker(
         "inference-service".to_string(),
-        CircuitBreakerConfig::default()
+        CircuitBreakerConfig::default(),
     )?;
 
     manager.add_bulkhead("batch-processing".to_string(), 10)?;
 
-    manager.add_retry_policy(
-        "model-loading".to_string(),
-        RetryConfig::default()
-    )?;
+    manager.add_retry_policy("model-loading".to_string(), RetryConfig::default())?;
 
     println!("\n🔄 Circuit Breakers:");
     if let Some(cb) = manager.get_circuit_breaker("inference-service") {
         let state = cb.get_state();
         let metrics = cb.get_metrics();
         println!("  • inference-service: {:?}", state);
-        println!("    - Total requests: {}", metrics.total_requests.load(std::sync::atomic::Ordering::Relaxed));
+        println!(
+            "    - Total requests: {}",
+            metrics
+                .total_requests
+                .load(std::sync::atomic::Ordering::Relaxed)
+        );
         println!("    - Success rate: {:.2}%", {
-            let total = metrics.total_requests.load(std::sync::atomic::Ordering::Relaxed);
-            let successful = metrics.successful_requests.load(std::sync::atomic::Ordering::Relaxed);
-            if total > 0 { (successful as f64 / total as f64) * 100.0 } else { 0.0 }
+            let total = metrics
+                .total_requests
+                .load(std::sync::atomic::Ordering::Relaxed);
+            let successful = metrics
+                .successful_requests
+                .load(std::sync::atomic::Ordering::Relaxed);
+            if total > 0 {
+                (successful as f64 / total as f64) * 100.0
+            } else {
+                0.0
+            }
         });
     }
 
@@ -243,7 +246,10 @@ async fn handle_circuit_breaker_action(action: CircuitBreakerAction) -> Result<(
             println!("• State Changes: 2");
         }
         CircuitBreakerAction::Reset { name } => {
-            println!("✅ Circuit breaker '{}' has been reset to CLOSED state", name);
+            println!(
+                "✅ Circuit breaker '{}' has been reset to CLOSED state",
+                name
+            );
             println!("All failure counters have been cleared");
         }
     }
@@ -271,13 +277,13 @@ async fn handle_bulkhead_action(action: BulkheadAction) -> Result<()> {
     Ok(())
 }
 
-async fn test_resilience_pattern(
-    pattern: String,
-    requests: u32,
-    failure_rate: f64,
-) -> Result<()> {
+async fn test_resilience_pattern(pattern: String, requests: u32, failure_rate: f64) -> Result<()> {
     println!("Testing resilience pattern: {}", pattern);
-    println!("Requests: {}, Failure rate: {:.1}%", requests, failure_rate * 100.0);
+    println!(
+        "Requests: {}, Failure rate: {:.1}%",
+        requests,
+        failure_rate * 100.0
+    );
     println!("");
 
     let manager = ResilienceManager::new();
@@ -295,7 +301,7 @@ async fn test_resilience_pattern(
                     success_threshold: 2,
                     timeout_ms: 1000,
                     max_concurrent_requests: 10,
-                }
+                },
             )?;
 
             if let Some(cb) = manager.get_circuit_breaker("test-service") {
@@ -306,13 +312,15 @@ async fn test_resilience_pattern(
                 for i in 1..=requests {
                     let should_fail = rand::random::<f64>() < failure_rate;
 
-                    let result = cb.call(|| async {
-                        if should_fail {
-                            Err(anyhow::anyhow!("Simulated failure"))
-                        } else {
-                            Ok("Success")
-                        }
-                    }).await;
+                    let result = cb
+                        .call(|| async {
+                            if should_fail {
+                                Err(anyhow::anyhow!("Simulated failure"))
+                            } else {
+                                Ok("Success")
+                            }
+                        })
+                        .await;
 
                     match result {
                         Ok(_) => {
@@ -356,7 +364,7 @@ async fn test_resilience_pattern(
                     backoff_multiplier: 2.0,
                     jitter_enabled: true,
                     retry_on_timeout: true,
-                }
+                },
             )?;
 
             if let Some(retry) = manager.get_retry_policy("test-retry") {
@@ -365,13 +373,15 @@ async fn test_resilience_pattern(
                 for i in 1..=requests {
                     let should_fail = rand::random::<f64>() < failure_rate;
 
-                    let result = retry.execute(|| async {
-                        if should_fail {
-                            Err(anyhow::anyhow!("Simulated failure"))
-                        } else {
-                            Ok("Success")
-                        }
-                    }).await;
+                    let result = retry
+                        .execute(|| async {
+                            if should_fail {
+                                Err(anyhow::anyhow!("Simulated failure"))
+                            } else {
+                                Ok("Success")
+                            }
+                        })
+                        .await;
 
                     match result {
                         Ok(_) => {
@@ -391,7 +401,10 @@ async fn test_resilience_pattern(
                 println!("\n\nTest Results:");
                 println!("• Successful requests: {}", successes);
                 println!("• Failed requests: {}", requests - successes);
-                println!("• Success rate: {:.2}%", (successes as f64 / requests as f64) * 100.0);
+                println!(
+                    "• Success rate: {:.2}%",
+                    (successes as f64 / requests as f64) * 100.0
+                );
             }
         }
         "bulkhead" => {
@@ -405,10 +418,12 @@ async fn test_resilience_pattern(
                 for i in 1..=requests {
                     let bh = bulkhead.clone();
                     let handle = tokio::spawn(async move {
-                        let result = bh.execute(|| async {
-                            tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-                            Ok(format!("Request {}", i))
-                        }).await;
+                        let result = bh
+                            .execute(|| async {
+                                tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                                Ok(format!("Request {}", i))
+                            })
+                            .await;
                         result
                     });
                     handles.push(handle);
@@ -459,14 +474,15 @@ async fn export_resilience_metrics(format: MetricsFormat, output: Option<String>
     let metrics = manager.get_resilience_metrics();
 
     let output_data = match format {
-        MetricsFormat::Json => {
-            serde_json::to_string_pretty(&metrics)?
-        }
+        MetricsFormat::Json => serde_json::to_string_pretty(&metrics)?,
         MetricsFormat::Prometheus => {
             let mut prometheus_output = String::new();
             for (name, value) in metrics {
-                prometheus_output.push_str(&format!("inferno_{} {}\n", name,
-                    serde_json::to_string(&value)?));
+                prometheus_output.push_str(&format!(
+                    "inferno_{} {}\n",
+                    name,
+                    serde_json::to_string(&value)?
+                ));
             }
             prometheus_output
         }
@@ -475,8 +491,10 @@ async fn export_resilience_metrics(format: MetricsFormat, output: Option<String>
             table_output.push_str("Component             | Metric                | Value\n");
             table_output.push_str("----------------------|----------------------|--------\n");
             for (name, _value) in metrics {
-                table_output.push_str(&format!("{:<20} | {:<20} | {}\n",
-                    name, "status", "healthy"));
+                table_output.push_str(&format!(
+                    "{:<20} | {:<20} | {}\n",
+                    name, "status", "healthy"
+                ));
             }
             table_output
         }
@@ -501,7 +519,7 @@ async fn handle_configure_action(action: ConfigureAction) -> Result<()> {
             name,
             failure_threshold,
             recovery_timeout,
-            success_threshold
+            success_threshold,
         } => {
             println!("Configuring circuit breaker: {}", name);
             if let Some(threshold) = failure_threshold {
@@ -519,7 +537,7 @@ async fn handle_configure_action(action: ConfigureAction) -> Result<()> {
             name,
             max_attempts,
             initial_delay,
-            backoff_multiplier
+            backoff_multiplier,
         } => {
             println!("Configuring retry policy: {}", name);
             if let Some(attempts) = max_attempts {
@@ -533,7 +551,10 @@ async fn handle_configure_action(action: ConfigureAction) -> Result<()> {
             }
             println!("✅ Retry policy configuration updated");
         }
-        ConfigureAction::Bulkhead { name, max_concurrent } => {
+        ConfigureAction::Bulkhead {
+            name,
+            max_concurrent,
+        } => {
             println!("Configuring bulkhead: {}", name);
             if let Some(concurrent) = max_concurrent {
                 println!("• Max concurrent: {}", concurrent);

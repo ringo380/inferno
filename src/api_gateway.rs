@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::sync::{RwLock, Mutex};
+use tokio::sync::{Mutex, RwLock};
 use tracing::{error, info, warn};
 
 /// API Gateway configuration
@@ -762,7 +762,12 @@ impl Default for CorsConfig {
         Self {
             enabled: true,
             allowed_origins: vec!["*".to_string()],
-            allowed_methods: vec!["GET".to_string(), "POST".to_string(), "PUT".to_string(), "DELETE".to_string()],
+            allowed_methods: vec![
+                "GET".to_string(),
+                "POST".to_string(),
+                "PUT".to_string(),
+                "DELETE".to_string(),
+            ],
             allowed_headers: vec!["*".to_string()],
             expose_headers: Vec::new(),
             allow_credentials: false,
@@ -981,11 +986,13 @@ impl RateLimitStorage for MemoryRateLimitStorage {
             tokio::runtime::Handle::current().block_on(async {
                 let mut storage = self.storage.write().await;
 
-                let entry = storage.entry(key.to_string()).or_insert_with(|| RateLimitEntry {
-                    count: 0,
-                    window_start,
-                    expires_at,
-                });
+                let entry = storage
+                    .entry(key.to_string())
+                    .or_insert_with(|| RateLimitEntry {
+                        count: 0,
+                        window_start,
+                        expires_at,
+                    });
 
                 // Reset if window expired
                 if now >= entry.expires_at {
@@ -1051,11 +1058,7 @@ impl RateLimitAlgorithm for TokenBucketAlgorithm {
         };
 
         let reset_time = Utc::now() + chrono::Duration::from_std(window).unwrap();
-        let retry_after = if !allowed {
-            Some(window)
-        } else {
-            None
-        };
+        let retry_after = if !allowed { Some(window) } else { None };
 
         Ok(RateLimitResult {
             allowed,
@@ -1120,24 +1123,26 @@ impl LoadBalancer {
 
         match self.config.algorithm {
             LoadBalancingAlgorithm::RoundRobin => {
-                self.round_robin_selection(service_id, &healthy_targets).await
+                self.round_robin_selection(service_id, &healthy_targets)
+                    .await
             }
             LoadBalancingAlgorithm::WeightedRoundRobin => {
-                self.weighted_round_robin_selection(service_id, &healthy_targets).await
+                self.weighted_round_robin_selection(service_id, &healthy_targets)
+                    .await
             }
             LoadBalancingAlgorithm::LeastConnections => {
                 self.least_connections_selection(&healthy_targets).await
             }
-            LoadBalancingAlgorithm::Random => {
-                self.random_selection(&healthy_targets).await
-            }
+            LoadBalancingAlgorithm::Random => self.random_selection(&healthy_targets).await,
             LoadBalancingAlgorithm::IPHash => {
                 // Would need client IP for proper implementation
-                self.round_robin_selection(service_id, &healthy_targets).await
+                self.round_robin_selection(service_id, &healthy_targets)
+                    .await
             }
             _ => {
                 // Default to round robin
-                self.round_robin_selection(service_id, &healthy_targets).await
+                self.round_robin_selection(service_id, &healthy_targets)
+                    .await
             }
         }
     }
@@ -1181,17 +1186,19 @@ impl LoadBalancer {
         Ok(targets.first().map(|t| (*t).clone()))
     }
 
-    async fn random_selection(
-        &self,
-        targets: &[&ServiceTarget],
-    ) -> Result<Option<ServiceTarget>> {
+    async fn random_selection(&self, targets: &[&ServiceTarget]) -> Result<Option<ServiceTarget>> {
         use rand::Rng;
         let mut rng = rand::thread_rng();
         let index = rng.gen_range(0..targets.len());
         Ok(Some(targets[index].clone()))
     }
 
-    pub async fn update_target_health(&self, service_id: &str, target_id: &str, healthy: bool) -> Result<()> {
+    pub async fn update_target_health(
+        &self,
+        service_id: &str,
+        target_id: &str,
+        healthy: bool,
+    ) -> Result<()> {
         let mut targets = self.targets.write().await;
         if let Some(service_targets) = targets.get_mut(service_id) {
             for target in service_targets.iter_mut() {
@@ -1233,7 +1240,8 @@ impl HealthChecker {
                     target,
                     health_config,
                     Arc::clone(&load_balancer),
-                ).await?;
+                )
+                .await?;
             }
         }
         Ok(())
@@ -1270,7 +1278,8 @@ impl HealthChecker {
                     timeout,
                     &expected_status,
                     expected_body.as_deref(),
-                ).await;
+                )
+                .await;
 
                 match health_result {
                     Ok(healthy) => {
@@ -1279,7 +1288,10 @@ impl HealthChecker {
                             consecutive_failures = 0;
 
                             if consecutive_successes >= healthy_threshold {
-                                if let Err(e) = load_balancer.update_target_health(&service_id, &target_id, true).await {
+                                if let Err(e) = load_balancer
+                                    .update_target_health(&service_id, &target_id, true)
+                                    .await
+                                {
                                     error!("Failed to update target health: {}", e);
                                 }
                             }
@@ -1288,7 +1300,10 @@ impl HealthChecker {
                             consecutive_successes = 0;
 
                             if consecutive_failures >= unhealthy_threshold {
-                                if let Err(e) = load_balancer.update_target_health(&service_id, &target_id, false).await {
+                                if let Err(e) = load_balancer
+                                    .update_target_health(&service_id, &target_id, false)
+                                    .await
+                                {
                                     error!("Failed to update target health: {}", e);
                                 }
                             }
@@ -1300,7 +1315,10 @@ impl HealthChecker {
                         consecutive_successes = 0;
 
                         if consecutive_failures >= unhealthy_threshold {
-                            if let Err(e) = load_balancer.update_target_health(&service_id, &target_id, false).await {
+                            if let Err(e) = load_balancer
+                                .update_target_health(&service_id, &target_id, false)
+                                .await
+                            {
                                 error!("Failed to update target health: {}", e);
                             }
                         }
@@ -1324,12 +1342,10 @@ impl HealthChecker {
         #[cfg(feature = "reqwest")]
         {
             let client = reqwest::Client::new();
-            let response = tokio::time::timeout(
-                timeout,
-                client.get(url).send()
-            ).await
-            .map_err(|_| anyhow::anyhow!("Health check timeout"))?
-            .map_err(|e| anyhow::anyhow!("Health check request failed: {}", e))?;
+            let response = tokio::time::timeout(timeout, client.get(url).send())
+                .await
+                .map_err(|_| anyhow::anyhow!("Health check timeout"))?
+                .map_err(|e| anyhow::anyhow!("Health check request failed: {}", e))?;
 
             let status_ok = if expected_status.is_empty() {
                 response.status().is_success()
@@ -1342,7 +1358,9 @@ impl HealthChecker {
             }
 
             if let Some(expected) = expected_body {
-                let body = response.text().await
+                let body = response
+                    .text()
+                    .await
                     .map_err(|e| anyhow::anyhow!("Failed to read response body: {}", e))?;
                 return Ok(body.contains(expected));
             }
@@ -1486,7 +1504,10 @@ impl ApiGateway {
         // Initialize storage
         let storage: Arc<dyn RateLimitStorage> = match config.rate_limiting.storage.backend {
             StorageBackend::Memory => {
-                let memory_config = config.rate_limiting.storage.memory
+                let memory_config = config
+                    .rate_limiting
+                    .storage
+                    .memory
                     .as_ref()
                     .cloned()
                     .unwrap_or_else(MemoryStorageConfig::default);
@@ -1543,11 +1564,16 @@ impl ApiGateway {
     }
 
     pub async fn start(&self) -> Result<()> {
-        info!("Starting API Gateway on {}:{}", self.config.bind_address, self.config.port);
+        info!(
+            "Starting API Gateway on {}:{}",
+            self.config.bind_address, self.config.port
+        );
 
         // Start health checks
         for service in &self.config.upstream_services {
-            self.health_checker.start_health_checks(service, Arc::clone(&self.load_balancer)).await?;
+            self.health_checker
+                .start_health_checks(service, Arc::clone(&self.load_balancer))
+                .await?;
         }
 
         info!("API Gateway started successfully");
@@ -1610,12 +1636,17 @@ impl ApiGateway {
             let circuit_breakers = self.circuit_breakers.read().await;
             if let Some(circuit_breaker) = circuit_breakers.get(&route_config.upstream) {
                 if !circuit_breaker.should_allow_request().await {
-                    return Err(anyhow::anyhow!("Circuit breaker is open for service: {}", route_config.upstream));
+                    return Err(anyhow::anyhow!(
+                        "Circuit breaker is open for service: {}",
+                        route_config.upstream
+                    ));
                 }
             }
 
             // Select target from load balancer
-            self.load_balancer.select_target(&route_config.upstream).await
+            self.load_balancer
+                .select_target(&route_config.upstream)
+                .await
         } else {
             Err(anyhow::anyhow!("Route not found: {}", route_id))
         }

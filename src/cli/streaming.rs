@@ -2,7 +2,7 @@ use crate::{
     backends::{Backend, BackendType, InferenceParams},
     config::Config,
     models::ModelManager,
-    streaming::{StreamingConfig, StreamingManager, StreamingToken},
+    streaming::{StreamingConfig, StreamingManager},
 };
 use anyhow::Result;
 use clap::{Args, Subcommand};
@@ -42,7 +42,12 @@ pub enum StreamingCommand {
         #[arg(short, long, help = "Model to use")]
         model: String,
 
-        #[arg(short, long, help = "Number of concurrent streams", default_value = "5")]
+        #[arg(
+            short,
+            long,
+            help = "Number of concurrent streams",
+            default_value = "5"
+        )]
         concurrent: usize,
 
         #[arg(short, long, help = "Test prompt")]
@@ -63,7 +68,12 @@ pub enum StreamingCommand {
 
     #[command(about = "Start WebSocket streaming server")]
     Server {
-        #[arg(short, long, help = "Server bind address", default_value = "127.0.0.1:8081")]
+        #[arg(
+            short,
+            long,
+            help = "Server bind address",
+            default_value = "127.0.0.1:8081"
+        )]
         bind: std::net::SocketAddr,
 
         #[arg(short, long, help = "Default model to load")]
@@ -97,31 +107,23 @@ pub async fn execute(args: StreamingArgs, config: &Config) -> Result<()> {
             max_tokens,
             temperature,
             top_p,
-            verbose
-        } => {
-            execute_interactive(model, max_tokens, temperature, top_p, verbose, config).await
-        }
+            verbose,
+        } => execute_interactive(model, max_tokens, temperature, top_p, verbose, config).await,
         StreamingCommand::Benchmark {
             model,
             concurrent,
             prompt,
-            duration
-        } => {
-            execute_benchmark(model, concurrent, prompt, duration, config).await
-        }
+            duration,
+        } => execute_benchmark(model, concurrent, prompt, duration, config).await,
         StreamingCommand::Monitor { interval, detailed } => {
             execute_monitor(interval, detailed, config).await
         }
         StreamingCommand::Server {
             bind,
             model,
-            max_connections
-        } => {
-            execute_server(bind, model, max_connections, config).await
-        }
-        StreamingCommand::Config { format, output } => {
-            execute_config(format, output).await
-        }
+            max_connections,
+        } => execute_server(bind, model, max_connections, config).await,
+        StreamingCommand::Config { format, output } => execute_config(format, output).await,
     }
 }
 
@@ -148,7 +150,8 @@ async fn execute_interactive(
     // Load model
     let model_manager = ModelManager::new(&config.models_dir);
     let model_info = model_manager.resolve_model(&model_name).await?;
-    let backend_type = BackendType::from_model_path(&model_info.path);
+    let backend_type = BackendType::from_model_path(&model_info.path)
+        .ok_or_else(|| anyhow::anyhow!("No suitable backend found for model: {}", model_info.path.display()))?;
     let mut backend = Backend::new(backend_type, &config.backend_config)?;
     backend.load_model(&model_info).await?;
 
@@ -179,11 +182,10 @@ async fn execute_interactive(
                 io::stdout().flush()?;
 
                 // Create enhanced streaming session
-                match streaming_manager.create_enhanced_stream(
-                    &mut backend,
-                    input,
-                    &inference_params,
-                ).await {
+                match streaming_manager
+                    .create_enhanced_stream(&mut backend, input, &inference_params)
+                    .await
+                {
                     Ok(mut stream) => {
                         let mut token_count = 0;
                         let start_time = std::time::Instant::now();
@@ -208,15 +210,18 @@ async fn execute_interactive(
                         println!();
 
                         if verbose {
-                            println!("📊 Generated {} tokens in {:.2}s ({:.1} tok/s)",
-                                    token_count,
-                                    elapsed.as_secs_f32(),
-                                    token_count as f32 / elapsed.as_secs_f32());
+                            println!(
+                                "📊 Generated {} tokens in {:.2}s ({:.1} tok/s)",
+                                token_count,
+                                elapsed.as_secs_f32(),
+                                token_count as f32 / elapsed.as_secs_f32()
+                            );
 
                             let metrics = streaming_manager.get_metrics();
-                            println!("📈 Total streams: {}, Total tokens: {}",
-                                    metrics.total_streams_created,
-                                    metrics.total_tokens_streamed);
+                            println!(
+                                "📈 Total streams: {}, Total tokens: {}",
+                                metrics.total_streams_created, metrics.total_tokens_streamed
+                            );
                         }
                         println!();
                     }
@@ -242,7 +247,10 @@ async fn execute_benchmark(
     duration: u64,
     config: &Config,
 ) -> Result<()> {
-    info!("Starting streaming benchmark with {} concurrent streams", concurrent);
+    info!(
+        "Starting streaming benchmark with {} concurrent streams",
+        concurrent
+    );
 
     // Initialize streaming manager
     let streaming_config = StreamingConfig {
@@ -283,41 +291,44 @@ async fn execute_benchmark(
         let backend_config = config.backend_config.clone();
 
         let handle = tokio::spawn(async move {
-            let mut backend = Backend::new(backend_type, &backend_config).unwrap();
-            backend.load_model(&model_info).await.unwrap();
+            let result: Result<(usize, u64, u64)> = async move {
+                let backend_type = backend_type.ok_or_else(|| anyhow::anyhow!("No suitable backend found"))?;
+                let mut backend = Backend::new(backend_type, &backend_config)?;
+                backend.load_model(&model_info).await?;
 
-            let start_time = std::time::Instant::now();
-            let mut total_tokens = 0u64;
-            let mut total_streams = 0u64;
+                let start_time = std::time::Instant::now();
+                let mut total_tokens = 0u64;
+                let mut total_streams = 0u64;
 
-            while start_time.elapsed().as_secs() < duration {
-                match streaming_manager.create_enhanced_stream(
-                    &mut backend,
-                    &prompt,
-                    &inference_params,
-                ).await {
-                    Ok(mut stream) => {
-                        total_streams += 1;
+                while start_time.elapsed().as_secs() < duration {
+                    match streaming_manager
+                        .create_enhanced_stream(&mut backend, &prompt, &inference_params)
+                        .await
+                    {
+                        Ok(mut stream) => {
+                            total_streams += 1;
 
-                        while let Some(token_result) = stream.next().await {
-                            match token_result {
-                                Ok(streaming_token) => {
-                                    if !streaming_token.is_heartbeat() {
-                                        total_tokens += 1;
+                            while let Some(token_result) = stream.next().await {
+                                match token_result {
+                                    Ok(streaming_token) => {
+                                        if !streaming_token.is_heartbeat() {
+                                            total_tokens += 1;
+                                        }
                                     }
+                                    Err(_) => break,
                                 }
-                                Err(_) => break,
                             }
                         }
-                    }
-                    Err(e) => {
-                        warn!("Stream {} failed: {}", i, e);
-                        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                        Err(e) => {
+                            warn!("Stream {} failed: {}", i, e);
+                            tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                        }
                     }
                 }
-            }
 
-            (i, total_streams, total_tokens)
+                Ok((i, total_streams, total_tokens))
+            }.await;
+            result.unwrap_or((i, 0, 0))
         });
 
         handles.push(handle);
@@ -332,10 +343,12 @@ async fn execute_benchmark(
             for _ in 0..(duration / 5) {
                 interval.tick().await;
                 let metrics = streaming_manager.get_metrics();
-                println!("📊 Active: {}, Total tokens: {}, Avg tok/s: {:.1}",
-                        metrics.active_streams,
-                        metrics.total_tokens_streamed,
-                        metrics.average_tokens_per_second);
+                println!(
+                    "📊 Active: {}, Total tokens: {}, Avg tok/s: {:.1}",
+                    metrics.active_streams,
+                    metrics.total_tokens_streamed,
+                    metrics.average_tokens_per_second
+                );
             }
         })
     };
@@ -349,7 +362,10 @@ async fn execute_benchmark(
             Ok((stream_id, streams, tokens)) => {
                 total_streams += streams;
                 total_tokens += tokens;
-                println!("Stream {} completed: {} streams, {} tokens", stream_id, streams, tokens);
+                println!(
+                    "Stream {} completed: {} streams, {} tokens",
+                    stream_id, streams, tokens
+                );
             }
             Err(e) => {
                 error!("Stream failed: {}", e);
@@ -365,7 +381,10 @@ async fn execute_benchmark(
     println!("\n🏁 Benchmark Results:");
     println!("Total streams created: {}", total_streams);
     println!("Total tokens generated: {}", total_tokens);
-    println!("Average tokens/second: {:.1}", total_tokens as f32 / duration as f32);
+    println!(
+        "Average tokens/second: {:.1}",
+        total_tokens as f32 / duration as f32
+    );
     println!("Errors: {}", final_metrics.errors_count);
     println!("Timeouts: {}", final_metrics.timeouts);
     println!("Buffer overflows: {}", final_metrics.buffer_overflows);
@@ -388,7 +407,10 @@ async fn execute_monitor(interval: u64, detailed: bool, _config: &Config) -> Res
         let total_tokens = counter * 50;
         let avg_latency = 150.0 + (counter as f32 * 10.0) % 100.0;
 
-        println!("\n📊 Streaming Monitor ({})", chrono::Utc::now().format("%H:%M:%S"));
+        println!(
+            "\n📊 Streaming Monitor ({})",
+            chrono::Utc::now().format("%H:%M:%S")
+        );
         println!("Active streams: {}", active_streams);
         println!("Total tokens streamed: {}", total_tokens);
         println!("Average latency: {:.1}ms", avg_latency);
@@ -396,10 +418,12 @@ async fn execute_monitor(interval: u64, detailed: bool, _config: &Config) -> Res
         if detailed {
             println!("Stream details:");
             for i in 0..active_streams {
-                println!("  Stream {}: {} tokens, {:.1}ms latency",
-                        i + 1,
-                        (i + 1) * 10,
-                        avg_latency + (i as f32 * 20.0));
+                println!(
+                    "  Stream {}: {} tokens, {:.1}ms latency",
+                    i + 1,
+                    (i + 1) * 10,
+                    avg_latency + (i as f32 * 20.0)
+                );
             }
         }
 
@@ -447,9 +471,10 @@ async fn execute_server(
     loop {
         tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;
         let metrics = streaming_manager.get_metrics();
-        info!("Server running - Active streams: {}, Total: {}",
-              metrics.active_streams,
-              metrics.total_streams_created);
+        info!(
+            "Server running - Active streams: {}, Total: {}",
+            metrics.active_streams, metrics.total_streams_created
+        );
     }
 }
 

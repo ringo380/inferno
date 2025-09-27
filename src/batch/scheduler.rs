@@ -1,8 +1,6 @@
-use crate::batch::queue::{
-    BatchJob, JobSchedule, ScheduleType, JobQueueManager, QueueStatus
-};
+use crate::batch::queue::{BatchJob, JobQueueManager, JobSchedule, QueueStatus, ScheduleType};
 use anyhow::Result;
-use chrono::{DateTime, Utc, Datelike, Timelike, Weekday};
+use chrono::{DateTime, Datelike, Timelike, Utc, Weekday};
 use cron::Schedule;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -12,7 +10,7 @@ use std::{
     time::{Duration, SystemTime},
 };
 use tokio::{
-    sync::{RwLock, mpsc},
+    sync::{mpsc, RwLock},
     time::interval,
 };
 use tracing::{debug, error, info};
@@ -56,7 +54,8 @@ impl JobScheduler {
     }
 
     pub async fn start(&mut self) -> Result<()> {
-        self.running.store(true, std::sync::atomic::Ordering::SeqCst);
+        self.running
+            .store(true, std::sync::atomic::Ordering::SeqCst);
 
         let (tx, mut rx) = mpsc::channel::<SchedulerCommand>(100);
         self.scheduler_tx = Some(tx);
@@ -156,7 +155,9 @@ impl JobScheduler {
                                         info!("Scheduled job submitted: {}", job_id);
 
                                         // Calculate next run time
-                                        if let Ok(next_run) = Self::calculate_next_run(&entry.job.schedule, now) {
+                                        if let Ok(next_run) =
+                                            Self::calculate_next_run(&entry.job.schedule, now)
+                                        {
                                             let mut updated_entry = entry.clone();
                                             updated_entry.last_run = Some(now);
                                             updated_entry.run_count += 1;
@@ -165,10 +166,14 @@ impl JobScheduler {
                                             // Check if we've reached max runs
                                             if let Some(schedule) = &entry.job.schedule {
                                                 let should_disable = match &schedule.schedule_type {
-                                                    ScheduleType::Interval { max_runs: Some(max), .. } |
-                                                    ScheduleType::Cron { max_runs: Some(max), .. } => {
-                                                        updated_entry.run_count >= *max
+                                                    ScheduleType::Interval {
+                                                        max_runs: Some(max),
+                                                        ..
                                                     }
+                                                    | ScheduleType::Cron {
+                                                        max_runs: Some(max),
+                                                        ..
+                                                    } => updated_entry.run_count >= *max,
                                                     ScheduleType::Once(_) => true,
                                                     _ => false,
                                                 };
@@ -179,16 +184,23 @@ impl JobScheduler {
                                                 }
                                             }
 
-                                            jobs_to_update.push((entry.job.id.clone(), updated_entry));
+                                            jobs_to_update
+                                                .push((entry.job.id.clone(), updated_entry));
                                         }
                                     }
                                     Err(e) => {
-                                        error!("Failed to submit scheduled job {}: {}", entry.job.id, e);
+                                        error!(
+                                            "Failed to submit scheduled job {}: {}",
+                                            entry.job.id, e
+                                        );
                                     }
                                 }
                             }
                             _ => {
-                                debug!("Queue {} not available for scheduled job {}", entry.queue_id, entry.job.id);
+                                debug!(
+                                    "Queue {} not available for scheduled job {}",
+                                    entry.queue_id, entry.job.id
+                                );
                             }
                         }
                     }
@@ -205,8 +217,12 @@ impl JobScheduler {
         }
     }
 
-    fn calculate_next_run(schedule: &Option<JobSchedule>, from_time: SystemTime) -> Result<SystemTime> {
-        let schedule = schedule.as_ref()
+    fn calculate_next_run(
+        schedule: &Option<JobSchedule>,
+        from_time: SystemTime,
+    ) -> Result<SystemTime> {
+        let schedule = schedule
+            .as_ref()
             .ok_or_else(|| anyhow::anyhow!("Job has no schedule"))?;
 
         if !schedule.enabled {
@@ -225,9 +241,9 @@ impl JobScheduler {
                 }
             }
 
-            ScheduleType::Interval { interval_minutes, .. } => {
-                from_datetime + chrono::Duration::minutes(*interval_minutes as i64)
-            }
+            ScheduleType::Interval {
+                interval_minutes, ..
+            } => from_datetime + chrono::Duration::minutes(*interval_minutes as i64),
 
             ScheduleType::Cron { expression, .. } => {
                 Self::parse_cron_next(expression, from_datetime)?
@@ -266,14 +282,23 @@ impl JobScheduler {
             .map_err(|e| anyhow::anyhow!("Invalid cron expression '{}': {}", expression, e))?;
 
         // Find the next occurrence after the current time
-        let next_occurrence = schedule.upcoming(Utc).next()
-            .ok_or_else(|| anyhow::anyhow!("No future occurrence found for cron expression: {}", expression))?;
+        let next_occurrence = schedule.upcoming(Utc).next().ok_or_else(|| {
+            anyhow::anyhow!(
+                "No future occurrence found for cron expression: {}",
+                expression
+            )
+        })?;
 
         // Ensure the next occurrence is after the from time
         if next_occurrence <= from {
             // If the calculated next time is not after 'from', get the one after that
-            schedule.after(&from).next()
-                .ok_or_else(|| anyhow::anyhow!("No future occurrence found after {} for cron expression: {}", from, expression))
+            schedule.after(&from).next().ok_or_else(|| {
+                anyhow::anyhow!(
+                    "No future occurrence found after {} for cron expression: {}",
+                    from,
+                    expression
+                )
+            })
         } else {
             Ok(next_occurrence)
         }
@@ -316,13 +341,11 @@ impl JobScheduler {
                 Self::validate_cron_expression(expression)?;
                 Ok(expression.to_string())
             }
-            _ => {
-                Err(anyhow::anyhow!(
-                    "Invalid cron expression format. Expected 5, 6, or 7 fields, got {}: '{}'",
-                    parts.len(),
-                    expression
-                ))
-            }
+            _ => Err(anyhow::anyhow!(
+                "Invalid cron expression format. Expected 5, 6, or 7 fields, got {}: '{}'",
+                parts.len(),
+                expression
+            )),
         }
     }
 
@@ -385,9 +408,9 @@ impl JobScheduler {
 
     fn is_valid_cron_field(field: &str) -> bool {
         // Allow digits, asterisk, forward slash, hyphen, comma, and question mark
-        field.chars().all(|c| {
-            c.is_ascii_digit() || matches!(c, '*' | '/' | '-' | ',' | '?')
-        })
+        field
+            .chars()
+            .all(|c| c.is_ascii_digit() || matches!(c, '*' | '/' | '-' | ',' | '?'))
     }
 
     fn calculate_daily_next(
@@ -456,13 +479,13 @@ impl JobScheduler {
     ) -> Result<DateTime<Utc>> {
         let (hour, minute) = Self::parse_time_string(time_str)?;
 
-        let mut next = from.with_day(day_of_month as u32)
-            .unwrap_or_else(|| {
-                // If the day doesn't exist in this month (e.g., Feb 30), use the last day
-                from.with_day(1)
-                    .expect("Setting day to 1 should always succeed")
-                    + chrono::Duration::days(32) - chrono::Duration::days(1)
-            });
+        let mut next = from.with_day(day_of_month as u32).unwrap_or_else(|| {
+            // If the day doesn't exist in this month (e.g., Feb 30), use the last day
+            from.with_day(1)
+                .expect("Setting day to 1 should always succeed")
+                + chrono::Duration::days(32)
+                - chrono::Duration::days(1)
+        });
 
         next = next
             .with_hour(hour)
@@ -491,9 +514,11 @@ impl JobScheduler {
             return Err(anyhow::anyhow!("Invalid time format. Use HH:MM"));
         }
 
-        let hour: u32 = parts[0].parse()
+        let hour: u32 = parts[0]
+            .parse()
             .map_err(|_| anyhow::anyhow!("Invalid hour: {}", parts[0]))?;
-        let minute: u32 = parts[1].parse()
+        let minute: u32 = parts[1]
+            .parse()
             .map_err(|_| anyhow::anyhow!("Invalid minute: {}", parts[1]))?;
 
         if hour > 23 {
@@ -508,7 +533,8 @@ impl JobScheduler {
 
     pub async fn add_scheduled_job(&self, entry: ScheduledJobEntry) -> Result<()> {
         if let Some(tx) = &self.scheduler_tx {
-            tx.send(SchedulerCommand::AddJob(entry)).await
+            tx.send(SchedulerCommand::AddJob(entry))
+                .await
                 .map_err(|e| anyhow::anyhow!("Failed to add scheduled job: {}", e))?;
         }
         Ok(())
@@ -516,7 +542,8 @@ impl JobScheduler {
 
     pub async fn remove_scheduled_job(&self, job_id: &str) -> Result<()> {
         if let Some(tx) = &self.scheduler_tx {
-            tx.send(SchedulerCommand::RemoveJob(job_id.to_string())).await
+            tx.send(SchedulerCommand::RemoveJob(job_id.to_string()))
+                .await
                 .map_err(|e| anyhow::anyhow!("Failed to remove scheduled job: {}", e))?;
         }
         Ok(())
@@ -524,7 +551,8 @@ impl JobScheduler {
 
     pub async fn enable_job(&self, job_id: &str) -> Result<()> {
         if let Some(tx) = &self.scheduler_tx {
-            tx.send(SchedulerCommand::EnableJob(job_id.to_string())).await
+            tx.send(SchedulerCommand::EnableJob(job_id.to_string()))
+                .await
                 .map_err(|e| anyhow::anyhow!("Failed to enable job: {}", e))?;
         }
         Ok(())
@@ -532,7 +560,8 @@ impl JobScheduler {
 
     pub async fn disable_job(&self, job_id: &str) -> Result<()> {
         if let Some(tx) = &self.scheduler_tx {
-            tx.send(SchedulerCommand::DisableJob(job_id.to_string())).await
+            tx.send(SchedulerCommand::DisableJob(job_id.to_string()))
+                .await
                 .map_err(|e| anyhow::anyhow!("Failed to disable job: {}", e))?;
         }
         Ok(())
@@ -549,10 +578,12 @@ impl JobScheduler {
     }
 
     pub async fn stop(&self) -> Result<()> {
-        self.running.store(false, std::sync::atomic::Ordering::SeqCst);
+        self.running
+            .store(false, std::sync::atomic::Ordering::SeqCst);
 
         if let Some(tx) = &self.scheduler_tx {
-            tx.send(SchedulerCommand::Shutdown).await
+            tx.send(SchedulerCommand::Shutdown)
+                .await
                 .map_err(|e| anyhow::anyhow!("Failed to stop scheduler: {}", e))?;
         }
 
@@ -567,9 +598,18 @@ mod tests {
 
     #[test]
     fn test_parse_time_string() {
-        assert_eq!(JobScheduler::parse_time_string("09:30").expect("Failed to parse time 09:30"), (9, 30));
-        assert_eq!(JobScheduler::parse_time_string("23:59").expect("Failed to parse time 23:59"), (23, 59));
-        assert_eq!(JobScheduler::parse_time_string("00:00").expect("Failed to parse time 00:00"), (0, 0));
+        assert_eq!(
+            JobScheduler::parse_time_string("09:30").expect("Failed to parse time 09:30"),
+            (9, 30)
+        );
+        assert_eq!(
+            JobScheduler::parse_time_string("23:59").expect("Failed to parse time 23:59"),
+            (23, 59)
+        );
+        assert_eq!(
+            JobScheduler::parse_time_string("00:00").expect("Failed to parse time 00:00"),
+            (0, 0)
+        );
 
         assert!(JobScheduler::parse_time_string("24:00").is_err());
         assert!(JobScheduler::parse_time_string("12:60").is_err());
@@ -590,9 +630,12 @@ mod tests {
         };
 
         let now = SystemTime::now();
-        let next = JobScheduler::calculate_next_run(&Some(schedule), now).expect("Failed to calculate next run");
+        let next = JobScheduler::calculate_next_run(&Some(schedule), now)
+            .expect("Failed to calculate next run");
 
-        let duration = next.duration_since(now).expect("Failed to calculate duration");
+        let duration = next
+            .duration_since(now)
+            .expect("Failed to calculate duration");
         assert!(duration >= Duration::from_secs(3590) && duration <= Duration::from_secs(3610));
     }
 
@@ -608,28 +651,72 @@ mod tests {
         };
 
         let now = SystemTime::now();
-        let next = JobScheduler::calculate_next_run(&Some(schedule), now).expect("Failed to calculate next run for future test");
+        let next = JobScheduler::calculate_next_run(&Some(schedule), now)
+            .expect("Failed to calculate next run for future test");
 
         assert_eq!(next, future_time);
     }
 
     #[test]
     fn test_normalize_cron_expression_keywords() {
-        assert_eq!(JobScheduler::normalize_cron_expression("@yearly").expect("Failed to normalize @yearly"), "0 0 0 1 1 * *");
-        assert_eq!(JobScheduler::normalize_cron_expression("@annually").expect("Failed to normalize @annually"), "0 0 0 1 1 * *");
-        assert_eq!(JobScheduler::normalize_cron_expression("@monthly").expect("Failed to normalize @monthly"), "0 0 0 1 * * *");
-        assert_eq!(JobScheduler::normalize_cron_expression("@weekly").expect("Failed to normalize @weekly"), "0 0 0 * * SUN *");
-        assert_eq!(JobScheduler::normalize_cron_expression("@daily").expect("Failed to normalize @daily"), "0 0 0 * * * *");
-        assert_eq!(JobScheduler::normalize_cron_expression("@midnight").expect("Failed to normalize @midnight"), "0 0 0 * * * *");
-        assert_eq!(JobScheduler::normalize_cron_expression("@hourly").expect("Failed to normalize @hourly"), "0 0 * * * * *");
+        assert_eq!(
+            JobScheduler::normalize_cron_expression("@yearly")
+                .expect("Failed to normalize @yearly"),
+            "0 0 0 1 1 * *"
+        );
+        assert_eq!(
+            JobScheduler::normalize_cron_expression("@annually")
+                .expect("Failed to normalize @annually"),
+            "0 0 0 1 1 * *"
+        );
+        assert_eq!(
+            JobScheduler::normalize_cron_expression("@monthly")
+                .expect("Failed to normalize @monthly"),
+            "0 0 0 1 * * *"
+        );
+        assert_eq!(
+            JobScheduler::normalize_cron_expression("@weekly")
+                .expect("Failed to normalize @weekly"),
+            "0 0 0 * * SUN *"
+        );
+        assert_eq!(
+            JobScheduler::normalize_cron_expression("@daily").expect("Failed to normalize @daily"),
+            "0 0 0 * * * *"
+        );
+        assert_eq!(
+            JobScheduler::normalize_cron_expression("@midnight")
+                .expect("Failed to normalize @midnight"),
+            "0 0 0 * * * *"
+        );
+        assert_eq!(
+            JobScheduler::normalize_cron_expression("@hourly")
+                .expect("Failed to normalize @hourly"),
+            "0 0 * * * * *"
+        );
     }
 
     #[test]
     fn test_normalize_cron_expression_standard() {
-        assert_eq!(JobScheduler::normalize_cron_expression("0 * * * *").expect("Failed to normalize hourly cron"), "0 0 * * * * *");
-        assert_eq!(JobScheduler::normalize_cron_expression("15 14 1 * *").expect("Failed to normalize specific time cron"), "0 15 14 1 * * *");
-        assert_eq!(JobScheduler::normalize_cron_expression("0 22 * * 1-5").expect("Failed to normalize weekday cron"), "0 0 22 * * 1-5 *");
-        assert_eq!(JobScheduler::normalize_cron_expression("*/15 * * * *").expect("Failed to normalize interval cron"), "0 */15 * * * * *");
+        assert_eq!(
+            JobScheduler::normalize_cron_expression("0 * * * *")
+                .expect("Failed to normalize hourly cron"),
+            "0 0 * * * * *"
+        );
+        assert_eq!(
+            JobScheduler::normalize_cron_expression("15 14 1 * *")
+                .expect("Failed to normalize specific time cron"),
+            "0 15 14 1 * * *"
+        );
+        assert_eq!(
+            JobScheduler::normalize_cron_expression("0 22 * * 1-5")
+                .expect("Failed to normalize weekday cron"),
+            "0 0 22 * * 1-5 *"
+        );
+        assert_eq!(
+            JobScheduler::normalize_cron_expression("*/15 * * * *")
+                .expect("Failed to normalize interval cron"),
+            "0 */15 * * * * *"
+        );
     }
 
     #[test]
@@ -653,7 +740,8 @@ mod tests {
         assert!(JobScheduler::validate_cron_expression("0 * * *").is_err()); // Too few fields
         assert!(JobScheduler::validate_cron_expression("0 * * * * * * *").is_err()); // Too many fields
         assert!(JobScheduler::validate_cron_expression("0 * * * @ ").is_err()); // Invalid character
-        assert!(JobScheduler::validate_cron_expression("abc * * * *").is_err()); // Invalid characters
+        assert!(JobScheduler::validate_cron_expression("abc * * * *").is_err());
+        // Invalid characters
     }
 
     #[test]
@@ -677,21 +765,26 @@ mod tests {
 
     #[test]
     fn test_parse_cron_next_basic_expressions() {
-        let base_time = DateTime::parse_from_rfc3339("2024-01-15T10:30:00Z").expect("Failed to parse test date").into();
+        let base_time = DateTime::parse_from_rfc3339("2024-01-15T10:30:00Z")
+            .expect("Failed to parse test date")
+            .into();
 
         // Test hourly: "0 * * * *" - every hour at minute 0
-        let next = JobScheduler::parse_cron_next("0 * * * *", base_time).expect("Failed to parse hourly cron");
+        let next = JobScheduler::parse_cron_next("0 * * * *", base_time)
+            .expect("Failed to parse hourly cron");
         assert_eq!(next.minute(), 0);
         assert!(next > base_time);
 
         // Test daily: "0 0 * * *" - every day at midnight
-        let next = JobScheduler::parse_cron_next("0 0 * * *", base_time).expect("Failed to parse daily cron");
+        let next = JobScheduler::parse_cron_next("0 0 * * *", base_time)
+            .expect("Failed to parse daily cron");
         assert_eq!(next.hour(), 0);
         assert_eq!(next.minute(), 0);
         assert!(next > base_time);
 
         // Test specific time: "30 14 * * *" - every day at 2:30 PM
-        let next = JobScheduler::parse_cron_next("30 14 * * *", base_time).expect("Failed to parse specific time cron");
+        let next = JobScheduler::parse_cron_next("30 14 * * *", base_time)
+            .expect("Failed to parse specific time cron");
         assert_eq!(next.hour(), 14);
         assert_eq!(next.minute(), 30);
         assert!(next > base_time);
@@ -699,35 +792,42 @@ mod tests {
 
     #[test]
     fn test_parse_cron_next_keywords() {
-        let base_time = DateTime::parse_from_rfc3339("2024-01-15T10:30:00Z").expect("Failed to parse test date").into();
+        let base_time = DateTime::parse_from_rfc3339("2024-01-15T10:30:00Z")
+            .expect("Failed to parse test date")
+            .into();
 
         // Test @hourly
-        let next = JobScheduler::parse_cron_next("@hourly", base_time).expect("Failed to parse @hourly cron");
+        let next = JobScheduler::parse_cron_next("@hourly", base_time)
+            .expect("Failed to parse @hourly cron");
         assert_eq!(next.minute(), 0);
         assert!(next > base_time);
 
         // Test @daily
-        let next = JobScheduler::parse_cron_next("@daily", base_time).expect("Failed to parse @daily cron");
+        let next = JobScheduler::parse_cron_next("@daily", base_time)
+            .expect("Failed to parse @daily cron");
         assert_eq!(next.hour(), 0);
         assert_eq!(next.minute(), 0);
         assert!(next > base_time);
 
         // Test @weekly
-        let next = JobScheduler::parse_cron_next("@weekly", base_time).expect("Failed to parse @weekly cron");
+        let next = JobScheduler::parse_cron_next("@weekly", base_time)
+            .expect("Failed to parse @weekly cron");
         assert_eq!(next.weekday(), Weekday::Sun);
         assert_eq!(next.hour(), 0);
         assert_eq!(next.minute(), 0);
         assert!(next > base_time);
 
         // Test @monthly
-        let next = JobScheduler::parse_cron_next("@monthly", base_time).expect("Failed to parse @monthly cron");
+        let next = JobScheduler::parse_cron_next("@monthly", base_time)
+            .expect("Failed to parse @monthly cron");
         assert_eq!(next.day(), 1);
         assert_eq!(next.hour(), 0);
         assert_eq!(next.minute(), 0);
         assert!(next > base_time);
 
         // Test @yearly
-        let next = JobScheduler::parse_cron_next("@yearly", base_time).expect("Failed to parse @yearly cron");
+        let next = JobScheduler::parse_cron_next("@yearly", base_time)
+            .expect("Failed to parse @yearly cron");
         assert_eq!(next.month(), 1);
         assert_eq!(next.day(), 1);
         assert_eq!(next.hour(), 0);
@@ -737,15 +837,19 @@ mod tests {
 
     #[test]
     fn test_parse_cron_next_complex_expressions() {
-        let base_time = DateTime::parse_from_rfc3339("2024-01-15T10:30:00Z").expect("Failed to parse test date").into();
+        let base_time = DateTime::parse_from_rfc3339("2024-01-15T10:30:00Z")
+            .expect("Failed to parse test date")
+            .into();
 
         // Test every 15 minutes: "*/15 * * * *"
-        let next = JobScheduler::parse_cron_next("*/15 * * * *", base_time).expect("Failed to parse 15-minute interval cron");
+        let next = JobScheduler::parse_cron_next("*/15 * * * *", base_time)
+            .expect("Failed to parse 15-minute interval cron");
         assert!(next.minute() % 15 == 0);
         assert!(next > base_time);
 
         // Test weekdays at 9 AM: "0 9 * * 1-5"
-        let next = JobScheduler::parse_cron_next("0 9 * * 1-5", base_time).expect("Failed to parse weekday cron");
+        let next = JobScheduler::parse_cron_next("0 9 * * 1-5", base_time)
+            .expect("Failed to parse weekday cron");
         assert_eq!(next.hour(), 9);
         assert_eq!(next.minute(), 0);
         let weekday = next.weekday().num_days_from_monday();
@@ -753,14 +857,17 @@ mod tests {
         assert!(next > base_time);
 
         // Test multiple specific minutes: "0,30 * * * *"
-        let next = JobScheduler::parse_cron_next("0,30 * * * *", base_time).expect("Failed to parse multi-minute cron");
+        let next = JobScheduler::parse_cron_next("0,30 * * * *", base_time)
+            .expect("Failed to parse multi-minute cron");
         assert!(next.minute() == 0 || next.minute() == 30);
         assert!(next > base_time);
     }
 
     #[test]
     fn test_parse_cron_next_invalid_expressions() {
-        let base_time = DateTime::parse_from_rfc3339("2024-01-15T10:30:00Z").expect("Failed to parse test date").into();
+        let base_time = DateTime::parse_from_rfc3339("2024-01-15T10:30:00Z")
+            .expect("Failed to parse test date")
+            .into();
 
         // Test invalid format
         assert!(JobScheduler::parse_cron_next("invalid", base_time).is_err());
@@ -769,7 +876,8 @@ mod tests {
 
         // Test invalid ranges
         assert!(JobScheduler::parse_cron_next("60 * * * *", base_time).is_err()); // Invalid minute
-        assert!(JobScheduler::parse_cron_next("0 25 * * *", base_time).is_err()); // Invalid hour
+        assert!(JobScheduler::parse_cron_next("0 25 * * *", base_time).is_err());
+        // Invalid hour
     }
 
     #[test]
@@ -786,10 +894,13 @@ mod tests {
         };
 
         let now = SystemTime::now();
-        let next = JobScheduler::calculate_next_run(&Some(schedule), now).expect("Failed to calculate next run for interval test");
+        let next = JobScheduler::calculate_next_run(&Some(schedule), now)
+            .expect("Failed to calculate next run for interval test");
 
         // The next run should be within the next hour
-        let duration = next.duration_since(now).expect("Failed to calculate duration for interval test");
+        let duration = next
+            .duration_since(now)
+            .expect("Failed to calculate duration for interval test");
         assert!(duration <= Duration::from_secs(3600));
 
         // Convert to DateTime to check that it's at minute 0

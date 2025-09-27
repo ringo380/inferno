@@ -6,10 +6,7 @@ use std::{
     sync::Arc,
     time::SystemTime,
 };
-use tokio::{
-    fs,
-    sync::RwLock,
-};
+use tokio::{fs, sync::RwLock};
 use tracing::info;
 use uuid::Uuid;
 
@@ -91,11 +88,14 @@ impl SemanticVersion {
             return Err(anyhow::anyhow!("Invalid version format: {}", version_str));
         }
 
-        let major = parts[0].parse::<u32>()
+        let major = parts[0]
+            .parse::<u32>()
             .map_err(|_| anyhow::anyhow!("Invalid major version: {}", parts[0]))?;
-        let minor = parts[1].parse::<u32>()
+        let minor = parts[1]
+            .parse::<u32>()
             .map_err(|_| anyhow::anyhow!("Invalid minor version: {}", parts[1]))?;
-        let patch = parts[2].parse::<u32>()
+        let patch = parts[2]
+            .parse::<u32>()
             .map_err(|_| anyhow::anyhow!("Invalid patch version: {}", parts[2]))?;
 
         Ok(Self {
@@ -431,8 +431,11 @@ impl ModelVersionManager {
         let version_dir = self.storage_path.join(model_name).join(&version_id);
         fs::create_dir_all(&version_dir).await?;
 
-        let stored_file_path = version_dir.join(model_file.file_name()
-            .ok_or_else(|| anyhow::anyhow!("Invalid file name"))?);
+        let stored_file_path = version_dir.join(
+            model_file
+                .file_name()
+                .ok_or_else(|| anyhow::anyhow!("Invalid file name"))?,
+        );
         fs::copy(model_file, &stored_file_path).await?;
 
         // Create model version
@@ -476,9 +479,8 @@ impl ModelVersionManager {
             }
 
             registry.registry_metadata.total_models = registry.models.len();
-            registry.registry_metadata.total_versions = registry.models.values()
-                .map(|h| h.versions.len())
-                .sum();
+            registry.registry_metadata.total_versions =
+                registry.models.values().map(|h| h.versions.len()).sum();
             registry.registry_metadata.last_updated = SystemTime::now();
         }
 
@@ -502,7 +504,7 @@ impl ModelVersionManager {
     }
 
     async fn calculate_checksum(&self, file_path: &Path) -> Result<String> {
-        use sha2::{Sha256, Digest};
+        use sha2::{Digest, Sha256};
 
         let content = fs::read(file_path).await?;
         let mut hasher = Sha256::new();
@@ -519,10 +521,14 @@ impl ModelVersionManager {
     ) -> Result<()> {
         let mut registry = self.registry.write().await;
 
-        let history = registry.models.get_mut(model_name)
+        let history = registry
+            .models
+            .get_mut(model_name)
             .ok_or_else(|| anyhow::anyhow!("Model '{}' not found", model_name))?;
 
-        let version = history.versions.iter_mut()
+        let version = history
+            .versions
+            .iter_mut()
             .find(|v| v.id == version_id)
             .ok_or_else(|| anyhow::anyhow!("Version '{}' not found", version_id))?;
 
@@ -546,8 +552,10 @@ impl ModelVersionManager {
         drop(registry);
         self.save_registry().await?;
 
-        info!("Promoted version {} of {} from {:?} to {:?}",
-              version_id, model_name, old_status, target_status);
+        info!(
+            "Promoted version {} of {} from {:?} to {:?}",
+            version_id, model_name, old_status, target_status
+        );
         Ok(())
     }
 
@@ -564,12 +572,19 @@ impl ModelVersionManager {
         // Get current deployment
         let current_version = {
             let registry = self.registry.read().await;
-            registry.active_deployments.get(&format!("{}:{}", model_name, environment))
+            registry
+                .active_deployments
+                .get(&format!("{}:{}", model_name, environment))
                 .map(|d| d.version_id.clone())
         };
 
-        let current_version = current_version
-            .ok_or_else(|| anyhow::anyhow!("No active deployment found for {} in {}", model_name, environment))?;
+        let current_version = current_version.ok_or_else(|| {
+            anyhow::anyhow!(
+                "No active deployment found for {} in {}",
+                model_name,
+                environment
+            )
+        })?;
 
         // Validate target version exists
         self.get_version(model_name, target_version_id).await?;
@@ -596,13 +611,17 @@ impl ModelVersionManager {
         }
 
         // Perform the rollback (update active deployment)
-        self.deploy_version(model_name, target_version_id, environment, HashMap::new()).await?;
+        self.deploy_version(model_name, target_version_id, environment, HashMap::new())
+            .await?;
 
         // Update rollback status
         {
             let mut registry = self.registry.write().await;
-            if let Some(record) = registry.rollback_history.iter_mut()
-                .find(|r| r.id == rollback_id) {
+            if let Some(record) = registry
+                .rollback_history
+                .iter_mut()
+                .find(|r| r.id == rollback_id)
+            {
                 record.status = RollbackStatus::Completed;
                 record.completed_at = Some(SystemTime::now());
             }
@@ -610,8 +629,10 @@ impl ModelVersionManager {
 
         self.save_registry().await?;
 
-        info!("Completed rollback {} for {} in {} to version {}",
-              rollback_id, model_name, environment, target_version_id);
+        info!(
+            "Completed rollback {} for {} in {} to version {}",
+            rollback_id, model_name, environment, target_version_id
+        );
         Ok(rollback_id)
     }
 
@@ -628,7 +649,9 @@ impl ModelVersionManager {
         match version.status {
             VersionStatus::Draft => return Err(anyhow::anyhow!("Cannot deploy draft version")),
             VersionStatus::Failed => return Err(anyhow::anyhow!("Cannot deploy failed version")),
-            VersionStatus::Archived => return Err(anyhow::anyhow!("Cannot deploy archived version")),
+            VersionStatus::Archived => {
+                return Err(anyhow::anyhow!("Cannot deploy archived version"))
+            }
             _ => {}
         }
 
@@ -647,23 +670,32 @@ impl ModelVersionManager {
 
         {
             let mut registry = self.registry.write().await;
-            registry.active_deployments.insert(deployment_key, deployment);
+            registry
+                .active_deployments
+                .insert(deployment_key, deployment);
             registry.registry_metadata.last_updated = SystemTime::now();
         }
 
         self.save_registry().await?;
 
-        info!("Deployed version {} of {} to {}", version_id, model_name, environment);
+        info!(
+            "Deployed version {} of {} to {}",
+            version_id, model_name, environment
+        );
         Ok(())
     }
 
     pub async fn get_version(&self, model_name: &str, version_id: &str) -> Result<ModelVersion> {
         let registry = self.registry.read().await;
 
-        let history = registry.models.get(model_name)
+        let history = registry
+            .models
+            .get(model_name)
             .ok_or_else(|| anyhow::anyhow!("Model '{}' not found", model_name))?;
 
-        history.versions.iter()
+        history
+            .versions
+            .iter()
             .find(|v| v.id == version_id)
             .cloned()
             .ok_or_else(|| anyhow::anyhow!("Version '{}' not found", version_id))
@@ -672,7 +704,9 @@ impl ModelVersionManager {
     pub async fn get_latest_version(&self, model_name: &str) -> Result<String> {
         let registry = self.registry.read().await;
 
-        registry.models.get(model_name)
+        registry
+            .models
+            .get(model_name)
             .map(|h| h.latest_version.clone())
             .ok_or_else(|| anyhow::anyhow!("Model '{}' not found", model_name))
     }
@@ -680,7 +714,9 @@ impl ModelVersionManager {
     pub async fn list_versions(&self, model_name: &str) -> Result<Vec<ModelVersion>> {
         let registry = self.registry.read().await;
 
-        registry.models.get(model_name)
+        registry
+            .models
+            .get(model_name)
             .map(|h| h.versions.clone())
             .ok_or_else(|| anyhow::anyhow!("Model '{}' not found", model_name))
     }
@@ -696,7 +732,10 @@ impl ModelVersionManager {
             let registry = self.registry.read().await;
             for deployment in registry.active_deployments.values() {
                 if deployment.model_name == model_name && deployment.version_id == version_id {
-                    return Err(anyhow::anyhow!("Cannot delete version {} - it's currently deployed", version_id));
+                    return Err(anyhow::anyhow!(
+                        "Cannot delete version {} - it's currently deployed",
+                        version_id
+                    ));
                 }
             }
         }
@@ -712,7 +751,9 @@ impl ModelVersionManager {
 
                 // Update latest version if this was it
                 if history.latest_version == version_id {
-                    history.latest_version = history.versions.last()
+                    history.latest_version = history
+                        .versions
+                        .last()
                         .map(|v| v.id.clone())
                         .unwrap_or_default();
                 }
@@ -759,7 +800,9 @@ impl ModelVersionManager {
         let registry = self.registry.read().await;
 
         if let Some(model_name) = model_name {
-            registry.rollback_history.iter()
+            registry
+                .rollback_history
+                .iter()
                 .filter(|r| r.model_name == model_name)
                 .cloned()
                 .collect()

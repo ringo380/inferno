@@ -1,9 +1,6 @@
 use crate::{
     config::Config,
-    security::{
-        SecurityConfig, SecurityManager, User, UserRole, Permission,
-        AuditAction, AuditLogEntry,
-    },
+    security::{Permission, SecurityManager, User, UserRole},
 };
 use anyhow::Result;
 use chrono::Utc;
@@ -244,7 +241,12 @@ pub enum RateLimitCommand {
 
     #[command(about = "Test rate limiting")]
     Test {
-        #[arg(short, long, help = "Number of requests to simulate", default_value = "100")]
+        #[arg(
+            short,
+            long,
+            help = "Number of requests to simulate",
+            default_value = "100"
+        )]
         requests: u32,
 
         #[arg(short, long, help = "User identifier", default_value = "test_user")]
@@ -316,12 +318,8 @@ pub async fn execute(args: SecurityArgs, config: &Config) -> Result<()> {
     let security_manager = SecurityManager::new(security_config);
 
     match args.command {
-        SecurityCommand::Init => {
-            execute_init(&security_manager).await
-        }
-        SecurityCommand::User { command } => {
-            execute_user_command(command, &security_manager).await
-        }
+        SecurityCommand::Init => execute_init(&security_manager).await,
+        SecurityCommand::User { command } => execute_user_command(command, &security_manager).await,
         SecurityCommand::ApiKey { command } => {
             execute_api_key_command(command, &security_manager).await
         }
@@ -339,23 +337,17 @@ pub async fn execute(args: SecurityArgs, config: &Config) -> Result<()> {
             user,
             action,
             failures_only,
-        } => {
-            execute_audit(limit, user, action, failures_only, &security_manager).await
-        }
+        } => execute_audit(limit, user, action, failures_only, &security_manager).await,
         SecurityCommand::Test {
             auth,
             rate_limit,
             validation,
             all,
-        } => {
-            execute_security_test(auth, rate_limit, validation, all, &security_manager).await
-        }
+        } => execute_security_test(auth, rate_limit, validation, all, &security_manager).await,
         SecurityCommand::Export {
             output,
             include_sensitive,
-        } => {
-            execute_export(output, include_sensitive, &security_manager, config).await
-        }
+        } => execute_export(output, include_sensitive, &security_manager, config).await,
     }
 }
 
@@ -373,7 +365,10 @@ async fn execute_init(security_manager: &SecurityManager) -> Result<()> {
     Ok(())
 }
 
-async fn execute_user_command(command: UserCommand, security_manager: &SecurityManager) -> Result<()> {
+async fn execute_user_command(
+    command: UserCommand,
+    security_manager: &SecurityManager,
+) -> Result<()> {
     match command {
         UserCommand::Create {
             id,
@@ -454,12 +449,9 @@ async fn execute_api_key_command(
         } => {
             let perms = parse_permissions(permissions);
 
-            let api_key = security_manager.generate_api_key(
-                &user,
-                &name,
-                perms,
-                expires_in,
-            ).await?;
+            let api_key = security_manager
+                .generate_api_key(&user, &name, perms, expires_in)
+                .await?;
 
             println!("🔑 API Key Generated Successfully");
             println!("\n⚠️  Save this key securely - it won't be shown again!");
@@ -481,43 +473,44 @@ async fn execute_api_key_command(
             println!("🚫 Revoking API key '{}' for user '{}'", key_id, user);
             // Revocation logic would be implemented here
         }
-        ApiKeyCommand::Test { key } => {
-            match security_manager.authenticate_api_key(&key).await {
-                Ok(user) => {
-                    println!("✅ API key is valid");
-                    println!("User: {}", user.username);
-                    println!("Role: {:?}", user.role);
-                }
-                Err(e) => {
-                    println!("❌ API key authentication failed: {}", e);
-                }
+        ApiKeyCommand::Test { key } => match security_manager.authenticate_api_key(&key).await {
+            Ok(user) => {
+                println!("✅ API key is valid");
+                println!("User: {}", user.username);
+                println!("Role: {:?}", user.role);
             }
-        }
+            Err(e) => {
+                println!("❌ API key authentication failed: {}", e);
+            }
+        },
     }
 
     Ok(())
 }
 
-async fn execute_token_command(command: TokenCommand, security_manager: &SecurityManager) -> Result<()> {
+async fn execute_token_command(
+    command: TokenCommand,
+    security_manager: &SecurityManager,
+) -> Result<()> {
     match command {
         TokenCommand::Generate { user: _user_id } => {
             // Would need to fetch user first
             println!("🎫 JWT Token generation would be performed here");
         }
-        TokenCommand::Verify { token } => {
-            match security_manager.verify_jwt_token(&token).await {
-                Ok(claims) => {
-                    println!("✅ Token is valid");
-                    println!("User: {}", claims.username);
-                    println!("Role: {:?}", claims.role);
-                    println!("Expires: {}", chrono::DateTime::from_timestamp(claims.exp, 0)
-                        .unwrap_or_default());
-                }
-                Err(e) => {
-                    println!("❌ Token verification failed: {}", e);
-                }
+        TokenCommand::Verify { token } => match security_manager.verify_jwt_token(&token).await {
+            Ok(claims) => {
+                println!("✅ Token is valid");
+                println!("User: {}", claims.username);
+                println!("Role: {:?}", claims.role);
+                println!(
+                    "Expires: {}",
+                    chrono::DateTime::from_timestamp(claims.exp, 0).unwrap_or_default()
+                );
             }
-        }
+            Err(e) => {
+                println!("❌ Token verification failed: {}", e);
+            }
+        },
         TokenCommand::Revoke { jti } => {
             security_manager.revoke_token(jti.clone()).await?;
             println!("🚫 Token '{}' has been revoked", jti);
@@ -575,8 +568,14 @@ async fn execute_rate_limit_command(
                 println!("🔄 Resetting rate limit counters for '{}'", id);
             }
         }
-        RateLimitCommand::Test { requests, identifier } => {
-            println!("🧪 Testing rate limiting with {} requests for '{}'", requests, identifier);
+        RateLimitCommand::Test {
+            requests,
+            identifier,
+        } => {
+            println!(
+                "🧪 Testing rate limiting with {} requests for '{}'",
+                requests, identifier
+            );
 
             let mut passed = 0;
             let mut failed = 0;
@@ -656,9 +655,7 @@ async fn execute_audit(
     let mut filtered_entries = entries;
 
     if let Some(user_filter) = user {
-        filtered_entries.retain(|e| {
-            e.user_id.as_ref().map_or(false, |u| u == &user_filter)
-        });
+        filtered_entries.retain(|e| e.user_id.as_ref().map_or(false, |u| u == &user_filter));
     }
 
     if failures_only {
@@ -673,7 +670,8 @@ async fn execute_audit(
     println!("|---|---|---|---|---|");
 
     for entry in filtered_entries.iter().take(10) {
-        println!("| {} | {} | {:?} | {} | {} |",
+        println!(
+            "| {} | {} | {:?} | {} | {} |",
             entry.timestamp.format("%Y-%m-%d %H:%M:%S"),
             entry.user_id.as_ref().unwrap_or(&"--".to_string()),
             entry.action,
@@ -766,18 +764,42 @@ fn parse_permissions(permissions: Option<String>) -> HashSet<Permission> {
     if let Some(perm_str) = permissions {
         for perm in perm_str.split(',') {
             match perm.trim().to_lowercase().as_str() {
-                "read_models" => { perms.insert(Permission::ReadModels); }
-                "write_models" => { perms.insert(Permission::WriteModels); }
-                "delete_models" => { perms.insert(Permission::DeleteModels); }
-                "run_inference" => { perms.insert(Permission::RunInference); }
-                "manage_cache" => { perms.insert(Permission::ManageCache); }
-                "read_metrics" => { perms.insert(Permission::ReadMetrics); }
-                "write_config" => { perms.insert(Permission::WriteConfig); }
-                "manage_users" => { perms.insert(Permission::ManageUsers); }
-                "view_audit_logs" => { perms.insert(Permission::ViewAuditLogs); }
-                "use_streaming" => { perms.insert(Permission::UseStreaming); }
-                "use_distributed" => { perms.insert(Permission::UseDistributed); }
-                "manage_queue" => { perms.insert(Permission::ManageQueue); }
+                "read_models" => {
+                    perms.insert(Permission::ReadModels);
+                }
+                "write_models" => {
+                    perms.insert(Permission::WriteModels);
+                }
+                "delete_models" => {
+                    perms.insert(Permission::DeleteModels);
+                }
+                "run_inference" => {
+                    perms.insert(Permission::RunInference);
+                }
+                "manage_cache" => {
+                    perms.insert(Permission::ManageCache);
+                }
+                "read_metrics" => {
+                    perms.insert(Permission::ReadMetrics);
+                }
+                "write_config" => {
+                    perms.insert(Permission::WriteConfig);
+                }
+                "manage_users" => {
+                    perms.insert(Permission::ManageUsers);
+                }
+                "view_audit_logs" => {
+                    perms.insert(Permission::ViewAuditLogs);
+                }
+                "use_streaming" => {
+                    perms.insert(Permission::UseStreaming);
+                }
+                "use_distributed" => {
+                    perms.insert(Permission::UseDistributed);
+                }
+                "manage_queue" => {
+                    perms.insert(Permission::ManageQueue);
+                }
                 _ => {
                     warn!("Unknown permission: {}", perm);
                 }

@@ -1,6 +1,15 @@
 {
   "name": "inferno-dashboard",
   "version": "0.1.0",
+  "description": "Enterprise-grade offline AI/ML model runner dashboard",
+  "author": "Inferno Developers",
+  "license": "MIT OR Apache-2.0",
+  "homepage": "https://github.com/inferno-ai/inferno",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/inferno-ai/inferno.git"
+  },
+  "keywords": ["ai", "ml", "gguf", "onnx", "inference", "dashboard"],
   "private": true,
   "scripts": {
     "dev": "next dev -p 3457",
@@ -35,6 +44,7 @@
     "@radix-ui/react-slider": "^1.3.6",
     "@radix-ui/react-slot": "^1.0.2",
     "@radix-ui/react-switch": "^1.2.6",
+    "@radix-ui/react-tabs": "^1.1.13",
     "@tanstack/react-query": "^5.14.2",
     "@tanstack/react-query-devtools": "^5.14.2",
     "@tauri-apps/api": "^2.8.0",

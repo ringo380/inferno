@@ -1,14 +1,14 @@
+use anyhow::Result;
 use inferno::{
+    backends::{BackendConfig, BackendHandle, BackendType},
     cache::{
-        ModelCache, CacheConfig, CachedModel, WarmupStrategy, CacheStats,
-        SerializableCacheState, SerializableCacheEntry, ModelUsageStats,
+        CacheConfig, CacheStats, CachedModel, ModelCache, ModelUsageStats, SerializableCacheEntry,
+        SerializableCacheState, WarmupStrategy,
     },
-    backends::{BackendConfig, BackendType, BackendHandle},
-    models::{ModelInfo, ModelManager},
     metrics::MetricsCollector,
+    models::{ModelInfo, ModelManager},
     InfernoError,
 };
-use anyhow::Result;
 use std::{
     collections::HashMap,
     fs,
@@ -97,7 +97,10 @@ mod cache_test_utils {
         Ok(model_paths)
     }
 
-    pub async fn wait_for_cache_persistence(cache_dir: &Path, timeout_duration: Duration) -> Result<()> {
+    pub async fn wait_for_cache_persistence(
+        cache_dir: &Path,
+        timeout_duration: Duration,
+    ) -> Result<()> {
         let cache_file = cache_dir.join("cache_state.bin.zst");
         let start = std::time::Instant::now();
 
@@ -215,11 +218,14 @@ async fn test_cache_persistence_basic() -> Result<()> {
         backend_config.clone(),
         model_manager.clone(),
         None,
-    ).await?;
+    )
+    .await?;
 
     // Load some models to populate cache
     for model in &models[0..2] {
-        let _ = cache.get_or_load_model(&model.id, BackendType::Gguf, &backend_config).await?;
+        let _ = cache
+            .get_or_load_model(&model.id, BackendType::Gguf, &backend_config)
+            .await?;
     }
 
     // Wait for cache to be persisted
@@ -261,11 +267,14 @@ async fn test_cache_persistence_across_restarts() -> Result<()> {
             backend_config.clone(),
             model_manager.clone(),
             None,
-        ).await?;
+        )
+        .await?;
 
         // Load models and track usage
         for model in &models[0..2] {
-            let _ = cache1.get_or_load_model(&model.id, BackendType::Gguf, &backend_config).await?;
+            let _ = cache1
+                .get_or_load_model(&model.id, BackendType::Gguf, &backend_config)
+                .await?;
         }
 
         // Get initial stats
@@ -281,26 +290,30 @@ async fn test_cache_persistence_across_restarts() -> Result<()> {
 
     // Second cache instance - should load from persistence
     {
-        let cache2 = ModelCache::new(
-            cache_config,
-            backend_config.clone(),
-            model_manager,
-            None,
-        ).await?;
+        let cache2 =
+            ModelCache::new(cache_config, backend_config.clone(), model_manager, None).await?;
 
         // Wait a bit for background loading
         sleep(Duration::from_millis(500)).await;
 
         // Access a previously cached model - should be faster (cache hit)
         let start = std::time::Instant::now();
-        let _cached_model = cache2.get_or_load_model(&models[0].id, BackendType::Gguf, &backend_config).await?;
+        let _cached_model = cache2
+            .get_or_load_model(&models[0].id, BackendType::Gguf, &backend_config)
+            .await?;
         let access_time = start.elapsed();
 
         // Should be relatively fast since it was restored from cache
-        assert!(access_time < Duration::from_secs(2), "Restored model access should be fast");
+        assert!(
+            access_time < Duration::from_secs(2),
+            "Restored model access should be fast"
+        );
 
         let stats = cache2.get_stats().await;
-        assert!(stats.cache_hits > 0, "Should have cache hits from restored cache");
+        assert!(
+            stats.cache_hits > 0,
+            "Should have cache hits from restored cache"
+        );
     }
 
     Ok(())
@@ -331,12 +344,18 @@ async fn test_cache_compression() -> Result<()> {
 
     // Verify data integrity
     assert_eq!(cache_state.version, deserialized.version);
-    assert_eq!(cache_state.cache_entries.len(), deserialized.cache_entries.len());
+    assert_eq!(
+        cache_state.cache_entries.len(),
+        deserialized.cache_entries.len()
+    );
     assert_eq!(cache_state.cache_hits, deserialized.cache_hits);
     assert_eq!(cache_state.cache_misses, deserialized.cache_misses);
 
     // Verify compression efficiency
-    assert!(compressed.len() < serialized.len(), "Compression should reduce size");
+    assert!(
+        compressed.len() < serialized.len(),
+        "Compression should reduce size"
+    );
 
     Ok(())
 }
@@ -355,23 +374,20 @@ async fn test_cache_eviction_with_persistence() -> Result<()> {
 
     let mut cache_config = cache_test_utils::create_test_cache_config(Some(cache_dir.clone()));
     cache_config.max_cached_models = 2; // Small cache to force eviction
-    cache_config.max_memory_mb = 512;   // Small memory limit
+    cache_config.max_memory_mb = 512; // Small memory limit
 
     let backend_config = cache_test_utils::create_test_backend_config();
     let model_manager = Arc::new(ModelManager::new(models_dir));
 
     let models = model_manager.discover_models().await?;
 
-    let cache = ModelCache::new(
-        cache_config,
-        backend_config.clone(),
-        model_manager,
-        None,
-    ).await?;
+    let cache = ModelCache::new(cache_config, backend_config.clone(), model_manager, None).await?;
 
     // Load models until eviction occurs
     for model in &models {
-        let _ = cache.get_or_load_model(&model.id, BackendType::Gguf, &backend_config).await?;
+        let _ = cache
+            .get_or_load_model(&model.id, BackendType::Gguf, &backend_config)
+            .await?;
 
         // Small delay to allow background processing
         sleep(Duration::from_millis(100)).await;
@@ -383,8 +399,10 @@ async fn test_cache_eviction_with_persistence() -> Result<()> {
     let stats = cache.get_stats().await;
 
     // Should have evictions due to cache size limit
-    assert!(stats.eviction_count > 0 || stats.cached_models <= 2,
-           "Should have evictions or be within cache limit");
+    assert!(
+        stats.eviction_count > 0 || stats.cached_models <= 2,
+        "Should have evictions or be within cache limit"
+    );
 
     // Wait for persistence
     cache_test_utils::wait_for_cache_persistence(&cache_dir, Duration::from_secs(5)).await?;
@@ -414,17 +432,14 @@ async fn test_cache_statistics_persistence() -> Result<()> {
 
     let models = model_manager.discover_models().await?;
 
-    let cache = ModelCache::new(
-        cache_config,
-        backend_config.clone(),
-        model_manager,
-        None,
-    ).await?;
+    let cache = ModelCache::new(cache_config, backend_config.clone(), model_manager, None).await?;
 
     // Generate some cache activity
     for _ in 0..3 {
         for model in &models[0..2] {
-            let _ = cache.get_or_load_model(&model.id, BackendType::Gguf, &backend_config).await?;
+            let _ = cache
+                .get_or_load_model(&model.id, BackendType::Gguf, &backend_config)
+                .await?;
         }
     }
 
@@ -443,7 +458,8 @@ async fn test_cache_statistics_persistence() -> Result<()> {
         backend_config,
         model_manager,
         None,
-    ).await?;
+    )
+    .await?;
 
     sleep(Duration::from_millis(500)).await; // Allow loading
 
@@ -474,12 +490,8 @@ async fn test_concurrent_cache_with_persistence() -> Result<()> {
 
     let models = model_manager.discover_models().await?;
 
-    let cache = Arc::new(ModelCache::new(
-        cache_config,
-        backend_config.clone(),
-        model_manager,
-        None,
-    ).await?);
+    let cache =
+        Arc::new(ModelCache::new(cache_config, backend_config.clone(), model_manager, None).await?);
 
     // Launch concurrent cache operations
     let mut tasks = Vec::new();
@@ -494,11 +506,9 @@ async fn test_concurrent_cache_with_persistence() -> Result<()> {
                 let model_idx = (i + j) % models_clone.len();
                 let model = &models_clone[model_idx];
 
-                let result = cache_clone.get_or_load_model(
-                    &model.id,
-                    BackendType::Gguf,
-                    &backend_config_clone
-                ).await;
+                let result = cache_clone
+                    .get_or_load_model(&model.id, BackendType::Gguf, &backend_config_clone)
+                    .await;
 
                 assert!(result.is_ok(), "Concurrent cache access should succeed");
 
@@ -544,22 +554,26 @@ async fn test_cache_corruption_recovery() -> Result<()> {
     let model_manager = Arc::new(ModelManager::new(models_dir));
 
     // Cache should still initialize despite corrupted file
-    let cache_result = ModelCache::new(
-        cache_config,
-        backend_config.clone(),
-        model_manager,
-        None,
-    ).await;
+    let cache_result =
+        ModelCache::new(cache_config, backend_config.clone(), model_manager, None).await;
 
-    assert!(cache_result.is_ok(), "Cache should handle corruption gracefully");
+    assert!(
+        cache_result.is_ok(),
+        "Cache should handle corruption gracefully"
+    );
 
     let cache = cache_result?;
     let models = cache.list_available_models().await?;
 
     // Should still be able to load models
     if !models.is_empty() {
-        let result = cache.get_or_load_model(&models[0].id, BackendType::Gguf, &backend_config).await;
-        assert!(result.is_ok(), "Should be able to load models after corruption recovery");
+        let result = cache
+            .get_or_load_model(&models[0].id, BackendType::Gguf, &backend_config)
+            .await;
+        assert!(
+            result.is_ok(),
+            "Should be able to load models after corruption recovery"
+        );
     }
 
     Ok(())
@@ -586,16 +600,13 @@ async fn test_cache_memory_management() -> Result<()> {
 
     let models = model_manager.discover_models().await?;
 
-    let cache = ModelCache::new(
-        cache_config,
-        backend_config.clone(),
-        model_manager,
-        None,
-    ).await?;
+    let cache = ModelCache::new(cache_config, backend_config.clone(), model_manager, None).await?;
 
     // Load models and monitor memory usage
     for model in &models {
-        let _ = cache.get_or_load_model(&model.id, BackendType::Gguf, &backend_config).await?;
+        let _ = cache
+            .get_or_load_model(&model.id, BackendType::Gguf, &backend_config)
+            .await?;
 
         let stats = cache.get_stats().await;
 
@@ -638,12 +649,7 @@ async fn test_cache_warmup_with_persistence() -> Result<()> {
     let backend_config = cache_test_utils::create_test_backend_config();
     let model_manager = Arc::new(ModelManager::new(models_dir));
 
-    let cache = ModelCache::new(
-        cache_config,
-        backend_config.clone(),
-        model_manager,
-        None,
-    ).await?;
+    let cache = ModelCache::new(cache_config, backend_config.clone(), model_manager, None).await?;
 
     // Wait for warmup to complete
     sleep(Duration::from_secs(2)).await;

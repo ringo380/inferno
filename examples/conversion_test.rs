@@ -1,8 +1,10 @@
-use inferno::conversion::{ModelConverter, ConversionConfig, ModelFormat, QuantizationType, OptimizationLevel};
-use inferno::models::ModelManager;
 use inferno::config::Config;
-use std::sync::Arc;
+use inferno::conversion::{
+    ConversionConfig, ModelConverter, ModelFormat, OptimizationLevel, QuantizationType,
+};
+use inferno::models::ModelManager;
 use std::path::Path;
+use std::sync::Arc;
 use tempfile::tempdir;
 
 #[tokio::main]
@@ -47,7 +49,10 @@ async fn main() -> anyhow::Result<()> {
     println!("Testing GGUF to ONNX conversion...");
 
     // Test the conversion
-    match converter.convert_model(&gguf_path, &output_path, &conversion_config).await {
+    match converter
+        .convert_model(&gguf_path, &output_path, &conversion_config)
+        .await
+    {
         Ok(result) => {
             println!("Conversion completed!");
             println!("Success: {}", result.success);
@@ -90,7 +95,14 @@ async fn main() -> anyhow::Result<()> {
 
     let gguf_output_path = temp_path.join("converted_model.gguf");
 
-    match converter.convert_model(&safetensors_path, &gguf_output_path, &safetensors_to_gguf_config).await {
+    match converter
+        .convert_model(
+            &safetensors_path,
+            &gguf_output_path,
+            &safetensors_to_gguf_config,
+        )
+        .await
+    {
         Ok(result) => {
             println!("SafeTensors conversion completed!");
             println!("Success: {}", result.success);
@@ -116,8 +128,8 @@ async fn main() -> anyhow::Result<()> {
 }
 
 async fn create_mock_gguf_file(path: &Path) -> anyhow::Result<()> {
-    use tokio::fs;
     use byteorder::{LittleEndian, WriteBytesExt};
+    use tokio::fs;
 
     let mut data = Vec::new();
 
@@ -175,16 +187,17 @@ async fn create_mock_gguf_file(path: &Path) -> anyhow::Result<()> {
 }
 
 async fn create_mock_safetensors_file(path: &Path) -> anyhow::Result<()> {
-    use tokio::fs;
     use safetensors::{serialize, Dtype};
     use std::collections::HashMap;
+    use tokio::fs;
 
     // Create mock tensor data
     let mut tensors = HashMap::new();
 
     // Create a simple 2x3 F32 tensor
     let data = vec![1.0f32, 2.0, 3.0, 4.0, 5.0, 6.0];
-    let bytes = data.iter()
+    let bytes = data
+        .iter()
         .flat_map(|f| f.to_le_bytes())
         .collect::<Vec<u8>>();
 

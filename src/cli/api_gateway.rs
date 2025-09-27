@@ -1,13 +1,10 @@
-use crate::{
-    api_gateway::ApiGateway,
-    config::Config,
-};
-use uuid;
+use crate::{api_gateway::ApiGateway, config::Config};
 use anyhow::Result;
 use clap::{Args, Subcommand};
 use std::path::PathBuf;
 use tokio::signal;
 use tracing::{info, warn};
+use uuid;
 
 #[derive(Debug, Args)]
 pub struct ApiGatewayArgs {
@@ -1052,40 +1049,27 @@ pub async fn execute(args: ApiGatewayArgs, config: &Config) -> Result<()> {
                 debug,
                 no_rate_limiting,
                 no_auth,
-            ).await
+            )
+            .await
         }
 
-        ApiGatewayCommand::Stop { force, timeout } => {
-            handle_stop_command(force, timeout).await
-        }
+        ApiGatewayCommand::Stop { force, timeout } => handle_stop_command(force, timeout).await,
 
         ApiGatewayCommand::Status { detailed, format } => {
             handle_status_command(config, detailed, format).await
         }
 
-        ApiGatewayCommand::Routes { action } => {
-            handle_routes_command(config, action).await
-        }
+        ApiGatewayCommand::Routes { action } => handle_routes_command(config, action).await,
 
-        ApiGatewayCommand::Services { action } => {
-            handle_services_command(config, action).await
-        }
+        ApiGatewayCommand::Services { action } => handle_services_command(config, action).await,
 
-        ApiGatewayCommand::RateLimit { action } => {
-            handle_rate_limit_command(config, action).await
-        }
+        ApiGatewayCommand::RateLimit { action } => handle_rate_limit_command(config, action).await,
 
-        ApiGatewayCommand::Auth { action } => {
-            handle_auth_command(config, action).await
-        }
+        ApiGatewayCommand::Auth { action } => handle_auth_command(config, action).await,
 
-        ApiGatewayCommand::Tls { action } => {
-            handle_tls_command(config, action).await
-        }
+        ApiGatewayCommand::Tls { action } => handle_tls_command(config, action).await,
 
-        ApiGatewayCommand::Health { action } => {
-            handle_health_command(config, action).await
-        }
+        ApiGatewayCommand::Health { action } => handle_health_command(config, action).await,
 
         ApiGatewayCommand::CircuitBreaker { action } => {
             handle_circuit_breaker_command(config, action).await
@@ -1095,33 +1079,27 @@ pub async fn execute(args: ApiGatewayArgs, config: &Config) -> Result<()> {
             handle_load_balancer_command(config, action).await
         }
 
-        ApiGatewayCommand::Middleware { action } => {
-            handle_middleware_command(config, action).await
-        }
+        ApiGatewayCommand::Middleware { action } => handle_middleware_command(config, action).await,
 
-        ApiGatewayCommand::Cors { action } => {
-            handle_cors_command(config, action).await
-        }
+        ApiGatewayCommand::Cors { action } => handle_cors_command(config, action).await,
 
-        ApiGatewayCommand::Metrics { action } => {
-            handle_metrics_command(config, action).await
-        }
+        ApiGatewayCommand::Metrics { action } => handle_metrics_command(config, action).await,
 
-        ApiGatewayCommand::Test { action } => {
-            handle_test_command(config, action).await
-        }
+        ApiGatewayCommand::Test { action } => handle_test_command(config, action).await,
 
-        ApiGatewayCommand::Config { action } => {
-            handle_config_command(config, action).await
-        }
+        ApiGatewayCommand::Config { action } => handle_config_command(config, action).await,
 
-        ApiGatewayCommand::Import { file, merge, backup } => {
-            handle_import_command(config, file, merge, backup).await
-        }
+        ApiGatewayCommand::Import {
+            file,
+            merge,
+            backup,
+        } => handle_import_command(config, file, merge, backup).await,
 
-        ApiGatewayCommand::Export { output, format, include_secrets } => {
-            handle_export_command(config, output, format, include_secrets).await
-        }
+        ApiGatewayCommand::Export {
+            output,
+            format,
+            include_secrets,
+        } => handle_export_command(config, output, format, include_secrets).await,
     }
 }
 
@@ -1171,9 +1149,10 @@ async fn handle_start_command(
     }
 
     info!("API Gateway started successfully");
-    info!("Gateway endpoint: http://{}:{}",
-          config.api_gateway.bind_address,
-          config.api_gateway.port);
+    info!(
+        "Gateway endpoint: http://{}:{}",
+        config.api_gateway.bind_address, config.api_gateway.port
+    );
 
     // Wait for shutdown signal
     signal::ctrl_c().await?;
@@ -1197,12 +1176,11 @@ async fn handle_stop_command(force: bool, timeout: Option<u64>) -> Result<()> {
     info!("Graceful shutdown with {} second timeout", timeout_duration);
 
     // Implement graceful shutdown logic
-    tokio::time::timeout(
-        std::time::Duration::from_secs(timeout_duration),
-        async {
-            info!("API Gateway stopped gracefully");
-        }
-    ).await.map_err(|_| anyhow::anyhow!("Shutdown timeout exceeded"))?;
+    tokio::time::timeout(std::time::Duration::from_secs(timeout_duration), async {
+        info!("API Gateway stopped gracefully");
+    })
+    .await
+    .map_err(|_| anyhow::anyhow!("Shutdown timeout exceeded"))?;
 
     Ok(())
 }
@@ -1232,8 +1210,22 @@ async fn handle_status_command(
             println!("Enabled: {}", status.enabled);
             println!("Routes: {}", status.routes_count);
             println!("Services: {}", status.services_count);
-            println!("Rate Limiting: {}", if status.rate_limiting_enabled { "Enabled" } else { "Disabled" });
-            println!("Authentication: {}", if status.authentication_enabled { "Enabled" } else { "Disabled" });
+            println!(
+                "Rate Limiting: {}",
+                if status.rate_limiting_enabled {
+                    "Enabled"
+                } else {
+                    "Disabled"
+                }
+            );
+            println!(
+                "Authentication: {}",
+                if status.authentication_enabled {
+                    "Enabled"
+                } else {
+                    "Disabled"
+                }
+            );
 
             if detailed {
                 println!("\nCircuit Breaker Status:");
@@ -1243,7 +1235,10 @@ async fn handle_status_command(
             }
         }
         OutputFormat::Plain => {
-            println!("Status: {}", if status.enabled { "Running" } else { "Stopped" });
+            println!(
+                "Status: {}",
+                if status.enabled { "Running" } else { "Stopped" }
+            );
             if detailed {
                 println!("Routes: {}", status.routes_count);
                 println!("Services: {}", status.services_count);
@@ -1258,7 +1253,11 @@ async fn handle_status_command(
 
 async fn handle_routes_command(config: &Config, action: RouteAction) -> Result<()> {
     match action {
-        RouteAction::List { service, path, format } => {
+        RouteAction::List {
+            service,
+            path,
+            format,
+        } => {
             println!("API Gateway Routes");
             println!("==================");
 
@@ -1276,8 +1275,10 @@ async fn handle_routes_command(config: &Config, action: RouteAction) -> Result<(
                             println!("{}", serde_json::to_string_pretty(&route)?);
                         }
                         OutputFormat::Table => {
-                            println!("ID: {} | Path: {} | Methods: {:?} | Service: {} | Priority: {}",
-                                     route.id, route.path, route.methods, route.upstream, route.priority);
+                            println!(
+                                "ID: {} | Path: {} | Methods: {:?} | Service: {} | Priority: {}",
+                                route.id, route.path, route.methods, route.upstream, route.priority
+                            );
                             if !route.tags.is_empty() {
                                 println!("  Tags: {:?}", route.tags);
                             }
@@ -1290,7 +1291,16 @@ async fn handle_routes_command(config: &Config, action: RouteAction) -> Result<(
             }
         }
 
-        RouteAction::Add { id, path, service, methods, priority: _, tags, rewrite: _, middleware: _ } => {
+        RouteAction::Add {
+            id,
+            path,
+            service,
+            methods,
+            priority: _,
+            tags,
+            rewrite: _,
+            middleware: _,
+        } => {
             info!("Adding route: {} -> {} ({})", id, path, service);
 
             let _route_methods = if let Some(m) = methods {
@@ -1310,7 +1320,14 @@ async fn handle_routes_command(config: &Config, action: RouteAction) -> Result<(
             println!("Route '{}' added: {} -> {}", id, path, service);
         }
 
-        RouteAction::Update { id, path: _, service: _, methods: _, priority: _, enabled: _ } => {
+        RouteAction::Update {
+            id,
+            path: _,
+            service: _,
+            methods: _,
+            priority: _,
+            enabled: _,
+        } => {
             info!("Updating route: {}", id);
 
             // In a real implementation, this would update the route configuration
@@ -1345,7 +1362,12 @@ async fn handle_routes_command(config: &Config, action: RouteAction) -> Result<(
             println!("Route '{}' disabled", id);
         }
 
-        RouteAction::Test { route, method, headers, payload } => {
+        RouteAction::Test {
+            route,
+            method,
+            headers,
+            payload,
+        } => {
             info!("Testing route: {}", route);
             let test_method = method.unwrap_or_else(|| "GET".to_string());
 
@@ -1369,7 +1391,11 @@ async fn handle_routes_command(config: &Config, action: RouteAction) -> Result<(
 
 async fn handle_services_command(config: &Config, action: ServiceAction) -> Result<()> {
     match action {
-        ServiceAction::List { healthy: _, detailed, format } => {
+        ServiceAction::List {
+            healthy: _,
+            detailed,
+            format,
+        } => {
             println!("Upstream Services");
             println!("================");
 
@@ -1380,25 +1406,49 @@ async fn handle_services_command(config: &Config, action: ServiceAction) -> Resu
                         println!("{}", serde_json::to_string_pretty(&service)?);
                     }
                     OutputFormat::Table => {
-                        println!("ID: {} | Name: {} | Weight: {} | Targets: {}",
-                                 service.id, service.name, service.weight, service.targets.len());
+                        println!(
+                            "ID: {} | Name: {} | Weight: {} | Targets: {}",
+                            service.id,
+                            service.name,
+                            service.weight,
+                            service.targets.len()
+                        );
 
                         if detailed {
                             for target in &service.targets {
-                                let health_status = if target.healthy { "Healthy" } else { "Unhealthy" };
-                                println!("  Target: {}:{} | Weight: {} | Status: {}",
-                                         target.host, target.port, target.weight, health_status);
+                                let health_status = if target.healthy {
+                                    "Healthy"
+                                } else {
+                                    "Unhealthy"
+                                };
+                                println!(
+                                    "  Target: {}:{} | Weight: {} | Status: {}",
+                                    target.host, target.port, target.weight, health_status
+                                );
                             }
                         }
                     }
                     _ => {
-                        println!("{}: {} ({} targets)", service.id, service.name, service.targets.len());
+                        println!(
+                            "{}: {} ({} targets)",
+                            service.id,
+                            service.name,
+                            service.targets.len()
+                        );
                     }
                 }
             }
         }
 
-        ServiceAction::Add { id, name, targets, weight: _, health_check, health_path, health_interval } => {
+        ServiceAction::Add {
+            id,
+            name,
+            targets,
+            weight: _,
+            health_check,
+            health_path,
+            health_interval,
+        } => {
             info!("Adding service: {} ({})", id, name);
 
             // Parse targets
@@ -1422,7 +1472,13 @@ async fn handle_services_command(config: &Config, action: ServiceAction) -> Resu
             info!("Service added successfully");
         }
 
-        ServiceAction::Update { id, name: _, targets: _, weight: _, health_check: _ } => {
+        ServiceAction::Update {
+            id,
+            name: _,
+            targets: _,
+            weight: _,
+            health_check: _,
+        } => {
             info!("Updating service: {}", id);
             println!("Service '{}' updated", id);
         }
@@ -1442,7 +1498,12 @@ async fn handle_services_command(config: &Config, action: ServiceAction) -> Resu
             println!("Service '{}' removed", id);
         }
 
-        ServiceAction::AddTarget { service, host, port, weight: _ } => {
+        ServiceAction::AddTarget {
+            service,
+            host,
+            port,
+            weight: _,
+        } => {
             info!("Adding target {}:{} to service {}", host, port, service);
             println!("Target added to service '{}'", service);
         }
@@ -1452,10 +1513,20 @@ async fn handle_services_command(config: &Config, action: ServiceAction) -> Resu
             println!("Target removed from service '{}'", service);
         }
 
-        ServiceAction::SetTargetHealth { service, target, healthy } => {
+        ServiceAction::SetTargetHealth {
+            service,
+            target,
+            healthy,
+        } => {
             let status = if healthy { "healthy" } else { "unhealthy" };
-            info!("Setting target {} in service {} as {}", target, service, status);
-            println!("Target '{}' in service '{}' marked as {}", target, service, status);
+            info!(
+                "Setting target {} in service {} as {}",
+                target, service, status
+            );
+            println!(
+                "Target '{}' in service '{}' marked as {}",
+                target, service, status
+            );
         }
     }
 
@@ -1484,7 +1555,10 @@ async fn handle_rate_limit_command(config: &Config, action: RateLimitAction) -> 
                     if !rate_config.per_client_limits.is_empty() {
                         println!("\nClient-specific limits:");
                         for (client, limit) in &rate_config.per_client_limits {
-                            println!("  {}: {} req/s (burst: {})", client, limit.rate, limit.burst);
+                            println!(
+                                "  {}: {} req/s (burst: {})",
+                                client, limit.rate, limit.burst
+                            );
                         }
                     }
 
@@ -1496,67 +1570,105 @@ async fn handle_rate_limit_command(config: &Config, action: RateLimitAction) -> 
                     }
                 }
                 _ => {
-                    println!("Rate limiting: {}", if rate_config.enabled { "Enabled" } else { "Disabled" });
+                    println!(
+                        "Rate limiting: {}",
+                        if rate_config.enabled {
+                            "Enabled"
+                        } else {
+                            "Disabled"
+                        }
+                    );
                     println!("Default: {} req/s", rate_config.default_rate);
                 }
             }
         }
 
-        RateLimitAction::SetGlobal { rate, burst, window } => {
+        RateLimitAction::SetGlobal {
+            rate,
+            burst,
+            window,
+        } => {
             info!("Setting global rate limit: {} req/s", rate);
             let burst_size = burst.unwrap_or(rate * 2);
             let time_window = window.unwrap_or(60);
 
-            println!("Global rate limit set to {} req/s (burst: {}, window: {}s)",
-                     rate, burst_size, time_window);
+            println!(
+                "Global rate limit set to {} req/s (burst: {}, window: {}s)",
+                rate, burst_size, time_window
+            );
         }
 
-        RateLimitAction::SetClient { client, rate, burst, window } => {
+        RateLimitAction::SetClient {
+            client,
+            rate,
+            burst,
+            window,
+        } => {
             info!("Setting client rate limit for {}: {} req/s", client, rate);
             let burst_size = burst.unwrap_or(rate * 2);
             let time_window = window.unwrap_or(60);
 
-            println!("Client '{}' rate limit set to {} req/s (burst: {}, window: {}s)",
-                     client, rate, burst_size, time_window);
+            println!(
+                "Client '{}' rate limit set to {} req/s (burst: {}, window: {}s)",
+                client, rate, burst_size, time_window
+            );
         }
 
-        RateLimitAction::SetRoute { route, rate, burst, per_client } => {
+        RateLimitAction::SetRoute {
+            route,
+            rate,
+            burst,
+            per_client,
+        } => {
             info!("Setting route rate limit for {}: {} req/s", route, rate);
             let burst_size = burst.unwrap_or(rate * 2);
 
-            println!("Route '{}' rate limit set to {} req/s (burst: {}, per-client: {})",
-                     route, rate, burst_size, per_client);
+            println!(
+                "Route '{}' rate limit set to {} req/s (burst: {}, per-client: {})",
+                route, rate, burst_size, per_client
+            );
         }
 
-        RateLimitAction::Remove { limit_type, identifier } => {
-            match limit_type.as_str() {
-                "global" => {
-                    info!("Removing global rate limit");
-                    println!("Global rate limit removed");
-                }
-                "client" => {
-                    if let Some(client_id) = identifier {
-                        info!("Removing client rate limit for {}", client_id);
-                        println!("Client '{}' rate limit removed", client_id);
-                    } else {
-                        return Err(anyhow::anyhow!("Client ID required for client rate limit removal"));
-                    }
-                }
-                "route" => {
-                    if let Some(route_pattern) = identifier {
-                        info!("Removing route rate limit for {}", route_pattern);
-                        println!("Route '{}' rate limit removed", route_pattern);
-                    } else {
-                        return Err(anyhow::anyhow!("Route pattern required for route rate limit removal"));
-                    }
-                }
-                _ => {
-                    return Err(anyhow::anyhow!("Invalid limit type. Use: global, client, or route"));
+        RateLimitAction::Remove {
+            limit_type,
+            identifier,
+        } => match limit_type.as_str() {
+            "global" => {
+                info!("Removing global rate limit");
+                println!("Global rate limit removed");
+            }
+            "client" => {
+                if let Some(client_id) = identifier {
+                    info!("Removing client rate limit for {}", client_id);
+                    println!("Client '{}' rate limit removed", client_id);
+                } else {
+                    return Err(anyhow::anyhow!(
+                        "Client ID required for client rate limit removal"
+                    ));
                 }
             }
-        }
+            "route" => {
+                if let Some(route_pattern) = identifier {
+                    info!("Removing route rate limit for {}", route_pattern);
+                    println!("Route '{}' rate limit removed", route_pattern);
+                } else {
+                    return Err(anyhow::anyhow!(
+                        "Route pattern required for route rate limit removal"
+                    ));
+                }
+            }
+            _ => {
+                return Err(anyhow::anyhow!(
+                    "Invalid limit type. Use: global, client, or route"
+                ));
+            }
+        },
 
-        RateLimitAction::Stats { client, route, range } => {
+        RateLimitAction::Stats {
+            client,
+            route,
+            range,
+        } => {
             println!("Rate Limit Statistics");
             println!("====================");
 
@@ -1585,33 +1697,36 @@ async fn handle_rate_limit_command(config: &Config, action: RateLimitAction) -> 
             }
         }
 
-        RateLimitAction::Reset { reset_type, identifier } => {
-            match reset_type.as_str() {
-                "all" => {
-                    info!("Resetting all rate limit counters");
-                    println!("All rate limit counters reset");
-                }
-                "client" => {
-                    if let Some(client_id) = identifier {
-                        info!("Resetting rate limit counters for client {}", client_id);
-                        println!("Rate limit counters reset for client '{}'", client_id);
-                    } else {
-                        return Err(anyhow::anyhow!("Client ID required"));
-                    }
-                }
-                "route" => {
-                    if let Some(route_pattern) = identifier {
-                        info!("Resetting rate limit counters for route {}", route_pattern);
-                        println!("Rate limit counters reset for route '{}'", route_pattern);
-                    } else {
-                        return Err(anyhow::anyhow!("Route pattern required"));
-                    }
-                }
-                _ => {
-                    return Err(anyhow::anyhow!("Invalid reset type. Use: all, client, or route"));
+        RateLimitAction::Reset {
+            reset_type,
+            identifier,
+        } => match reset_type.as_str() {
+            "all" => {
+                info!("Resetting all rate limit counters");
+                println!("All rate limit counters reset");
+            }
+            "client" => {
+                if let Some(client_id) = identifier {
+                    info!("Resetting rate limit counters for client {}", client_id);
+                    println!("Rate limit counters reset for client '{}'", client_id);
+                } else {
+                    return Err(anyhow::anyhow!("Client ID required"));
                 }
             }
-        }
+            "route" => {
+                if let Some(route_pattern) = identifier {
+                    info!("Resetting rate limit counters for route {}", route_pattern);
+                    println!("Rate limit counters reset for route '{}'", route_pattern);
+                } else {
+                    return Err(anyhow::anyhow!("Route pattern required"));
+                }
+            }
+            _ => {
+                return Err(anyhow::anyhow!(
+                    "Invalid reset type. Use: all, client, or route"
+                ));
+            }
+        },
     }
 
     Ok(())
@@ -1672,28 +1787,43 @@ async fn handle_auth_command(config: &Config, action: AuthAction) -> Result<()> 
 
 async fn handle_api_key_action(config: &Config, action: ApiKeyAction) -> Result<()> {
     match action {
-        ApiKeyAction::List { show_expired, format: _ } => {
+        ApiKeyAction::List {
+            show_expired,
+            format: _,
+        } => {
             println!("API Keys");
             println!("========");
 
             if let Some(api_config) = &config.api_gateway.authentication.api_key {
                 for (key, info) in &api_config.keys {
-                    let expired = info.expires_at.map_or(false, |exp| exp < chrono::Utc::now());
+                    let expired = info
+                        .expires_at
+                        .map_or(false, |exp| exp < chrono::Utc::now());
 
                     if !show_expired && expired {
                         continue;
                     }
 
                     let status = if expired { "EXPIRED" } else { "ACTIVE" };
-                    println!("Key: {} | Name: {} | Status: {} | Permissions: {:?}",
-                             &key[..8], info.name, status, info.permissions);
+                    println!(
+                        "Key: {} | Name: {} | Status: {} | Permissions: {:?}",
+                        &key[..8],
+                        info.name,
+                        status,
+                        info.permissions
+                    );
                 }
             } else {
                 println!("No API key configuration found");
             }
         }
 
-        ApiKeyAction::Create { name, permissions, expires_in, rate_limit: _ } => {
+        ApiKeyAction::Create {
+            name,
+            permissions,
+            expires_in,
+            rate_limit: _,
+        } => {
             info!("Creating API key: {}", name);
 
             let key = format!("ak_{}", uuid::Uuid::new_v4().to_string().replace('-', ""));
@@ -1714,7 +1844,11 @@ async fn handle_api_key_action(config: &Config, action: ApiKeyAction) -> Result<
             println!("API key '{}' revoked", key);
         }
 
-        ApiKeyAction::Update { key, permissions, extend } => {
+        ApiKeyAction::Update {
+            key,
+            permissions,
+            extend,
+        } => {
             info!("Updating API key: {}", key);
 
             if let Some(perms) = permissions {
@@ -1744,7 +1878,11 @@ async fn handle_api_key_action(config: &Config, action: ApiKeyAction) -> Result<
 
 async fn handle_jwt_action(_config: &Config, action: JwtAction) -> Result<()> {
     match action {
-        JwtAction::Generate { subject, claims, expires_in } => {
+        JwtAction::Generate {
+            subject,
+            claims,
+            expires_in,
+        } => {
             info!("Generating JWT token for subject: {}", subject);
 
             // In a real implementation, this would generate an actual JWT
@@ -1774,7 +1912,10 @@ async fn handle_jwt_action(_config: &Config, action: JwtAction) -> Result<()> {
             println!("Expires: 2024-12-31 23:59:59 UTC");
         }
 
-        JwtAction::Decode { token: _, no_verify } => {
+        JwtAction::Decode {
+            token: _,
+            no_verify,
+        } => {
             info!("Decoding JWT token");
 
             if no_verify {
@@ -1790,7 +1931,11 @@ async fn handle_jwt_action(_config: &Config, action: JwtAction) -> Result<()> {
             }
         }
 
-        JwtAction::Configure { secret, algorithm, expiration } => {
+        JwtAction::Configure {
+            secret,
+            algorithm,
+            expiration,
+        } => {
             info!("Configuring JWT settings");
 
             if secret.is_some() {
@@ -1821,7 +1966,10 @@ async fn handle_health_command(_config: &Config, _action: HealthAction) -> Resul
     Ok(())
 }
 
-async fn handle_circuit_breaker_command(_config: &Config, _action: CircuitBreakerAction) -> Result<()> {
+async fn handle_circuit_breaker_command(
+    _config: &Config,
+    _action: CircuitBreakerAction,
+) -> Result<()> {
     info!("Circuit breaker command not fully implemented");
     Ok(())
 }
@@ -1856,12 +2004,22 @@ async fn handle_config_command(_config: &Config, _action: ConfigAction) -> Resul
     Ok(())
 }
 
-async fn handle_import_command(_config: &Config, _file: PathBuf, _merge: bool, _backup: bool) -> Result<()> {
+async fn handle_import_command(
+    _config: &Config,
+    _file: PathBuf,
+    _merge: bool,
+    _backup: bool,
+) -> Result<()> {
     info!("Import command not fully implemented");
     Ok(())
 }
 
-async fn handle_export_command(_config: &Config, _output: PathBuf, _format: Option<ExportFormat>, _include_secrets: bool) -> Result<()> {
+async fn handle_export_command(
+    _config: &Config,
+    _output: PathBuf,
+    _format: Option<ExportFormat>,
+    _include_secrets: bool,
+) -> Result<()> {
     info!("Export command not fully implemented");
     Ok(())
 }

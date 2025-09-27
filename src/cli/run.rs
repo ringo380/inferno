@@ -4,8 +4,8 @@ use crate::io::{InputFormat, OutputFormat};
 use crate::models::ModelManager;
 use anyhow::Result;
 use clap::Args;
-use std::path::PathBuf;
 use futures::StreamExt;
+use std::path::PathBuf;
 use tokio::io::{self, AsyncBufReadExt, BufReader};
 use tracing::{info, warn};
 
@@ -14,13 +14,29 @@ pub struct RunArgs {
     #[arg(short, long, help = "Model file path or name")]
     pub model: String,
 
-    #[arg(short = 't', long, help = "Input type", value_enum, default_value = "text")]
+    #[arg(
+        short = 't',
+        long,
+        help = "Input type",
+        value_enum,
+        default_value = "text"
+    )]
     pub input_type: InputFormat,
 
-    #[arg(short = 'o', long, help = "Output format", value_enum, default_value = "text")]
+    #[arg(
+        short = 'o',
+        long,
+        help = "Output format",
+        value_enum,
+        default_value = "text"
+    )]
     pub output_format: OutputFormat,
 
-    #[arg(short, long, help = "Input file path (if not provided, reads from stdin)")]
+    #[arg(
+        short,
+        long,
+        help = "Input file path (if not provided, reads from stdin)"
+    )]
     pub input: Option<PathBuf>,
 
     #[arg(long, help = "Output file path (if not provided, writes to stdout)")]
@@ -54,9 +70,10 @@ pub async fn execute(args: RunArgs, config: &Config) -> Result<()> {
     let model_manager = ModelManager::new(&config.models_dir);
     let model_info = model_manager.resolve_model(&args.model).await?;
 
-    let backend_type = args.backend.unwrap_or_else(|| {
-        BackendType::from_model_path(&model_info.path)
-    });
+    let backend_type = args
+        .backend
+        .or_else(|| BackendType::from_model_path(&model_info.path))
+        .ok_or_else(|| anyhow::anyhow!("No suitable backend found for model: {}", model_info.path.display()))?;
 
     let mut backend = Backend::new(backend_type, &config.backend_config)?;
     backend.load_model(&model_info).await?;
@@ -75,7 +92,9 @@ pub async fn execute(args: RunArgs, config: &Config) -> Result<()> {
             shuffle_inputs: false,
         };
 
-        let input_path = args.input.as_ref()
+        let input_path = args
+            .input
+            .as_ref()
             .ok_or_else(|| anyhow::anyhow!("Batch mode requires input file"))?;
 
         let total_items = estimate_batch_size(input_path).await?;
@@ -89,11 +108,18 @@ pub async fn execute(args: RunArgs, config: &Config) -> Result<()> {
         };
 
         let progress = processor
-            .process_file(&mut backend, input_path, args.output.as_deref(), &inference_params)
+            .process_file(
+                &mut backend,
+                input_path,
+                args.output.as_deref(),
+                &inference_params,
+            )
             .await?;
 
-        info!("Batch processing completed: {}/{} items processed",
-              progress.completed_items, progress.total_items);
+        info!(
+            "Batch processing completed: {}/{} items processed",
+            progress.completed_items, progress.total_items
+        );
     } else {
         process_single(&mut backend, &args, config).await?;
     }
@@ -103,7 +129,10 @@ pub async fn execute(args: RunArgs, config: &Config) -> Result<()> {
 
 async fn estimate_batch_size(input_path: &std::path::Path) -> Result<usize> {
     let content = tokio::fs::read_to_string(input_path).await?;
-    let extension = input_path.extension().and_then(|s| s.to_str()).unwrap_or("");
+    let extension = input_path
+        .extension()
+        .and_then(|s| s.to_str())
+        .unwrap_or("");
 
     let count = match extension.to_lowercase().as_str() {
         "json" => {
@@ -113,9 +142,10 @@ async fn estimate_batch_size(input_path: &std::path::Path) -> Result<usize> {
                 _ => 1,
             }
         }
-        "jsonl" | "ndjson" => {
-            content.lines().filter(|line| !line.trim().is_empty()).count()
-        }
+        "jsonl" | "ndjson" => content
+            .lines()
+            .filter(|line| !line.trim().is_empty())
+            .count(),
         "csv" | "tsv" => {
             let delimiter = if extension == "tsv" { b'\t' } else { b',' };
             let mut rdr = csv::ReaderBuilder::new()
@@ -123,19 +153,16 @@ async fn estimate_batch_size(input_path: &std::path::Path) -> Result<usize> {
                 .from_reader(content.as_bytes());
             rdr.records().count()
         }
-        _ => {
-            content.lines().filter(|line| !line.trim().is_empty()).count()
-        }
+        _ => content
+            .lines()
+            .filter(|line| !line.trim().is_empty())
+            .count(),
     };
 
     Ok(count)
 }
 
-async fn process_single(
-    backend: &mut Backend,
-    args: &RunArgs,
-    _config: &Config,
-) -> Result<()> {
+async fn process_single(backend: &mut Backend, args: &RunArgs, _config: &Config) -> Result<()> {
     let input = if let Some(prompt) = &args.prompt {
         prompt.clone()
     } else if let Some(input_path) = &args.input {
@@ -185,12 +212,10 @@ async fn process_single(
     Ok(())
 }
 
-async fn process_batch(
-    backend: &mut Backend,
-    args: &RunArgs,
-    _config: &Config,
-) -> Result<()> {
-    let input_path = args.input.as_ref()
+async fn process_batch(backend: &mut Backend, args: &RunArgs, _config: &Config) -> Result<()> {
+    let input_path = args
+        .input
+        .as_ref()
         .ok_or_else(|| anyhow::anyhow!("Batch mode requires input file"))?;
 
     let content = tokio::fs::read_to_string(input_path).await?;

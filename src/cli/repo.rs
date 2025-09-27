@@ -1,5 +1,5 @@
 use crate::config::Config;
-use crate::marketplace::{ModelMarketplace, MarketplaceConfig};
+use crate::marketplace::{MarketplaceConfig, ModelMarketplace};
 use anyhow::{Context, Result};
 use clap::{Args, Subcommand};
 use tracing::info;
@@ -20,7 +20,12 @@ pub enum RepoCommand {
         #[arg(help = "Repository URL")]
         url: String,
 
-        #[arg(short, long, help = "Repository priority (lower = higher priority)", default_value = "100")]
+        #[arg(
+            short,
+            long,
+            help = "Repository priority (lower = higher priority)",
+            default_value = "100"
+        )]
         priority: u32,
 
         #[arg(long, help = "Require signature verification")]
@@ -112,41 +117,44 @@ pub async fn handle_repo_command(args: RepoArgs) -> Result<()> {
     let marketplace = ModelMarketplace::new(marketplace_config)?;
 
     match args.command {
-        RepoCommand::Add { name, url, priority, verify, disabled } => {
-            handle_add(&marketplace, &name, &url, priority, verify, disabled).await
-        }
+        RepoCommand::Add {
+            name,
+            url,
+            priority,
+            verify,
+            disabled,
+        } => handle_add(&marketplace, &name, &url, priority, verify, disabled).await,
 
-        RepoCommand::Remove { name, force } => {
-            handle_remove(&marketplace, &name, force).await
-        }
+        RepoCommand::Remove { name, force } => handle_remove(&marketplace, &name, force).await,
 
-        RepoCommand::List { detailed, enabled_only } => {
-            handle_list(&marketplace, detailed, enabled_only).await
-        }
+        RepoCommand::List {
+            detailed,
+            enabled_only,
+        } => handle_list(&marketplace, detailed, enabled_only).await,
 
-        RepoCommand::Toggle { name, enable, disable } => {
-            handle_toggle(&marketplace, &name, enable, disable).await
-        }
+        RepoCommand::Toggle {
+            name,
+            enable,
+            disable,
+        } => handle_toggle(&marketplace, &name, enable, disable).await,
 
         RepoCommand::Update { name, force } => {
             handle_update(&marketplace, name.as_deref(), force).await
         }
 
-        RepoCommand::Info { name, models } => {
-            handle_info(&marketplace, &name, models).await
-        }
+        RepoCommand::Info { name, models } => handle_info(&marketplace, &name, models).await,
 
-        RepoCommand::Test { name } => {
-            handle_test(&marketplace, &name).await
-        }
+        RepoCommand::Test { name } => handle_test(&marketplace, &name).await,
 
         RepoCommand::Priority { name, priority } => {
             handle_priority(&marketplace, &name, priority).await
         }
 
-        RepoCommand::Clean { name, metadata, models } => {
-            handle_clean(&marketplace, name.as_deref(), metadata, models).await
-        }
+        RepoCommand::Clean {
+            name,
+            metadata,
+            models,
+        } => handle_clean(&marketplace, name.as_deref(), metadata, models).await,
     }
 }
 
@@ -171,8 +179,14 @@ async fn handle_add(
             println!("✓ Repository '{}' added successfully", name);
             println!("  URL: {}", url);
             println!("  Priority: {}", priority);
-            println!("  Verification: {}", if verify { "enabled" } else { "disabled" });
-            println!("  Status: {}", if disabled { "disabled" } else { "enabled" });
+            println!(
+                "  Verification: {}",
+                if verify { "enabled" } else { "disabled" }
+            );
+            println!(
+                "  Status: {}",
+                if disabled { "disabled" } else { "enabled" }
+            );
 
             if !disabled {
                 println!("\nUpdating repository metadata...");
@@ -190,11 +204,7 @@ async fn handle_add(
     Ok(())
 }
 
-async fn handle_remove(
-    marketplace: &ModelMarketplace,
-    name: &str,
-    force: bool,
-) -> Result<()> {
+async fn handle_remove(marketplace: &ModelMarketplace, name: &str, force: bool) -> Result<()> {
     info!("Removing repository: {}", name);
 
     if !force {
@@ -247,9 +257,19 @@ async fn handle_list(
             println!("  URL: {}", repo.url);
             println!("  Priority: {}", repo.priority);
             println!("  Enabled: {}", if repo.enabled { "yes" } else { "no" });
-            println!("  Verification required: {}", if repo.verification_required { "yes" } else { "no" });
+            println!(
+                "  Verification required: {}",
+                if repo.verification_required {
+                    "yes"
+                } else {
+                    "no"
+                }
+            );
             if let Some(last_updated) = repo.last_updated {
-                println!("  Last updated: {}", last_updated.format("%Y-%m-%d %H:%M:%S"));
+                println!(
+                    "  Last updated: {}",
+                    last_updated.format("%Y-%m-%d %H:%M:%S")
+                );
             } else {
                 println!("  Last updated: never");
             }
@@ -258,16 +278,24 @@ async fn handle_list(
             }
         }
     } else {
-        println!("{:<20} {:<50} {:<8} {:<8} {:<12}", "NAME", "URL", "PRIORITY", "ENABLED", "VERIFICATION");
+        println!(
+            "{:<20} {:<50} {:<8} {:<8} {:<12}",
+            "NAME", "URL", "PRIORITY", "ENABLED", "VERIFICATION"
+        );
         println!("{}", "-".repeat(98));
 
         for repo in &repositories {
-            println!("{:<20} {:<50} {:<8} {:<8} {:<12}",
+            println!(
+                "{:<20} {:<50} {:<8} {:<8} {:<12}",
                 truncate(&repo.name, 18),
                 truncate(&repo.url, 48),
                 repo.priority,
                 if repo.enabled { "yes" } else { "no" },
-                if repo.verification_required { "required" } else { "optional" }
+                if repo.verification_required {
+                    "required"
+                } else {
+                    "optional"
+                }
             );
         }
     }
@@ -282,7 +310,9 @@ async fn handle_toggle(
     disable: bool,
 ) -> Result<()> {
     if enable && disable {
-        return Err(anyhow::anyhow!("Cannot both enable and disable at the same time"));
+        return Err(anyhow::anyhow!(
+            "Cannot both enable and disable at the same time"
+        ));
     }
 
     if !enable && !disable {
@@ -339,11 +369,7 @@ async fn handle_update(
     Ok(())
 }
 
-async fn handle_info(
-    marketplace: &ModelMarketplace,
-    name: &str,
-    show_models: bool,
-) -> Result<()> {
+async fn handle_info(marketplace: &ModelMarketplace, name: &str, show_models: bool) -> Result<()> {
     info!("Getting repository information: {}", name);
 
     let repositories = marketplace.repo_list().await?;
@@ -358,7 +384,14 @@ async fn handle_info(
     println!("URL: {}", repo.url);
     println!("Priority: {}", repo.priority);
     println!("Enabled: {}", if repo.enabled { "yes" } else { "no" });
-    println!("Verification required: {}", if repo.verification_required { "yes" } else { "no" });
+    println!(
+        "Verification required: {}",
+        if repo.verification_required {
+            "yes"
+        } else {
+            "no"
+        }
+    );
 
     if let Some(last_updated) = repo.last_updated {
         println!("Last updated: {}", last_updated.format("%Y-%m-%d %H:%M:%S"));
@@ -397,7 +430,10 @@ async fn handle_info(
                 } else {
                     println!("Found {} models:", models.len());
                     for model in models.iter().take(10) {
-                        println!("  - {} v{} by {}", model.name, model.version, model.publisher);
+                        println!(
+                            "  - {} v{} by {}",
+                            model.name, model.version, model.publisher
+                        );
                     }
                     if models.len() > 10 {
                         println!("  ... and {} more", models.len() - 10);
@@ -413,10 +449,7 @@ async fn handle_info(
     Ok(())
 }
 
-async fn handle_test(
-    _marketplace: &ModelMarketplace,
-    name: &str,
-) -> Result<()> {
+async fn handle_test(_marketplace: &ModelMarketplace, name: &str) -> Result<()> {
     info!("Testing repository connection: {}", name);
 
     println!("Testing connection to repository '{}'...", name);
@@ -437,11 +470,7 @@ async fn handle_test(
     Ok(())
 }
 
-async fn handle_priority(
-    _marketplace: &ModelMarketplace,
-    name: &str,
-    priority: u32,
-) -> Result<()> {
+async fn handle_priority(_marketplace: &ModelMarketplace, name: &str, priority: u32) -> Result<()> {
     info!("Setting repository priority: {} -> {}", name, priority);
 
     // In a real implementation, this would update the repository priority
@@ -491,7 +520,9 @@ fn confirm(message: &str) -> Result<bool> {
     io::stdout().flush().context("Failed to flush stdout")?;
 
     let mut input = String::new();
-    io::stdin().read_line(&mut input).context("Failed to read input")?;
+    io::stdin()
+        .read_line(&mut input)
+        .context("Failed to read input")?;
 
     Ok(input.trim().to_lowercase().starts_with('y'))
 }

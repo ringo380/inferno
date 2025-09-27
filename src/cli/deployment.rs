@@ -1,14 +1,11 @@
 use crate::config::Config;
-use crate::deployment::{
-    DeploymentArgs, DeploymentConfig, DeploymentManager,
-};
+use crate::deployment::{DeploymentArgs, DeploymentConfig, DeploymentManager};
 use anyhow::{Context, Result};
 use clap::{Args, Subcommand};
 use std::collections::HashMap;
 use std::io;
 use std::path::PathBuf;
 use tracing::{info, warn};
-use chrono::Utc;
 
 #[derive(Args)]
 pub struct DeploymentCliArgs {
@@ -50,7 +47,11 @@ pub enum DeploymentCommands {
         #[arg(long, help = "Wait for deployment to complete")]
         wait: bool,
 
-        #[arg(long, help = "Timeout for deployment wait (seconds)", default_value = "600")]
+        #[arg(
+            long,
+            help = "Timeout for deployment wait (seconds)",
+            default_value = "600"
+        )]
         timeout: u64,
     },
 
@@ -203,7 +204,11 @@ pub enum DeploymentCommands {
         #[arg(long, help = "Number of revisions to show", default_value = "10")]
         limit: u32,
 
-        #[arg(long, help = "Output format (table, json, yaml)", default_value = "table")]
+        #[arg(
+            long,
+            help = "Output format (table, json, yaml)",
+            default_value = "table"
+        )]
         output: String,
     },
 
@@ -341,7 +346,11 @@ pub enum ConfigCommands {
         #[arg(long, help = "Include secrets")]
         include_secrets: bool,
 
-        #[arg(long, help = "Output format (table, json, yaml)", default_value = "table")]
+        #[arg(
+            long,
+            help = "Output format (table, json, yaml)",
+            default_value = "table"
+        )]
         output: String,
     },
 
@@ -570,7 +579,9 @@ async fn handle_deploy(
     // Parse custom values
     for value_pair in set_values {
         if let Some((key, value)) = value_pair.split_once('=') {
-            deploy_args.custom_values.insert(key.to_string(), value.to_string());
+            deploy_args
+                .custom_values
+                .insert(key.to_string(), value.to_string());
         } else {
             warn!("Invalid value format: {}. Expected key=value", value_pair);
         }
@@ -627,7 +638,10 @@ async fn handle_scale(
     _namespace: Option<String>,
     wait: bool,
 ) -> Result<()> {
-    info!("Scaling deployment in {} environment to {} replicas", environment, replicas);
+    info!(
+        "Scaling deployment in {} environment to {} replicas",
+        environment, replicas
+    );
 
     let result = manager.scale(&environment, replicas).await?;
 
@@ -656,14 +670,19 @@ async fn handle_status(
         // Implementation would continuously monitor status
     }
 
-    let status = manager.get_status(&environment, namespace.as_deref()).await?;
+    let status = manager
+        .get_status(&environment, namespace.as_deref())
+        .await?;
 
     println!("Deployment Status for {}", environment);
     println!("==========================================");
     println!("Environment: {}", status.environment);
     println!("Version: {}", status.version);
     println!("Status: {}", status.status);
-    println!("Replicas: {}/{}", status.ready_replicas, status.total_replicas);
+    println!(
+        "Replicas: {}/{}",
+        status.ready_replicas, status.total_replicas
+    );
     println!("Updated: {}", status.last_updated);
 
     if detailed {
@@ -681,7 +700,11 @@ async fn handle_status(
     if !watch {
         println!("\nHealth Checks:");
         for check in &status.health_checks {
-            println!("  {}: {}", check.name, if check.passing { "✓" } else { "✗" });
+            println!(
+                "  {}: {}",
+                check.name,
+                if check.passing { "✓" } else { "✗" }
+            );
         }
     }
 
@@ -699,7 +722,15 @@ async fn handle_logs(
 ) -> Result<()> {
     info!("Fetching logs for {} environment", environment);
 
-    let logs = manager.get_logs(&environment, namespace.as_deref(), lines, since.as_deref(), selector.as_deref()).await?;
+    let logs = manager
+        .get_logs(
+            &environment,
+            namespace.as_deref(),
+            lines,
+            since.as_deref(),
+            selector.as_deref(),
+        )
+        .await?;
 
     if follow {
         // Implementation would stream logs continuously
@@ -707,7 +738,10 @@ async fn handle_logs(
     }
 
     for log_entry in logs {
-        println!("[{}] {}: {}", log_entry.timestamp, log_entry.pod, log_entry.message);
+        println!(
+            "[{}] {}: {}",
+            log_entry.timestamp, log_entry.pod, log_entry.message
+        );
     }
 
     Ok(())
@@ -753,14 +787,19 @@ async fn handle_delete(
     purge: bool,
 ) -> Result<()> {
     if !force {
-        println!("This will delete the deployment in {} environment.", environment);
+        println!(
+            "This will delete the deployment in {} environment.",
+            environment
+        );
         if purge {
             println!("This will also delete all persistent volumes and data.");
         }
         println!("Are you sure? (y/N)");
 
         let mut input = String::new();
-        io::stdin().read_line(&mut input).context("Failed to read user input")?;
+        io::stdin()
+            .read_line(&mut input)
+            .context("Failed to read user input")?;
 
         if !input.trim().to_lowercase().starts_with('y') {
             println!("Deletion cancelled.");
@@ -789,7 +828,10 @@ async fn handle_generate(
     _namespace: Option<String>,
     _values_file: Option<PathBuf>,
 ) -> Result<()> {
-    info!("Generating {} manifests for {} environment", format, environment);
+    info!(
+        "Generating {} manifests for {} environment",
+        format, environment
+    );
 
     let manifests = manager.generate_manifests(&environment, &version).await?;
 
@@ -809,7 +851,10 @@ async fn handle_generate(
             println!("Generated Helm chart: {}", chart_dir.display());
         }
         _ => {
-            return Err(anyhow::anyhow!("Unsupported format: {}. Use 'yaml' or 'helm'", format));
+            return Err(anyhow::anyhow!(
+                "Unsupported format: {}. Use 'yaml' or 'helm'",
+                format
+            ));
         }
     }
 
@@ -825,9 +870,19 @@ async fn handle_validate(
     namespace: Option<String>,
     cluster: bool,
 ) -> Result<()> {
-    info!("Validating deployment configuration for {} environment", environment);
+    info!(
+        "Validating deployment configuration for {} environment",
+        environment
+    );
 
-    let validation_result = manager.validate_config(&environment, config_file.as_deref(), namespace.as_deref(), cluster).await?;
+    let validation_result = manager
+        .validate_config(
+            &environment,
+            config_file.as_deref(),
+            namespace.as_deref(),
+            cluster,
+        )
+        .await?;
 
     println!("Validation Results for {}", environment);
     println!("===================================");
@@ -855,7 +910,10 @@ async fn handle_validate(
     if cluster {
         println!("\nCluster Resources:");
         for resource in &validation_result.cluster_resources {
-            println!("  {} ({}): {}", resource.name, resource.kind, resource.status);
+            println!(
+                "  {} ({}): {}",
+                resource.name, resource.kind, resource.status
+            );
         }
     }
 
@@ -869,21 +927,31 @@ async fn handle_history(
     limit: u32,
     output_format: String,
 ) -> Result<()> {
-    info!("Fetching deployment history for {} environment", environment);
+    info!(
+        "Fetching deployment history for {} environment",
+        environment
+    );
 
-    let history = manager.get_deployment_history(&environment, namespace.as_deref(), limit).await?;
+    let history = manager
+        .get_deployment_history(&environment, namespace.as_deref(), limit)
+        .await?;
 
     match output_format.as_str() {
         "table" => {
             println!("Deployment History for {}", environment);
             println!("========================================");
-            println!("{:<10} {:<15} {:<20} {:<15} {:<10}", "REVISION", "VERSION", "TIMESTAMP", "STATUS", "ROLLBACK");
+            println!(
+                "{:<10} {:<15} {:<20} {:<15} {:<10}",
+                "REVISION", "VERSION", "TIMESTAMP", "STATUS", "ROLLBACK"
+            );
             println!("{}", "-".repeat(80));
 
             for entry in history {
                 let rollback_info = if entry.rolled_back { "Yes" } else { "No" };
-                println!("{:<10} {:<15} {:<20} {:<15} {:<10}",
-                    entry.revision, entry.version, entry.timestamp, entry.status, rollback_info);
+                println!(
+                    "{:<10} {:<15} {:<20} {:<15} {:<10}",
+                    entry.revision, entry.version, entry.timestamp, entry.status, rollback_info
+                );
             }
         }
         "json" => {
@@ -895,7 +963,10 @@ async fn handle_history(
             println!("{}", yaml);
         }
         _ => {
-            return Err(anyhow::anyhow!("Unsupported output format: {}. Use 'table', 'json', or 'yaml'", output_format));
+            return Err(anyhow::anyhow!(
+                "Unsupported output format: {}. Use 'table', 'json', or 'yaml'",
+                output_format
+            ));
         }
     }
 
@@ -917,14 +988,16 @@ async fn handle_autoscale_command(
         } => {
             info!("Enabling autoscaling for {} environment", environment);
 
-            manager.enable_autoscaling(
-                &environment,
-                namespace.as_deref(),
-                min_replicas,
-                max_replicas,
-                cpu_percent,
-                memory_percent,
-            ).await?;
+            manager
+                .enable_autoscaling(
+                    &environment,
+                    namespace.as_deref(),
+                    min_replicas,
+                    max_replicas,
+                    cpu_percent,
+                    memory_percent,
+                )
+                .await?;
 
             println!("Autoscaling enabled successfully!");
             println!("Min replicas: {}", min_replicas);
@@ -941,7 +1014,9 @@ async fn handle_autoscale_command(
         } => {
             info!("Disabling autoscaling for {} environment", environment);
 
-            manager.disable_autoscaling(&environment, namespace.as_deref()).await?;
+            manager
+                .disable_autoscaling(&environment, namespace.as_deref())
+                .await?;
 
             println!("Autoscaling disabled successfully!");
         }
@@ -950,7 +1025,9 @@ async fn handle_autoscale_command(
             environment,
             namespace,
         } => {
-            let status = manager.get_autoscaling_status(&environment, namespace.as_deref()).await?;
+            let status = manager
+                .get_autoscaling_status(&environment, namespace.as_deref())
+                .await?;
 
             println!("Autoscaling Status for {}", environment);
             println!("==================================");
@@ -959,9 +1036,16 @@ async fn handle_autoscale_command(
                 println!("Current replicas: {}", status.current_replicas);
                 println!("Min replicas: {}", status.min_replicas);
                 println!("Max replicas: {}", status.max_replicas);
-                println!("CPU utilization: {}% (target: {}%)", status.current_cpu_percent, status.target_cpu_percent);
+                println!(
+                    "CPU utilization: {}% (target: {}%)",
+                    status.current_cpu_percent, status.target_cpu_percent
+                );
                 if let Some(memory) = status.current_memory_percent {
-                    println!("Memory utilization: {}% (target: {}%)", memory, status.target_memory_percent.unwrap_or(0));
+                    println!(
+                        "Memory utilization: {}% (target: {}%)",
+                        memory,
+                        status.target_memory_percent.unwrap_or(0)
+                    );
                 }
                 println!("Last scale time: {}", status.last_scale_time);
             }
@@ -977,14 +1061,16 @@ async fn handle_autoscale_command(
         } => {
             info!("Updating autoscaling for {} environment", environment);
 
-            manager.update_autoscaling(
-                &environment,
-                namespace.as_deref(),
-                min_replicas,
-                max_replicas,
-                cpu_percent,
-                memory_percent,
-            ).await?;
+            manager
+                .update_autoscaling(
+                    &environment,
+                    namespace.as_deref(),
+                    min_replicas,
+                    max_replicas,
+                    cpu_percent,
+                    memory_percent,
+                )
+                .await?;
 
             println!("Autoscaling configuration updated successfully!");
         }
@@ -1005,12 +1091,20 @@ async fn handle_config_command(
             namespace,
             secret,
         } => {
-            info!("Setting configuration {} in {} environment", key, environment);
+            info!(
+                "Setting configuration {} in {} environment",
+                key, environment
+            );
 
-            manager.set_config(&environment, namespace.as_deref(), &key, &value, secret).await?;
+            manager
+                .set_config(&environment, namespace.as_deref(), &key, &value, secret)
+                .await?;
 
             let resource_type = if secret { "secret" } else { "config" };
-            println!("Configuration {} set successfully as {}", key, resource_type);
+            println!(
+                "Configuration {} set successfully as {}",
+                key, resource_type
+            );
         }
 
         ConfigCommands::Get {
@@ -1018,7 +1112,9 @@ async fn handle_config_command(
             key,
             namespace,
         } => {
-            let value = manager.get_config(&environment, namespace.as_deref(), &key).await?;
+            let value = manager
+                .get_config(&environment, namespace.as_deref(), &key)
+                .await?;
 
             println!("{}: {}", key, value);
         }
@@ -1029,7 +1125,9 @@ async fn handle_config_command(
             include_secrets,
             output,
         } => {
-            let configs = manager.list_config(&environment, namespace.as_deref(), include_secrets).await?;
+            let configs = manager
+                .list_config(&environment, namespace.as_deref(), include_secrets)
+                .await?;
 
             match output.as_str() {
                 "table" => {
@@ -1045,7 +1143,10 @@ async fn handle_config_command(
                             config.value.clone()
                         };
                         let config_type = if config.is_secret { "secret" } else { "config" };
-                        println!("{:<30} {:<50} {:<10}", config.key, display_value, config_type);
+                        println!(
+                            "{:<30} {:<50} {:<10}",
+                            config.key, display_value, config_type
+                        );
                     }
                 }
                 "json" => {
@@ -1057,7 +1158,10 @@ async fn handle_config_command(
                     println!("{}", yaml);
                 }
                 _ => {
-                    return Err(anyhow::anyhow!("Unsupported output format: {}. Use 'table', 'json', or 'yaml'", output));
+                    return Err(anyhow::anyhow!(
+                        "Unsupported output format: {}. Use 'table', 'json', or 'yaml'",
+                        output
+                    ));
                 }
             }
         }
@@ -1067,9 +1171,14 @@ async fn handle_config_command(
             key,
             namespace,
         } => {
-            info!("Deleting configuration {} in {} environment", key, environment);
+            info!(
+                "Deleting configuration {} in {} environment",
+                key, environment
+            );
 
-            manager.delete_config(&environment, namespace.as_deref(), &key).await?;
+            manager
+                .delete_config(&environment, namespace.as_deref(), &key)
+                .await?;
 
             println!("Configuration {} deleted successfully", key);
         }
@@ -1080,9 +1189,14 @@ async fn handle_config_command(
             namespace,
             secrets,
         } => {
-            info!("Importing configuration from file for {} environment", environment);
+            info!(
+                "Importing configuration from file for {} environment",
+                environment
+            );
 
-            manager.import_config(&environment, namespace.as_deref(), &file, secrets).await?;
+            manager
+                .import_config(&environment, namespace.as_deref(), &file, secrets)
+                .await?;
 
             let resource_type = if secrets { "secrets" } else { "config" };
             println!("Configuration imported successfully as {}", resource_type);
@@ -1097,7 +1211,15 @@ async fn handle_config_command(
         } => {
             info!("Exporting configuration for {} environment", environment);
 
-            manager.export_config(&environment, namespace.as_deref(), &file, include_secrets, &format).await?;
+            manager
+                .export_config(
+                    &environment,
+                    namespace.as_deref(),
+                    &file,
+                    include_secrets,
+                    &format,
+                )
+                .await?;
 
             println!("Configuration exported to {}", file.display());
         }
@@ -1117,25 +1239,47 @@ async fn handle_health(
         info!("Monitoring deployment health (Ctrl+C to exit)");
 
         loop {
-            let health = manager.check_health(&environment, namespace.as_deref()).await?;
+            let health = manager
+                .check_health(&environment, namespace.as_deref())
+                .await?;
 
             // Clear screen and move cursor to top
             print!("\x1B[2J\x1B[1;1H");
 
-            println!("Health Status for {} (Updated: {})", environment, chrono::Utc::now().format("%H:%M:%S"));
+            println!(
+                "Health Status for {} (Updated: {})",
+                environment,
+                chrono::Utc::now().format("%H:%M:%S")
+            );
             println!("===============================================");
-            println!("Overall Health: {}", if health.overall_healthy { "✓ Healthy" } else { "✗ Unhealthy" });
+            println!(
+                "Overall Health: {}",
+                if health.overall_healthy {
+                    "✓ Healthy"
+                } else {
+                    "✗ Unhealthy"
+                }
+            );
             println!("Uptime: {}", health.uptime);
 
             println!("\nService Health:");
             for service in &health.services {
                 let status_icon = if service.healthy { "✓" } else { "✗" };
-                println!("  {} {}: {} ({}ms)", status_icon, service.name, service.status, service.response_time_ms);
+                println!(
+                    "  {} {}: {} ({}ms)",
+                    status_icon, service.name, service.status, service.response_time_ms
+                );
             }
 
             println!("\nResource Usage:");
-            println!("  CPU: {}% (limit: {}%)", health.cpu_usage, health.cpu_limit);
-            println!("  Memory: {}% (limit: {}%)", health.memory_usage, health.memory_limit);
+            println!(
+                "  CPU: {}% (limit: {}%)",
+                health.cpu_usage, health.cpu_limit
+            );
+            println!(
+                "  Memory: {}% (limit: {}%)",
+                health.memory_usage, health.memory_limit
+            );
 
             if !health.recent_errors.is_empty() {
                 println!("\nRecent Errors:");
@@ -1147,11 +1291,20 @@ async fn handle_health(
             tokio::time::sleep(std::time::Duration::from_secs(interval)).await;
         }
     } else {
-        let health = manager.check_health(&environment, namespace.as_deref()).await?;
+        let health = manager
+            .check_health(&environment, namespace.as_deref())
+            .await?;
 
         println!("Health Status for {}", environment);
         println!("========================");
-        println!("Overall Health: {}", if health.overall_healthy { "✓ Healthy" } else { "✗ Unhealthy" });
+        println!(
+            "Overall Health: {}",
+            if health.overall_healthy {
+                "✓ Healthy"
+            } else {
+                "✗ Unhealthy"
+            }
+        );
         println!("Uptime: {}", health.uptime);
 
         println!("\nServices:");

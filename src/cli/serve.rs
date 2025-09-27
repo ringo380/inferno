@@ -1,16 +1,22 @@
-use crate::{config::Config, metrics::MetricsCollector, backends::{BackendHandle, BackendType}, models::ModelManager, api::{openai, websocket}, distributed::DistributedInference};
+use crate::{
+    api::{openai, websocket},
+    backends::{BackendHandle, BackendType},
+    config::Config,
+    distributed::DistributedInference,
+    metrics::MetricsCollector,
+    models::ModelManager,
+};
 use anyhow::Result;
 use axum::{
     extract::State,
     http::StatusCode,
-    response::{IntoResponse, Response},
+    response::IntoResponse,
     routing::{get, post},
     Json, Router,
 };
 use clap::Args;
 use serde_json::json;
 use std::{net::SocketAddr, sync::Arc};
-use tokio::sync::Mutex;
 use tokio::signal;
 use tower::ServiceBuilder;
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
@@ -18,7 +24,12 @@ use tracing::{info, warn};
 
 #[derive(Args)]
 pub struct ServeArgs {
-    #[arg(short, long, help = "Server bind address", default_value = "127.0.0.1:8080")]
+    #[arg(
+        short,
+        long,
+        help = "Server bind address",
+        default_value = "127.0.0.1:8080"
+    )]
     pub bind: SocketAddr,
 
     #[arg(short, long, help = "Model to load on startup")]
@@ -27,7 +38,11 @@ pub struct ServeArgs {
     #[arg(long, help = "Enable distributed inference with worker pools")]
     pub distributed: bool,
 
-    #[arg(long, help = "Number of worker processes (0 = auto)", default_value = "0")]
+    #[arg(
+        long,
+        help = "Number of worker processes (0 = auto)",
+        default_value = "0"
+    )]
     pub workers: usize,
 }
 
@@ -55,7 +70,9 @@ pub async fn execute(args: ServeArgs, config: &Config) -> Result<()> {
             config.backend_config.clone(),
             model_manager.clone(),
             Some(Arc::new(metrics_collector.clone())),
-        ).await {
+        )
+        .await
+        {
             Ok(dist) => {
                 info!("Distributed inference initialized successfully");
                 Some(Arc::new(dist))
@@ -102,29 +119,24 @@ pub async fn execute(args: ServeArgs, config: &Config) -> Result<()> {
         // Health and status endpoints
         .route("/health", get(health_check))
         .route("/", get(root_handler))
-
         // Metrics endpoints
         .route("/metrics", get(metrics_prometheus))
         .route("/metrics/json", get(metrics_json))
         .route("/metrics/snapshot", get(metrics_snapshot))
-
         // OpenAI-compatible API endpoints
         .route("/v1/models", get(openai::list_models))
         .route("/v1/chat/completions", post(openai::chat_completions))
         .route("/v1/completions", post(openai::completions))
         .route("/v1/embeddings", post(openai::embeddings))
-
         // WebSocket streaming endpoints
         .route("/ws/stream", get(websocket::websocket_handler))
-
         // API v1 endpoints
         .route("/v1/status", get(server_status))
-
         // Add middleware
         .layer(
             ServiceBuilder::new()
                 .layer(TraceLayer::new_for_http())
-                .layer(CorsLayer::permissive())
+                .layer(CorsLayer::permissive()),
         )
         .with_state(state);
 
@@ -170,7 +182,8 @@ async fn load_model_on_startup(
     config: &Config,
 ) -> Result<(BackendHandle, String)> {
     let model_info = model_manager.resolve_model(model_name).await?;
-    let backend_type = BackendType::from_model_path(&model_info.path);
+    let backend_type = BackendType::from_model_path(&model_info.path)
+        .ok_or_else(|| anyhow::anyhow!("No suitable backend found for model: {}", model_info.path.display()))?;
     let backend_handle = BackendHandle::new_shared(backend_type, &config.backend_config)?;
     backend_handle.load_model(&model_info).await?;
     Ok((backend_handle, model_info.name.clone()))
@@ -212,12 +225,20 @@ async fn metrics_prometheus(State(state): State<Arc<ServerState>>) -> impl IntoR
     match state.metrics.export_prometheus_format().await {
         Ok(metrics) => (
             StatusCode::OK,
-            [(header::CONTENT_TYPE, "text/plain; version=0.0.4; charset=utf-8")],
-            metrics
-        ).into_response(),
+            [(
+                header::CONTENT_TYPE,
+                "text/plain; version=0.0.4; charset=utf-8",
+            )],
+            metrics,
+        )
+            .into_response(),
         Err(e) => {
             warn!("Failed to export Prometheus metrics: {}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, "Failed to export metrics").into_response()
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to export metrics",
+            )
+                .into_response()
         }
     }
 }
@@ -227,7 +248,11 @@ async fn metrics_json(State(state): State<Arc<ServerState>>) -> impl IntoRespons
         Ok(metrics_json) => (StatusCode::OK, metrics_json).into_response(),
         Err(e) => {
             warn!("Failed to export JSON metrics: {}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, "Failed to export metrics").into_response()
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to export metrics",
+            )
+                .into_response()
         }
     }
 }
@@ -237,20 +262,29 @@ async fn metrics_snapshot(State(state): State<Arc<ServerState>>) -> impl IntoRes
         Ok(snapshot) => Json(snapshot).into_response(),
         Err(e) => {
             warn!("Failed to get metrics snapshot: {}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({
-                "error": "Failed to get metrics snapshot"
-            }))).into_response()
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({
+                    "error": "Failed to get metrics snapshot"
+                })),
+            )
+                .into_response()
         }
     }
 }
 
-
 async fn server_status(State(state): State<Arc<ServerState>>) -> impl IntoResponse {
     let snapshot = match state.metrics.get_snapshot().await {
         Ok(s) => s,
-        Err(_) => return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({
-            "error": "Failed to get server status"
-        }))).into_response()
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({
+                    "error": "Failed to get server status"
+                })),
+            )
+                .into_response()
+        }
     };
 
     Json(json!({
@@ -264,7 +298,8 @@ async fn server_status(State(state): State<Arc<ServerState>>) -> impl IntoRespon
             "cpu_usage": snapshot.system_metrics.cpu_usage_percent,
             "loaded_models": snapshot.model_metrics.loaded_models.len()
         }
-    })).into_response()
+    }))
+    .into_response()
 }
 
 async fn shutdown_signal() {

@@ -1,6 +1,6 @@
 [package]
 name = "inferno"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 authors = ["Inferno Developers"]
 description = "An offline AI/ML model runner for GGUF and ONNX models"
@@ -68,14 +68,14 @@ image = { version = "0.24", features = ["png", "jpeg"] }
 hound = "3.5"
 
 # ML backend support
-llama-cpp-2 = "0.1.67"  # for GGUF support
-ort = "1.16"             # for ONNX support
+llama-cpp-2 = { version = "0.1.67", optional = true }  # for GGUF support
+ort = { version = "1.16", optional = true }             # for ONNX support
 ndarray = "0.15"         # for tensor operations
 tokenizers = "0.14"      # for text tokenization
 
 # Model format conversion dependencies
 safetensors = "0.4"      # for SafeTensors format support
-tch = { version = "0.13", optional = true } # PyTorch bindings (optional)
+# tch = { version = "0.13", optional = true } # PyTorch bindings (optional) - temporarily disabled
 hf-hub = "0.3"           # for Hugging Face model downloads
 memmap2 = "0.9"          # for memory-mapped file I/O
 byteorder = "1.5"        # for binary data handling
@@ -174,12 +174,17 @@ predicates = "3.0"
 criterion = { version = "0.5", features = ["html_reports"] }
 
 [features]
-default = ["reqwest"]  # Include reqwest by default for audit alerting
+default = ["reqwest"]  # Minimal default - exclude heavy ML backends for fast development builds
+gguf = ["llama-cpp-2"]     # Enable GGUF/llama.cpp backend
+onnx = ["ort"]             # Enable ONNX Runtime backend
+ml-backends = ["gguf", "onnx"]  # Enable all ML backends
 download = ["reqwest"]
 gpu-metal = []
 gpu-vulkan = []
 gpu-directml = []
-pytorch = ["tch"]  # Enable PyTorch support
+cuda = []      # NVIDIA CUDA support
+rocm = []      # AMD ROCm support
+pytorch = []  # Enable PyTorch support - temporarily disabled (deps commented out)
 tauri-app = ["tauri", "tauri-build"]  # Enable Tauri native app
 
 [profile.release]

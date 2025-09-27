@@ -1,6 +1,4 @@
-use crate::{
-    metrics::MetricsCollector,
-};
+use crate::metrics::MetricsCollector;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -8,10 +6,7 @@ use std::{
     sync::Arc,
     time::{Duration, SystemTime},
 };
-use tokio::{
-    sync::RwLock,
-    time::interval,
-};
+use tokio::{sync::RwLock, time::interval};
 use tracing::{debug, error, info, warn};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -311,12 +306,33 @@ impl PerformanceMonitor {
         }
 
         let total_metrics = recent_metrics.len() as f64;
-        let avg_response_time = recent_metrics.iter().map(|m| m.response_time_ms as f64).sum::<f64>() / total_metrics;
-        let avg_throughput = recent_metrics.iter().map(|m| m.throughput_rps).sum::<f64>() / total_metrics;
-        let avg_error_rate = recent_metrics.iter().map(|m| m.error_rate_percent).sum::<f64>() / total_metrics;
-        let avg_memory_usage = recent_metrics.iter().map(|m| m.memory_usage_mb as f64).sum::<f64>() / total_metrics;
-        let avg_cpu_usage = recent_metrics.iter().map(|m| m.cpu_usage_percent).sum::<f64>() / total_metrics;
-        let avg_cache_hit_rate = recent_metrics.iter().map(|m| m.cache_hit_rate_percent).sum::<f64>() / total_metrics;
+        let avg_response_time = recent_metrics
+            .iter()
+            .map(|m| m.response_time_ms as f64)
+            .sum::<f64>()
+            / total_metrics;
+        let avg_throughput =
+            recent_metrics.iter().map(|m| m.throughput_rps).sum::<f64>() / total_metrics;
+        let avg_error_rate = recent_metrics
+            .iter()
+            .map(|m| m.error_rate_percent)
+            .sum::<f64>()
+            / total_metrics;
+        let avg_memory_usage = recent_metrics
+            .iter()
+            .map(|m| m.memory_usage_mb as f64)
+            .sum::<f64>()
+            / total_metrics;
+        let avg_cpu_usage = recent_metrics
+            .iter()
+            .map(|m| m.cpu_usage_percent)
+            .sum::<f64>()
+            / total_metrics;
+        let avg_cache_hit_rate = recent_metrics
+            .iter()
+            .map(|m| m.cache_hit_rate_percent)
+            .sum::<f64>()
+            / total_metrics;
 
         let total_requests = recent_metrics.iter().map(|m| m.total_requests).sum();
         let successful_requests = recent_metrics.iter().map(|m| m.successful_requests).sum();
@@ -386,8 +402,10 @@ impl PerformanceMonitor {
             new_alerts.push((
                 AlertType::HighResponseTime,
                 AlertSeverity::Warning,
-                format!("Response time {}ms exceeds threshold {}ms for model {}",
-                        metric.response_time_ms, thresholds.max_response_time_ms, metric.model_id),
+                format!(
+                    "Response time {}ms exceeds threshold {}ms for model {}",
+                    metric.response_time_ms, thresholds.max_response_time_ms, metric.model_id
+                ),
                 metric.response_time_ms as f64,
                 thresholds.max_response_time_ms as f64,
             ));
@@ -398,8 +416,10 @@ impl PerformanceMonitor {
             new_alerts.push((
                 AlertType::LowThroughput,
                 AlertSeverity::Warning,
-                format!("Throughput {:.2} RPS below threshold {:.2} RPS for model {}",
-                        metric.throughput_rps, thresholds.min_throughput_rps, metric.model_id),
+                format!(
+                    "Throughput {:.2} RPS below threshold {:.2} RPS for model {}",
+                    metric.throughput_rps, thresholds.min_throughput_rps, metric.model_id
+                ),
                 metric.throughput_rps,
                 thresholds.min_throughput_rps,
             ));
@@ -410,8 +430,10 @@ impl PerformanceMonitor {
             new_alerts.push((
                 AlertType::HighErrorRate,
                 AlertSeverity::Critical,
-                format!("Error rate {:.2}% exceeds threshold {:.2}% for model {}",
-                        metric.error_rate_percent, thresholds.max_error_rate_percent, metric.model_id),
+                format!(
+                    "Error rate {:.2}% exceeds threshold {:.2}% for model {}",
+                    metric.error_rate_percent, thresholds.max_error_rate_percent, metric.model_id
+                ),
                 metric.error_rate_percent,
                 thresholds.max_error_rate_percent,
             ));
@@ -422,8 +444,10 @@ impl PerformanceMonitor {
             new_alerts.push((
                 AlertType::HighMemoryUsage,
                 AlertSeverity::Warning,
-                format!("Memory usage {}MB exceeds threshold {}MB",
-                        metric.memory_usage_mb, thresholds.max_memory_usage_mb),
+                format!(
+                    "Memory usage {}MB exceeds threshold {}MB",
+                    metric.memory_usage_mb, thresholds.max_memory_usage_mb
+                ),
                 metric.memory_usage_mb as f64,
                 thresholds.max_memory_usage_mb as f64,
             ));
@@ -434,8 +458,10 @@ impl PerformanceMonitor {
             new_alerts.push((
                 AlertType::HighCpuUsage,
                 AlertSeverity::Warning,
-                format!("CPU usage {:.2}% exceeds threshold {:.2}%",
-                        metric.cpu_usage_percent, thresholds.max_cpu_usage_percent),
+                format!(
+                    "CPU usage {:.2}% exceeds threshold {:.2}%",
+                    metric.cpu_usage_percent, thresholds.max_cpu_usage_percent
+                ),
                 metric.cpu_usage_percent,
                 thresholds.max_cpu_usage_percent,
             ));
@@ -446,8 +472,10 @@ impl PerformanceMonitor {
             new_alerts.push((
                 AlertType::HighQueueDepth,
                 AlertSeverity::Warning,
-                format!("Queue depth {} exceeds threshold {} for model {}",
-                        metric.queue_depth, thresholds.max_queue_depth, metric.model_id),
+                format!(
+                    "Queue depth {} exceeds threshold {} for model {}",
+                    metric.queue_depth, thresholds.max_queue_depth, metric.model_id
+                ),
                 metric.queue_depth as f64,
                 thresholds.max_queue_depth as f64,
             ));
@@ -458,8 +486,12 @@ impl PerformanceMonitor {
             new_alerts.push((
                 AlertType::LowCacheHitRate,
                 AlertSeverity::Info,
-                format!("Cache hit rate {:.2}% below threshold {:.2}% for model {}",
-                        metric.cache_hit_rate_percent, thresholds.min_cache_hit_rate_percent, metric.model_id),
+                format!(
+                    "Cache hit rate {:.2}% below threshold {:.2}% for model {}",
+                    metric.cache_hit_rate_percent,
+                    thresholds.min_cache_hit_rate_percent,
+                    metric.model_id
+                ),
                 metric.cache_hit_rate_percent,
                 thresholds.min_cache_hit_rate_percent,
             ));
@@ -474,7 +506,13 @@ impl PerformanceMonitor {
                 continue;
             }
 
-            let alert_id = format!("{}_{}", alert_key, SystemTime::now().duration_since(SystemTime::UNIX_EPOCH)?.as_secs());
+            let alert_id = format!(
+                "{}_{}",
+                alert_key,
+                SystemTime::now()
+                    .duration_since(SystemTime::UNIX_EPOCH)?
+                    .as_secs()
+            );
 
             let alert = Alert {
                 id: alert_id.clone(),
@@ -512,7 +550,10 @@ impl PerformanceMonitor {
         let last_alert_times = self.last_alert_times.read().await;
         if let Some(last_time) = last_alert_times.get(alert_key) {
             let cooldown_duration = Duration::from_secs(self.config.alerting.cooldown_minutes * 60);
-            SystemTime::now().duration_since(*last_time).unwrap_or(Duration::ZERO) < cooldown_duration
+            SystemTime::now()
+                .duration_since(*last_time)
+                .unwrap_or(Duration::ZERO)
+                < cooldown_duration
         } else {
             false
         }
@@ -555,7 +596,10 @@ impl PerformanceMonitor {
             "timestamp": alert.timestamp.duration_since(SystemTime::UNIX_EPOCH)?.as_secs()
         });
 
-        info!("Sending webhook alert to {} for alert: {}", webhook.url, alert.id);
+        info!(
+            "Sending webhook alert to {} for alert: {}",
+            webhook.url, alert.id
+        );
         // Note: In a real implementation, you would use reqwest or similar to send HTTP request
         debug!("Webhook payload: {}", payload);
 
@@ -615,9 +659,9 @@ impl PerformanceMonitor {
                     error_rate_percent: 0.0, // Will be calculated
                     memory_usage_mb: Self::get_memory_usage(),
                     cpu_usage_percent: Self::get_cpu_usage(),
-                    queue_depth: 0, // Will be updated by queue monitoring
+                    queue_depth: 0,              // Will be updated by queue monitoring
                     cache_hit_rate_percent: 0.0, // Will be updated by cache monitoring
-                    active_connections: 0, // Will be updated by connection monitoring
+                    active_connections: 0,       // Will be updated by connection monitoring
                     total_requests: 0,
                     successful_requests: 0,
                     failed_requests: 0,
@@ -655,7 +699,10 @@ impl PerformanceMonitor {
                 drop(active_alerts_guard);
 
                 if alert_count > 0 {
-                    debug!("Evaluating {} active alerts for auto-resolution", alert_count);
+                    debug!(
+                        "Evaluating {} active alerts for auto-resolution",
+                        alert_count
+                    );
                 }
             }
         })
@@ -667,7 +714,10 @@ impl PerformanceMonitor {
         let active_alerts = Arc::clone(&self.active_alerts);
 
         let handle = tokio::spawn(async move {
-            info!("Starting monitoring dashboard on {}:{}", config.bind_address, config.port);
+            info!(
+                "Starting monitoring dashboard on {}:{}",
+                config.bind_address, config.port
+            );
 
             // Note: In a real implementation, you would start an HTTP server here
             // using axum, warp, or similar framework to serve the dashboard
@@ -680,8 +730,11 @@ impl PerformanceMonitor {
                 let metrics_guard = metrics.read().await;
                 let alerts_guard = active_alerts.read().await;
 
-                debug!("Dashboard update: {} metrics, {} active alerts",
-                       metrics_guard.len(), alerts_guard.len());
+                debug!(
+                    "Dashboard update: {} metrics, {} active alerts",
+                    metrics_guard.len(),
+                    alerts_guard.len()
+                );
             }
         });
 

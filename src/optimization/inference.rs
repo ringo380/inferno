@@ -5,8 +5,8 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
-use tokio::sync::RwLock;
 use std::time::{Duration, Instant};
+use tokio::sync::RwLock;
 
 /// Inference optimization configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -43,11 +43,11 @@ impl Default for InferenceConfig {
 /// Request scheduling strategies
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum RequestSchedulingStrategy {
-    FIFO,              // First In, First Out
-    SJF,               // Shortest Job First
-    PriorityBased,     // Priority-based scheduling
-    LoadBalanced,      // Dynamic load balancing
-    LatencyOptimized,  // Minimize latency
+    FIFO,                // First In, First Out
+    SJF,                 // Shortest Job First
+    PriorityBased,       // Priority-based scheduling
+    LoadBalanced,        // Dynamic load balancing
+    LatencyOptimized,    // Minimize latency
     ThroughputOptimized, // Maximize throughput
 }
 
@@ -131,7 +131,7 @@ impl KVCacheManager {
         let key = sequence_hash.to_string();
         let mut cache = self.cache.write().await;
 
-        if let Some(mut entry) = cache.get_mut(&key) {
+        if let Some(entry) = cache.get_mut(&key) {
             entry.last_used = Instant::now();
             entry.access_count += 1;
             *self.hit_count.write().await += 1;
@@ -143,7 +143,13 @@ impl KVCacheManager {
     }
 
     /// Store KV state for a sequence
-    pub async fn put(&self, sequence_hash: u64, key_cache: Vec<f32>, value_cache: Vec<f32>, sequence_length: usize) -> Result<()> {
+    pub async fn put(
+        &self,
+        sequence_hash: u64,
+        key_cache: Vec<f32>,
+        value_cache: Vec<f32>,
+        sequence_length: usize,
+    ) -> Result<()> {
         let cache_key = sequence_hash.to_string();
         let entry_size = (key_cache.len() + value_cache.len()) * 4; // 4 bytes per f32
 
@@ -229,10 +235,14 @@ pub struct SpeculativeDecoder {
 }
 
 impl SpeculativeDecoder {
-    pub fn new(target_model: String, draft_model: String, initial_speculation_count: usize) -> Self {
+    pub fn new(
+        target_model: String,
+        draft_model: String,
+        initial_speculation_count: usize,
+    ) -> Self {
         let state = SpeculativeState {
             draft_tokens: VecDeque::new(),
-            acceptance_rate: 0.7, // Start with 70% acceptance rate
+            acceptance_rate: 0.7,        // Start with 70% acceptance rate
             target_acceptance_rate: 0.8, // Target 80% acceptance rate
             adaptive_speculation_count: initial_speculation_count,
         };
@@ -245,8 +255,16 @@ impl SpeculativeDecoder {
     }
 
     /// Generate speculative tokens using draft model
-    pub async fn generate_speculative_tokens(&self, input: &str, count: usize) -> Result<Vec<String>> {
-        tracing::debug!("Generating {} speculative tokens with draft model: {}", count, self.draft_model);
+    pub async fn generate_speculative_tokens(
+        &self,
+        input: &str,
+        count: usize,
+    ) -> Result<Vec<String>> {
+        tracing::debug!(
+            "Generating {} speculative tokens with draft model: {}",
+            count,
+            self.draft_model
+        );
 
         // Simulate draft model inference (much faster than target model)
         tokio::time::sleep(Duration::from_millis(5)).await;
@@ -266,9 +284,16 @@ impl SpeculativeDecoder {
     }
 
     /// Validate speculative tokens with target model
-    pub async fn validate_tokens(&self, input: &str, speculative_tokens: &[String]) -> Result<Vec<String>> {
-        tracing::debug!("Validating {} speculative tokens with target model: {}",
-                       speculative_tokens.len(), self.target_model);
+    pub async fn validate_tokens(
+        &self,
+        input: &str,
+        speculative_tokens: &[String],
+    ) -> Result<Vec<String>> {
+        tracing::debug!(
+            "Validating {} speculative tokens with target model: {}",
+            speculative_tokens.len(),
+            self.target_model
+        );
 
         // Simulate target model validation
         tokio::time::sleep(Duration::from_millis(20)).await;
@@ -292,7 +317,8 @@ impl SpeculativeDecoder {
         }
 
         // Update acceptance rate statistics
-        self.update_acceptance_rate(acceptance_count, speculative_tokens.len()).await;
+        self.update_acceptance_rate(acceptance_count, speculative_tokens.len())
+            .await;
 
         Ok(accepted_tokens)
     }
@@ -310,11 +336,15 @@ impl SpeculativeDecoder {
             state.adaptive_speculation_count = (state.adaptive_speculation_count + 1).min(8);
         } else if state.acceptance_rate < state.target_acceptance_rate * 0.8 {
             // Poor acceptance rate, reduce speculation
-            state.adaptive_speculation_count = (state.adaptive_speculation_count.saturating_sub(1)).max(1);
+            state.adaptive_speculation_count =
+                (state.adaptive_speculation_count.saturating_sub(1)).max(1);
         }
 
-        tracing::debug!("Updated acceptance rate: {:.2}, adaptive count: {}",
-                       state.acceptance_rate, state.adaptive_speculation_count);
+        tracing::debug!(
+            "Updated acceptance rate: {:.2}, adaptive count: {}",
+            state.acceptance_rate,
+            state.adaptive_speculation_count
+        );
     }
 
     /// Get current speculation count
@@ -339,10 +369,22 @@ impl OperatorFuser {
         let mut fusion_patterns = HashMap::new();
 
         // Define common fusion patterns
-        fusion_patterns.insert("conv_relu".to_string(), vec!["conv2d".to_string(), "relu".to_string()]);
-        fusion_patterns.insert("linear_relu".to_string(), vec!["linear".to_string(), "relu".to_string()]);
-        fusion_patterns.insert("matmul_add".to_string(), vec!["matmul".to_string(), "add".to_string()]);
-        fusion_patterns.insert("softmax_cross_entropy".to_string(), vec!["softmax".to_string(), "cross_entropy".to_string()]);
+        fusion_patterns.insert(
+            "conv_relu".to_string(),
+            vec!["conv2d".to_string(), "relu".to_string()],
+        );
+        fusion_patterns.insert(
+            "linear_relu".to_string(),
+            vec!["linear".to_string(), "relu".to_string()],
+        );
+        fusion_patterns.insert(
+            "matmul_add".to_string(),
+            vec!["matmul".to_string(), "add".to_string()],
+        );
+        fusion_patterns.insert(
+            "softmax_cross_entropy".to_string(),
+            vec!["softmax".to_string(), "cross_entropy".to_string()],
+        );
 
         Self {
             fusion_patterns,
@@ -365,7 +407,10 @@ impl OperatorFuser {
             fused_ops.push(pattern_name.clone());
 
             // Record fusion time
-            self.fused_operations.write().await.insert(pattern_name.clone(), fusion_time);
+            self.fused_operations
+                .write()
+                .await
+                .insert(pattern_name.clone(), fusion_time);
         }
 
         tracing::info!("Fused {} operator patterns", fused_ops.len());
@@ -397,10 +442,18 @@ impl ModelCompiler {
     }
 
     /// Compile model for target hardware
-    pub async fn compile_model(&self, model_path: &str, optimization_level: OptimizationLevel) -> Result<String> {
+    pub async fn compile_model(
+        &self,
+        model_path: &str,
+        optimization_level: OptimizationLevel,
+    ) -> Result<String> {
         let start_time = Instant::now();
 
-        tracing::info!("Compiling model: {} with optimization level: {:?}", model_path, optimization_level);
+        tracing::info!(
+            "Compiling model: {} with optimization level: {:?}",
+            model_path,
+            optimization_level
+        );
 
         // Simulate compilation time based on optimization level
         let compilation_time = match optimization_level {
@@ -439,10 +492,16 @@ impl ModelCompiler {
         let compiled_path = format!("{}.compiled", model_path);
 
         // Store compiled model info
-        self.compiled_models.write().await.insert(compiled_path.clone(), compiled_model);
+        self.compiled_models
+            .write()
+            .await
+            .insert(compiled_path.clone(), compiled_model);
 
-        tracing::info!("Model compilation completed in {:?}, expected speedup: {:.1}x",
-                      compilation_time, expected_speedup);
+        tracing::info!(
+            "Model compilation completed in {:?}, expected speedup: {:.1}x",
+            compilation_time,
+            expected_speedup
+        );
 
         Ok(compiled_path)
     }
@@ -505,16 +564,21 @@ impl InferenceOptimizer {
 
         // Step 2: Model compilation
         if self.config.model_compilation {
-            optimized_path = self.model_compiler.compile_model(
-                &optimized_path,
-                self.config.compilation_optimization_level.clone()
-            ).await?;
+            optimized_path = self
+                .model_compiler
+                .compile_model(
+                    &optimized_path,
+                    self.config.compilation_optimization_level.clone(),
+                )
+                .await?;
         }
 
         // Step 3: Initialize speculative decoding if enabled
         if let Some(ref decoder) = self.speculative_decoder {
-            tracing::info!("Speculative decoding initialized with {} tokens",
-                          decoder.get_speculation_count().await);
+            tracing::info!(
+                "Speculative decoding initialized with {} tokens",
+                decoder.get_speculation_count().await
+            );
         }
 
         // Update metrics
@@ -544,7 +608,9 @@ impl InferenceOptimizer {
         if let Some(seq_id) = sequence_id {
             let key_cache = vec![0.5f32; 1024]; // Mock key cache
             let value_cache = vec![0.3f32; 1024]; // Mock value cache
-            self.kv_cache.put(seq_id, key_cache, value_cache, input.len()).await?;
+            self.kv_cache
+                .put(seq_id, key_cache, value_cache, input.len())
+                .await?;
         }
 
         // Apply post-processing optimizations
@@ -558,26 +624,43 @@ impl InferenceOptimizer {
         Ok(result)
     }
 
-    async fn run_speculative_inference(&self, input: &str, _kv_state: Option<KVCacheEntry>) -> Result<String> {
+    async fn run_speculative_inference(
+        &self,
+        input: &str,
+        _kv_state: Option<KVCacheEntry>,
+    ) -> Result<String> {
         if let Some(ref decoder) = self.speculative_decoder {
             let speculation_count = decoder.get_speculation_count().await;
 
             // Generate speculative tokens
-            let speculative_tokens = decoder.generate_speculative_tokens(input, speculation_count).await?;
+            let speculative_tokens = decoder
+                .generate_speculative_tokens(input, speculation_count)
+                .await?;
 
             // Validate with target model
             let accepted_tokens = decoder.validate_tokens(input, &speculative_tokens).await?;
 
-            tracing::debug!("Accepted {}/{} speculative tokens",
-                           accepted_tokens.len(), speculative_tokens.len());
+            tracing::debug!(
+                "Accepted {}/{} speculative tokens",
+                accepted_tokens.len(),
+                speculative_tokens.len()
+            );
 
-            Ok(format!("Speculative result: {} -> {}", input, accepted_tokens.join(" ")))
+            Ok(format!(
+                "Speculative result: {} -> {}",
+                input,
+                accepted_tokens.join(" ")
+            ))
         } else {
             self.run_standard_inference(input, _kv_state).await
         }
     }
 
-    async fn run_standard_inference(&self, input: &str, _kv_state: Option<KVCacheEntry>) -> Result<String> {
+    async fn run_standard_inference(
+        &self,
+        input: &str,
+        _kv_state: Option<KVCacheEntry>,
+    ) -> Result<String> {
         // Simulate optimized inference
         tokio::time::sleep(Duration::from_millis(50)).await;
         Ok(format!("Optimized result: {}", input))
@@ -608,7 +691,11 @@ impl InferenceOptimizer {
         metrics.compilation_speedup = 2.0; // Mock compilation speedup
 
         // Pipeline efficiency
-        metrics.pipeline_efficiency = if self.config.async_pipeline { 0.95 } else { 0.85 };
+        metrics.pipeline_efficiency = if self.config.async_pipeline {
+            0.95
+        } else {
+            0.85
+        };
 
         // Overall speedup ratio
         metrics.speedup_ratio = 1.0
@@ -629,7 +716,8 @@ impl InferenceOptimizer {
         // Estimate throughput (tokens per second)
         let estimated_tokens = result.split_whitespace().count() as f64;
         let tokens_per_second = estimated_tokens / inference_time.as_secs_f64();
-        metrics.throughput_tokens_per_second = (metrics.throughput_tokens_per_second * 0.9) + (tokens_per_second * 0.1);
+        metrics.throughput_tokens_per_second =
+            (metrics.throughput_tokens_per_second * 0.9) + (tokens_per_second * 0.1);
     }
 
     /// Get current inference metrics
@@ -639,7 +727,10 @@ impl InferenceOptimizer {
 
     /// Benchmark inference optimization performance
     pub async fn benchmark(&self, _model_path: &str, num_requests: usize) -> Result<f64> {
-        tracing::info!("Benchmarking inference optimization with {} requests", num_requests);
+        tracing::info!(
+            "Benchmarking inference optimization with {} requests",
+            num_requests
+        );
 
         let start_time = Instant::now();
 
@@ -656,8 +747,11 @@ impl InferenceOptimizer {
         // Get current metrics for speedup calculation
         let metrics = self.get_metrics().await;
 
-        tracing::info!("Inference benchmark completed: {:.2} requests/second, {:.2}x speedup",
-                      requests_per_second, metrics.speedup_ratio);
+        tracing::info!(
+            "Inference benchmark completed: {:.2} requests/second, {:.2}x speedup",
+            requests_per_second,
+            metrics.speedup_ratio
+        );
 
         Ok(metrics.speedup_ratio)
     }
@@ -701,11 +795,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_speculative_decoder() {
-        let decoder = SpeculativeDecoder::new(
-            "target".to_string(),
-            "draft".to_string(),
-            4
-        );
+        let decoder = SpeculativeDecoder::new("target".to_string(), "draft".to_string(), 4);
 
         let tokens = decoder.generate_speculative_tokens("test input", 3).await;
         assert!(tokens.is_ok());
@@ -729,7 +819,9 @@ mod tests {
     #[tokio::test]
     async fn test_model_compiler() {
         let compiler = ModelCompiler::new();
-        let compiled_path = compiler.compile_model("test_model", OptimizationLevel::Balanced).await;
+        let compiled_path = compiler
+            .compile_model("test_model", OptimizationLevel::Balanced)
+            .await;
         assert!(compiled_path.is_ok());
 
         let info = compiler.get_compilation_info(&compiled_path.unwrap()).await;

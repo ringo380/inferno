@@ -3,52 +3,79 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
-import { Brain, MoreHorizontal } from 'lucide-react';
+import { Brain, MoreHorizontal, RefreshCw, AlertCircle } from 'lucide-react';
 import { getStatusColor, formatBytes } from '@/lib/utils';
-
-const mockModels = [
-  {
-    id: 'llama-7b',
-    name: 'Llama 2 7B',
-    status: 'loaded',
-    size: 13631488000,
-    format: 'gguf',
-    usage: 85,
-    lastUsed: '2 minutes ago',
-  },
-  {
-    id: 'gpt-3.5-turbo',
-    name: 'GPT-3.5 Turbo',
-    status: 'available',
-    size: 6442450944,
-    format: 'onnx',
-    usage: 0,
-    lastUsed: '1 hour ago',
-  },
-  {
-    id: 'claude-instant',
-    name: 'Claude Instant',
-    status: 'loading',
-    size: 8589934592,
-    format: 'gguf',
-    usage: 45,
-    lastUsed: 'Loading...',
-  },
-  {
-    id: 'mistral-7b',
-    name: 'Mistral 7B',
-    status: 'error',
-    size: 12884901888,
-    format: 'gguf',
-    usage: 0,
-    lastUsed: '30 minutes ago',
-  },
-];
+import { useModels, useLoadedModels } from '@/hooks/use-tauri-api';
+import { Skeleton } from '@/components/ui/skeleton';
 
 export function ModelStatus() {
+  const { data: models, isLoading: modelsLoading, error: modelsError } = useModels();
+  const { data: loadedModels, isLoading: loadedLoading, error: loadedError } = useLoadedModels();
+
+  if (modelsLoading || loadedLoading) {
+    return (
+      <div className="space-y-4">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <div key={i} className="flex items-center justify-between p-4 border rounded-lg">
+            <div className="flex items-center space-x-3">
+              <Skeleton className="h-8 w-8 rounded-md" />
+              <div className="space-y-2">
+                <Skeleton className="h-4 w-32" />
+                <Skeleton className="h-3 w-24" />
+              </div>
+            </div>
+            <div className="flex items-center space-x-3">
+              <Skeleton className="h-6 w-16" />
+              <Skeleton className="h-8 w-8" />
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  if (modelsError || loadedError) {
+    return (
+      <div className="flex items-center justify-center p-8 border rounded-lg border-destructive/20">
+        <div className="text-center space-y-2">
+          <AlertCircle className="h-8 w-8 text-destructive mx-auto" />
+          <p className="text-sm text-muted-foreground">
+            Failed to load models: {(modelsError || loadedError)?.message}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!models || models.length === 0) {
+    return (
+      <div className="flex items-center justify-center p-8 border rounded-lg border-dashed">
+        <div className="text-center space-y-2">
+          <Brain className="h-8 w-8 text-muted-foreground mx-auto" />
+          <p className="text-sm text-muted-foreground">
+            No models found in the configured directory
+          </p>
+          <Button variant="outline" size="sm">
+            <RefreshCw className="h-3 w-3 mr-1" />
+            Refresh
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // Enhance models with loading status
+  const enhancedModels = models.map(model => ({
+    ...model,
+    isLoaded: loadedModels?.includes(model.id) || false,
+    status: loadedModels?.includes(model.id) ? 'loaded' : 'available',
+    usage: loadedModels?.includes(model.id) ? 45 : 0, // Static value until backend provides real usage metrics
+    lastUsed: loadedModels?.includes(model.id) ? 'Active' : 'Not loaded',
+  }));
+
   return (
     <div className="space-y-4">
-      {mockModels.map((model) => (
+      {enhancedModels.map((model) => (
         <div
           key={model.id}
           className="flex items-center justify-between p-4 border rounded-lg hover:bg-accent/50 transition-colors"

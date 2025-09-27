@@ -4,17 +4,16 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::SystemTime;
 
-use crate::config::Config;
-use crate::audit::{
-    AuditEvent, EventType as AuditEventType, Severity as EventSeverity,
-    ActorType, AuditLogger as LoggingAuditSystem, AuditQuery as AuditSearchQuery,
-    Actor, Resource, EventOutcome, SortField, SortOrder
-};
-use crate::logging_audit::{
-    IntegrityReport, ComplianceReport, ActionOutcome, ComplianceStandard, ExportRequest,
-    AuditStatistics, DateRange
-};
 use crate::audit::ExportFormat;
+use crate::audit::{
+    AuditEvent, AuditLogger as LoggingAuditSystem, AuditQuery as AuditSearchQuery,
+    EventType as AuditEventType, Severity as EventSeverity, SortField, SortOrder,
+};
+use crate::config::Config;
+use crate::logging_audit::{
+    ActionOutcome, AuditStatistics, ComplianceReport, ComplianceStandard, DateRange, ExportRequest,
+    IntegrityReport,
+};
 
 #[derive(Args)]
 pub struct LoggingAuditArgs {
@@ -1490,60 +1489,74 @@ pub async fn execute(args: LoggingAuditArgs, config: &Config) -> Result<()> {
     match args.command {
         LoggingAuditCommand::Audit { command } => {
             handle_audit_command(command, &system).await?;
-        },
+        }
 
         LoggingAuditCommand::Logs { command } => {
             handle_logs_command(command, &system).await?;
-        },
+        }
 
         LoggingAuditCommand::Compliance { command } => {
             handle_compliance_command(command, &system).await?;
-        },
+        }
 
         LoggingAuditCommand::Export { command } => {
             handle_export_command(command, &system).await?;
-        },
+        }
 
         LoggingAuditCommand::Security { command } => {
             handle_security_command(command, &system).await?;
-        },
+        }
 
         LoggingAuditCommand::Monitor { command } => {
             handle_monitor_command(command, &system).await?;
-        },
+        }
 
         LoggingAuditCommand::Config { command } => {
             handle_config_command(command, &system).await?;
-        },
+        }
 
         LoggingAuditCommand::Retention { command } => {
             handle_retention_command(command, &system).await?;
-        },
+        }
 
         LoggingAuditCommand::Integration { command } => {
             handle_integration_command(command, &system).await?;
-        },
+        }
 
         LoggingAuditCommand::Alerts { command } => {
             handle_alert_command(command, &system).await?;
-        },
+        }
 
         LoggingAuditCommand::Search { command } => {
             handle_search_command(command, &system).await?;
-        },
+        }
 
-        LoggingAuditCommand::Status { detailed, format, refresh, health, performance } => {
+        LoggingAuditCommand::Status {
+            detailed,
+            format,
+            refresh,
+            health,
+            performance,
+        } => {
             if let Some(refresh_interval) = refresh {
                 println!("Monitoring logging and audit system (refresh every {}s, press Ctrl+C to exit)...", refresh_interval);
                 loop {
-                    display_system_status(&system, detailed, format.as_deref(), health, performance).await?;
+                    display_system_status(
+                        &system,
+                        detailed,
+                        format.as_deref(),
+                        health,
+                        performance,
+                    )
+                    .await?;
                     tokio::time::sleep(tokio::time::Duration::from_secs(refresh_interval)).await;
                     print!("\x1B[2J\x1B[H"); // Clear screen
                 }
             } else {
-                display_system_status(&system, detailed, format.as_deref(), health, performance).await?;
+                display_system_status(&system, detailed, format.as_deref(), health, performance)
+                    .await?;
             }
-        },
+        }
     }
 
     Ok(())
@@ -1554,9 +1567,21 @@ pub async fn execute(args: LoggingAuditArgs, config: &Config) -> Result<()> {
 async fn handle_audit_command(command: AuditCommand, system: &LoggingAuditSystem) -> Result<()> {
     match command {
         AuditCommand::Search {
-            event_types, from, to, user_id, resource_type, resource_id,
-            severity, outcome, text, limit, offset, sort_by, sort_order,
-            format, export
+            event_types,
+            from,
+            to,
+            user_id,
+            resource_type,
+            resource_id,
+            severity,
+            outcome,
+            text,
+            limit,
+            offset,
+            sort_by,
+            sort_order,
+            format,
+            export,
         } => {
             println!("Searching audit events with validation...");
 
@@ -1571,16 +1596,26 @@ async fn handle_audit_command(command: AuditCommand, system: &LoggingAuditSystem
                 (None, None)
             };
 
-            let mut query = AuditSearchQuery {
+            let query = AuditSearchQuery {
                 event_types: if event_types.is_empty() {
                     None
                 } else {
-                    Some(event_types.into_iter().map(|t| parse_event_type(&t)).collect::<Result<Vec<_>>>()?)
+                    Some(
+                        event_types
+                            .into_iter()
+                            .map(|t| parse_event_type(&t))
+                            .collect::<Result<Vec<_>>>()?,
+                    )
                 },
                 severities: if severity.is_empty() {
                     None
                 } else {
-                    Some(severity.into_iter().map(|s| parse_severity(&s)).collect::<Result<Vec<_>>>()?)
+                    Some(
+                        severity
+                            .into_iter()
+                            .map(|s| parse_severity(&s))
+                            .collect::<Result<Vec<_>>>()?,
+                    )
                 },
                 actors: if let Some(id) = user_id {
                     Some(vec![sanitize_input(&id)?])
@@ -1627,8 +1662,10 @@ async fn handle_audit_command(command: AuditCommand, system: &LoggingAuditSystem
             let start_time = std::time::Instant::now();
             let events = match tokio::time::timeout(
                 std::time::Duration::from_secs(60),
-                system.search_audit_events(query)
-            ).await {
+                system.search_audit_events(query),
+            )
+            .await
+            {
                 Ok(result) => result?,
                 Err(_) => {
                     return Err(anyhow::anyhow!("Search query timed out after 60 seconds. Please refine your search criteria."));
@@ -1644,10 +1681,20 @@ async fn handle_audit_command(command: AuditCommand, system: &LoggingAuditSystem
                 println!("✓ Results exported to: {}", export_path.display());
             }
 
-            println!("Found {} audit events in {:.2}s", events.len(), search_duration.as_secs_f64());
-        },
+            println!(
+                "Found {} audit events in {:.2}s",
+                events.len(),
+                search_duration.as_secs_f64()
+            );
+        }
 
-        AuditCommand::Stats { range, group_by, format, trends, export } => {
+        AuditCommand::Stats {
+            range,
+            group_by,
+            format,
+            trends,
+            export,
+        } => {
             println!("Generating audit statistics...");
 
             // Validate range parameter
@@ -1662,11 +1709,15 @@ async fn handle_audit_command(command: AuditCommand, system: &LoggingAuditSystem
 
             let stats = match tokio::time::timeout(
                 std::time::Duration::from_secs(30),
-                system.get_audit_statistics(Some((date_range.start, date_range.end)))
-            ).await {
+                system.get_audit_statistics(Some((date_range.start, date_range.end))),
+            )
+            .await
+            {
                 Ok(result) => result?,
                 Err(_) => {
-                    return Err(anyhow::anyhow!("Statistics generation timed out. Try a smaller time range."));
+                    return Err(anyhow::anyhow!(
+                        "Statistics generation timed out. Try a smaller time range."
+                    ));
                 }
             };
 
@@ -1677,9 +1728,16 @@ async fn handle_audit_command(command: AuditCommand, system: &LoggingAuditSystem
                 export_audit_statistics(&stats, &export_path, format.as_deref().unwrap_or("json"))?;
                 println!("✓ Statistics exported to: {}", export_path.display());
             }
-        },
+        }
 
-        AuditCommand::Validate { from, to, detailed, fix, report, output } => {
+        AuditCommand::Validate {
+            from,
+            to,
+            detailed,
+            fix,
+            report,
+            output,
+        } => {
             println!("Validating audit trail integrity...");
 
             // Validate date range if provided
@@ -1695,11 +1753,15 @@ async fn handle_audit_command(command: AuditCommand, system: &LoggingAuditSystem
 
             let integrity_report = match tokio::time::timeout(
                 std::time::Duration::from_secs(120), // 2 minutes for validation
-                system.validate_audit_integrity()
-            ).await {
+                system.validate_audit_integrity(),
+            )
+            .await
+            {
                 Ok(result) => result?,
                 Err(_) => {
-                    return Err(anyhow::anyhow!("Integrity validation timed out after 2 minutes."));
+                    return Err(anyhow::anyhow!(
+                        "Integrity validation timed out after 2 minutes."
+                    ));
                 }
             };
 
@@ -1714,22 +1776,29 @@ async fn handle_audit_command(command: AuditCommand, system: &LoggingAuditSystem
                 }
             }
 
-            let has_violations = !integrity_report.hash_mismatches.is_empty() ||
-                                !integrity_report.missing_files.is_empty() ||
-                                !integrity_report.errors.is_empty();
+            let has_violations = !integrity_report.hash_mismatches.is_empty()
+                || !integrity_report.missing_files.is_empty()
+                || !integrity_report.errors.is_empty();
 
             if fix && has_violations {
                 println!("Attempting to fix integrity issues...");
                 // Validate fix operation
                 if integrity_report.files_checked > 10000 {
-                    return Err(anyhow::anyhow!("Too many files to fix safely. Manual intervention required."));
+                    return Err(anyhow::anyhow!(
+                        "Too many files to fix safely. Manual intervention required."
+                    ));
                 }
                 // This would implement integrity fixing logic with proper validation
                 println!("✓ Integrity issues analysis completed (actual fixes would be implemented here)");
             }
-        },
+        }
 
-        AuditCommand::Show { event_id, format, full, related } => {
+        AuditCommand::Show {
+            event_id,
+            format,
+            full,
+            related,
+        } => {
             // Validate event ID
             let sanitized_id = sanitize_input(&event_id)?;
             if sanitized_id.len() > 100 {
@@ -1762,7 +1831,10 @@ async fn handle_audit_command(command: AuditCommand, system: &LoggingAuditSystem
                     println!("Type: {:?}", event.event_type);
                     println!("Severity: {:?}", event.severity);
                     println!("Actor: {} ({})", event.actor.name, event.actor.actor_type);
-                    println!("Resource: {} ({:?})", event.resource.name, event.resource.resource_type);
+                    println!(
+                        "Resource: {} ({:?})",
+                        event.resource.name, event.resource.resource_type
+                    );
                     println!("Action: {}", event.action);
                     println!("Success: {}", event.outcome.success);
                     if let Some(duration) = event.outcome.duration_ms {
@@ -1790,9 +1862,18 @@ async fn handle_audit_command(command: AuditCommand, system: &LoggingAuditSystem
                 println!("Found {} related events", related_events.len());
                 display_audit_events(&related_events, Some("table"))?;
             }
-        },
+        }
 
-        AuditCommand::Create { event_type, action, resource_type, resource_id, severity, outcome, details, metadata } => {
+        AuditCommand::Create {
+            event_type,
+            action,
+            resource_type,
+            resource_id,
+            severity,
+            outcome,
+            details,
+            metadata,
+        } => {
             println!("Creating manual audit event...");
 
             // Validate and sanitize inputs
@@ -1830,11 +1911,19 @@ async fn handle_audit_command(command: AuditCommand, system: &LoggingAuditSystem
             };
 
             println!("✓ Manual audit event creation validated (implementation would create actual event here)");
-        },
+        }
 
-        AuditCommand::Archive { before, dry_run, destination, compression, confirm } => {
+        AuditCommand::Archive {
+            before,
+            dry_run,
+            destination,
+            compression,
+            confirm,
+        } => {
             if !confirm && !dry_run {
-                return Err(anyhow::anyhow!("Archive operation requires --confirm flag or --dry-run"));
+                return Err(anyhow::anyhow!(
+                    "Archive operation requires --confirm flag or --dry-run"
+                ));
             }
 
             // Validate date
@@ -1856,22 +1945,38 @@ async fn handle_audit_command(command: AuditCommand, system: &LoggingAuditSystem
             if dry_run {
                 println!("DRY RUN: Would archive events before {}", archive_date);
             } else {
-                println!("Archiving events before {} (implementation would archive here)", archive_date);
+                println!(
+                    "Archiving events before {} (implementation would archive here)",
+                    archive_date
+                );
             }
-        },
+        }
 
-        AuditCommand::Delete { event_ids, before, event_types, dry_run, force, confirm } => {
+        AuditCommand::Delete {
+            event_ids,
+            before,
+            event_types,
+            dry_run,
+            force,
+            confirm,
+        } => {
             if !confirm && !dry_run {
-                return Err(anyhow::anyhow!("Delete operation requires --confirm flag or --dry-run"));
+                return Err(anyhow::anyhow!(
+                    "Delete operation requires --confirm flag or --dry-run"
+                ));
             }
 
             if !force {
-                return Err(anyhow::anyhow!("Delete operation requires --force flag for safety"));
+                return Err(anyhow::anyhow!(
+                    "Delete operation requires --force flag for safety"
+                ));
             }
 
             // Validate parameters
             if event_ids.is_empty() && before.is_none() && event_types.is_empty() {
-                return Err(anyhow::anyhow!("Must specify event IDs, date, or event types to delete"));
+                return Err(anyhow::anyhow!(
+                    "Must specify event IDs, date, or event types to delete"
+                ));
             }
 
             // Validate event IDs if provided
@@ -1885,15 +1990,18 @@ async fn handle_audit_command(command: AuditCommand, system: &LoggingAuditSystem
             }
 
             if dry_run {
-                println!("DRY RUN: Would delete {} events based on criteria", event_ids.len());
+                println!(
+                    "DRY RUN: Would delete {} events based on criteria",
+                    event_ids.len()
+                );
             } else {
                 println!("Deleting events (implementation would delete here)");
             }
-        },
+        }
 
         _ => {
             println!("Audit command executed successfully");
-        },
+        }
     }
 
     Ok(())
@@ -1901,7 +2009,16 @@ async fn handle_audit_command(command: AuditCommand, system: &LoggingAuditSystem
 
 async fn handle_logs_command(command: LogsCommand, system: &LoggingAuditSystem) -> Result<()> {
     match command {
-        LogsCommand::View { level, logger, from, to, search, follow, lines, format } => {
+        LogsCommand::View {
+            level,
+            logger,
+            from,
+            to,
+            search,
+            follow,
+            lines,
+            format,
+        } => {
             if follow {
                 println!("Following logs (press Ctrl+C to exit)...");
                 // This would implement log following
@@ -1909,25 +2026,43 @@ async fn handle_logs_command(command: LogsCommand, system: &LoggingAuditSystem) 
                 println!("Viewing structured logs...");
                 // This would display filtered logs
             }
-        },
+        }
 
-        LogsCommand::Analyze { range, level, analysis_type, format, export } => {
+        LogsCommand::Analyze {
+            range,
+            level,
+            analysis_type,
+            format,
+            export,
+        } => {
             println!("Analyzing log patterns...");
             // This would implement log pattern analysis
             println!("✓ Log analysis completed");
-        },
+        }
 
         _ => {
             println!("Logs command executed successfully");
-        },
+        }
     }
 
     Ok(())
 }
 
-async fn handle_compliance_command(command: ComplianceCommand, system: &LoggingAuditSystem) -> Result<()> {
+async fn handle_compliance_command(
+    command: ComplianceCommand,
+    system: &LoggingAuditSystem,
+) -> Result<()> {
     match command {
-        ComplianceCommand::Report { standard, period, from, to, format, output, evidence, recommendations } => {
+        ComplianceCommand::Report {
+            standard,
+            period,
+            from,
+            to,
+            format,
+            output,
+            evidence,
+            recommendations,
+        } => {
             println!("Generating compliance report for: {}", standard);
 
             let compliance_standard = parse_compliance_standard(&standard)?;
@@ -1936,31 +2071,48 @@ async fn handle_compliance_command(command: ComplianceCommand, system: &LoggingA
             } else if from.is_some() || to.is_some() {
                 let (start, end) = parse_date_range(from.as_deref(), to.as_deref())?;
                 crate::logging_audit::DateRange {
-                    start: start.unwrap_or_else(|| std::time::SystemTime::now() - std::time::Duration::from_secs(30 * 24 * 3600)),
+                    start: start.unwrap_or_else(|| {
+                        std::time::SystemTime::now()
+                            - std::time::Duration::from_secs(30 * 24 * 3600)
+                    }),
                     end: end.unwrap_or_else(|| std::time::SystemTime::now()),
                 }
             } else {
                 parse_time_range("30d")?
             };
 
-            let report = system.generate_compliance_report(format!("{:?}", compliance_standard), Some((date_range.start, date_range.end))).await?;
+            let report = system
+                .generate_compliance_report(
+                    format!("{:?}", compliance_standard),
+                    Some((date_range.start, date_range.end)),
+                )
+                .await?;
             display_compliance_report(&report, format.as_deref(), evidence, recommendations)?;
 
             if let Some(output_path) = output {
-                export_compliance_report(&report, &output_path, format.as_deref().unwrap_or("json"))?;
+                export_compliance_report(
+                    &report,
+                    &output_path,
+                    format.as_deref().unwrap_or("json"),
+                )?;
                 println!("✓ Compliance report saved to: {}", output_path.display());
             }
-        },
+        }
 
-        ComplianceCommand::Check { standard, check_type, fix, format } => {
+        ComplianceCommand::Check {
+            standard,
+            check_type,
+            fix,
+            format,
+        } => {
             println!("Checking compliance status...");
             // This would implement compliance checking
             println!("✓ Compliance check completed");
-        },
+        }
 
         _ => {
             println!("Compliance command executed successfully");
-        },
+        }
     }
 
     Ok(())
@@ -1968,7 +2120,17 @@ async fn handle_compliance_command(command: ComplianceCommand, system: &LoggingA
 
 async fn handle_export_command(command: ExportCommand, system: &LoggingAuditSystem) -> Result<()> {
     match command {
-        ExportCommand::Create { format, from, to, event_types, filters, destination, compress, encrypt, batch_size } => {
+        ExportCommand::Create {
+            format,
+            from,
+            to,
+            event_types,
+            filters,
+            destination,
+            compress,
+            encrypt,
+            batch_size,
+        } => {
             println!("Creating export job...");
 
             let export_format = parse_export_format(&format)?;
@@ -1982,7 +2144,12 @@ async fn handle_export_command(command: ExportCommand, system: &LoggingAuditSyst
                 event_types: if event_types.is_empty() {
                     None
                 } else {
-                    Some(event_types.into_iter().map(|t| parse_event_type(&t)).collect::<Result<Vec<_>>>()?)
+                    Some(
+                        event_types
+                            .into_iter()
+                            .map(|t| parse_event_type(&t))
+                            .collect::<Result<Vec<_>>>()?,
+                    )
                 },
                 severities: None,
                 actors: None,
@@ -2019,11 +2186,17 @@ async fn handle_export_command(command: ExportCommand, system: &LoggingAuditSyst
                 encryption: Some(encrypt),
             };
 
-            let export_id = system.export_audit_data(serde_json::to_value(export_request)?).await?;
+            let export_id = system
+                .export_audit_data(serde_json::to_value(export_request)?)
+                .await?;
             println!("✓ Export job created with ID: {}", export_id);
-        },
+        }
 
-        ExportCommand::Status { job_id, format, watch } => {
+        ExportCommand::Status {
+            job_id,
+            format,
+            watch,
+        } => {
             if watch {
                 println!("Watching export job progress...");
                 // This would implement progress watching
@@ -2031,23 +2204,32 @@ async fn handle_export_command(command: ExportCommand, system: &LoggingAuditSyst
                 println!("Export job status: {}", job_id);
                 // This would show export status
             }
-        },
+        }
 
         _ => {
             println!("Export command executed successfully");
-        },
+        }
     }
 
     Ok(())
 }
 
-async fn handle_security_command(command: SecurityCommand, system: &LoggingAuditSystem) -> Result<()> {
+async fn handle_security_command(
+    command: SecurityCommand,
+    system: &LoggingAuditSystem,
+) -> Result<()> {
     match command {
         SecurityCommand::Anomalies { command } => {
             handle_anomaly_command(command, system).await?;
-        },
+        }
 
-        SecurityCommand::Monitor { monitor_type, range, severity, realtime, format } => {
+        SecurityCommand::Monitor {
+            monitor_type,
+            range,
+            severity,
+            realtime,
+            format,
+        } => {
             if realtime {
                 println!("Starting real-time security monitoring...");
                 // This would implement real-time monitoring
@@ -2055,53 +2237,78 @@ async fn handle_security_command(command: SecurityCommand, system: &LoggingAudit
                 println!("Security monitoring report...");
                 // This would show security monitoring data
             }
-        },
+        }
 
         _ => {
             println!("Security command executed successfully");
-        },
+        }
     }
 
     Ok(())
 }
 
-async fn handle_anomaly_command(command: AnomalyCommand, system: &LoggingAuditSystem) -> Result<()> {
+async fn handle_anomaly_command(
+    command: AnomalyCommand,
+    system: &LoggingAuditSystem,
+) -> Result<()> {
     match command {
-        AnomalyCommand::Detect { algorithm, range, sensitivity, min_events, format } => {
+        AnomalyCommand::Detect {
+            algorithm,
+            range,
+            sensitivity,
+            min_events,
+            format,
+        } => {
             println!("Detecting anomalies...");
             // This would implement anomaly detection
             println!("✓ Anomaly detection completed");
-        },
+        }
 
-        AnomalyCommand::List { range, severity, detailed, format } => {
+        AnomalyCommand::List {
+            range,
+            severity,
+            detailed,
+            format,
+        } => {
             println!("Listing detected anomalies...");
             // This would list anomalies
-        },
+        }
 
         _ => {
             println!("Anomaly command executed successfully");
-        },
+        }
     }
 
     Ok(())
 }
 
-async fn handle_monitor_command(command: MonitorCommand, system: &LoggingAuditSystem) -> Result<()> {
+async fn handle_monitor_command(
+    command: MonitorCommand,
+    system: &LoggingAuditSystem,
+) -> Result<()> {
     match command {
-        MonitorCommand::Dashboard { refresh, alerts, performance, storage } => {
+        MonitorCommand::Dashboard {
+            refresh,
+            alerts,
+            performance,
+            storage,
+        } => {
             if let Some(refresh_interval) = refresh {
-                println!("Starting monitoring dashboard (refresh every {}s)...", refresh_interval);
+                println!(
+                    "Starting monitoring dashboard (refresh every {}s)...",
+                    refresh_interval
+                );
                 // This would implement real-time dashboard
             } else {
                 println!("Monitoring Dashboard");
                 println!("===================");
                 // This would show dashboard
             }
-        },
+        }
 
         _ => {
             println!("Monitor command executed successfully");
-        },
+        }
     }
 
     Ok(())
@@ -2109,12 +2316,23 @@ async fn handle_monitor_command(command: MonitorCommand, system: &LoggingAuditSy
 
 async fn handle_config_command(command: ConfigCommand, system: &LoggingAuditSystem) -> Result<()> {
     match command {
-        ConfigCommand::Show { section, format, show_sensitive, show_defaults } => {
+        ConfigCommand::Show {
+            section,
+            format,
+            show_sensitive,
+            show_defaults,
+        } => {
             println!("Current logging and audit configuration:");
             // This would show configuration
-        },
+        }
 
-        ConfigCommand::Update { config, section, validate, backup, apply } => {
+        ConfigCommand::Update {
+            config,
+            section,
+            validate,
+            backup,
+            apply,
+        } => {
             println!("Updating configuration from: {}", config.display());
             if validate {
                 println!("✓ Configuration validated");
@@ -2125,24 +2343,36 @@ async fn handle_config_command(command: ConfigCommand, system: &LoggingAuditSyst
             if apply {
                 println!("✓ Configuration applied");
             }
-        },
+        }
 
         _ => {
             println!("Config command executed successfully");
-        },
+        }
     }
 
     Ok(())
 }
 
-async fn handle_retention_command(command: RetentionCommand, system: &LoggingAuditSystem) -> Result<()> {
+async fn handle_retention_command(
+    command: RetentionCommand,
+    system: &LoggingAuditSystem,
+) -> Result<()> {
     match command {
-        RetentionCommand::Show { policy_type, format, effective } => {
+        RetentionCommand::Show {
+            policy_type,
+            format,
+            effective,
+        } => {
             println!("Retention policies:");
             // This would show retention policies
-        },
+        }
 
-        RetentionCommand::Apply { policy_type, dry_run, force, progress } => {
+        RetentionCommand::Apply {
+            policy_type,
+            dry_run,
+            force,
+            progress,
+        } => {
             if dry_run {
                 println!("Dry run: Applying retention policies");
                 println!("✓ Retention policy application preview completed");
@@ -2150,25 +2380,28 @@ async fn handle_retention_command(command: RetentionCommand, system: &LoggingAud
                 println!("Applying retention policies...");
                 println!("✓ Retention policies applied");
             }
-        },
+        }
 
         _ => {
             println!("Retention command executed successfully");
-        },
+        }
     }
 
     Ok(())
 }
 
-async fn handle_integration_command(command: IntegrationCommand, system: &LoggingAuditSystem) -> Result<()> {
+async fn handle_integration_command(
+    command: IntegrationCommand,
+    system: &LoggingAuditSystem,
+) -> Result<()> {
     match command {
         IntegrationCommand::Siem { command } => {
             handle_siem_command(command).await?;
-        },
+        }
 
         _ => {
             println!("Integration command executed successfully");
-        },
+        }
     }
 
     Ok(())
@@ -2176,7 +2409,12 @@ async fn handle_integration_command(command: IntegrationCommand, system: &Loggin
 
 async fn handle_siem_command(command: SiemCommand) -> Result<()> {
     match command {
-        SiemCommand::Configure { siem_type, config, test, enable } => {
+        SiemCommand::Configure {
+            siem_type,
+            config,
+            test,
+            enable,
+        } => {
             println!("Configuring {} SIEM integration", siem_type);
             if test {
                 println!("✓ SIEM connection test passed");
@@ -2184,11 +2422,11 @@ async fn handle_siem_command(command: SiemCommand) -> Result<()> {
             if enable {
                 println!("✓ SIEM integration enabled");
             }
-        },
+        }
 
         _ => {
             println!("SIEM command executed successfully");
-        },
+        }
     }
 
     Ok(())
@@ -2196,19 +2434,32 @@ async fn handle_siem_command(command: SiemCommand) -> Result<()> {
 
 async fn handle_alert_command(command: AlertCommand, system: &LoggingAuditSystem) -> Result<()> {
     match command {
-        AlertCommand::List { severity, status, range, format, limit } => {
+        AlertCommand::List {
+            severity,
+            status,
+            range,
+            format,
+            limit,
+        } => {
             println!("Listing alerts...");
             // This would list alerts
-        },
+        }
 
-        AlertCommand::Create { name, condition, severity, channels, throttle, description } => {
+        AlertCommand::Create {
+            name,
+            condition,
+            severity,
+            channels,
+            throttle,
+            description,
+        } => {
             println!("Creating alert rule: {}", name);
             println!("✓ Alert rule created");
-        },
+        }
 
         _ => {
             println!("Alert command executed successfully");
-        },
+        }
     }
 
     Ok(())
@@ -2216,19 +2467,32 @@ async fn handle_alert_command(command: AlertCommand, system: &LoggingAuditSystem
 
 async fn handle_search_command(command: SearchCommand, system: &LoggingAuditSystem) -> Result<()> {
     match command {
-        SearchCommand::Advanced { query, index, fields, range, limit, format } => {
+        SearchCommand::Advanced {
+            query,
+            index,
+            fields,
+            range,
+            limit,
+            format,
+        } => {
             println!("Performing advanced search...");
             // This would implement advanced search
-        },
+        }
 
-        SearchCommand::Text { text, scope, case_sensitive, fuzzy, format } => {
+        SearchCommand::Text {
+            text,
+            scope,
+            case_sensitive,
+            fuzzy,
+            format,
+        } => {
             println!("Performing full-text search for: {}", text);
             // This would implement text search
-        },
+        }
 
         _ => {
             println!("Search command executed successfully");
-        },
+        }
     }
 
     Ok(())
@@ -2243,7 +2507,7 @@ fn validate_search_parameters(
     severities: &[String],
     text: &Option<String>,
     limit: Option<usize>,
-    offset: Option<usize>
+    offset: Option<usize>,
 ) -> Result<()> {
     // Validate event types count
     if event_types.len() > 50 {
@@ -2261,11 +2525,15 @@ fn validate_search_parameters(
             return Err(anyhow::anyhow!("Search text cannot be empty"));
         }
         if search_text.len() > 1000 {
-            return Err(anyhow::anyhow!("Search text too long (max 1000 characters)"));
+            return Err(anyhow::anyhow!(
+                "Search text too long (max 1000 characters)"
+            ));
         }
         // Check for potential injection patterns
         if search_text.contains("';") || search_text.contains("--") || search_text.contains("/*") {
-            return Err(anyhow::anyhow!("Search text contains potentially unsafe characters"));
+            return Err(anyhow::anyhow!(
+                "Search text contains potentially unsafe characters"
+            ));
         }
     }
 
@@ -2303,7 +2571,9 @@ fn validate_date_range(start: Option<SystemTime>, end: Option<SystemTime>) -> Re
         // Check if dates are too far in the future
         let now = SystemTime::now();
         if start_time > now + std::time::Duration::from_secs(24 * 3600) {
-            return Err(anyhow::anyhow!("Start time cannot be more than 1 day in the future"));
+            return Err(anyhow::anyhow!(
+                "Start time cannot be more than 1 day in the future"
+            ));
         }
     }
     Ok(())
@@ -2315,20 +2585,23 @@ fn validate_time_range_string(range: &str) -> Result<()> {
         _ => {
             // Try to parse as duration
             if range.ends_with('h') || range.ends_with('d') || range.ends_with('m') {
-                let number_part = &range[..range.len()-1];
+                let number_part = &range[..range.len() - 1];
                 match number_part.parse::<u32>() {
                     Ok(num) => {
-                        if range.ends_with('h') && num > 8760 { // Max 1 year in hours
+                        if range.ends_with('h') && num > 8760 {
+                            // Max 1 year in hours
                             Err(anyhow::anyhow!("Time range too large"))
-                        } else if range.ends_with('d') && num > 365 { // Max 1 year in days
+                        } else if range.ends_with('d') && num > 365 {
+                            // Max 1 year in days
                             Err(anyhow::anyhow!("Time range too large"))
-                        } else if range.ends_with('m') && num > 525600 { // Max 1 year in minutes
+                        } else if range.ends_with('m') && num > 525600 {
+                            // Max 1 year in minutes
                             Err(anyhow::anyhow!("Time range too large"))
                         } else {
                             Ok(())
                         }
-                    },
-                    Err(_) => Err(anyhow::anyhow!("Invalid time range format: {}", range))
+                    }
+                    Err(_) => Err(anyhow::anyhow!("Invalid time range format: {}", range)),
                 }
             } else {
                 Err(anyhow::anyhow!("Invalid time range format: {}", range))
@@ -2356,7 +2629,10 @@ fn validate_export_path(path: &PathBuf) -> Result<()> {
     // Check if parent directory exists
     if let Some(parent) = path.parent() {
         if !parent.exists() {
-            return Err(anyhow::anyhow!("Export directory does not exist: {}", parent.display()));
+            return Err(anyhow::anyhow!(
+                "Export directory does not exist: {}",
+                parent.display()
+            ));
         }
     }
 
@@ -2365,7 +2641,10 @@ fn validate_export_path(path: &PathBuf) -> Result<()> {
         let ext_str = extension.to_string_lossy().to_lowercase();
         match ext_str.as_str() {
             "json" | "yaml" | "yml" | "csv" | "txt" => Ok(()),
-            _ => Err(anyhow::anyhow!("Unsupported export file extension: {}", ext_str))
+            _ => Err(anyhow::anyhow!(
+                "Unsupported export file extension: {}",
+                ext_str
+            )),
         }
     } else {
         Err(anyhow::anyhow!("Export file must have an extension"))
@@ -2400,22 +2679,35 @@ fn sanitize_search_text(text: &str) -> Result<String> {
     }
 
     if text.len() > 1000 {
-        return Err(anyhow::anyhow!("Search text too long (max 1000 characters)"));
+        return Err(anyhow::anyhow!(
+            "Search text too long (max 1000 characters)"
+        ));
     }
 
     // Check for injection patterns
-    let dangerous_patterns = ["';", "--", "/*", "*/", "union", "select", "drop", "delete", "insert", "update"];
+    let dangerous_patterns = [
+        "';", "--", "/*", "*/", "union", "select", "drop", "delete", "insert", "update",
+    ];
     let text_lower = text.to_lowercase();
     for pattern in dangerous_patterns {
         if text_lower.contains(pattern) {
-            return Err(anyhow::anyhow!("Search text contains potentially unsafe pattern: {}", pattern));
+            return Err(anyhow::anyhow!(
+                "Search text contains potentially unsafe pattern: {}",
+                pattern
+            ));
         }
     }
 
     Ok(text.to_string())
 }
 
-async fn display_system_status(system: &LoggingAuditSystem, detailed: bool, format: Option<&str>, health: bool, performance: bool) -> Result<()> {
+async fn display_system_status(
+    system: &LoggingAuditSystem,
+    detailed: bool,
+    format: Option<&str>,
+    health: bool,
+    performance: bool,
+) -> Result<()> {
     println!("Logging & Audit System Status");
     println!("=============================");
     println!("System: Online");
@@ -2445,37 +2737,47 @@ fn display_audit_events(events: &[AuditEvent], format: Option<&str>) -> Result<(
     match format.unwrap_or("table") {
         "json" => {
             println!("{}", serde_json::to_string_pretty(events)?);
-        },
+        }
         "yaml" => {
             println!("{}", serde_yaml::to_string(events)?);
-        },
+        }
         "table" | _ => {
-            println!("{:<36} {:<20} {:<15} {:<15} {:<20} {:<30}",
-                    "ID", "TIMESTAMP", "TYPE", "SEVERITY", "ACTOR", "RESOURCE");
+            println!(
+                "{:<36} {:<20} {:<15} {:<15} {:<20} {:<30}",
+                "ID", "TIMESTAMP", "TYPE", "SEVERITY", "ACTOR", "RESOURCE"
+            );
             println!("{}", "-".repeat(140));
             for event in events {
-                println!("{:<36} {:<20} {:<15} {:<15} {:<20} {:<30}",
-                        event.id,
-                        chrono::DateTime::<chrono::Utc>::from(event.timestamp).format("%Y-%m-%d %H:%M:%S"),
-                        format!("{:?}", event.event_type),
-                        format!("{:?}", event.severity),
-                        event.actor.id.as_str(),
-                        format!("{:?}:{}", event.resource.resource_type, event.resource.id));
+                println!(
+                    "{:<36} {:<20} {:<15} {:<15} {:<20} {:<30}",
+                    event.id,
+                    chrono::DateTime::<chrono::Utc>::from(event.timestamp)
+                        .format("%Y-%m-%d %H:%M:%S"),
+                    format!("{:?}", event.event_type),
+                    format!("{:?}", event.severity),
+                    event.actor.id.as_str(),
+                    format!("{:?}:{}", event.resource.resource_type, event.resource.id)
+                );
             }
-        },
+        }
     }
 
     Ok(())
 }
 
-fn display_audit_statistics(stats: &AuditStatistics, format: Option<&str>, group_by: &[String], trends: bool) -> Result<()> {
+fn display_audit_statistics(
+    stats: &AuditStatistics,
+    format: Option<&str>,
+    group_by: &[String],
+    trends: bool,
+) -> Result<()> {
     match format.unwrap_or("table") {
         "json" => {
             println!("{}", serde_json::to_string_pretty(stats)?);
-        },
+        }
         "yaml" => {
             println!("{}", serde_yaml::to_string(stats)?);
-        },
+        }
         "table" | _ => {
             println!("Audit Statistics");
             println!("================");
@@ -2496,7 +2798,7 @@ fn display_audit_statistics(stats: &AuditStatistics, format: Option<&str>, group
                     println!("  {}: {}", severity, count);
                 }
             }
-        },
+        }
     }
 
     Ok(())
@@ -2507,10 +2809,14 @@ fn display_integrity_report(report: &IntegrityReport, detailed: bool) -> Result<
     println!("============================");
     println!("Files Checked: {}", report.files_checked);
     println!("Files Valid: {}", report.files_valid);
-    let violations = report.hash_mismatches.len() + report.missing_files.len() + report.errors.len();
+    let violations =
+        report.hash_mismatches.len() + report.missing_files.len() + report.errors.len();
     println!("Integrity Violations: {}", violations);
     println!("Overall Status: {:?}", report.status);
-    println!("Generated At: {}", report.generated_at.format("%Y-%m-%d %H:%M:%S"));
+    println!(
+        "Generated At: {}",
+        report.generated_at.format("%Y-%m-%d %H:%M:%S")
+    );
     println!("Integrity Score: {:.2}", report.integrity_score);
 
     if detailed {
@@ -2537,25 +2843,36 @@ fn display_integrity_report(report: &IntegrityReport, detailed: bool) -> Result<
     Ok(())
 }
 
-fn display_compliance_report(report: &ComplianceReport, format: Option<&str>, evidence: bool, recommendations: bool) -> Result<()> {
+fn display_compliance_report(
+    report: &ComplianceReport,
+    format: Option<&str>,
+    evidence: bool,
+    recommendations: bool,
+) -> Result<()> {
     match format.unwrap_or("table") {
         "json" => {
             println!("{}", serde_json::to_string_pretty(report)?);
-        },
+        }
         "yaml" => {
             println!("{}", serde_yaml::to_string(report)?);
-        },
+        }
         "table" | _ => {
             println!("Compliance Report - {:?}", report.standard);
             println!("========================================");
-            println!("Period: {:?} to {:?}", report.period_start, report.period_end);
+            println!(
+                "Period: {:?} to {:?}",
+                report.period_start, report.period_end
+            );
             println!("Score: {:.2}", report.compliance_score);
             println!("Findings: {}", report.findings.len());
 
             if !report.findings.is_empty() {
                 println!("\nFindings:");
                 for finding in &report.findings {
-                    println!("  {} - {}: {}", finding.id, finding.severity, finding.description);
+                    println!(
+                        "  {} - {}: {}",
+                        finding.id, finding.severity, finding.description
+                    );
                 }
             }
 
@@ -2576,7 +2893,7 @@ fn display_compliance_report(report: &ComplianceReport, format: Option<&str>, ev
                     }
                 }
             }
-        },
+        }
     }
 
     Ok(())
@@ -2692,24 +3009,26 @@ fn parse_sort_field(field: &str) -> Result<SortField> {
     }
 }
 
-fn parse_date_range(from: Option<&str>, to: Option<&str>) -> Result<(Option<std::time::SystemTime>, Option<std::time::SystemTime>)> {
+fn parse_date_range(
+    from: Option<&str>,
+    to: Option<&str>,
+) -> Result<(Option<std::time::SystemTime>, Option<std::time::SystemTime>)> {
     use chrono::DateTime;
-    use std::time::SystemTime;
 
     match (from, to) {
         (Some(from_str), Some(to_str)) => {
             let from_date = DateTime::parse_from_rfc3339(from_str)?.with_timezone(&chrono::Utc);
             let to_date = DateTime::parse_from_rfc3339(to_str)?.with_timezone(&chrono::Utc);
             Ok((Some(from_date.into()), Some(to_date.into())))
-        },
+        }
         (Some(from_str), None) => {
             let from_date = DateTime::parse_from_rfc3339(from_str)?.with_timezone(&chrono::Utc);
             Ok((Some(from_date.into()), None))
-        },
+        }
         (None, Some(to_str)) => {
             let to_date = DateTime::parse_from_rfc3339(to_str)?.with_timezone(&chrono::Utc);
             Ok((None, Some(to_date.into())))
-        },
+        }
         (None, None) => Ok((None, None)),
     }
 }
@@ -2786,8 +3105,12 @@ fn export_compliance_report(report: &ComplianceReport, path: &PathBuf, format: &
     Ok(())
 }
 
-fn convert_logging_audit_config(config: &crate::logging_audit::LoggingAuditConfig) -> Result<crate::audit::AuditConfiguration> {
-    use crate::audit::{AuditConfiguration, LogLevel, CompressionMethod, AlertConfiguration, ExportFormat};
+fn convert_logging_audit_config(
+    config: &crate::logging_audit::LoggingAuditConfig,
+) -> Result<crate::audit::AuditConfiguration> {
+    use crate::audit::{
+        AlertConfiguration, AuditConfiguration, CompressionMethod, ExportFormat, LogLevel,
+    };
     use std::path::PathBuf;
 
     Ok(AuditConfiguration {

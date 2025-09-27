@@ -1,19 +1,15 @@
+use anyhow::Result;
+use futures::StreamExt;
 use inferno::{
-    backends::{Backend, BackendHandle, BackendConfig, BackendType, InferenceParams},
-    models::{ModelInfo, ModelManager},
+    backends::{Backend, BackendConfig, BackendHandle, BackendType, InferenceParams},
+    cache::{CacheConfig, ModelCache},
     config::Config,
-    cache::{ModelCache, CacheConfig},
+    models::{ModelInfo, ModelManager},
     InfernoError,
 };
-use anyhow::Result;
-use std::{
-    path::PathBuf,
-    sync::Arc,
-    time::Duration,
-};
+use std::{path::PathBuf, sync::Arc, time::Duration};
 use tempfile::TempDir;
 use tokio::time::timeout;
-use futures::StreamExt;
 
 /// Test utilities for backend integration tests
 mod test_utils {
@@ -87,7 +83,10 @@ mod test_utils {
         }
     }
 
-    pub async fn wait_for_condition<F, Fut>(mut condition: F, timeout_duration: Duration) -> Result<()>
+    pub async fn wait_for_condition<F, Fut>(
+        mut condition: F,
+        timeout_duration: Duration,
+    ) -> Result<()>
     where
         F: FnMut() -> Fut,
         Fut: std::future::Future<Output = bool>,
@@ -136,11 +135,15 @@ async fn test_model_loading_lifecycle() -> Result<()> {
     let models = model_manager.discover_models().await?;
     assert!(!models.is_empty(), "Should discover test models");
 
-    for (backend_type, model_path) in [(BackendType::Gguf, &model_files[0]), (BackendType::Onnx, &model_files[1])] {
+    for (backend_type, model_path) in [
+        (BackendType::Gguf, &model_files[0]),
+        (BackendType::Onnx, &model_files[1]),
+    ] {
         let mut backend = Backend::new(backend_type, &config)?;
 
         // Find the corresponding model info
-        let model_info = models.iter()
+        let model_info = models
+            .iter()
             .find(|m| m.path == *model_path)
             .expect("Should find model info");
 
@@ -172,10 +175,14 @@ async fn test_backend_inference() -> Result<()> {
     let mut model_manager = ModelManager::new(temp_dir.path().to_path_buf());
     let models = model_manager.discover_models().await?;
 
-    for (backend_type, model_path) in [(BackendType::Gguf, &model_files[0]), (BackendType::Onnx, &model_files[1])] {
+    for (backend_type, model_path) in [
+        (BackendType::Gguf, &model_files[0]),
+        (BackendType::Onnx, &model_files[1]),
+    ] {
         let mut backend = Backend::new(backend_type, &config)?;
 
-        let model_info = models.iter()
+        let model_info = models
+            .iter()
             .find(|m| m.path == *model_path)
             .expect("Should find model info");
 
@@ -200,7 +207,10 @@ async fn test_backend_inference() -> Result<()> {
 
         // Test metrics
         let metrics = backend.get_metrics();
-        assert!(metrics.is_some(), "Metrics should be available after inference");
+        assert!(
+            metrics.is_some(),
+            "Metrics should be available after inference"
+        );
 
         backend.unload_model().await?;
     }
@@ -219,7 +229,8 @@ async fn test_streaming_inference() -> Result<()> {
     let models = model_manager.discover_models().await?;
 
     let mut backend = Backend::new(BackendType::Gguf, &config)?;
-    let model_info = models.iter()
+    let model_info = models
+        .iter()
         .find(|m| m.path == model_files[0])
         .expect("Should find GGUF model info");
 
@@ -230,7 +241,11 @@ async fn test_streaming_inference() -> Result<()> {
     params.max_tokens = 50;
 
     let input = "Once upon a time";
-    let stream_result = timeout(Duration::from_secs(10), backend.infer_stream(input, &params)).await?;
+    let stream_result = timeout(
+        Duration::from_secs(10),
+        backend.infer_stream(input, &params),
+    )
+    .await?;
     assert!(stream_result.is_ok(), "Stream inference should succeed");
 
     let mut stream = stream_result?;
@@ -255,7 +270,10 @@ async fn test_streaming_inference() -> Result<()> {
     }
 
     assert!(token_count > 0, "Should receive at least one token");
-    assert!(!collected_output.is_empty(), "Collected output should not be empty");
+    assert!(
+        !collected_output.is_empty(),
+        "Collected output should not be empty"
+    );
 
     backend.unload_model().await?;
     Ok(())
@@ -272,7 +290,8 @@ async fn test_backend_handle_thread_safety() -> Result<()> {
     let models = model_manager.discover_models().await?;
 
     let handle = BackendHandle::new_shared(BackendType::Gguf, &config)?;
-    let model_info = models.iter()
+    let model_info = models
+        .iter()
         .find(|m| m.path == model_files[0])
         .expect("Should find GGUF model info");
 
@@ -289,15 +308,9 @@ async fn test_backend_handle_thread_safety() -> Result<()> {
     let input = "Test concurrent access";
 
     let tasks = vec![
-        tokio::spawn(async move {
-            handle1.infer(input, &params).await
-        }),
-        tokio::spawn(async move {
-            handle2.infer(input, &params).await
-        }),
-        tokio::spawn(async move {
-            handle3.infer(input, &params).await
-        }),
+        tokio::spawn(async move { handle1.infer(input, &params).await }),
+        tokio::spawn(async move { handle2.infer(input, &params).await }),
+        tokio::spawn(async move { handle3.infer(input, &params).await }),
     ];
 
     // Wait for all tasks to complete
@@ -305,7 +318,10 @@ async fn test_backend_handle_thread_safety() -> Result<()> {
 
     for task_result in results {
         let inference_result = task_result?;
-        assert!(inference_result.is_ok(), "Concurrent inference should succeed");
+        assert!(
+            inference_result.is_ok(),
+            "Concurrent inference should succeed"
+        );
     }
 
     handle.unload_model().await?;
@@ -328,7 +344,8 @@ async fn test_backend_config_validation() -> Result<()> {
     let models = model_manager.discover_models().await?;
 
     let mut backend = Backend::new(BackendType::Gguf, &invalid_config)?;
-    let model_info = models.iter()
+    let model_info = models
+        .iter()
         .find(|m| m.path == model_files[0])
         .expect("Should find GGUF model info");
 
@@ -348,15 +365,24 @@ async fn test_backend_error_handling() -> Result<()> {
     // Test inference without loaded model
     let params = InferenceParams::default();
     let result = backend.infer("test", &params).await;
-    assert!(result.is_err(), "Inference should fail without loaded model");
+    assert!(
+        result.is_err(),
+        "Inference should fail without loaded model"
+    );
 
     // Test embeddings without loaded model
     let embeddings_result = backend.get_embeddings("test").await;
-    assert!(embeddings_result.is_err(), "Embeddings should fail without loaded model");
+    assert!(
+        embeddings_result.is_err(),
+        "Embeddings should fail without loaded model"
+    );
 
     // Test streaming without loaded model
     let stream_result = backend.infer_stream("test", &params).await;
-    assert!(stream_result.is_err(), "Streaming should fail without loaded model");
+    assert!(
+        stream_result.is_err(),
+        "Streaming should fail without loaded model"
+    );
 
     Ok(())
 }
@@ -365,15 +391,30 @@ async fn test_backend_error_handling() -> Result<()> {
 #[tokio::test]
 async fn test_backend_type_detection() -> Result<()> {
     // Test extension-based detection
-    assert_eq!(BackendType::from_model_path(&PathBuf::from("model.gguf")), BackendType::Gguf);
-    assert_eq!(BackendType::from_model_path(&PathBuf::from("model.onnx")), BackendType::Onnx);
+    assert_eq!(
+        BackendType::from_model_path(&PathBuf::from("model.gguf")),
+        BackendType::Gguf
+    );
+    assert_eq!(
+        BackendType::from_model_path(&PathBuf::from("model.onnx")),
+        BackendType::Onnx
+    );
 
     // Test filename pattern-based detection
-    assert_eq!(BackendType::from_model_path(&PathBuf::from("llama-7b-chat")), BackendType::Gguf);
-    assert_eq!(BackendType::from_model_path(&PathBuf::from("bert-base-onnx")), BackendType::Onnx);
+    assert_eq!(
+        BackendType::from_model_path(&PathBuf::from("llama-7b-chat")),
+        BackendType::Gguf
+    );
+    assert_eq!(
+        BackendType::from_model_path(&PathBuf::from("bert-base-onnx")),
+        BackendType::Onnx
+    );
 
     // Test default fallback
-    assert_eq!(BackendType::from_model_path(&PathBuf::from("unknown")), BackendType::Gguf);
+    assert_eq!(
+        BackendType::from_model_path(&PathBuf::from("unknown")),
+        BackendType::Gguf
+    );
 
     Ok(())
 }
@@ -389,7 +430,8 @@ async fn test_backend_metrics_collection() -> Result<()> {
     let models = model_manager.discover_models().await?;
 
     let mut backend = Backend::new(BackendType::Gguf, &config)?;
-    let model_info = models.iter()
+    let model_info = models
+        .iter()
         .find(|m| m.path == model_files[0])
         .expect("Should find GGUF model info");
 
@@ -409,7 +451,10 @@ async fn test_backend_metrics_collection() -> Result<()> {
     let m = metrics.unwrap();
     assert!(m.total_tokens > 0, "Should have token count");
     assert!(m.total_time_ms > 0, "Should have execution time");
-    assert!(m.tokens_per_second > 0.0, "Should have calculated tokens per second");
+    assert!(
+        m.tokens_per_second > 0.0,
+        "Should have calculated tokens per second"
+    );
 
     backend.unload_model().await?;
     Ok(())
@@ -435,15 +480,20 @@ async fn test_backend_cache_integration() -> Result<()> {
     let cache = ModelCache::new(cache_config, model_manager.clone()).await?;
 
     // Get cached backend for GGUF model
-    let gguf_model = models.iter()
+    let gguf_model = models
+        .iter()
         .find(|m| m.path == model_files[0])
         .expect("Should find GGUF model");
 
-    let handle1 = cache.get_or_load_model(&gguf_model.id, BackendType::Gguf, &backend_config).await?;
+    let handle1 = cache
+        .get_or_load_model(&gguf_model.id, BackendType::Gguf, &backend_config)
+        .await?;
     assert!(handle1.is_loaded().await);
 
     // Get the same model again - should be cached
-    let handle2 = cache.get_or_load_model(&gguf_model.id, BackendType::Gguf, &backend_config).await?;
+    let handle2 = cache
+        .get_or_load_model(&gguf_model.id, BackendType::Gguf, &backend_config)
+        .await?;
     assert!(handle2.is_loaded().await);
 
     // Perform inference on both handles

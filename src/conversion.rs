@@ -1,16 +1,11 @@
-use crate::{
-    config::Config,
-    models::ModelManager,
-};
+use crate::{config::Config, models::ModelManager};
 use anyhow::{anyhow, Result};
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use half::f16;
 use memmap2::Mmap;
-use ort::{
-    Environment, SessionBuilder,
-    tensor::TensorElementDataType,
-};
-use safetensors::{SafeTensors, Dtype};
+#[cfg(feature = "onnx")]
+use ort::{tensor::TensorElementDataType, Environment, SessionBuilder};
+use safetensors::{Dtype, SafeTensors};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
@@ -19,14 +14,19 @@ use std::{
     path::{Path, PathBuf},
     sync::Arc,
 };
-use tokio::{
-    fs as async_fs,
-    io::AsyncReadExt,
-};
+use tokio::{fs as async_fs, io::AsyncReadExt};
 use tracing::{info, warn};
 
 #[cfg(feature = "pytorch")]
-use tch::{nn, Tensor as TchTensor, Kind as TchKind, Device as TchDevice};
+use tch::{nn, Device as TchDevice, Kind as TchKind, Tensor as TchTensor};
+
+// Placeholder types when pytorch is disabled
+#[cfg(not(feature = "pytorch"))]
+type TchDevice = ();
+#[cfg(not(feature = "pytorch"))]
+type TchTensor = ();
+#[cfg(not(feature = "pytorch"))]
+type TchKind = ();
 
 // GGUF format constants
 const GGUF_MAGIC: &[u8; 4] = b"GGUF";
@@ -171,6 +171,7 @@ pub struct GgufFile {
 }
 
 // ONNX conversion utilities
+#[cfg(feature = "onnx")]
 #[derive(Debug, Clone)]
 pub struct OnnxTensorInfo {
     pub name: String,
@@ -178,6 +179,11 @@ pub struct OnnxTensorInfo {
     pub shape: Vec<i64>,
     pub data: Vec<u8>,
 }
+
+// Dummy type when ONNX is not enabled
+#[cfg(not(feature = "onnx"))]
+#[derive(Debug, Clone)]
+pub struct OnnxTensorInfo;
 
 #[derive(Debug, Clone)]
 pub struct ModelArchitecture {
@@ -211,9 +217,17 @@ pub struct WeightMapping {
 pub enum WeightTransform {
     Transpose,
     Reshape(Vec<i64>),
-    Split { axis: usize, parts: usize },
-    Concat { axis: usize },
-    Convert { from_dtype: String, to_dtype: String },
+    Split {
+        axis: usize,
+        parts: usize,
+    },
+    Concat {
+        axis: usize,
+    },
+    Convert {
+        from_dtype: String,
+        to_dtype: String,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -404,7 +418,10 @@ impl ModelConverter {
             metadata_kv_count,
         };
 
-        info!("GGUF header: {} tensors, {} metadata entries", tensor_count, metadata_kv_count);
+        info!(
+            "GGUF header: {} tensors, {} metadata entries",
+            tensor_count, metadata_kv_count
+        );
 
         // Read metadata
         let mut metadata = HashMap::new();
@@ -454,7 +471,12 @@ impl ModelConverter {
     }
 
     // Real GGUF file writing implementation
-    async fn write_gguf_file(&self, gguf_file: &GgufFile, path: &Path, tensor_data: &[u8]) -> Result<()> {
+    async fn write_gguf_file(
+        &self,
+        gguf_file: &GgufFile,
+        path: &Path,
+        tensor_data: &[u8],
+    ) -> Result<()> {
         info!("Writing GGUF file: {}", path.display());
 
         let file = File::create(path)?;
@@ -501,7 +523,10 @@ impl ModelConverter {
         writer.write_all(tensor_data)?;
         writer.flush()?;
 
-        info!("Successfully wrote GGUF file with {} bytes", aligned_pos + tensor_data.len() as u64);
+        info!(
+            "Successfully wrote GGUF file with {} bytes",
+            aligned_pos + tensor_data.len() as u64
+        );
         Ok(())
     }
 
@@ -643,7 +668,11 @@ impl ModelConverter {
         let mut warnings = Vec::new();
         let mut errors = Vec::new();
 
-        info!("Starting model conversion: {} -> {}", input_path.display(), output_path.display());
+        info!(
+            "Starting model conversion: {} -> {}",
+            input_path.display(),
+            output_path.display()
+        );
 
         // Validate input model
         if !self.model_manager.validate_model(input_path).await? {
@@ -668,7 +697,9 @@ impl ModelConverter {
 
         // Check if conversion is needed
         if self.formats_compatible(&input_format, &conversion_config.output_format) {
-            if conversion_config.quantization.is_none() && conversion_config.optimization_level == OptimizationLevel::None {
+            if conversion_config.quantization.is_none()
+                && conversion_config.optimization_level == OptimizationLevel::None
+            {
                 warnings.push("No conversion needed - copying file".to_string());
                 async_fs::copy(input_path, output_path).await?;
                 let output_size = async_fs::metadata(output_path).await?.len();
@@ -689,7 +720,10 @@ impl ModelConverter {
         }
 
         // Perform actual conversion
-        match self.perform_conversion(input_path, output_path, &input_format, conversion_config).await {
+        match self
+            .perform_conversion(input_path, output_path, &input_format, conversion_config)
+            .await
+        {
             Ok(mut conversion_warnings) => {
                 warnings.append(&mut conversion_warnings);
             }
@@ -713,7 +747,10 @@ impl ModelConverter {
         // Verify output if requested
         let mut metadata_preserved = false;
         if conversion_config.verify_output {
-            match self.verify_converted_model(output_path, conversion_config).await {
+            match self
+                .verify_converted_model(output_path, conversion_config)
+                .await
+            {
                 Ok(verified) => {
                     if !verified {
                         warnings.push("Output model verification failed".to_string());
@@ -738,7 +775,11 @@ impl ModelConverter {
             output_path: output_path.to_path_buf(),
             input_size,
             output_size,
-            compression_ratio: if output_size > 0 { input_size as f32 / output_size as f32 } else { 0.0 },
+            compression_ratio: if output_size > 0 {
+                input_size as f32 / output_size as f32
+            } else {
+                0.0
+            },
             conversion_time: start_time.elapsed(),
             warnings,
             errors,
@@ -763,16 +804,28 @@ impl ModelConverter {
                 warnings.extend(self.convert_onnx_to_gguf(input_path, output_path).await?);
             }
             (ModelFormat::Pytorch, ModelFormat::Gguf) => {
-                warnings.extend(self.convert_pytorch_to_gguf(input_path, output_path).await?);
+                warnings.extend(
+                    self.convert_pytorch_to_gguf(input_path, output_path)
+                        .await?,
+                );
             }
             (ModelFormat::Pytorch, ModelFormat::Onnx) => {
-                warnings.extend(self.convert_pytorch_to_onnx(input_path, output_path).await?);
+                warnings.extend(
+                    self.convert_pytorch_to_onnx(input_path, output_path)
+                        .await?,
+                );
             }
             (ModelFormat::SafeTensors, ModelFormat::Gguf) => {
-                warnings.extend(self.convert_safetensors_to_gguf(input_path, output_path).await?);
+                warnings.extend(
+                    self.convert_safetensors_to_gguf(input_path, output_path)
+                        .await?,
+                );
             }
             (ModelFormat::SafeTensors, ModelFormat::Onnx) => {
-                warnings.extend(self.convert_safetensors_to_onnx(input_path, output_path).await?);
+                warnings.extend(
+                    self.convert_safetensors_to_onnx(input_path, output_path)
+                        .await?,
+                );
             }
             _ => {
                 return Err(anyhow!(
@@ -788,7 +841,10 @@ impl ModelConverter {
             let temp_path = output_path.with_extension("tmp");
             async_fs::rename(output_path, &temp_path).await?;
 
-            match self.quantize_model(&temp_path, output_path, quantization.clone()).await {
+            match self
+                .quantize_model(&temp_path, output_path, quantization.clone())
+                .await
+            {
                 Ok(result) => {
                     warnings.extend(result.warnings);
                     if !result.success {
@@ -808,10 +864,19 @@ impl ModelConverter {
     }
 
     // Real GGUF to ONNX conversion
-    async fn convert_gguf_to_onnx(&self, input_path: &Path, output_path: &Path) -> Result<Vec<String>> {
+    #[cfg(feature = "onnx")]
+    async fn convert_gguf_to_onnx(
+        &self,
+        input_path: &Path,
+        output_path: &Path,
+    ) -> Result<Vec<String>> {
         let mut warnings = Vec::new();
 
-        info!("Converting GGUF to ONNX: {} -> {}", input_path.display(), output_path.display());
+        info!(
+            "Converting GGUF to ONNX: {} -> {}",
+            input_path.display(),
+            output_path.display()
+        );
 
         // Read GGUF file
         let gguf_file = self.read_gguf_file(input_path).await?;
@@ -820,7 +885,9 @@ impl ModelConverter {
         let architecture = self.extract_model_architecture(&gguf_file)?;
 
         // Create ONNX model structure
-        let onnx_tensors = self.convert_gguf_tensors_to_onnx(&gguf_file, input_path).await?;
+        let onnx_tensors = self
+            .convert_gguf_tensors_to_onnx(&gguf_file, input_path)
+            .await?;
 
         // Build ONNX computational graph
         let onnx_graph = self.build_onnx_graph(&architecture, &onnx_tensors)?;
@@ -830,17 +897,39 @@ impl ModelConverter {
 
         warnings.push("GGUF to ONNX conversion completed".to_string());
         if architecture.model_type != "llama" {
-            warnings.push(format!("Architecture {} may have limited ONNX support", architecture.model_type));
+            warnings.push(format!(
+                "Architecture {} may have limited ONNX support",
+                architecture.model_type
+            ));
         }
 
         Ok(warnings)
     }
 
+    // Stub GGUF to ONNX conversion when ONNX feature is disabled
+    #[cfg(not(feature = "onnx"))]
+    async fn convert_gguf_to_onnx(
+        &self,
+        _input_path: &Path,
+        _output_path: &Path,
+    ) -> Result<Vec<String>> {
+        Err(anyhow::anyhow!("ONNX support not enabled. Compile with --features onnx"))
+    }
+
     // Real ONNX to GGUF conversion
-    async fn convert_onnx_to_gguf(&self, input_path: &Path, output_path: &Path) -> Result<Vec<String>> {
+    #[cfg(feature = "onnx")]
+    async fn convert_onnx_to_gguf(
+        &self,
+        input_path: &Path,
+        output_path: &Path,
+    ) -> Result<Vec<String>> {
         let mut warnings = Vec::new();
 
-        info!("Converting ONNX to GGUF: {} -> {}", input_path.display(), output_path.display());
+        info!(
+            "Converting ONNX to GGUF: {} -> {}",
+            input_path.display(),
+            output_path.display()
+        );
 
         // Read ONNX model
         let onnx_tensors = self.read_onnx_model(input_path).await?;
@@ -849,49 +938,81 @@ impl ModelConverter {
         let (gguf_file, tensor_data) = self.convert_onnx_tensors_to_gguf(&onnx_tensors).await?;
 
         // Write GGUF file
-        self.write_gguf_file(&gguf_file, output_path, &tensor_data).await?;
+        self.write_gguf_file(&gguf_file, output_path, &tensor_data)
+            .await?;
 
         warnings.push("ONNX to GGUF conversion completed".to_string());
         Ok(warnings)
     }
 
+    // Stub ONNX to GGUF conversion when ONNX feature is disabled
+    #[cfg(not(feature = "onnx"))]
+    async fn convert_onnx_to_gguf(
+        &self,
+        _input_path: &Path,
+        _output_path: &Path,
+    ) -> Result<Vec<String>> {
+        Err(anyhow::anyhow!("ONNX support not enabled. Compile with --features onnx"))
+    }
+
     // Real PyTorch to GGUF conversion
     #[allow(unused_variables)]
-    async fn convert_pytorch_to_gguf(&self, input_path: &Path, output_path: &Path) -> Result<Vec<String>> {
-        #[cfg(feature = "pytorch")]
+    async fn convert_pytorch_to_gguf(
+        &self,
+        input_path: &Path,
+        output_path: &Path,
+    ) -> Result<Vec<String>> {
+        // #[cfg(feature = "pytorch")]
+        // {
+        //     let mut warnings = Vec::new();
+        //
+        //     info!(
+        //         "Converting PyTorch to GGUF: {} -> {}",
+        //         input_path.display(),
+        //         output_path.display()
+        //     );
+        //
+        //     // Load PyTorch model
+        //     let device = TchDevice::Cpu;
+        //     let pytorch_tensors = self.load_pytorch_model(input_path, device)?;
+        //
+        //     // Convert to GGUF format
+        //     let (gguf_file, tensor_data) = self
+        //         .convert_pytorch_tensors_to_gguf(&pytorch_tensors)
+        //         .await?;
+        //
+        //     // Write GGUF file
+        //     self.write_gguf_file(&gguf_file, output_path, &tensor_data)
+        //         .await?;
+        //
+        //     warnings.push("PyTorch to GGUF conversion completed".to_string());
+        //     Ok(warnings)
+        // }
+
+        // #[cfg(not(feature = "pytorch"))]
         {
-            let mut warnings = Vec::new();
-
-            info!("Converting PyTorch to GGUF: {} -> {}", input_path.display(), output_path.display());
-
-            // Load PyTorch model
-            let device = TchDevice::Cpu;
-            let pytorch_tensors = self.load_pytorch_model(input_path, device)?;
-
-            // Convert to GGUF format
-            let (gguf_file, tensor_data) = self.convert_pytorch_tensors_to_gguf(&pytorch_tensors).await?;
-
-            // Write GGUF file
-            self.write_gguf_file(&gguf_file, output_path, &tensor_data).await?;
-
-            warnings.push("PyTorch to GGUF conversion completed".to_string());
-            Ok(warnings)
-        }
-
-        #[cfg(not(feature = "pytorch"))]
-        {
-            Err(anyhow!("PyTorch support not enabled. Compile with --features pytorch"))
+            Err(anyhow!(
+                "PyTorch support not enabled. Compile with --features pytorch"
+            ))
         }
     }
 
     // Real PyTorch to ONNX conversion
     #[allow(unused_variables)]
-    async fn convert_pytorch_to_onnx(&self, input_path: &Path, output_path: &Path) -> Result<Vec<String>> {
-        #[cfg(feature = "pytorch")]
+    async fn convert_pytorch_to_onnx(
+        &self,
+        input_path: &Path,
+        output_path: &Path,
+    ) -> Result<Vec<String>> {
+        #[cfg(all(feature = "pytorch", feature = "onnx"))]
         {
             let mut warnings = Vec::new();
 
-            info!("Converting PyTorch to ONNX: {} -> {}", input_path.display(), output_path.display());
+            info!(
+                "Converting PyTorch to ONNX: {} -> {}",
+                input_path.display(),
+                output_path.display()
+            );
 
             // Load PyTorch model
             let device = TchDevice::Cpu;
@@ -911,37 +1032,59 @@ impl ModelConverter {
             Ok(warnings)
         }
 
-        #[cfg(not(feature = "pytorch"))]
+        #[cfg(not(all(feature = "pytorch", feature = "onnx")))]
         {
-            Err(anyhow!("PyTorch support not enabled. Compile with --features pytorch"))
+            Err(anyhow!(
+                "PyTorch to ONNX conversion requires both pytorch and onnx features. Compile with --features pytorch,onnx"
+            ))
         }
     }
 
     // SafeTensors to GGUF conversion
-    async fn convert_safetensors_to_gguf(&self, input_path: &Path, output_path: &Path) -> Result<Vec<String>> {
+    async fn convert_safetensors_to_gguf(
+        &self,
+        input_path: &Path,
+        output_path: &Path,
+    ) -> Result<Vec<String>> {
         let mut warnings = Vec::new();
 
-        info!("Converting SafeTensors to GGUF: {} -> {}", input_path.display(), output_path.display());
+        info!(
+            "Converting SafeTensors to GGUF: {} -> {}",
+            input_path.display(),
+            output_path.display()
+        );
 
         // Read SafeTensors file
         let file_content = async_fs::read(input_path).await?;
         let safetensors = SafeTensors::deserialize(&file_content)?;
 
         // Convert to GGUF format
-        let (gguf_file, tensor_data) = self.convert_safetensors_to_gguf_format(&safetensors).await?;
+        let (gguf_file, tensor_data) = self
+            .convert_safetensors_to_gguf_format(&safetensors)
+            .await?;
 
         // Write GGUF file
-        self.write_gguf_file(&gguf_file, output_path, &tensor_data).await?;
+        self.write_gguf_file(&gguf_file, output_path, &tensor_data)
+            .await?;
 
         warnings.push("SafeTensors to GGUF conversion completed".to_string());
         Ok(warnings)
     }
 
     // SafeTensors to ONNX conversion
-    async fn convert_safetensors_to_onnx(&self, input_path: &Path, output_path: &Path) -> Result<Vec<String>> {
+    #[cfg(feature = "onnx")]
+    async fn convert_safetensors_to_onnx(
+        &self,
+        input_path: &Path,
+        output_path: &Path,
+    ) -> Result<Vec<String>> {
         let mut warnings = Vec::new();
 
-        info!("Converting SafeTensors to ONNX: {} -> {}", input_path.display(), output_path.display());
+        info!(
+            "Converting SafeTensors to ONNX: {} -> {}",
+            input_path.display(),
+            output_path.display()
+        );
 
         // Read SafeTensors file
         let file_content = async_fs::read(input_path).await?;
@@ -959,6 +1102,16 @@ impl ModelConverter {
 
         warnings.push("SafeTensors to ONNX conversion completed".to_string());
         Ok(warnings)
+    }
+
+    // Stub SafeTensors to ONNX conversion when ONNX feature is disabled
+    #[cfg(not(feature = "onnx"))]
+    async fn convert_safetensors_to_onnx(
+        &self,
+        _input_path: &Path,
+        _output_path: &Path,
+    ) -> Result<Vec<String>> {
+        Err(anyhow::anyhow!("ONNX support not enabled. Compile with --features onnx"))
     }
 
     // Helper functions for architecture extraction
@@ -993,63 +1146,108 @@ impl ModelConverter {
                 "llama.vocab_size" | "gpt_neox.vocab_size" => {
                     if value.data.len() >= 8 {
                         architecture.vocab_size = Some(u64::from_le_bytes([
-                            value.data[0], value.data[1], value.data[2], value.data[3],
-                            value.data[4], value.data[5], value.data[6], value.data[7],
+                            value.data[0],
+                            value.data[1],
+                            value.data[2],
+                            value.data[3],
+                            value.data[4],
+                            value.data[5],
+                            value.data[6],
+                            value.data[7],
                         ]));
                     }
                 }
                 "llama.embedding_length" | "gpt_neox.n_embd" => {
                     if value.data.len() >= 8 {
                         architecture.hidden_size = Some(u64::from_le_bytes([
-                            value.data[0], value.data[1], value.data[2], value.data[3],
-                            value.data[4], value.data[5], value.data[6], value.data[7],
+                            value.data[0],
+                            value.data[1],
+                            value.data[2],
+                            value.data[3],
+                            value.data[4],
+                            value.data[5],
+                            value.data[6],
+                            value.data[7],
                         ]));
                     }
                 }
                 "llama.feed_forward_length" | "gpt_neox.n_inner" => {
                     if value.data.len() >= 8 {
                         architecture.intermediate_size = Some(u64::from_le_bytes([
-                            value.data[0], value.data[1], value.data[2], value.data[3],
-                            value.data[4], value.data[5], value.data[6], value.data[7],
+                            value.data[0],
+                            value.data[1],
+                            value.data[2],
+                            value.data[3],
+                            value.data[4],
+                            value.data[5],
+                            value.data[6],
+                            value.data[7],
                         ]));
                     }
                 }
                 "llama.attention.head_count" | "gpt_neox.n_head" => {
                     if value.data.len() >= 8 {
                         architecture.num_attention_heads = Some(u64::from_le_bytes([
-                            value.data[0], value.data[1], value.data[2], value.data[3],
-                            value.data[4], value.data[5], value.data[6], value.data[7],
+                            value.data[0],
+                            value.data[1],
+                            value.data[2],
+                            value.data[3],
+                            value.data[4],
+                            value.data[5],
+                            value.data[6],
+                            value.data[7],
                         ]));
                     }
                 }
                 "llama.attention.head_count_kv" => {
                     if value.data.len() >= 8 {
                         architecture.num_key_value_heads = Some(u64::from_le_bytes([
-                            value.data[0], value.data[1], value.data[2], value.data[3],
-                            value.data[4], value.data[5], value.data[6], value.data[7],
+                            value.data[0],
+                            value.data[1],
+                            value.data[2],
+                            value.data[3],
+                            value.data[4],
+                            value.data[5],
+                            value.data[6],
+                            value.data[7],
                         ]));
                     }
                 }
                 "llama.block_count" | "gpt_neox.n_layer" => {
                     if value.data.len() >= 8 {
                         architecture.num_layers = Some(u64::from_le_bytes([
-                            value.data[0], value.data[1], value.data[2], value.data[3],
-                            value.data[4], value.data[5], value.data[6], value.data[7],
+                            value.data[0],
+                            value.data[1],
+                            value.data[2],
+                            value.data[3],
+                            value.data[4],
+                            value.data[5],
+                            value.data[6],
+                            value.data[7],
                         ]));
                     }
                 }
                 "llama.context_length" | "gpt_neox.n_ctx" => {
                     if value.data.len() >= 8 {
                         architecture.context_length = Some(u64::from_le_bytes([
-                            value.data[0], value.data[1], value.data[2], value.data[3],
-                            value.data[4], value.data[5], value.data[6], value.data[7],
+                            value.data[0],
+                            value.data[1],
+                            value.data[2],
+                            value.data[3],
+                            value.data[4],
+                            value.data[5],
+                            value.data[6],
+                            value.data[7],
                         ]));
                     }
                 }
                 "llama.rope.freq_base" => {
                     if value.data.len() >= 4 {
                         architecture.rope_freq_base = Some(f32::from_le_bytes([
-                            value.data[0], value.data[1], value.data[2], value.data[3],
+                            value.data[0],
+                            value.data[1],
+                            value.data[2],
+                            value.data[3],
                         ]));
                     }
                 }
@@ -1063,7 +1261,8 @@ impl ModelConverter {
     // Implementation continued in next chunk due to length...
 
     fn detect_model_format(&self, path: &Path) -> Result<ModelFormat> {
-        let extension = path.extension()
+        let extension = path
+            .extension()
             .and_then(|ext| ext.to_str())
             .unwrap_or("")
             .to_lowercase();
@@ -1079,11 +1278,19 @@ impl ModelConverter {
     }
 
     fn formats_compatible(&self, input: &ModelFormat, output: &ModelFormat) -> bool {
-        matches!((input, output), (ModelFormat::Gguf, ModelFormat::Gguf) | (ModelFormat::Onnx, ModelFormat::Onnx))
+        matches!(
+            (input, output),
+            (ModelFormat::Gguf, ModelFormat::Gguf) | (ModelFormat::Onnx, ModelFormat::Onnx)
+        )
     }
 
     // ONNX conversion helper functions
-    async fn convert_gguf_tensors_to_onnx(&self, gguf_file: &GgufFile, input_path: &Path) -> Result<Vec<OnnxTensorInfo>> {
+    #[cfg(feature = "onnx")]
+    async fn convert_gguf_tensors_to_onnx(
+        &self,
+        gguf_file: &GgufFile,
+        input_path: &Path,
+    ) -> Result<Vec<OnnxTensorInfo>> {
         let mut onnx_tensors = Vec::new();
 
         // Read tensor data
@@ -1095,14 +1302,19 @@ impl ModelConverter {
             let tensor_offset = gguf_file.tensor_data_offset + tensor.offset;
 
             if tensor_offset as usize + tensor_size <= mmap.len() {
-                let tensor_data = &mmap[tensor_offset as usize..(tensor_offset as usize + tensor_size)];
+                let tensor_data =
+                    &mmap[tensor_offset as usize..(tensor_offset as usize + tensor_size)];
 
                 // Convert GGML type to ONNX type
                 let onnx_dtype = self.ggml_to_onnx_dtype(tensor.ggml_type)?;
                 let shape: Vec<i64> = tensor.dimensions.iter().map(|&d| d as i64).collect();
 
                 // Convert quantized data to float32 for ONNX compatibility
-                let converted_data = self.convert_ggml_data_to_float32(tensor_data, tensor.ggml_type, &tensor.dimensions)?;
+                let converted_data = self.convert_ggml_data_to_float32(
+                    tensor_data,
+                    tensor.ggml_type,
+                    &tensor.dimensions,
+                )?;
 
                 onnx_tensors.push(OnnxTensorInfo {
                     name: tensor.name.clone(),
@@ -1116,13 +1328,13 @@ impl ModelConverter {
         Ok(onnx_tensors)
     }
 
+    #[cfg(feature = "onnx")]
     async fn read_onnx_model(&self, path: &Path) -> Result<Vec<OnnxTensorInfo>> {
         info!("Reading ONNX model: {}", path.display());
 
         // Use ort to read ONNX model
         let env = Arc::new(Environment::builder().build()?);
-        let session = SessionBuilder::new(&env)?
-            .with_model_from_file(path)?;
+        let session = SessionBuilder::new(&env)?.with_model_from_file(path)?;
 
         let mut tensors = Vec::new();
 
@@ -1131,7 +1343,11 @@ impl ModelConverter {
             let tensor_info = OnnxTensorInfo {
                 name: input.name.clone(),
                 dtype: input.input_type,
-                shape: input.dimensions.iter().map(|&dim| dim.map(|d| d as i64).unwrap_or(-1)).collect(),
+                shape: input
+                    .dimensions
+                    .iter()
+                    .map(|&dim| dim.map(|d| d as i64).unwrap_or(-1))
+                    .collect(),
                 data: Vec::new(), // Will be filled by actual model data
             };
             tensors.push(tensor_info);
@@ -1143,7 +1359,11 @@ impl ModelConverter {
         Ok(tensors)
     }
 
-    async fn convert_onnx_tensors_to_gguf(&self, onnx_tensors: &[OnnxTensorInfo]) -> Result<(GgufFile, Vec<u8>)> {
+    #[cfg(feature = "onnx")]
+    async fn convert_onnx_tensors_to_gguf(
+        &self,
+        onnx_tensors: &[OnnxTensorInfo],
+    ) -> Result<(GgufFile, Vec<u8>)> {
         let mut metadata = HashMap::new();
         let mut tensors = Vec::new();
         let mut tensor_data = Vec::new();
@@ -1164,7 +1384,8 @@ impl ModelConverter {
             let dimensions: Vec<u64> = onnx_tensor.shape.iter().map(|&d| d as u64).collect();
 
             // Convert tensor data
-            let converted_data = self.convert_onnx_data_to_ggml(&onnx_tensor.data, onnx_tensor.dtype, ggml_type)?;
+            let converted_data =
+                self.convert_onnx_data_to_ggml(&onnx_tensor.data, onnx_tensor.dtype, ggml_type)?;
 
             tensors.push(GgufTensorInfo {
                 name: onnx_tensor.name.clone(),
@@ -1191,26 +1412,43 @@ impl ModelConverter {
         Ok((gguf_file, tensor_data))
     }
 
-    #[cfg(feature = "pytorch")]
-    fn load_pytorch_model(&self, path: &Path, device: TchDevice) -> Result<HashMap<String, TchTensor>> {
-        info!("Loading PyTorch model: {}", path.display());
+    #[cfg(not(feature = "onnx"))]
+    async fn read_onnx_model(&self, _path: &Path) -> Result<Vec<OnnxTensorInfo>> {
+        Err(anyhow::anyhow!("ONNX support not enabled. Compile with --features onnx"))
+    }
 
-        let vs = nn::VarStore::new(device);
-        let mut tensors = HashMap::new();
-
-        // Load PyTorch state dict
-        vs.load(path)?;
-
-        // Extract tensors from the VarStore
-        for (name, tensor) in vs.variables() {
-            tensors.insert(name, tensor);
-        }
-
-        Ok(tensors)
+    #[cfg(not(feature = "onnx"))]
+    async fn convert_onnx_tensors_to_gguf(&self, _tensors: &[OnnxTensorInfo]) -> Result<(GgufFile, Vec<u8>)> {
+        Err(anyhow::anyhow!("ONNX support not enabled. Compile with --features onnx"))
     }
 
     #[cfg(feature = "pytorch")]
-    async fn convert_pytorch_tensors_to_gguf(&self, pytorch_tensors: &HashMap<String, TchTensor>) -> Result<(GgufFile, Vec<u8>)> {
+    // fn load_pytorch_model(
+    //     &self,
+    //     path: &Path,
+    //     device: TchDevice,
+    // ) -> Result<HashMap<String, TchTensor>> {
+    //     info!("Loading PyTorch model: {}", path.display());
+    //
+    //     let vs = nn::VarStore::new(device);
+    //     let mut tensors = HashMap::new();
+    //
+    //     // Load PyTorch state dict
+    //     vs.load(path)?;
+    //
+    //     // Extract tensors from the VarStore
+    //     for (name, tensor) in vs.variables() {
+    //         tensors.insert(name, tensor);
+    //     }
+    //
+    //     Ok(tensors)
+    // }
+
+    #[cfg(feature = "pytorch")]
+    async fn convert_pytorch_tensors_to_gguf(
+        &self,
+        pytorch_tensors: &HashMap<String, TchTensor>,
+    ) -> Result<(GgufFile, Vec<u8>)> {
         let mut metadata = HashMap::new();
         let mut tensors = Vec::new();
         let mut tensor_data = Vec::new();
@@ -1266,7 +1504,10 @@ impl ModelConverter {
     }
 
     #[cfg(feature = "pytorch")]
-    fn convert_pytorch_tensors_to_onnx(&self, pytorch_tensors: &HashMap<String, TchTensor>) -> Result<Vec<OnnxTensorInfo>> {
+    fn convert_pytorch_tensors_to_onnx(
+        &self,
+        pytorch_tensors: &HashMap<String, TchTensor>,
+    ) -> Result<Vec<OnnxTensorInfo>> {
         let mut onnx_tensors = Vec::new();
 
         for (name, tensor) in pytorch_tensors {
@@ -1295,7 +1536,10 @@ impl ModelConverter {
     }
 
     #[cfg(feature = "pytorch")]
-    fn infer_architecture_from_pytorch(&self, pytorch_tensors: &HashMap<String, TchTensor>) -> Result<ModelArchitecture> {
+    fn infer_architecture_from_pytorch(
+        &self,
+        pytorch_tensors: &HashMap<String, TchTensor>,
+    ) -> Result<ModelArchitecture> {
         let mut architecture = ModelArchitecture {
             model_type: "transformer".to_string(),
             vocab_size: None,
@@ -1344,7 +1588,10 @@ impl ModelConverter {
         Ok(architecture)
     }
 
-    async fn convert_safetensors_to_gguf_format(&self, safetensors: &SafeTensors<'_>) -> Result<(GgufFile, Vec<u8>)> {
+    async fn convert_safetensors_to_gguf_format(
+        &self,
+        safetensors: &SafeTensors<'_>,
+    ) -> Result<(GgufFile, Vec<u8>)> {
         let mut metadata = HashMap::new();
         let mut tensors = Vec::new();
         let mut tensor_data = Vec::new();
@@ -1395,7 +1642,11 @@ impl ModelConverter {
         Ok((gguf_file, tensor_data))
     }
 
-    fn convert_safetensors_to_onnx_tensors(&self, safetensors: &SafeTensors) -> Result<Vec<OnnxTensorInfo>> {
+    #[cfg(feature = "onnx")]
+    fn convert_safetensors_to_onnx_tensors(
+        &self,
+        safetensors: &SafeTensors,
+    ) -> Result<Vec<OnnxTensorInfo>> {
         let mut onnx_tensors = Vec::new();
 
         for (name, tensor_view) in safetensors.tensors() {
@@ -1419,7 +1670,10 @@ impl ModelConverter {
         Ok(onnx_tensors)
     }
 
-    fn infer_architecture_from_safetensors(&self, safetensors: &SafeTensors) -> Result<ModelArchitecture> {
+    fn infer_architecture_from_safetensors(
+        &self,
+        safetensors: &SafeTensors,
+    ) -> Result<ModelArchitecture> {
         let mut architecture = ModelArchitecture {
             model_type: "transformer".to_string(),
             vocab_size: None,
@@ -1469,6 +1723,7 @@ impl ModelConverter {
     }
 
     // Data type conversion functions
+    #[cfg(feature = "onnx")]
     fn ggml_to_onnx_dtype(&self, ggml_type: GgmlType) -> Result<TensorElementDataType> {
         match ggml_type {
             GgmlType::F32 => Ok(TensorElementDataType::Float32),
@@ -1485,6 +1740,7 @@ impl ModelConverter {
         }
     }
 
+    #[cfg(feature = "onnx")]
     fn onnx_to_ggml_dtype(&self, onnx_type: TensorElementDataType) -> Result<GgmlType> {
         match onnx_type {
             TensorElementDataType::Float32 => Ok(GgmlType::F32),
@@ -1507,10 +1763,14 @@ impl ModelConverter {
             Dtype::I32 => Ok(GgmlType::I32),
             Dtype::I64 => Ok(GgmlType::I64),
             Dtype::F64 => Ok(GgmlType::F64),
-            _ => Err(anyhow!("Unsupported SafeTensors data type: {:?}", safetensors_type)),
+            _ => Err(anyhow!(
+                "Unsupported SafeTensors data type: {:?}",
+                safetensors_type
+            )),
         }
     }
 
+    #[cfg(feature = "onnx")]
     fn safetensors_to_onnx_dtype(&self, safetensors_type: Dtype) -> Result<TensorElementDataType> {
         match safetensors_type {
             Dtype::F32 => Ok(TensorElementDataType::Float32),
@@ -1520,12 +1780,20 @@ impl ModelConverter {
             Dtype::I32 => Ok(TensorElementDataType::Int32),
             Dtype::I64 => Ok(TensorElementDataType::Int64),
             Dtype::F64 => Ok(TensorElementDataType::Float64),
-            _ => Err(anyhow!("Unsupported SafeTensors data type: {:?}", safetensors_type)),
+            _ => Err(anyhow!(
+                "Unsupported SafeTensors data type: {:?}",
+                safetensors_type
+            )),
         }
     }
 
     // Tensor data conversion functions
-    fn convert_ggml_data_to_float32(&self, data: &[u8], ggml_type: GgmlType, dimensions: &[u64]) -> Result<Vec<u8>> {
+    fn convert_ggml_data_to_float32(
+        &self,
+        data: &[u8],
+        ggml_type: GgmlType,
+        dimensions: &[u64],
+    ) -> Result<Vec<u8>> {
         let total_elements: usize = dimensions.iter().product::<u64>() as usize;
         let mut float_data = Vec::new();
 
@@ -1566,7 +1834,10 @@ impl ModelConverter {
             }
             _ => {
                 // For other quantized types, use a simplified conversion
-                warn!("Simplified conversion for {:?}, may not be accurate", ggml_type);
+                warn!(
+                    "Simplified conversion for {:?}, may not be accurate",
+                    ggml_type
+                );
                 for _ in 0..total_elements {
                     float_data.extend_from_slice(&0.0f32.to_le_bytes());
                 }
@@ -1576,11 +1847,15 @@ impl ModelConverter {
         Ok(float_data)
     }
 
-    fn convert_onnx_data_to_ggml(&self, data: &[u8], onnx_type: TensorElementDataType, ggml_type: GgmlType) -> Result<Vec<u8>> {
+    #[cfg(feature = "onnx")]
+    fn convert_onnx_data_to_ggml(
+        &self,
+        data: &[u8],
+        onnx_type: TensorElementDataType,
+        ggml_type: GgmlType,
+    ) -> Result<Vec<u8>> {
         match (onnx_type, ggml_type) {
-            (TensorElementDataType::Float32, GgmlType::F32) => {
-                Ok(data.to_vec())
-            }
+            (TensorElementDataType::Float32, GgmlType::F32) => Ok(data.to_vec()),
             (TensorElementDataType::Float32, GgmlType::F16) => {
                 let mut f16_data = Vec::new();
                 for chunk in data.chunks_exact(4) {
@@ -1621,7 +1896,12 @@ impl ModelConverter {
     }
 
     // Placeholder implementations for ONNX graph building and model writing
-    fn build_onnx_graph(&self, _architecture: &ModelArchitecture, _tensors: &[OnnxTensorInfo]) -> Result<Vec<u8>> {
+    #[cfg(feature = "onnx")]
+    fn build_onnx_graph(
+        &self,
+        _architecture: &ModelArchitecture,
+        _tensors: &[OnnxTensorInfo],
+    ) -> Result<Vec<u8>> {
         // This would be a complex implementation that builds an ONNX computational graph
         // For now, return a basic ONNX model structure
         warn!("ONNX graph building is simplified - full implementation needed for production use");
@@ -1635,11 +1915,13 @@ impl ModelConverter {
         Ok(onnx_data)
     }
 
+    #[cfg(feature = "onnx")]
     async fn write_onnx_model(&self, path: &Path, model_data: &[u8]) -> Result<()> {
         info!("Writing ONNX model: {}", path.display());
         async_fs::write(path, model_data).await?;
         Ok(())
     }
+
 
     // Real quantization and optimization implementations
     pub async fn quantize_model(
@@ -1652,27 +1934,40 @@ impl ModelConverter {
         let mut warnings = Vec::new();
         let mut errors = Vec::new();
 
-        info!("Starting model quantization: {} -> {} ({:?})",
-              input_path.display(), output_path.display(), quantization_type);
+        info!(
+            "Starting model quantization: {} -> {} ({:?})",
+            input_path.display(),
+            output_path.display(),
+            quantization_type
+        );
 
         let input_size = async_fs::metadata(input_path).await?.len();
         let model_format = self.detect_model_format(input_path)?;
 
         match model_format {
             ModelFormat::Gguf => {
-                match self.quantize_gguf_model_real(input_path, output_path, &quantization_type).await {
+                match self
+                    .quantize_gguf_model_real(input_path, output_path, &quantization_type)
+                    .await
+                {
                     Ok(mut quant_warnings) => warnings.append(&mut quant_warnings),
                     Err(e) => errors.push(format!("GGUF quantization failed: {}", e)),
                 }
             }
             ModelFormat::Onnx => {
-                match self.quantize_onnx_model_real(input_path, output_path, &quantization_type).await {
+                match self
+                    .quantize_onnx_model_real(input_path, output_path, &quantization_type)
+                    .await
+                {
                     Ok(mut quant_warnings) => warnings.append(&mut quant_warnings),
                     Err(e) => errors.push(format!("ONNX quantization failed: {}", e)),
                 }
             }
             _ => {
-                errors.push(format!("Quantization not supported for format: {:?}", model_format));
+                errors.push(format!(
+                    "Quantization not supported for format: {:?}",
+                    model_format
+                ));
             }
         }
 
@@ -1688,7 +1983,11 @@ impl ModelConverter {
             output_path: output_path.to_path_buf(),
             input_size,
             output_size,
-            compression_ratio: if output_size > 0 { input_size as f32 / output_size as f32 } else { 0.0 },
+            compression_ratio: if output_size > 0 {
+                input_size as f32 / output_size as f32
+            } else {
+                0.0
+            },
             conversion_time: start_time.elapsed(),
             warnings,
             errors,
@@ -1696,7 +1995,12 @@ impl ModelConverter {
         })
     }
 
-    async fn quantize_gguf_model_real(&self, input_path: &Path, output_path: &Path, quantization_type: &QuantizationType) -> Result<Vec<String>> {
+    async fn quantize_gguf_model_real(
+        &self,
+        input_path: &Path,
+        output_path: &Path,
+        quantization_type: &QuantizationType,
+    ) -> Result<Vec<String>> {
         let mut warnings = Vec::new();
 
         info!("Quantizing GGUF model to {:?}", quantization_type);
@@ -1717,7 +2021,8 @@ impl ModelConverter {
             let tensor_offset = gguf_file.tensor_data_offset + tensor.offset;
 
             if tensor_offset as usize + tensor_size <= mmap.len() {
-                let tensor_data = &mmap[tensor_offset as usize..(tensor_offset as usize + tensor_size)];
+                let tensor_data =
+                    &mmap[tensor_offset as usize..(tensor_offset as usize + tensor_size)];
 
                 // Quantize the tensor data
                 let quantized_data = self.quantize_tensor_data(
@@ -1753,14 +2058,25 @@ impl ModelConverter {
         };
 
         // Write the quantized GGUF file
-        self.write_gguf_file(&new_gguf_file, output_path, &quantized_tensor_data).await?;
+        self.write_gguf_file(&new_gguf_file, output_path, &quantized_tensor_data)
+            .await?;
 
-        warnings.push(format!("Applied {:?} quantization to {} tensors", quantization_type, gguf_file.tensors.len()));
+        warnings.push(format!(
+            "Applied {:?} quantization to {} tensors",
+            quantization_type,
+            gguf_file.tensors.len()
+        ));
 
         Ok(warnings)
     }
 
-    async fn quantize_onnx_model_real(&self, input_path: &Path, output_path: &Path, quantization_type: &QuantizationType) -> Result<Vec<String>> {
+    #[cfg(feature = "onnx")]
+    async fn quantize_onnx_model_real(
+        &self,
+        input_path: &Path,
+        output_path: &Path,
+        quantization_type: &QuantizationType,
+    ) -> Result<Vec<String>> {
         let mut warnings = Vec::new();
 
         info!("Quantizing ONNX model to {:?}", quantization_type);
@@ -1771,39 +2087,51 @@ impl ModelConverter {
         let onnx_tensors = self.read_onnx_model(input_path).await?;
 
         // Apply quantization to tensor data (simplified)
-        let quantized_tensors: Result<Vec<_>> = onnx_tensors.into_iter().map(|mut tensor| {
-            match quantization_type {
-                QuantizationType::Int8 => {
-                    tensor.dtype = TensorElementDataType::Int8;
-                    // Convert data (simplified - real implementation would use proper quantization)
-                    if !tensor.data.is_empty() {
-                        let float_data = tensor.data.chunks_exact(4)
-                            .map(|chunk| f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]))
-                            .collect::<Vec<f32>>();
+        let quantized_tensors: Result<Vec<_>> = onnx_tensors
+            .into_iter()
+            .map(|mut tensor| {
+                match quantization_type {
+                    QuantizationType::Int8 => {
+                        tensor.dtype = TensorElementDataType::Int8;
+                        // Convert data (simplified - real implementation would use proper quantization)
+                        if !tensor.data.is_empty() {
+                            let float_data = tensor
+                                .data
+                                .chunks_exact(4)
+                                .map(|chunk| {
+                                    f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]])
+                                })
+                                .collect::<Vec<f32>>();
 
-                        tensor.data = float_data.into_iter()
-                            .map(|f| (f * 127.0).clamp(-128.0, 127.0) as i8 as u8)
-                            .collect();
-                    }
-                }
-                QuantizationType::F16 => {
-                    tensor.dtype = TensorElementDataType::Float16;
-                    if !tensor.data.is_empty() {
-                        let mut f16_data = Vec::new();
-                        for chunk in tensor.data.chunks_exact(4) {
-                            let f32_val = f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
-                            let f16_val = f16::from_f32(f32_val);
-                            f16_data.extend_from_slice(&f16_val.to_le_bytes());
+                            tensor.data = float_data
+                                .into_iter()
+                                .map(|f| (f * 127.0).clamp(-128.0, 127.0) as i8 as u8)
+                                .collect();
                         }
-                        tensor.data = f16_data;
+                    }
+                    QuantizationType::F16 => {
+                        tensor.dtype = TensorElementDataType::Float16;
+                        if !tensor.data.is_empty() {
+                            let mut f16_data = Vec::new();
+                            for chunk in tensor.data.chunks_exact(4) {
+                                let f32_val =
+                                    f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
+                                let f16_val = f16::from_f32(f32_val);
+                                f16_data.extend_from_slice(&f16_val.to_le_bytes());
+                            }
+                            tensor.data = f16_data;
+                        }
+                    }
+                    _ => {
+                        warnings.push(format!(
+                            "Quantization type {:?} not fully supported for ONNX",
+                            quantization_type
+                        ));
                     }
                 }
-                _ => {
-                    warnings.push(format!("Quantization type {:?} not fully supported for ONNX", quantization_type));
-                }
-            }
-            Ok(tensor)
-        }).collect();
+                Ok(tensor)
+            })
+            .collect();
 
         let quantized_tensors = quantized_tensors?;
 
@@ -1830,12 +2158,32 @@ impl ModelConverter {
         let onnx_graph = self.build_onnx_graph(&architecture, &quantized_tensors)?;
         self.write_onnx_model(output_path, &onnx_graph).await?;
 
-        warnings.push(format!("Applied {:?} quantization to ONNX model", quantization_type));
+        warnings.push(format!(
+            "Applied {:?} quantization to ONNX model",
+            quantization_type
+        ));
 
         Ok(warnings)
     }
 
-    fn quantize_tensor_data(&self, data: &[u8], source_type: GgmlType, target_type: GgmlType, dimensions: &[u64]) -> Result<Vec<u8>> {
+    // Stub ONNX quantization when ONNX feature is disabled
+    #[cfg(not(feature = "onnx"))]
+    async fn quantize_onnx_model_real(
+        &self,
+        _input_path: &Path,
+        _output_path: &Path,
+        _quantization_type: &QuantizationType,
+    ) -> Result<Vec<String>> {
+        Err(anyhow::anyhow!("ONNX support not enabled. Compile with --features onnx"))
+    }
+
+    fn quantize_tensor_data(
+        &self,
+        data: &[u8],
+        source_type: GgmlType,
+        target_type: GgmlType,
+        dimensions: &[u64],
+    ) -> Result<Vec<u8>> {
         if source_type == target_type {
             return Ok(data.to_vec());
         }
@@ -1865,7 +2213,10 @@ impl ModelConverter {
                 self.quantize_f32_to_q4_0(&f32_data, dimensions)
             }
             _ => {
-                warn!("Quantization from {:?} to {:?} not implemented", source_type, target_type);
+                warn!(
+                    "Quantization from {:?} to {:?} not implemented",
+                    source_type, target_type
+                );
                 Ok(data.to_vec())
             }
         }
@@ -1906,7 +2257,9 @@ impl ModelConverter {
             // Quantize and pack values
             let mut packed_data = [0u8; 16];
             for (i, &value) in values.iter().enumerate() {
-                if i >= 32 { break; }
+                if i >= 32 {
+                    break;
+                }
 
                 let quantized = if scale > 0.0 {
                     ((value / scale).round() as i8).clamp(-8, 7) + 8
@@ -1921,7 +2274,8 @@ impl ModelConverter {
                     if nibble_idx == 0 {
                         packed_data[byte_idx] = (packed_data[byte_idx] & 0xF0) | (quantized & 0x0F);
                     } else {
-                        packed_data[byte_idx] = (packed_data[byte_idx] & 0x0F) | ((quantized & 0x0F) << 4);
+                        packed_data[byte_idx] =
+                            (packed_data[byte_idx] & 0x0F) | ((quantized & 0x0F) << 4);
                     }
                 }
             }
@@ -1943,26 +2297,39 @@ impl ModelConverter {
         let mut warnings = Vec::new();
         let mut errors = Vec::new();
 
-        info!("Starting model optimization: {} -> {}", input_path.display(), output_path.display());
+        info!(
+            "Starting model optimization: {} -> {}",
+            input_path.display(),
+            output_path.display()
+        );
 
         let input_size = async_fs::metadata(input_path).await?.len();
         let model_format = self.detect_model_format(input_path)?;
 
         match model_format {
             ModelFormat::Gguf => {
-                match self.optimize_gguf_model_real(input_path, output_path, optimization_options).await {
+                match self
+                    .optimize_gguf_model_real(input_path, output_path, optimization_options)
+                    .await
+                {
                     Ok(mut opt_warnings) => warnings.append(&mut opt_warnings),
                     Err(e) => errors.push(format!("GGUF optimization failed: {}", e)),
                 }
             }
             ModelFormat::Onnx => {
-                match self.optimize_onnx_model_real(input_path, output_path, optimization_options).await {
+                match self
+                    .optimize_onnx_model_real(input_path, output_path, optimization_options)
+                    .await
+                {
                     Ok(mut opt_warnings) => warnings.append(&mut opt_warnings),
                     Err(e) => errors.push(format!("ONNX optimization failed: {}", e)),
                 }
             }
             _ => {
-                errors.push(format!("Optimization not supported for format: {:?}", model_format));
+                errors.push(format!(
+                    "Optimization not supported for format: {:?}",
+                    model_format
+                ));
             }
         }
 
@@ -1978,7 +2345,11 @@ impl ModelConverter {
             output_path: output_path.to_path_buf(),
             input_size,
             output_size,
-            compression_ratio: if output_size > 0 { input_size as f32 / output_size as f32 } else { 0.0 },
+            compression_ratio: if output_size > 0 {
+                input_size as f32 / output_size as f32
+            } else {
+                0.0
+            },
             conversion_time: start_time.elapsed(),
             warnings,
             errors,
@@ -1986,7 +2357,12 @@ impl ModelConverter {
         })
     }
 
-    async fn optimize_gguf_model_real(&self, input_path: &Path, output_path: &Path, options: &OptimizationOptions) -> Result<Vec<String>> {
+    async fn optimize_gguf_model_real(
+        &self,
+        input_path: &Path,
+        output_path: &Path,
+        options: &OptimizationOptions,
+    ) -> Result<Vec<String>> {
         let mut warnings = Vec::new();
 
         info!("Optimizing GGUF model with options: {:?}", options);
@@ -2007,7 +2383,8 @@ impl ModelConverter {
             let tensor_offset = gguf_file.tensor_data_offset + tensor.offset;
 
             if tensor_offset as usize + tensor_size <= mmap.len() {
-                let tensor_data = &mmap[tensor_offset as usize..(tensor_offset as usize + tensor_size)];
+                let tensor_data =
+                    &mmap[tensor_offset as usize..(tensor_offset as usize + tensor_size)];
 
                 // Apply optimizations
                 let mut optimized_data = tensor_data.to_vec();
@@ -2029,7 +2406,8 @@ impl ModelConverter {
 
         // Filter out unused tensors if requested
         if options.remove_unused_layers {
-            let (filtered_tensors, filtered_data) = self.remove_unused_tensors(optimized_tensors, optimized_tensor_data)?;
+            let (filtered_tensors, filtered_data) =
+                self.remove_unused_tensors(optimized_tensors, optimized_tensor_data)?;
             optimized_tensors = filtered_tensors;
             optimized_tensor_data = filtered_data;
             warnings.push("Removed unused tensor layers".to_string());
@@ -2048,14 +2426,21 @@ impl ModelConverter {
         };
 
         // Write optimized GGUF file
-        self.write_gguf_file(&optimized_gguf_file, output_path, &optimized_tensor_data).await?;
+        self.write_gguf_file(&optimized_gguf_file, output_path, &optimized_tensor_data)
+            .await?;
 
         warnings.push("GGUF model optimization completed".to_string());
 
         Ok(warnings)
     }
 
-    async fn optimize_onnx_model_real(&self, input_path: &Path, output_path: &Path, options: &OptimizationOptions) -> Result<Vec<String>> {
+    #[cfg(feature = "onnx")]
+    async fn optimize_onnx_model_real(
+        &self,
+        input_path: &Path,
+        output_path: &Path,
+        options: &OptimizationOptions,
+    ) -> Result<Vec<String>> {
         let mut warnings = Vec::new();
 
         info!("Optimizing ONNX model with options: {:?}", options);
@@ -2108,6 +2493,17 @@ impl ModelConverter {
         Ok(warnings)
     }
 
+    // Stub ONNX optimization when ONNX feature is disabled
+    #[cfg(not(feature = "onnx"))]
+    async fn optimize_onnx_model_real(
+        &self,
+        _input_path: &Path,
+        _output_path: &Path,
+        _options: &OptimizationOptions,
+    ) -> Result<Vec<String>> {
+        Err(anyhow::anyhow!("ONNX support not enabled. Compile with --features onnx"))
+    }
+
     fn optimize_tensor_memory(&self, data: &[u8], _tensor: &GgufTensorInfo) -> Result<Vec<u8>> {
         // Simple memory optimization: remove trailing zeros
         let mut optimized = data.to_vec();
@@ -2117,7 +2513,11 @@ impl ModelConverter {
         Ok(optimized)
     }
 
-    fn remove_unused_tensors(&self, tensors: Vec<GgufTensorInfo>, data: Vec<u8>) -> Result<(Vec<GgufTensorInfo>, Vec<u8>)> {
+    fn remove_unused_tensors(
+        &self,
+        tensors: Vec<GgufTensorInfo>,
+        data: Vec<u8>,
+    ) -> Result<(Vec<GgufTensorInfo>, Vec<u8>)> {
         // Simple heuristic: remove tensors with "unused" in name or very small size
         let mut filtered_tensors = Vec::new();
         let mut filtered_data = Vec::new();
@@ -2129,7 +2529,8 @@ impl ModelConverter {
 
                 // Extract tensor data from original data
                 if tensor.offset as usize + tensor_size <= data.len() {
-                    let tensor_data = &data[tensor.offset as usize..tensor.offset as usize + tensor_size];
+                    let tensor_data =
+                        &data[tensor.offset as usize..tensor.offset as usize + tensor_size];
 
                     let mut new_tensor = tensor;
                     new_tensor.offset = current_offset;
@@ -2144,7 +2545,11 @@ impl ModelConverter {
         Ok((filtered_tensors, filtered_data))
     }
 
-    async fn verify_converted_model(&self, output_path: &Path, config: &ConversionConfig) -> Result<bool> {
+    async fn verify_converted_model(
+        &self,
+        output_path: &Path,
+        config: &ConversionConfig,
+    ) -> Result<bool> {
         if !output_path.exists() {
             return Ok(false);
         }
@@ -2159,7 +2564,10 @@ impl ModelConverter {
         let actual_format = self.detect_model_format(output_path)?;
 
         if std::mem::discriminant(&actual_format) != std::mem::discriminant(expected_format) {
-            warn!("Output format mismatch: expected {:?}, got {:?}", expected_format, actual_format);
+            warn!(
+                "Output format mismatch: expected {:?}, got {:?}",
+                expected_format, actual_format
+            );
             return Ok(false);
         }
 
@@ -2177,21 +2585,31 @@ impl ModelConverter {
         file.read_exact(&mut buffer).await?;
 
         // Check GGUF magic bytes and version
-        Ok(buffer[0..4] == *b"GGUF" && u32::from_le_bytes([buffer[4], buffer[5], buffer[6], buffer[7]]) > 0)
+        Ok(buffer[0..4] == *b"GGUF"
+            && u32::from_le_bytes([buffer[4], buffer[5], buffer[6], buffer[7]]) > 0)
     }
 
+    #[cfg(feature = "onnx")]
     async fn verify_onnx_model(&self, path: &Path) -> Result<bool> {
         // Try to load the ONNX model to verify it's valid
-        let env = Arc::new(Environment::builder().build().map_err(|e| anyhow!("Failed to create ONNX environment: {}", e))?);
+        let env = Arc::new(
+            Environment::builder()
+                .build()
+                .map_err(|e| anyhow!("Failed to create ONNX environment: {}", e))?,
+        );
         match SessionBuilder::new(&env) {
-            Ok(builder) => {
-                match builder.with_model_from_file(path) {
-                    Ok(_) => Ok(true),
-                    Err(_) => Ok(false),
-                }
-            }
+            Ok(builder) => match builder.with_model_from_file(path) {
+                Ok(_) => Ok(true),
+                Err(_) => Ok(false),
+            },
             Err(_) => Ok(false),
         }
+    }
+
+    // Stub ONNX verification when ONNX feature is disabled
+    #[cfg(not(feature = "onnx"))]
+    async fn verify_onnx_model(&self, _path: &Path) -> Result<bool> {
+        Err(anyhow::anyhow!("ONNX support not enabled. Compile with --features onnx"))
     }
 
     // Batch conversion support
@@ -2205,7 +2623,9 @@ impl ModelConverter {
         let mut results = Vec::new();
 
         if !input_dir.exists() || !input_dir.is_dir() {
-            return Err(anyhow!("Input directory does not exist or is not a directory"));
+            return Err(anyhow!(
+                "Input directory does not exist or is not a directory"
+            ));
         }
 
         // Create output directory if it doesn't exist
@@ -2231,22 +2651,36 @@ impl ModelConverter {
                 // Check if it's a supported model file
                 if let Some(extension) = path.extension() {
                     let ext_str = extension.to_string_lossy().to_lowercase();
-                    if matches!(ext_str.as_str(), "gguf" | "onnx" | "pt" | "pth" | "safetensors") {
-                        let output_filename = format!("{}.{}",
-                                                     path.file_stem().unwrap().to_string_lossy(),
-                                                     self.get_extension_for_format(&conversion_config.output_format));
+                    if matches!(
+                        ext_str.as_str(),
+                        "gguf" | "onnx" | "pt" | "pth" | "safetensors"
+                    ) {
+                        let output_filename = format!(
+                            "{}.{}",
+                            path.file_stem().unwrap().to_string_lossy(),
+                            self.get_extension_for_format(&conversion_config.output_format)
+                        );
                         let output_path = output_dir.join(output_filename);
 
                         info!("Converting {} -> {}", path.display(), output_path.display());
 
-                        match self.convert_model(&path, &output_path, conversion_config).await {
+                        match self
+                            .convert_model(&path, &output_path, conversion_config)
+                            .await
+                        {
                             Ok(result) => {
                                 if result.success {
-                                    info!("Successfully converted {} (compression: {:.2}x)",
-                                          path.file_name().unwrap().to_string_lossy(), result.compression_ratio);
+                                    info!(
+                                        "Successfully converted {} (compression: {:.2}x)",
+                                        path.file_name().unwrap().to_string_lossy(),
+                                        result.compression_ratio
+                                    );
                                 } else {
-                                    warn!("Failed to convert {}: {:?}",
-                                          path.file_name().unwrap().to_string_lossy(), result.errors);
+                                    warn!(
+                                        "Failed to convert {}: {:?}",
+                                        path.file_name().unwrap().to_string_lossy(),
+                                        result.errors
+                                    );
                                 }
                                 results.push(result);
                             }
@@ -2259,9 +2693,11 @@ impl ModelConverter {
             }
         }
 
-        info!("Batch conversion completed: {}/{} models processed successfully",
-              results.iter().filter(|r| r.success).count(),
-              results.len());
+        info!(
+            "Batch conversion completed: {}/{} models processed successfully",
+            results.iter().filter(|r| r.success).count(),
+            results.len()
+        );
 
         Ok(results)
     }

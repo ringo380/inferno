@@ -10,10 +10,7 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::{
     path::Path,
-    sync::{
-        atomic::AtomicUsize,
-        Arc,
-    },
+    sync::{atomic::AtomicUsize, Arc},
     time::{Duration, Instant},
 };
 // use tokio::sync::Semaphore; // Reserved for future concurrent processing
@@ -115,9 +112,9 @@ impl BatchProcessor {
         inference_params: &InferenceParams,
     ) -> Result<BatchProgress> {
         let inputs = self.load_inputs(input_path).await?;
-        self.process_inputs(backend, inputs, output_path, inference_params).await
+        self.process_inputs(backend, inputs, output_path, inference_params)
+            .await
     }
-
 
     pub async fn process_inputs(
         &self,
@@ -132,7 +129,10 @@ impl BatchProcessor {
         }
 
         let total_items = inputs.len();
-        info!("Starting batch processing of {} items (sequential mode)", total_items);
+        info!(
+            "Starting batch processing of {} items (sequential mode)",
+            total_items
+        );
 
         let mut results = Vec::new();
         let start_time = chrono::Utc::now();
@@ -152,7 +152,8 @@ impl BatchProcessor {
                 "batch_model".to_string(),
                 self.config.timeout_seconds,
                 self.config.retry_attempts,
-            ).await;
+            )
+            .await;
 
             if result.error.is_none() {
                 completed += 1;
@@ -216,8 +217,10 @@ impl BatchProcessor {
         for attempt in 0..=retry_attempts {
             match tokio::time::timeout(
                 Duration::from_secs(timeout_seconds),
-                backend.infer(&input.content, params)
-            ).await {
+                backend.infer(&input.content, params),
+            )
+            .await
+            {
                 Ok(Ok(output)) => {
                     let duration = start_time.elapsed();
 
@@ -245,9 +248,14 @@ impl BatchProcessor {
                     };
                 }
                 Ok(Err(e)) => {
-                    warn!("Inference failed for item {}: {} (attempt {}/{})", input.id, e, attempt + 1, retry_attempts + 1);
+                    warn!(
+                        "Inference failed for item {}: {} (attempt {}/{})",
+                        input.id,
+                        e,
+                        attempt + 1,
+                        retry_attempts + 1
+                    );
                     if attempt == retry_attempts {
-
                         // Record failed metrics
                         if let Some(metrics) = &metrics {
                             let event = InferenceEvent {
@@ -274,7 +282,12 @@ impl BatchProcessor {
                     tokio::time::sleep(Duration::from_millis(1000 * (attempt + 1) as u64)).await;
                 }
                 Err(_) => {
-                    warn!("Timeout for item {} (attempt {}/{})", input.id, attempt + 1, retry_attempts + 1);
+                    warn!(
+                        "Timeout for item {} (attempt {}/{})",
+                        input.id,
+                        attempt + 1,
+                        retry_attempts + 1
+                    );
                     if attempt == retry_attempts {
                         return BatchResult {
                             id: input.id,
@@ -296,7 +309,10 @@ impl BatchProcessor {
 
     pub async fn load_inputs(&self, input_path: &Path) -> Result<Vec<BatchInput>> {
         let content = tokio::fs::read_to_string(input_path).await?;
-        let extension = input_path.extension().and_then(|s| s.to_str()).unwrap_or("");
+        let extension = input_path
+            .extension()
+            .and_then(|s| s.to_str())
+            .unwrap_or("");
 
         match extension.to_lowercase().as_str() {
             "json" => self.load_json_inputs(&content),
@@ -322,14 +338,18 @@ impl BatchProcessor {
                             });
                         }
                         serde_json::Value::Object(obj) => {
-                            let content = obj.get("content")
+                            let content = obj
+                                .get("content")
                                 .or_else(|| obj.get("text"))
                                 .or_else(|| obj.get("input"))
                                 .and_then(|v| v.as_str())
-                                .ok_or_else(|| anyhow::anyhow!("No content field found in JSON object"))?
+                                .ok_or_else(|| {
+                                    anyhow::anyhow!("No content field found in JSON object")
+                                })?
                                 .to_string();
 
-                            let id = obj.get("id")
+                            let id = obj
+                                .get("id")
                                 .and_then(|v| v.as_str())
                                 .unwrap_or(&format!("item_{}", i))
                                 .to_string();
@@ -365,14 +385,21 @@ impl BatchProcessor {
                     });
                 }
                 serde_json::Value::Object(obj) => {
-                    let content = obj.get("content")
+                    let content = obj
+                        .get("content")
                         .or_else(|| obj.get("text"))
                         .or_else(|| obj.get("input"))
                         .and_then(|v| v.as_str())
-                        .ok_or_else(|| anyhow::anyhow!("No content field found in JSONL object at line {}", i + 1))?
+                        .ok_or_else(|| {
+                            anyhow::anyhow!(
+                                "No content field found in JSONL object at line {}",
+                                i + 1
+                            )
+                        })?
                         .to_string();
 
-                    let id = obj.get("id")
+                    let id = obj
+                        .get("id")
                         .and_then(|v| v.as_str())
                         .unwrap_or(&format!("line_{}", i + 1))
                         .to_string();
@@ -397,7 +424,11 @@ impl BatchProcessor {
         self.load_delimited_inputs(content, '\t').await
     }
 
-    async fn load_delimited_inputs(&self, content: &str, delimiter: char) -> Result<Vec<BatchInput>> {
+    async fn load_delimited_inputs(
+        &self,
+        content: &str,
+        delimiter: char,
+    ) -> Result<Vec<BatchInput>> {
         let mut rdr = csv::ReaderBuilder::new()
             .delimiter(delimiter as u8)
             .from_reader(content.as_bytes());
@@ -409,10 +440,20 @@ impl BatchProcessor {
             let record = result?;
 
             // Look for content in common column names
-            let content = record.get(0)
-                .or_else(|| headers.iter().enumerate()
-                    .find(|(_, h)| matches!(h.to_lowercase().as_str(), "content" | "text" | "input" | "prompt"))
-                    .and_then(|(idx, _)| record.get(idx)))
+            let content = record
+                .get(0)
+                .or_else(|| {
+                    headers
+                        .iter()
+                        .enumerate()
+                        .find(|(_, h)| {
+                            matches!(
+                                h.to_lowercase().as_str(),
+                                "content" | "text" | "input" | "prompt"
+                            )
+                        })
+                        .and_then(|(idx, _)| record.get(idx))
+                })
                 .ok_or_else(|| anyhow::anyhow!("No content column found in CSV row {}", i + 1))?
                 .to_string();
 
@@ -420,11 +461,15 @@ impl BatchProcessor {
             let mut metadata = serde_json::Map::new();
             for (idx, value) in record.iter().enumerate() {
                 if let Some(header) = headers.get(idx) {
-                    metadata.insert(header.to_string(), serde_json::Value::String(value.to_string()));
+                    metadata.insert(
+                        header.to_string(),
+                        serde_json::Value::String(value.to_string()),
+                    );
                 }
             }
 
-            let id = metadata.get("id")
+            let id = metadata
+                .get("id")
                 .and_then(|v| v.as_str())
                 .unwrap_or(&format!("row_{}", i + 1))
                 .to_string();
@@ -460,23 +505,24 @@ impl BatchProcessor {
     }
 
     async fn save_checkpoint(&self, output_path: &Path, results: &[BatchResult]) -> Result<()> {
-        let checkpoint_path = output_path.with_extension(
-            format!("checkpoint.{}",
-                output_path.extension().and_then(|s| s.to_str()).unwrap_or("json"))
-        );
+        let checkpoint_path = output_path.with_extension(format!(
+            "checkpoint.{}",
+            output_path
+                .extension()
+                .and_then(|s| s.to_str())
+                .unwrap_or("json")
+        ));
         self.save_results(&checkpoint_path, results).await
     }
 
     async fn save_results(&self, output_path: &Path, results: &[BatchResult]) -> Result<()> {
         let content = match self.config.output_format {
             BatchOutputFormat::Json => serde_json::to_string_pretty(results)?,
-            BatchOutputFormat::JsonLines => {
-                results
-                    .iter()
-                    .map(|r| serde_json::to_string(r))
-                    .collect::<Result<Vec<_>, _>>()?
-                    .join("\n")
-            }
+            BatchOutputFormat::JsonLines => results
+                .iter()
+                .map(|r| serde_json::to_string(r))
+                .collect::<Result<Vec<_>, _>>()?
+                .join("\n"),
             BatchOutputFormat::Csv => self.results_to_csv(results)?,
             BatchOutputFormat::Tsv => self.results_to_tsv(results)?,
         };
@@ -490,8 +536,13 @@ impl BatchProcessor {
 
         // Write header
         wtr.write_record(&[
-            "id", "input", "output", "error", "duration_ms",
-            "tokens_generated", "timestamp"
+            "id",
+            "input",
+            "output",
+            "error",
+            "duration_ms",
+            "tokens_generated",
+            "timestamp",
         ])?;
 
         // Write data
@@ -502,7 +553,10 @@ impl BatchProcessor {
                 result.output.as_deref().unwrap_or(""),
                 &result.error.as_deref().unwrap_or(""),
                 &result.duration_ms.to_string(),
-                &result.tokens_generated.map(|t| t.to_string()).unwrap_or_default(),
+                &result
+                    .tokens_generated
+                    .map(|t| t.to_string())
+                    .unwrap_or_default(),
                 &result.timestamp.to_rfc3339(),
             ])?;
         }
@@ -518,8 +572,13 @@ impl BatchProcessor {
 
         // Write header
         wtr.write_record(&[
-            "id", "input", "output", "error", "duration_ms",
-            "tokens_generated", "timestamp"
+            "id",
+            "input",
+            "output",
+            "error",
+            "duration_ms",
+            "tokens_generated",
+            "timestamp",
         ])?;
 
         // Write data
@@ -530,7 +589,10 @@ impl BatchProcessor {
                 result.output.as_deref().unwrap_or(""),
                 &result.error.as_deref().unwrap_or(""),
                 &result.duration_ms.to_string(),
-                &result.tokens_generated.map(|t| t.to_string()).unwrap_or_default(),
+                &result
+                    .tokens_generated
+                    .map(|t| t.to_string())
+                    .unwrap_or_default(),
                 &result.timestamp.to_rfc3339(),
             ])?;
         }

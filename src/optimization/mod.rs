@@ -1,17 +1,17 @@
 // Optimization module for Inferno AI/ML platform
 // Provides comprehensive ML optimization techniques for 10x performance improvement
 
-pub mod quantization;
 pub mod batching;
-pub mod memory;
 pub mod hardware;
 pub mod inference;
+pub mod memory;
+pub mod quantization;
 
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use tokio::sync::RwLock;
 use std::sync::Arc;
+use tokio::sync::RwLock;
 
 /// Global optimization configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -67,7 +67,8 @@ impl OptimizationManager {
         let batcher = batching::DynamicBatcher::new(config.batching.clone()).await?;
         let memory_manager = memory::MemoryManager::new(config.memory.clone()).await?;
         let hardware_optimizer = hardware::HardwareOptimizer::new(config.hardware.clone()).await?;
-        let inference_optimizer = inference::InferenceOptimizer::new(config.inference.clone()).await?;
+        let inference_optimizer =
+            inference::InferenceOptimizer::new(config.inference.clone()).await?;
 
         Ok(Self {
             config,
@@ -81,20 +82,39 @@ impl OptimizationManager {
     }
 
     /// Apply all optimizations to a model
-    pub async fn optimize_model(&mut self, model_path: &str, target_format: &str) -> Result<String> {
-        tracing::info!("Starting comprehensive model optimization for {}", model_path);
+    pub async fn optimize_model(
+        &mut self,
+        model_path: &str,
+        target_format: &str,
+    ) -> Result<String> {
+        tracing::info!(
+            "Starting comprehensive model optimization for {}",
+            model_path
+        );
 
         // Step 1: Quantization
-        let quantized_path = self.quantizer.quantize_model(model_path, target_format).await?;
+        let quantized_path = self
+            .quantizer
+            .quantize_model(model_path, target_format)
+            .await?;
 
         // Step 2: Memory optimization
-        let memory_optimized = self.memory_manager.optimize_model_loading(&quantized_path).await?;
+        let memory_optimized = self
+            .memory_manager
+            .optimize_model_loading(&quantized_path)
+            .await?;
 
         // Step 3: Hardware-specific optimizations
-        let hardware_optimized = self.hardware_optimizer.optimize_for_hardware(&memory_optimized).await?;
+        let hardware_optimized = self
+            .hardware_optimizer
+            .optimize_for_hardware(&memory_optimized)
+            .await?;
 
         // Step 4: Inference optimizations
-        let final_optimized = self.inference_optimizer.optimize_model(&hardware_optimized).await?;
+        let final_optimized = self
+            .inference_optimizer
+            .optimize_model(&hardware_optimized)
+            .await?;
 
         // Update metrics
         self.update_optimization_metrics().await?;
@@ -132,14 +152,23 @@ impl OptimizationManager {
     }
 
     /// Enable/disable specific optimizations
-    pub async fn configure_optimization(&mut self, optimization_type: &str, enabled: bool) -> Result<()> {
+    pub async fn configure_optimization(
+        &mut self,
+        optimization_type: &str,
+        enabled: bool,
+    ) -> Result<()> {
         match optimization_type {
             "quantization" => self.config.quantization.enabled = enabled,
             "batching" => self.config.batching.enabled = enabled,
             "memory" => self.config.memory.enabled = enabled,
             "hardware" => self.config.hardware.enabled = enabled,
             "inference" => self.config.inference.enabled = enabled,
-            _ => return Err(anyhow::anyhow!("Unknown optimization type: {}", optimization_type)),
+            _ => {
+                return Err(anyhow::anyhow!(
+                    "Unknown optimization type: {}",
+                    optimization_type
+                ))
+            }
         }
 
         tracing::info!("Optimization '{}' set to: {}", optimization_type, enabled);
@@ -147,10 +176,17 @@ impl OptimizationManager {
     }
 
     /// Run optimization benchmark
-    pub async fn benchmark_optimizations(&self, model_path: &str, num_requests: usize) -> Result<HashMap<String, f64>> {
+    pub async fn benchmark_optimizations(
+        &self,
+        model_path: &str,
+        num_requests: usize,
+    ) -> Result<HashMap<String, f64>> {
         let mut results = HashMap::new();
 
-        tracing::info!("Running optimization benchmark with {} requests", num_requests);
+        tracing::info!(
+            "Running optimization benchmark with {} requests",
+            num_requests
+        );
 
         // Benchmark each optimization individually
         let baseline = self.benchmark_baseline(model_path, num_requests).await?;
@@ -162,13 +198,22 @@ impl OptimizationManager {
         let batched = self.batcher.benchmark(model_path, num_requests).await?;
         results.insert("batching".to_string(), batched);
 
-        let memory_opt = self.memory_manager.benchmark(model_path, num_requests).await?;
+        let memory_opt = self
+            .memory_manager
+            .benchmark(model_path, num_requests)
+            .await?;
         results.insert("memory".to_string(), memory_opt);
 
-        let hardware_opt = self.hardware_optimizer.benchmark(model_path, num_requests).await?;
+        let hardware_opt = self
+            .hardware_optimizer
+            .benchmark(model_path, num_requests)
+            .await?;
         results.insert("hardware".to_string(), hardware_opt);
 
-        let inference_opt = self.inference_optimizer.benchmark(model_path, num_requests).await?;
+        let inference_opt = self
+            .inference_optimizer
+            .benchmark(model_path, num_requests)
+            .await?;
         results.insert("inference".to_string(), inference_opt);
 
         Ok(results)
@@ -197,10 +242,16 @@ mod tests {
         let config = OptimizationConfig::default();
         let mut manager = OptimizationManager::new(config).await.unwrap();
 
-        manager.configure_optimization("quantization", false).await.unwrap();
+        manager
+            .configure_optimization("quantization", false)
+            .await
+            .unwrap();
         assert!(!manager.config.quantization.enabled);
 
-        manager.configure_optimization("quantization", true).await.unwrap();
+        manager
+            .configure_optimization("quantization", true)
+            .await
+            .unwrap();
         assert!(manager.config.quantization.enabled);
     }
 }

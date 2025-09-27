@@ -1,15 +1,19 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId};
+use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 use inferno::{
     backends::{Backend, BackendConfig, BackendType, InferenceParams},
-    models::{ModelInfo, ModelManager},
     config::Config,
+    models::{ModelInfo, ModelManager},
 };
 use std::{path::PathBuf, time::Duration};
 use tempfile::tempdir;
 use tokio::{fs, runtime::Runtime};
 
 fn create_mock_gguf_model(path: &PathBuf) -> ModelInfo {
-    std::fs::write(path, b"GGUF\x00\x00\x00\x01mock model data for benchmarking").unwrap();
+    std::fs::write(
+        path,
+        b"GGUF\x00\x00\x00\x01mock model data for benchmarking",
+    )
+    .unwrap();
 
     ModelInfo {
         name: path.file_name().unwrap().to_string_lossy().to_string(),
@@ -128,10 +132,9 @@ fn bench_inference(c: &mut Criterion) {
             prompt,
             |b, prompt| {
                 b.to_async(&rt).iter(|| async {
-                    let result = gguf_backend.infer(
-                        black_box(prompt),
-                        black_box(&inference_params),
-                    ).await;
+                    let result = gguf_backend
+                        .infer(black_box(prompt), black_box(&inference_params))
+                        .await;
                     black_box(result)
                 })
             },
@@ -142,10 +145,9 @@ fn bench_inference(c: &mut Criterion) {
             prompt,
             |b, prompt| {
                 b.to_async(&rt).iter(|| async {
-                    let result = onnx_backend.infer(
-                        black_box(prompt),
-                        black_box(&inference_params),
-                    ).await;
+                    let result = onnx_backend
+                        .infer(black_box(prompt), black_box(&inference_params))
+                        .await;
                     black_box(result)
                 })
             },
@@ -197,14 +199,18 @@ fn bench_model_manager_operations(c: &mut Criterion) {
 
     group.bench_function("validate_model", |b| {
         b.to_async(&rt).iter(|| async {
-            let result = model_manager.validate_model(black_box(&test_model_path)).await;
+            let result = model_manager
+                .validate_model(black_box(&test_model_path))
+                .await;
             black_box(result)
         })
     });
 
     group.bench_function("compute_checksum", |b| {
         b.to_async(&rt).iter(|| async {
-            let result = model_manager.compute_checksum(black_box(&test_model_path)).await;
+            let result = model_manager
+                .compute_checksum(black_box(&test_model_path))
+                .await;
             black_box(result)
         })
     });
@@ -275,7 +281,9 @@ fn bench_io_operations(c: &mut Criterion) {
         b.to_async(&rt).iter(|| async {
             let path = temp_dir.path().join("bench_text.txt");
 
-            inferno::io::text::write_text_file(&path, black_box(&text_data)).await.unwrap();
+            inferno::io::text::write_text_file(&path, black_box(&text_data))
+                .await
+                .unwrap();
             let result = inferno::io::text::read_text_file(black_box(&path)).await;
             black_box(result)
         })
@@ -285,8 +293,12 @@ fn bench_io_operations(c: &mut Criterion) {
         b.to_async(&rt).iter(|| async {
             let path = temp_dir.path().join("bench_data.json");
 
-            inferno::io::json::write_json_file(&path, black_box(&json_data)).await.unwrap();
-            let result: serde_json::Value = inferno::io::json::read_json_file(black_box(&path)).await.unwrap();
+            inferno::io::json::write_json_file(&path, black_box(&json_data))
+                .await
+                .unwrap();
+            let result: serde_json::Value = inferno::io::json::read_json_file(black_box(&path))
+                .await
+                .unwrap();
             black_box(result)
         })
     });

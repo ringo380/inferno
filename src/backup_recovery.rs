@@ -312,8 +312,8 @@ impl Default for SchedulingConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MaintenanceWindow {
     pub name: String,
-    pub start_time: String, // HH:MM format
-    pub end_time: String,   // HH:MM format
+    pub start_time: String,    // HH:MM format
+    pub end_time: String,      // HH:MM format
     pub days_of_week: Vec<u8>, // 0=Sunday, 6=Saturday
     pub allow_backup: bool,
     pub allow_recovery: bool,
@@ -559,7 +559,7 @@ impl Default for DisasterRecoveryConfig {
     fn default() -> Self {
         Self {
             enabled: true,
-            rpo_minutes: 60, // 1 hour RPO
+            rpo_minutes: 60,  // 1 hour RPO
             rto_minutes: 240, // 4 hours RTO
             replication_strategy: ReplicationStrategy::Asynchronous,
             failover_strategy: FailoverStrategy::Manual,
@@ -1339,7 +1339,8 @@ impl BackupRecoverySystem {
         let storage_manager = Arc::new(MultiDestinationStorageManager::new(&config.destinations)?);
         let encryption_manager = Arc::new(StandardEncryptionManager::new(&config.encryption)?);
         let monitoring = Arc::new(StandardBackupMonitoring::new(&config.monitoring)?);
-        let notification_service = Arc::new(StandardNotificationService::new(&config.notification)?);
+        let notification_service =
+            Arc::new(StandardNotificationService::new(&config.notification)?);
 
         Ok(Self {
             config,
@@ -1355,7 +1356,13 @@ impl BackupRecoverySystem {
         })
     }
 
-    pub async fn create_backup_job(&self, name: String, backup_type: BackupType, source_paths: Vec<PathBuf>, destination: String) -> Result<String> {
+    pub async fn create_backup_job(
+        &self,
+        name: String,
+        backup_type: BackupType,
+        source_paths: Vec<PathBuf>,
+        destination: String,
+    ) -> Result<String> {
         let job_id = Uuid::new_v4().to_string();
         let job = BackupJob {
             id: job_id.clone(),
@@ -1401,11 +1408,13 @@ impl BackupRecoverySystem {
             job.started_at = Some(Utc::now());
 
             // Notify about backup start
-            self.notification_service.send_notification(
-                EventType::BackupStarted,
-                &format!("Backup job '{}' started", job.name),
-                None,
-            ).await?;
+            self.notification_service
+                .send_notification(
+                    EventType::BackupStarted,
+                    &format!("Backup job '{}' started", job.name),
+                    None,
+                )
+                .await?;
 
             // Start the actual backup process
             // This would spawn a background task to perform the backup
@@ -1415,7 +1424,13 @@ impl BackupRecoverySystem {
         }
     }
 
-    pub async fn create_restore_job(&self, name: String, backup_id: String, restore_type: RestoreType, destination_path: PathBuf) -> Result<String> {
+    pub async fn create_restore_job(
+        &self,
+        name: String,
+        backup_id: String,
+        restore_type: RestoreType,
+        destination_path: PathBuf,
+    ) -> Result<String> {
         let job_id = Uuid::new_v4().to_string();
         let job = RestoreJob {
             id: job_id.clone(),
@@ -1453,11 +1468,13 @@ impl BackupRecoverySystem {
             job.started_at = Some(Utc::now());
 
             // Notify about restore start
-            self.notification_service.send_notification(
-                EventType::RestoreStarted,
-                &format!("Restore job '{}' started", job.name),
-                None,
-            ).await?;
+            self.notification_service
+                .send_notification(
+                    EventType::RestoreStarted,
+                    &format!("Restore job '{}' started", job.name),
+                    None,
+                )
+                .await?;
 
             // Start the actual restore process
             // This would spawn a background task to perform the restore
@@ -1534,7 +1551,11 @@ impl BackupRecoverySystem {
         Ok(sets.values().cloned().collect())
     }
 
-    pub async fn create_recovery_point(&self, backup_id: String, description: String) -> Result<String> {
+    pub async fn create_recovery_point(
+        &self,
+        backup_id: String,
+        description: String,
+    ) -> Result<String> {
         let point_id = Uuid::new_v4().to_string();
         let recovery_point = RecoveryPoint {
             id: point_id.clone(),
@@ -1561,23 +1582,30 @@ impl BackupRecoverySystem {
         let backup_jobs = self.backup_jobs.read().await;
         let restore_jobs = self.restore_jobs.read().await;
 
-        let running_backups = backup_jobs.values()
+        let running_backups = backup_jobs
+            .values()
             .filter(|job| matches!(job.status, BackupStatus::Running))
             .count();
 
-        let running_restores = restore_jobs.values()
+        let running_restores = restore_jobs
+            .values()
             .filter(|job| matches!(job.status, RestoreStatus::Running))
             .count();
 
-        let failed_backups_24h = backup_jobs.values()
+        let failed_backups_24h = backup_jobs
+            .values()
             .filter(|job| {
-                matches!(job.status, BackupStatus::Failed) &&
-                job.created_at > Utc::now() - chrono::Duration::hours(24)
+                matches!(job.status, BackupStatus::Failed)
+                    && job.created_at > Utc::now() - chrono::Duration::hours(24)
             })
             .count();
 
         Ok(BackupSystemStatus {
-            overall_health: if failed_backups_24h == 0 { SystemHealth::Healthy } else { SystemHealth::Degraded },
+            overall_health: if failed_backups_24h == 0 {
+                SystemHealth::Healthy
+            } else {
+                SystemHealth::Degraded
+            },
             running_backup_jobs: running_backups,
             running_restore_jobs: running_restores,
             failed_jobs_24h: failed_backups_24h,
@@ -1604,7 +1632,10 @@ impl BackupRecoverySystem {
         })
     }
 
-    pub async fn test_disaster_recovery(&self, test_type: TestType) -> Result<DisasterRecoveryTestResult> {
+    pub async fn test_disaster_recovery(
+        &self,
+        test_type: TestType,
+    ) -> Result<DisasterRecoveryTestResult> {
         // This would perform disaster recovery testing
         Ok(DisasterRecoveryTestResult {
             test_id: Uuid::new_v4().to_string(),
@@ -1697,7 +1728,12 @@ pub struct ScheduledJob {
 
 #[async_trait::async_trait]
 pub trait StorageManager: Send + Sync {
-    async fn upload_backup(&self, job_id: &str, source_path: &PathBuf, destination: &str) -> Result<String>;
+    async fn upload_backup(
+        &self,
+        job_id: &str,
+        source_path: &PathBuf,
+        destination: &str,
+    ) -> Result<String>;
     async fn download_backup(&self, backup_id: &str, destination_path: &PathBuf) -> Result<()>;
     async fn delete_backup(&self, backup_id: &str) -> Result<()>;
     async fn list_backups(&self, destination: &str) -> Result<Vec<BackupInfo>>;
@@ -1745,7 +1781,12 @@ pub enum KeyStatus {
 pub trait BackupMonitoring: Send + Sync {
     async fn record_backup_start(&self, job_id: &str) -> Result<()>;
     async fn record_backup_progress(&self, job_id: &str, progress: &BackupProgress) -> Result<()>;
-    async fn record_backup_completion(&self, job_id: &str, success: bool, error: Option<&str>) -> Result<()>;
+    async fn record_backup_completion(
+        &self,
+        job_id: &str,
+        success: bool,
+        error: Option<&str>,
+    ) -> Result<()>;
     async fn get_backup_metrics(&self, time_range: &str) -> Result<BackupMetrics>;
     async fn check_health(&self) -> Result<Vec<HealthCheckResult>>;
 }
@@ -1780,8 +1821,18 @@ pub enum HealthStatus {
 
 #[async_trait::async_trait]
 pub trait NotificationService: Send + Sync {
-    async fn send_notification(&self, event_type: EventType, message: &str, metadata: Option<&HashMap<String, String>>) -> Result<()>;
-    async fn send_alert(&self, severity: AlertSeverity, message: &str, channels: &[String]) -> Result<()>;
+    async fn send_notification(
+        &self,
+        event_type: EventType,
+        message: &str,
+        metadata: Option<&HashMap<String, String>>,
+    ) -> Result<()>;
+    async fn send_alert(
+        &self,
+        severity: AlertSeverity,
+        message: &str,
+        channels: &[String],
+    ) -> Result<()>;
     async fn test_notification_channel(&self, channel_name: &str) -> Result<bool>;
 }
 
@@ -1836,7 +1887,12 @@ impl MultiDestinationStorageManager {
 
 #[async_trait::async_trait]
 impl StorageManager for MultiDestinationStorageManager {
-    async fn upload_backup(&self, _job_id: &str, _source_path: &PathBuf, _destination: &str) -> Result<String> {
+    async fn upload_backup(
+        &self,
+        _job_id: &str,
+        _source_path: &PathBuf,
+        _destination: &str,
+    ) -> Result<String> {
         // Mock implementation
         Ok(Uuid::new_v4().to_string())
     }
@@ -1933,12 +1989,21 @@ impl BackupMonitoring for StandardBackupMonitoring {
         Ok(())
     }
 
-    async fn record_backup_progress(&self, _job_id: &str, _progress: &BackupProgress) -> Result<()> {
+    async fn record_backup_progress(
+        &self,
+        _job_id: &str,
+        _progress: &BackupProgress,
+    ) -> Result<()> {
         // Mock implementation
         Ok(())
     }
 
-    async fn record_backup_completion(&self, _job_id: &str, _success: bool, _error: Option<&str>) -> Result<()> {
+    async fn record_backup_completion(
+        &self,
+        _job_id: &str,
+        _success: bool,
+        _error: Option<&str>,
+    ) -> Result<()> {
         // Mock implementation
         Ok(())
     }
@@ -1959,14 +2024,12 @@ impl BackupMonitoring for StandardBackupMonitoring {
 
     async fn check_health(&self) -> Result<Vec<HealthCheckResult>> {
         // Mock implementation
-        Ok(vec![
-            HealthCheckResult {
-                check_name: "Storage Space".to_string(),
-                status: HealthStatus::Healthy,
-                message: "Sufficient storage available".to_string(),
-                checked_at: Utc::now(),
-            }
-        ])
+        Ok(vec![HealthCheckResult {
+            check_name: "Storage Space".to_string(),
+            status: HealthStatus::Healthy,
+            message: "Sufficient storage available".to_string(),
+            checked_at: Utc::now(),
+        }])
     }
 }
 
@@ -1984,13 +2047,23 @@ impl StandardNotificationService {
 
 #[async_trait::async_trait]
 impl NotificationService for StandardNotificationService {
-    async fn send_notification(&self, _event_type: EventType, _message: &str, _metadata: Option<&HashMap<String, String>>) -> Result<()> {
+    async fn send_notification(
+        &self,
+        _event_type: EventType,
+        _message: &str,
+        _metadata: Option<&HashMap<String, String>>,
+    ) -> Result<()> {
         // Mock implementation
         println!("Notification sent: {}", _message);
         Ok(())
     }
 
-    async fn send_alert(&self, _severity: AlertSeverity, _message: &str, _channels: &[String]) -> Result<()> {
+    async fn send_alert(
+        &self,
+        _severity: AlertSeverity,
+        _message: &str,
+        _channels: &[String],
+    ) -> Result<()> {
         // Mock implementation
         println!("Alert sent: {}", _message);
         Ok(())

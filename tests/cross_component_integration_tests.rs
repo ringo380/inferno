@@ -1,44 +1,44 @@
+use anyhow::Result;
+use axum::{
+    body::Body,
+    http::{Method, Request, StatusCode},
+};
+use hyper::body::to_bytes;
 use inferno::{
+    // Audit and security
+    audit::{Actor, ActorType, AuditConfig, AuditEvent, AuditSystem, EventType, Severity},
     // Core components
-    backends::{Backend, BackendHandle, BackendConfig, BackendType, InferenceParams},
-    models::{ModelInfo, ModelManager},
-    cache::{ModelCache, CacheConfig, WarmupStrategy},
-    metrics::MetricsCollector,
-
+    backends::{Backend, BackendConfig, BackendHandle, BackendType, InferenceParams},
     // Batch processing
     batch::{
-        queue::{JobQueue, JobQueueManager, JobQueueConfig, BatchJob, JobPriority, JobStatus},
-        scheduler::{BatchScheduler, SchedulerConfig, ScheduleEntry, ScheduleType, OneTimeSchedule},
         processor::{BatchProcessor, ProcessorConfig},
+        queue::{BatchJob, JobPriority, JobQueue, JobQueueConfig, JobQueueManager, JobStatus},
+        scheduler::{
+            BatchScheduler, OneTimeSchedule, ScheduleEntry, ScheduleType, SchedulerConfig,
+        },
         BatchConfig, BatchInput,
     },
 
-    // Audit and security
-    audit::{AuditSystem, AuditConfig, AuditEvent, EventType, Severity, Actor, ActorType},
-    security::{SecurityManager, SecurityConfig},
-
-    // Dashboard and API
-    dashboard::{
-        DashboardServer, DashboardConfig, CreateModelRequest, CreateDeploymentRequest,
-    },
-
-    // Model conversion
-    conversion::{ModelConverter, ConversionConfig, ModelFormat, OptimizationLevel},
-
-    // Response caching
-    response_cache::{ResponseCache, ResponseCacheConfig, CacheKey},
-
+    cache::{CacheConfig, ModelCache, WarmupStrategy},
     // Configuration
     config::Config,
 
+    // Model conversion
+    conversion::{ConversionConfig, ModelConverter, ModelFormat, OptimizationLevel},
+
+    // Dashboard and API
+    dashboard::{CreateDeploymentRequest, CreateModelRequest, DashboardConfig, DashboardServer},
+
+    metrics::MetricsCollector,
+
+    models::{ModelInfo, ModelManager},
+    // Response caching
+    response_cache::{CacheKey, ResponseCache, ResponseCacheConfig},
+
+    security::{SecurityConfig, SecurityManager},
+
     InfernoError,
 };
-use anyhow::Result;
-use axum::{
-    http::{Method, Request, StatusCode},
-    body::Body,
-};
-use hyper::body::to_bytes;
 use serde_json::{json, Value};
 use std::{
     collections::HashMap,
@@ -71,7 +71,14 @@ mod integration_test_utils {
         let batch_storage_dir = temp_dir.path().join("batch_storage");
 
         // Create directories
-        for dir in [&models_dir, &cache_dir, &audit_dir, &dashboard_data_dir, &response_cache_dir, &batch_storage_dir] {
+        for dir in [
+            &models_dir,
+            &cache_dir,
+            &audit_dir,
+            &dashboard_data_dir,
+            &response_cache_dir,
+            &batch_storage_dir,
+        ] {
             fs::create_dir_all(dir).await?;
         }
 
@@ -108,12 +115,15 @@ mod integration_test_utils {
             cache_dir: Some(cache_dir),
         };
 
-        let model_cache = Arc::new(ModelCache::new(
-            cache_config,
-            backend_config.clone(),
-            model_manager.clone(),
-            Some(metrics_collector.clone()),
-        ).await?);
+        let model_cache = Arc::new(
+            ModelCache::new(
+                cache_config,
+                backend_config.clone(),
+                model_manager.clone(),
+                Some(metrics_collector.clone()),
+            )
+            .await?,
+        );
 
         let audit_config = AuditConfig {
             enabled: true,
@@ -198,10 +208,8 @@ mod integration_test_utils {
             max_schedule_history: 100,
         };
 
-        let batch_scheduler = Arc::new(BatchScheduler::new(
-            scheduler_config,
-            job_queue_manager.clone(),
-        ).await?);
+        let batch_scheduler =
+            Arc::new(BatchScheduler::new(scheduler_config, job_queue_manager.clone()).await?);
 
         let processor_config = ProcessorConfig {
             max_concurrent_jobs: 2,
@@ -218,12 +226,15 @@ mod integration_test_utils {
             circuit_breaker_timeout_seconds: 30,
         };
 
-        let batch_processor = Arc::new(BatchProcessor::new(
-            processor_config,
-            job_queue_manager.clone(),
-            model_cache.clone(),
-            Some(metrics_collector.clone()),
-        ).await?);
+        let batch_processor = Arc::new(
+            BatchProcessor::new(
+                processor_config,
+                job_queue_manager.clone(),
+                model_cache.clone(),
+                Some(metrics_collector.clone()),
+            )
+            .await?,
+        );
 
         let response_cache_config = ResponseCacheConfig {
             enabled: true,
@@ -339,16 +350,18 @@ mod integration_test_utils {
                 BatchInput {
                     id: format!("{}-input-1", id),
                     content: "What is machine learning?".to_string(),
-                    metadata: Some(HashMap::from([
-                        ("type".to_string(), "question".to_string()),
-                    ])),
+                    metadata: Some(HashMap::from([(
+                        "type".to_string(),
+                        "question".to_string(),
+                    )])),
                 },
                 BatchInput {
                     id: format!("{}-input-2", id),
                     content: "Explain neural networks.".to_string(),
-                    metadata: Some(HashMap::from([
-                        ("type".to_string(), "explanation".to_string()),
-                    ])),
+                    metadata: Some(HashMap::from([(
+                        "type".to_string(),
+                        "explanation".to_string(),
+                    )])),
                 },
             ],
             inference_params: InferenceParams {
@@ -385,12 +398,8 @@ mod integration_test_utils {
             max_retries: 2,
             created_at: SystemTime::now(),
             scheduled_at: None,
-            tags: HashMap::from([
-                ("integration_test".to_string(), "true".to_string()),
-            ]),
-            metadata: HashMap::from([
-                ("test_run_id".to_string(), Uuid::new_v4().to_string()),
-            ]),
+            tags: HashMap::from([("integration_test".to_string(), "true".to_string())]),
+            metadata: HashMap::from([("test_run_id".to_string(), Uuid::new_v4().to_string())]),
         }
     }
 }
@@ -421,7 +430,10 @@ async fn test_end_to_end_model_lifecycle() -> Result<()> {
     env.batch_scheduler.start().await?;
 
     // 1. Model Discovery and Loading
-    assert!(!env.discovered_models.is_empty(), "Should discover test models");
+    assert!(
+        !env.discovered_models.is_empty(),
+        "Should discover test models"
+    );
 
     let test_model = &env.discovered_models[0];
 
@@ -481,11 +493,10 @@ async fn test_end_to_end_model_lifecycle() -> Result<()> {
     env.audit_system.log_event(discovery_event).await?;
 
     // 2. Model Loading via Cache
-    let backend_handle = env.model_cache.get_or_load_model(
-        &test_model.id,
-        BackendType::Gguf,
-        &env.backend_config,
-    ).await?;
+    let backend_handle = env
+        .model_cache
+        .get_or_load_model(&test_model.id, BackendType::Gguf, &env.backend_config)
+        .await?;
 
     assert!(backend_handle.is_loaded().await, "Model should be loaded");
 
@@ -506,30 +517,39 @@ async fn test_end_to_end_model_lifecycle() -> Result<()> {
     let inference_time = start_time.elapsed();
 
     // Store in response cache
-    env.response_cache.store(&cache_key, &result1, Duration::from_secs(3600)).await?;
+    env.response_cache
+        .store(&cache_key, &result1, Duration::from_secs(3600))
+        .await?;
 
     // Second inference (should hit cache)
     let cached_result = env.response_cache.get(&cache_key).await?;
     assert!(cached_result.is_some(), "Should get cached result");
-    assert_eq!(cached_result.unwrap(), result1, "Cached result should match");
+    assert_eq!(
+        cached_result.unwrap(),
+        result1,
+        "Cached result should match"
+    );
 
     // 4. Batch Job Processing
     let queue_id = "integration-queue";
-    env.job_queue_manager.create_queue(
-        queue_id.to_string(),
-        "Integration Test Queue".to_string(),
-        "Queue for cross-component testing".to_string(),
-    ).await?;
+    env.job_queue_manager
+        .create_queue(
+            queue_id.to_string(),
+            "Integration Test Queue".to_string(),
+            "Queue for cross-component testing".to_string(),
+        )
+        .await?;
 
-    let batch_job = integration_test_utils::create_test_batch_job("integration-job-1", &test_model.id);
-    env.job_queue_manager.submit_job(queue_id, batch_job).await?;
+    let batch_job =
+        integration_test_utils::create_test_batch_job("integration-job-1", &test_model.id);
+    env.job_queue_manager
+        .submit_job(queue_id, batch_job)
+        .await?;
 
     // Start batch processor
     let processor_handle = tokio::spawn({
         let processor = env.batch_processor.clone();
-        async move {
-            processor.start_processing().await
-        }
+        async move { processor.start_processing().await }
     });
 
     // Wait for job processing
@@ -574,7 +594,9 @@ async fn test_end_to_end_model_lifecycle() -> Result<()> {
     sleep(Duration::from_secs(3)).await;
 
     let audit_query = inferno::audit::AuditQuery {
-        filters: vec![inferno::audit::QueryFilter::EventType(EventType::ModelManagement)],
+        filters: vec![inferno::audit::QueryFilter::EventType(
+            EventType::ModelManagement,
+        )],
         start_time: Some(SystemTime::now() - Duration::from_secs(300)),
         end_time: Some(SystemTime::now()),
         limit: Some(100),
@@ -613,37 +635,45 @@ async fn test_system_resilience_and_error_handling() -> Result<()> {
 
     // Test 1: Model loading failure cascade
     let nonexistent_model_id = "nonexistent_model";
-    let load_result = env.model_cache.get_or_load_model(
-        nonexistent_model_id,
-        BackendType::Gguf,
-        &env.backend_config,
-    ).await;
+    let load_result = env
+        .model_cache
+        .get_or_load_model(nonexistent_model_id, BackendType::Gguf, &env.backend_config)
+        .await;
 
-    assert!(load_result.is_err(), "Should fail to load nonexistent model");
+    assert!(
+        load_result.is_err(),
+        "Should fail to load nonexistent model"
+    );
 
     // Test 2: Batch job with invalid model
     let queue_id = "error-test-queue";
-    env.job_queue_manager.create_queue(
-        queue_id.to_string(),
-        "Error Test Queue".to_string(),
-        "Queue for testing error handling".to_string(),
-    ).await?;
+    env.job_queue_manager
+        .create_queue(
+            queue_id.to_string(),
+            "Error Test Queue".to_string(),
+            "Queue for testing error handling".to_string(),
+        )
+        .await?;
 
-    let invalid_job = integration_test_utils::create_test_batch_job("error-job", "nonexistent_model");
-    env.job_queue_manager.submit_job(queue_id, invalid_job).await?;
+    let invalid_job =
+        integration_test_utils::create_test_batch_job("error-job", "nonexistent_model");
+    env.job_queue_manager
+        .submit_job(queue_id, invalid_job)
+        .await?;
 
     // Start processor to handle the failing job
     let processor_handle = tokio::spawn({
         let processor = env.batch_processor.clone();
-        async move {
-            processor.start_processing().await
-        }
+        async move { processor.start_processing().await }
     });
 
     sleep(Duration::from_secs(5)).await;
 
     // Check job status - should be failed or in retry
-    let job_status = env.job_queue_manager.get_job_status(queue_id, "error-job").await?;
+    let job_status = env
+        .job_queue_manager
+        .get_job_status(queue_id, "error-job")
+        .await?;
     assert!(job_status.is_some());
 
     let job_info = job_status.unwrap();
@@ -716,18 +746,18 @@ async fn test_concurrent_cross_component_operations() -> Result<()> {
     env.batch_scheduler.start().await?;
 
     let queue_id = "concurrent-queue";
-    env.job_queue_manager.create_queue(
-        queue_id.to_string(),
-        "Concurrent Test Queue".to_string(),
-        "Queue for concurrent testing".to_string(),
-    ).await?;
+    env.job_queue_manager
+        .create_queue(
+            queue_id.to_string(),
+            "Concurrent Test Queue".to_string(),
+            "Queue for concurrent testing".to_string(),
+        )
+        .await?;
 
     // Start batch processor
     let processor_handle = tokio::spawn({
         let processor = env.batch_processor.clone();
-        async move {
-            processor.start_processing().await
-        }
+        async move { processor.start_processing().await }
     });
 
     // Launch concurrent operations
@@ -737,13 +767,19 @@ async fn test_concurrent_cross_component_operations() -> Result<()> {
     for i in 0..3 {
         let cache = env.model_cache.clone();
         let backend_config = env.backend_config.clone();
-        let model_id = env.discovered_models[i % env.discovered_models.len()].id.clone();
+        let model_id = env.discovered_models[i % env.discovered_models.len()]
+            .id
+            .clone();
 
         let task = tokio::spawn(async move {
             for _ in 0..5 {
-                let result = cache.get_or_load_model(&model_id, BackendType::Gguf, &backend_config).await;
+                let result = cache
+                    .get_or_load_model(&model_id, BackendType::Gguf, &backend_config)
+                    .await;
                 if let Ok(handle) = result {
-                    let _ = handle.infer("Test concurrent inference", &InferenceParams::default()).await;
+                    let _ = handle
+                        .infer("Test concurrent inference", &InferenceParams::default())
+                        .await;
                 }
                 sleep(Duration::from_millis(100)).await;
             }
@@ -779,7 +815,9 @@ async fn test_concurrent_cross_component_operations() -> Result<()> {
                 );
                 let value = format!("response {} {}", i, j);
 
-                let _ = response_cache.store(&key, &value, Duration::from_secs(300)).await;
+                let _ = response_cache
+                    .store(&key, &value, Duration::from_secs(300))
+                    .await;
                 let _ = response_cache.get(&key).await;
             }
         });
@@ -871,7 +909,9 @@ async fn test_concurrent_cross_component_operations() -> Result<()> {
     sleep(Duration::from_secs(2)).await;
 
     let audit_query = inferno::audit::AuditQuery {
-        filters: vec![inferno::audit::QueryFilter::Action("concurrent_action".to_string())],
+        filters: vec![inferno::audit::QueryFilter::Action(
+            "concurrent_action".to_string(),
+        )],
         start_time: Some(SystemTime::now() - Duration::from_secs(300)),
         end_time: Some(SystemTime::now()),
         limit: Some(100),
@@ -881,7 +921,11 @@ async fn test_concurrent_cross_component_operations() -> Result<()> {
     };
 
     let concurrent_events = env.audit_system.query_events(audit_query).await?;
-    assert_eq!(concurrent_events.len(), 30, "Should have 30 concurrent audit events (3 tasks * 10 events)");
+    assert_eq!(
+        concurrent_events.len(),
+        30,
+        "Should have 30 concurrent audit events (3 tasks * 10 events)"
+    );
 
     // Cleanup
     env.batch_processor.stop_processing().await?;
@@ -906,14 +950,16 @@ async fn test_data_flow_consistency() -> Result<()> {
 
     // Load a model and verify it appears in cache
     let test_model = &discovered_models[0];
-    let backend_handle = env.model_cache.get_or_load_model(
-        &test_model.id,
-        BackendType::Gguf,
-        &env.backend_config,
-    ).await?;
+    let backend_handle = env
+        .model_cache
+        .get_or_load_model(&test_model.id, BackendType::Gguf, &env.backend_config)
+        .await?;
 
     let cached_models = env.model_cache.list_cached_models().await;
-    assert!(cached_models.contains(&test_model.id), "Model should appear in cache list");
+    assert!(
+        cached_models.contains(&test_model.id),
+        "Model should appear in cache list"
+    );
 
     // Test inference consistency
     let input1 = "What is the meaning of life?";
@@ -928,10 +974,16 @@ async fn test_data_flow_consistency() -> Result<()> {
 
     // Test response cache consistency
     let cache_key = CacheKey::new(&test_model.id, input1, &params);
-    env.response_cache.store(&cache_key, &result1, Duration::from_secs(3600)).await?;
+    env.response_cache
+        .store(&cache_key, &result1, Duration::from_secs(3600))
+        .await?;
 
     let cached_result = env.response_cache.get(&cache_key).await?;
-    assert_eq!(cached_result.unwrap(), result1, "Cached result should match original");
+    assert_eq!(
+        cached_result.unwrap(),
+        result1,
+        "Cached result should match original"
+    );
 
     // Test metrics consistency
     let cache_stats_before = env.model_cache.get_stats().await;
@@ -999,8 +1051,14 @@ async fn test_data_flow_consistency() -> Result<()> {
             resource_usage: HashMap::new(),
         },
         metadata: HashMap::from([
-            ("cache_hits".to_string(), serde_json::Value::Number(cache_stats_after.cache_hits.into())),
-            ("cached_models".to_string(), serde_json::Value::Number(cache_stats_after.cached_models.into())),
+            (
+                "cache_hits".to_string(),
+                serde_json::Value::Number(cache_stats_after.cache_hits.into()),
+            ),
+            (
+                "cached_models".to_string(),
+                serde_json::Value::Number(cache_stats_after.cached_models.into()),
+            ),
         ]),
     };
 
@@ -1010,7 +1068,9 @@ async fn test_data_flow_consistency() -> Result<()> {
 
     // Verify audit event was recorded
     let audit_query = inferno::audit::AuditQuery {
-        filters: vec![inferno::audit::QueryFilter::Action("consistency_check".to_string())],
+        filters: vec![inferno::audit::QueryFilter::Action(
+            "consistency_check".to_string(),
+        )],
         start_time: Some(SystemTime::now() - Duration::from_secs(60)),
         end_time: Some(SystemTime::now()),
         limit: Some(10),
@@ -1020,7 +1080,11 @@ async fn test_data_flow_consistency() -> Result<()> {
     };
 
     let audit_results = env.audit_system.query_events(audit_query).await?;
-    assert_eq!(audit_results.len(), 1, "Should find consistency check audit event");
+    assert_eq!(
+        audit_results.len(),
+        1,
+        "Should find consistency check audit event"
+    );
 
     let recorded_event = &audit_results[0];
     assert_eq!(recorded_event.action, "consistency_check");

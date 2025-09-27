@@ -1,7 +1,7 @@
 // Simple test to verify our conversion implementation
-use std::collections::HashMap;
 use byteorder::{LittleEndian, WriteBytesExt};
 use half::f16;
+use std::collections::HashMap;
 use tempfile::tempdir;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -25,25 +25,37 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  Original: {:?}", f32_values);
     println!("  F32 bytes: {} bytes", f32_bytes.len());
     println!("  F16 bytes: {} bytes", f16_bytes.len());
-    println!("  Compression ratio: {:.2}x", f32_bytes.len() as f32 / f16_bytes.len() as f32);
+    println!(
+        "  Compression ratio: {:.2}x",
+        f32_bytes.len() as f32 / f16_bytes.len() as f32
+    );
 
     // Test 2: SafeTensors serialization
     println!("\n2. Testing SafeTensors functionality");
     let mut tensors = HashMap::new();
     let data = vec![1.0f32, 2.0, 3.0, 4.0, 5.0, 6.0];
-    let bytes = data.iter()
+    let bytes = data
+        .iter()
         .flat_map(|f| f.to_le_bytes())
         .collect::<Vec<u8>>();
 
-    tensors.insert("test_tensor".to_string(), (safetensors::Dtype::F32, vec![2, 3], bytes));
+    tensors.insert(
+        "test_tensor".to_string(),
+        (safetensors::Dtype::F32, vec![2, 3], bytes),
+    );
     let serialized = safetensors::serialize(&tensors, &None)?;
     println!("  Serialized SafeTensors size: {} bytes", serialized.len());
 
     // Deserialize and verify
     let deserialized = safetensors::SafeTensors::deserialize(&serialized)?;
     for (name, tensor_view) in deserialized.tensors() {
-        println!("  Tensor '{}': shape={:?}, dtype={:?}, size={} bytes",
-                 name, tensor_view.shape(), tensor_view.dtype(), tensor_view.data().len());
+        println!(
+            "  Tensor '{}': shape={:?}, dtype={:?}, size={} bytes",
+            name,
+            tensor_view.shape(),
+            tensor_view.dtype(),
+            tensor_view.data().len()
+        );
     }
 
     // Test 3: Basic GGUF structure creation

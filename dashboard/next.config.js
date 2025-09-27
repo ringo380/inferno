@@ -1,25 +1,16 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  experimental: {
-    appDir: true,
-  },
-  output: 'standalone',
+  // Removed deprecated appDir option (now default in Next.js 14)
+  output: 'export',
+  trailingSlash: true,
   images: {
-    domains: ['localhost'],
-    unoptimized: process.env.NODE_ENV === 'production',
+    unoptimized: true,
   },
   env: {
-    INFERNO_API_URL: process.env.INFERNO_API_URL || 'http://localhost:8080',
-    INFERNO_WS_URL: process.env.INFERNO_WS_URL || 'ws://localhost:8080',
+    INFERNO_API_URL: process.env.INFERNO_API_URL || 'tauri://localhost',
+    INFERNO_WS_URL: process.env.INFERNO_WS_URL || 'tauri://localhost',
   },
-  async rewrites() {
-    return [
-      {
-        source: '/api/inferno/:path*',
-        destination: `${process.env.INFERNO_API_URL || 'http://localhost:8080'}/:path*`,
-      },
-    ];
-  },
+  // Removed rewrites as they don't work with export mode and we're using Tauri
   webpack: (config, { buildId, dev, isServer, defaultLoaders, webpack }) => {
     // Optimize bundle size
     if (!dev && !isServer) {

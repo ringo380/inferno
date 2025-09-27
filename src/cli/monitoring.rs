@@ -1,7 +1,7 @@
 use crate::{
     config::Config,
-    monitoring::{PerformanceMonitor, MonitoringConfig, AlertSeverity, create_test_metric},
     metrics::MetricsCollector,
+    monitoring::{create_test_metric, AlertSeverity, MonitoringConfig, PerformanceMonitor},
 };
 use anyhow::Result;
 use clap::{Args, Subcommand, ValueEnum};
@@ -132,7 +132,11 @@ pub enum MonitoringCommand {
 
     #[command(about = "Benchmark monitoring system performance")]
     Benchmark {
-        #[arg(long, help = "Number of test metrics to generate", default_value = "1000")]
+        #[arg(
+            long,
+            help = "Number of test metrics to generate",
+            default_value = "1000"
+        )]
         metrics: usize,
 
         #[arg(long, help = "Number of concurrent writers", default_value = "10")]
@@ -170,12 +174,16 @@ pub enum ExportFormat {
 pub async fn execute(args: MonitoringArgs, config: &Config) -> Result<()> {
     match args.command {
         MonitoringCommand::Status => show_monitoring_status(config).await,
-        MonitoringCommand::Dashboard { port, interval, detailed } => {
-            start_dashboard(config, port, interval, detailed).await
-        }
-        MonitoringCommand::Alerts { show_resolved, severity, limit } => {
-            show_alerts(config, show_resolved, severity, limit).await
-        }
+        MonitoringCommand::Dashboard {
+            port,
+            interval,
+            detailed,
+        } => start_dashboard(config, port, interval, detailed).await,
+        MonitoringCommand::Alerts {
+            show_resolved,
+            severity,
+            limit,
+        } => show_alerts(config, show_resolved, severity, limit).await,
         MonitoringCommand::Resolve { alert_id } => resolve_alert(config, alert_id).await,
         MonitoringCommand::Configure {
             max_response_time,
@@ -193,26 +201,39 @@ pub async fn execute(args: MonitoringArgs, config: &Config) -> Result<()> {
                 max_memory,
                 max_cpu,
                 min_cache_hit_rate,
-            ).await
+            )
+            .await
         }
-        MonitoringCommand::TestAlerts { alert_type, generate_metrics } => {
-            test_alerts(config, alert_type, generate_metrics).await
-        }
-        MonitoringCommand::Trends { hours, model, group_by_minutes } => {
-            show_trends(config, hours, model, group_by_minutes).await
-        }
-        MonitoringCommand::Export { output, format, hours, include_alerts } => {
-            export_monitoring_data(config, output, format, hours, include_alerts).await
-        }
-        MonitoringCommand::Watch { interval, model, alerts_only } => {
-            watch_performance(config, interval, model, alerts_only).await
-        }
-        MonitoringCommand::Report { hours, detailed, recommendations } => {
-            generate_report(config, hours, detailed, recommendations).await
-        }
-        MonitoringCommand::Benchmark { metrics, concurrent, duration } => {
-            benchmark_monitoring(config, metrics, concurrent, duration).await
-        }
+        MonitoringCommand::TestAlerts {
+            alert_type,
+            generate_metrics,
+        } => test_alerts(config, alert_type, generate_metrics).await,
+        MonitoringCommand::Trends {
+            hours,
+            model,
+            group_by_minutes,
+        } => show_trends(config, hours, model, group_by_minutes).await,
+        MonitoringCommand::Export {
+            output,
+            format,
+            hours,
+            include_alerts,
+        } => export_monitoring_data(config, output, format, hours, include_alerts).await,
+        MonitoringCommand::Watch {
+            interval,
+            model,
+            alerts_only,
+        } => watch_performance(config, interval, model, alerts_only).await,
+        MonitoringCommand::Report {
+            hours,
+            detailed,
+            recommendations,
+        } => generate_report(config, hours, detailed, recommendations).await,
+        MonitoringCommand::Benchmark {
+            metrics,
+            concurrent,
+            duration,
+        } => benchmark_monitoring(config, metrics, concurrent, duration).await,
     }
 }
 
@@ -228,10 +249,26 @@ async fn show_monitoring_status(_config: &Config) -> Result<()> {
 
     let monitor = PerformanceMonitor::new(monitoring_config.clone(), metrics_collector).await?;
 
-    println!("Monitoring: {}", if monitoring_config.enabled { "Enabled" } else { "Disabled" });
-    println!("Collection Interval: {}ms", monitoring_config.collection_interval_ms);
-    println!("Alert Evaluation Interval: {}ms", monitoring_config.alert_evaluation_interval_ms);
-    println!("Metric Retention: {} hours", monitoring_config.metric_retention_hours);
+    println!(
+        "Monitoring: {}",
+        if monitoring_config.enabled {
+            "Enabled"
+        } else {
+            "Disabled"
+        }
+    );
+    println!(
+        "Collection Interval: {}ms",
+        monitoring_config.collection_interval_ms
+    );
+    println!(
+        "Alert Evaluation Interval: {}ms",
+        monitoring_config.alert_evaluation_interval_ms
+    );
+    println!(
+        "Metric Retention: {} hours",
+        monitoring_config.metric_retention_hours
+    );
 
     println!("\n=== Performance Thresholds ===");
     let thresholds = &monitoring_config.performance_thresholds;
@@ -241,14 +278,38 @@ async fn show_monitoring_status(_config: &Config) -> Result<()> {
     println!("Max Memory Usage: {}MB", thresholds.max_memory_usage_mb);
     println!("Max CPU Usage: {:.2}%", thresholds.max_cpu_usage_percent);
     println!("Max Queue Depth: {}", thresholds.max_queue_depth);
-    println!("Min Cache Hit Rate: {:.2}%", thresholds.min_cache_hit_rate_percent);
+    println!(
+        "Min Cache Hit Rate: {:.2}%",
+        thresholds.min_cache_hit_rate_percent
+    );
 
     println!("\n=== Alerting Configuration ===");
     let alerting = &monitoring_config.alerting;
-    println!("Alerting: {}", if alerting.enabled { "Enabled" } else { "Disabled" });
+    println!(
+        "Alerting: {}",
+        if alerting.enabled {
+            "Enabled"
+        } else {
+            "Disabled"
+        }
+    );
     println!("Webhooks: {}", alerting.webhooks.len());
-    println!("Email: {}", if alerting.email.is_some() { "Configured" } else { "Not configured" });
-    println!("Slack: {}", if alerting.slack.is_some() { "Configured" } else { "Not configured" });
+    println!(
+        "Email: {}",
+        if alerting.email.is_some() {
+            "Configured"
+        } else {
+            "Not configured"
+        }
+    );
+    println!(
+        "Slack: {}",
+        if alerting.slack.is_some() {
+            "Configured"
+        } else {
+            "Not configured"
+        }
+    );
     println!("Cooldown: {} minutes", alerting.cooldown_minutes);
 
     // Show current metrics
@@ -271,15 +332,28 @@ async fn show_monitoring_status(_config: &Config) -> Result<()> {
     } else {
         println!("Active alerts: {}", active_alerts.len());
         for alert in active_alerts.iter().take(5) {
-            println!("  [{:?}] {:?}: {}", alert.severity, alert.alert_type, alert.message);
+            println!(
+                "  [{:?}] {:?}: {}",
+                alert.severity, alert.alert_type, alert.message
+            );
         }
     }
 
     println!("\n=== Dashboard ===");
     let dashboard = &monitoring_config.dashboards;
-    println!("Dashboard: {}", if dashboard.enabled { "Enabled" } else { "Disabled" });
+    println!(
+        "Dashboard: {}",
+        if dashboard.enabled {
+            "Enabled"
+        } else {
+            "Disabled"
+        }
+    );
     if dashboard.enabled {
-        println!("Address: http://{}:{}", dashboard.bind_address, dashboard.port);
+        println!(
+            "Address: http://{}:{}",
+            dashboard.bind_address, dashboard.port
+        );
         println!("Update Interval: {}ms", dashboard.update_interval_ms);
     }
 
@@ -287,7 +361,10 @@ async fn show_monitoring_status(_config: &Config) -> Result<()> {
 }
 
 async fn start_dashboard(_config: &Config, port: u16, interval: u64, detailed: bool) -> Result<()> {
-    println!("Starting monitoring dashboard on port {} (update interval: {}s)", port, interval);
+    println!(
+        "Starting monitoring dashboard on port {} (update interval: {}s)",
+        port, interval
+    );
     if detailed {
         println!("Detailed metrics enabled");
     }
@@ -302,7 +379,10 @@ async fn start_dashboard(_config: &Config, port: u16, interval: u64, detailed: b
     let monitor = PerformanceMonitor::new(monitoring_config, metrics_collector).await?;
 
     println!("Dashboard started. Press Ctrl+C to stop.");
-    println!("Navigate to http://127.0.0.1:{} to view the dashboard", port);
+    println!(
+        "Navigate to http://127.0.0.1:{} to view the dashboard",
+        port
+    );
 
     let mut counter = 0;
     loop {
@@ -310,11 +390,15 @@ async fn start_dashboard(_config: &Config, port: u16, interval: u64, detailed: b
 
         if counter % 20 == 0 {
             if detailed {
-                println!("\n{:<8} {:<8} {:<10} {:<8} {:<8} {:<10} {:<8}",
-                    "Time", "Models", "Memory(MB)", "CPU%", "Alerts", "Cache%", "RPS");
+                println!(
+                    "\n{:<8} {:<8} {:<10} {:<8} {:<8} {:<10} {:<8}",
+                    "Time", "Models", "Memory(MB)", "CPU%", "Alerts", "Cache%", "RPS"
+                );
             } else {
-                println!("\n{:<8} {:<8} {:<10} {:<8}",
-                    "Time", "Models", "Memory(MB)", "Alerts");
+                println!(
+                    "\n{:<8} {:<8} {:<10} {:<8}",
+                    "Time", "Models", "Memory(MB)", "Alerts"
+                );
             }
         }
 
@@ -324,7 +408,8 @@ async fn start_dashboard(_config: &Config, port: u16, interval: u64, detailed: b
 
         if let Some(latest_metric) = metrics.first() {
             if detailed {
-                println!("{:<8} {:<8} {:<10} {:<8.1} {:<8} {:<10.1} {:<8.2}",
+                println!(
+                    "{:<8} {:<8} {:<10} {:<8.1} {:<8} {:<10.1} {:<8.2}",
                     now,
                     1, // Number of models (placeholder)
                     latest_metric.memory_usage_mb,
@@ -334,7 +419,8 @@ async fn start_dashboard(_config: &Config, port: u16, interval: u64, detailed: b
                     latest_metric.throughput_rps
                 );
             } else {
-                println!("{:<8} {:<8} {:<10} {:<8}",
+                println!(
+                    "{:<8} {:<8} {:<10} {:<8}",
                     now,
                     1, // Number of models (placeholder)
                     latest_metric.memory_usage_mb,
@@ -371,7 +457,8 @@ async fn show_alerts(
             .iter()
             .filter(|alert| {
                 if let Some(ref sev) = severity {
-                    std::mem::discriminant(&alert.severity) == std::mem::discriminant(&AlertSeverity::from(sev.clone()))
+                    std::mem::discriminant(&alert.severity)
+                        == std::mem::discriminant(&AlertSeverity::from(sev.clone()))
                 } else {
                     true
                 }
@@ -402,7 +489,8 @@ async fn show_alerts(
             .filter(|alert| alert.resolved)
             .filter(|alert| {
                 if let Some(ref sev) = severity {
-                    std::mem::discriminant(&alert.severity) == std::mem::discriminant(&AlertSeverity::from(sev.clone()))
+                    std::mem::discriminant(&alert.severity)
+                        == std::mem::discriminant(&AlertSeverity::from(sev.clone()))
                 } else {
                     true
                 }
@@ -412,7 +500,9 @@ async fn show_alerts(
 
         for alert in filtered_history {
             let duration = if let Some(resolved_at) = alert.resolved_at {
-                resolved_at.duration_since(alert.timestamp).unwrap_or(Duration::ZERO)
+                resolved_at
+                    .duration_since(alert.timestamp)
+                    .unwrap_or(Duration::ZERO)
             } else {
                 Duration::ZERO
             };
@@ -511,7 +601,10 @@ async fn test_alerts(
         println!("Generated {} test alerts", active_alerts.len());
 
         for alert in &active_alerts {
-            println!("  [{:?}] {:?}: {}", alert.severity, alert.alert_type, alert.message);
+            println!(
+                "  [{:?}] {:?}: {}",
+                alert.severity, alert.alert_type, alert.message
+            );
         }
     } else {
         println!("Alert system is configured and running.");
@@ -542,12 +635,27 @@ async fn show_trends(
     let duration = Duration::from_secs(hours * 3600);
     if let Some(aggregated) = monitor.get_aggregated_metrics(duration).await {
         println!("\n=== Aggregated Metrics ===");
-        println!("Average Response Time: {}ms", aggregated.avg_response_time_ms);
-        println!("Average Throughput: {:.2} RPS", aggregated.avg_throughput_rps);
-        println!("Average Error Rate: {:.2}%", aggregated.avg_error_rate_percent);
+        println!(
+            "Average Response Time: {}ms",
+            aggregated.avg_response_time_ms
+        );
+        println!(
+            "Average Throughput: {:.2} RPS",
+            aggregated.avg_throughput_rps
+        );
+        println!(
+            "Average Error Rate: {:.2}%",
+            aggregated.avg_error_rate_percent
+        );
         println!("Average Memory Usage: {}MB", aggregated.avg_memory_usage_mb);
-        println!("Average CPU Usage: {:.2}%", aggregated.avg_cpu_usage_percent);
-        println!("Average Cache Hit Rate: {:.2}%", aggregated.avg_cache_hit_rate_percent);
+        println!(
+            "Average CPU Usage: {:.2}%",
+            aggregated.avg_cpu_usage_percent
+        );
+        println!(
+            "Average Cache Hit Rate: {:.2}%",
+            aggregated.avg_cache_hit_rate_percent
+        );
         println!("Total Requests: {}", aggregated.total_requests);
         println!("Successful Requests: {}", aggregated.successful_requests);
         println!("Failed Requests: {}", aggregated.failed_requests);
@@ -599,13 +707,19 @@ async fn export_monitoring_data(
             let mut csv_output = String::new();
             csv_output.push_str("timestamp,model_id,response_time_ms,throughput_rps,error_rate_percent,memory_usage_mb,cpu_usage_percent\n");
             for metric in &metrics {
-                csv_output.push_str(&format!("{:?},{},{},{},{},{},{}\n",
-                    metric.timestamp, metric.model_id, metric.response_time_ms,
-                    metric.throughput_rps, metric.error_rate_percent,
-                    metric.memory_usage_mb, metric.cpu_usage_percent));
+                csv_output.push_str(&format!(
+                    "{:?},{},{},{},{},{},{}\n",
+                    metric.timestamp,
+                    metric.model_id,
+                    metric.response_time_ms,
+                    metric.throughput_rps,
+                    metric.error_rate_percent,
+                    metric.memory_usage_mb,
+                    metric.cpu_usage_percent
+                ));
             }
             csv_output
-        },
+        }
         ExportFormat::Yaml => serde_yaml::to_string(&export_data)
             .map_err(|e| anyhow::anyhow!("YAML serialization failed: {}", e))?,
     };
@@ -626,7 +740,10 @@ async fn watch_performance(
     model: Option<String>,
     alerts_only: bool,
 ) -> Result<()> {
-    println!("Starting performance monitoring (update interval: {}s)", interval);
+    println!(
+        "Starting performance monitoring (update interval: {}s)",
+        interval
+    );
     if let Some(ref model_id) = model {
         println!("Monitoring model: {}", model_id);
     }
@@ -641,8 +758,10 @@ async fn watch_performance(
     let mut counter = 0;
     loop {
         if counter % 20 == 0 && !alerts_only {
-            println!("{:<8} {:<12} {:<8} {:<8} {:<10} {:<8}",
-                "Time", "Model", "RT(ms)", "RPS", "Memory(MB)", "CPU%");
+            println!(
+                "{:<8} {:<12} {:<8} {:<8} {:<10} {:<8}",
+                "Time", "Model", "RT(ms)", "RPS", "Memory(MB)", "CPU%"
+            );
         }
 
         let now = chrono::Utc::now().format("%H:%M:%S");
@@ -652,7 +771,10 @@ async fn watch_performance(
             if !active_alerts.is_empty() {
                 println!("=== Active Alerts at {} ===", now);
                 for alert in &active_alerts {
-                    println!("[{:?}] {:?}: {}", alert.severity, alert.alert_type, alert.message);
+                    println!(
+                        "[{:?}] {:?}: {}",
+                        alert.severity, alert.alert_type, alert.message
+                    );
                 }
                 println!();
             }
@@ -664,7 +786,8 @@ async fn watch_performance(
             };
 
             if let Some(latest_metric) = metrics.first() {
-                println!("{:<8} {:<12} {:<8} {:<8.2} {:<10} {:<8.1}",
+                println!(
+                    "{:<8} {:<12} {:<8} {:<8.2} {:<10} {:<8.1}",
                     now,
                     latest_metric.model_id,
                     latest_metric.response_time_ms,
@@ -695,7 +818,10 @@ async fn generate_report(
 ) -> Result<()> {
     println!("=== Performance Report ===");
     println!("Report period: {} hours", hours);
-    println!("Generated at: {}", chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC"));
+    println!(
+        "Generated at: {}",
+        chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC")
+    );
 
     let monitoring_config = MonitoringConfig::default();
     let monitor = PerformanceMonitor::new(monitoring_config, None).await?;
@@ -705,24 +831,46 @@ async fn generate_report(
         println!("\n=== Executive Summary ===");
         println!("System Uptime: {:.2}%", aggregated.uptime_percent);
         println!("Total Requests Processed: {}", aggregated.total_requests);
-        println!("Average Response Time: {}ms", aggregated.avg_response_time_ms);
-        println!("Average Throughput: {:.2} RPS", aggregated.avg_throughput_rps);
-        println!("Overall Error Rate: {:.2}%", aggregated.avg_error_rate_percent);
+        println!(
+            "Average Response Time: {}ms",
+            aggregated.avg_response_time_ms
+        );
+        println!(
+            "Average Throughput: {:.2} RPS",
+            aggregated.avg_throughput_rps
+        );
+        println!(
+            "Overall Error Rate: {:.2}%",
+            aggregated.avg_error_rate_percent
+        );
 
         if detailed {
             println!("\n=== Detailed Performance Metrics ===");
             println!("Resource Utilization:");
-            println!("  Average Memory Usage: {}MB", aggregated.avg_memory_usage_mb);
-            println!("  Average CPU Usage: {:.2}%", aggregated.avg_cpu_usage_percent);
-            println!("  Cache Hit Rate: {:.2}%", aggregated.avg_cache_hit_rate_percent);
+            println!(
+                "  Average Memory Usage: {}MB",
+                aggregated.avg_memory_usage_mb
+            );
+            println!(
+                "  Average CPU Usage: {:.2}%",
+                aggregated.avg_cpu_usage_percent
+            );
+            println!(
+                "  Cache Hit Rate: {:.2}%",
+                aggregated.avg_cache_hit_rate_percent
+            );
 
             println!("\nRequest Statistics:");
-            println!("  Successful Requests: {} ({:.2}%)",
+            println!(
+                "  Successful Requests: {} ({:.2}%)",
                 aggregated.successful_requests,
-                (aggregated.successful_requests as f64 / aggregated.total_requests as f64) * 100.0);
-            println!("  Failed Requests: {} ({:.2}%)",
+                (aggregated.successful_requests as f64 / aggregated.total_requests as f64) * 100.0
+            );
+            println!(
+                "  Failed Requests: {} ({:.2}%)",
                 aggregated.failed_requests,
-                (aggregated.failed_requests as f64 / aggregated.total_requests as f64) * 100.0);
+                (aggregated.failed_requests as f64 / aggregated.total_requests as f64) * 100.0
+            );
         }
 
         if recommendations {
@@ -799,7 +947,9 @@ async fn benchmark_monitoring(
             let mut metrics_written = 0;
             let writer_start = std::time::Instant::now();
 
-            while writer_start.elapsed().as_secs() < duration && metrics_written < metrics_per_writer {
+            while writer_start.elapsed().as_secs() < duration
+                && metrics_written < metrics_per_writer
+            {
                 let test_metric = create_test_metric(&format!("benchmark-model-{}", i));
 
                 if let Err(e) = monitor_clone.record_metric(test_metric).await {
@@ -827,8 +977,14 @@ async fn benchmark_monitoring(
     println!("\n=== Benchmark Results ===");
     println!("Total time: {:?}", elapsed);
     println!("Metrics written: {}", total_written);
-    println!("Metrics per second: {:.2}", total_written as f64 / elapsed.as_secs_f64());
-    println!("Average write latency: {:.2}μs", elapsed.as_micros() as f64 / total_written as f64);
+    println!(
+        "Metrics per second: {:.2}",
+        total_written as f64 / elapsed.as_secs_f64()
+    );
+    println!(
+        "Average write latency: {:.2}μs",
+        elapsed.as_micros() as f64 / total_written as f64
+    );
 
     // Show current monitoring system status
     let current_metrics = monitor.get_current_metrics().await;

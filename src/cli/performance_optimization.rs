@@ -1,6 +1,6 @@
 use crate::config::Config;
 use crate::performance_optimization::{
-    PerformanceOptimizationSystem, PerformanceOptimizationConfig,
+    PerformanceOptimizationConfig, PerformanceOptimizationSystem,
 };
 use anyhow::Result;
 use clap::{Args, Subcommand};
@@ -254,9 +254,9 @@ pub struct BenchmarkComparison {
 
 impl BenchmarkComparison {
     pub fn has_regression(&self, threshold: f64) -> bool {
-        self.throughput_change < -threshold ||
-        self.latency_change > threshold ||
-        self.memory_change > threshold
+        self.throughput_change < -threshold
+            || self.latency_change > threshold
+            || self.memory_change > threshold
     }
 }
 
@@ -284,7 +284,8 @@ pub struct PerformanceStatus {
 
 // Helper function to parse key=value pairs
 fn parse_key_value_pairs(pairs: Option<Vec<String>>) -> HashMap<String, String> {
-    pairs.unwrap_or_default()
+    pairs
+        .unwrap_or_default()
         .iter()
         .filter_map(|s| {
             let parts: Vec<&str> = s.splitn(2, '=').collect();
@@ -1183,45 +1184,32 @@ pub enum BenchmarkCommand {
 }
 
 pub async fn execute(args: PerformanceOptimizationArgs, _config: &Config) -> Result<()> {
-    let system = PerformanceOptimizationSystem::new(PerformanceOptimizationConfig::default()).await?;
+    let system =
+        PerformanceOptimizationSystem::new(PerformanceOptimizationConfig::default()).await?;
 
     match args.command {
-        PerformanceCommand::Profile { command } => {
-            handle_profile_command(command, &system).await
-        }
-        PerformanceCommand::Optimize { command } => {
-            handle_optimize_command(command, &system).await
-        }
-        PerformanceCommand::AutoTune { command } => {
-            handle_autotune_command(command, &system).await
-        }
+        PerformanceCommand::Profile { command } => handle_profile_command(command, &system).await,
+        PerformanceCommand::Optimize { command } => handle_optimize_command(command, &system).await,
+        PerformanceCommand::AutoTune { command } => handle_autotune_command(command, &system).await,
         PerformanceCommand::Resources { command } => {
             handle_resource_command(command, &system).await
         }
-        PerformanceCommand::Cache { command } => {
-            handle_cache_command(command, &system).await
-        }
-        PerformanceCommand::Parallel { command } => {
-            handle_parallel_command(command, &system).await
-        }
-        PerformanceCommand::Memory { command } => {
-            handle_memory_command(command, &system).await
-        }
-        PerformanceCommand::IO { command } => {
-            handle_io_command(command, &system).await
-        }
-        PerformanceCommand::Network { command } => {
-            handle_network_command(command, &system).await
-        }
-        PerformanceCommand::Model { command } => {
-            handle_model_opt_command(command, &system).await
-        }
+        PerformanceCommand::Cache { command } => handle_cache_command(command, &system).await,
+        PerformanceCommand::Parallel { command } => handle_parallel_command(command, &system).await,
+        PerformanceCommand::Memory { command } => handle_memory_command(command, &system).await,
+        PerformanceCommand::IO { command } => handle_io_command(command, &system).await,
+        PerformanceCommand::Network { command } => handle_network_command(command, &system).await,
+        PerformanceCommand::Model { command } => handle_model_opt_command(command, &system).await,
         PerformanceCommand::Benchmark { command } => {
             handle_benchmark_command(command, &system).await
         }
-        PerformanceCommand::Status { detailed, format, refresh, history, realtime } => {
-            handle_status_command(&system, detailed, format, refresh, history, realtime).await
-        }
+        PerformanceCommand::Status {
+            detailed,
+            format,
+            refresh,
+            history,
+            realtime,
+        } => handle_status_command(&system, detailed, format, refresh, history, realtime).await,
     }
 }
 
@@ -1230,15 +1218,35 @@ async fn handle_profile_command(
     system: &PerformanceOptimizationSystem,
 ) -> Result<()> {
     match command {
-        ProfileCommand::Start { name, profile_type: _, duration, sample_rate: _, cpu, memory, io, network, gpu } => {
+        ProfileCommand::Start {
+            name,
+            profile_type: _,
+            duration,
+            sample_rate: _,
+            cpu,
+            memory,
+            io,
+            network,
+            gpu,
+        } => {
             println!("Starting profiling session: {}", name);
 
             let mut options = HashMap::new();
-            if cpu { options.insert("cpu".to_string(), "true".to_string()); }
-            if memory { options.insert("memory".to_string(), "true".to_string()); }
-            if io { options.insert("io".to_string(), "true".to_string()); }
-            if network { options.insert("network".to_string(), "true".to_string()); }
-            if gpu { options.insert("gpu".to_string(), "true".to_string()); }
+            if cpu {
+                options.insert("cpu".to_string(), "true".to_string());
+            }
+            if memory {
+                options.insert("memory".to_string(), "true".to_string());
+            }
+            if io {
+                options.insert("io".to_string(), "true".to_string());
+            }
+            if network {
+                options.insert("network".to_string(), "true".to_string());
+            }
+            if gpu {
+                options.insert("gpu".to_string(), "true".to_string());
+            }
 
             system.start_profiling_with_name(&name, options).await?;
 
@@ -1269,7 +1277,13 @@ async fn handle_profile_command(
             Ok(())
         }
 
-        ProfileCommand::Analyze { profile, depth: _, recommend, baseline: _, export: _ } => {
+        ProfileCommand::Analyze {
+            profile,
+            depth: _,
+            recommend,
+            baseline: _,
+            export: _,
+        } => {
             println!("Analyzing profile: {}", profile);
 
             let results = system.analyze_profile(&profile).await?;
@@ -1302,16 +1316,27 @@ async fn handle_profile_command(
             Ok(())
         }
 
-        ProfileCommand::Compare { profile1, profile2, metrics: _, format: _ } => {
+        ProfileCommand::Compare {
+            profile1,
+            profile2,
+            metrics: _,
+            format: _,
+        } => {
             println!("Comparing profiles: {} vs {}", profile1, profile2);
 
             let comparison = system.compare_profiles(&profile1, &profile2).await?;
 
             println!("\nComparison Results:");
             println!("  CPU Difference: {:.2}%", comparison.cpu_diff);
-            println!("  Memory Difference: {} MB", comparison.memory_diff / 1_048_576);
+            println!(
+                "  Memory Difference: {} MB",
+                comparison.memory_diff / 1_048_576
+            );
             println!("  I/O Difference: {}", comparison.io_diff);
-            println!("  Network Difference: {} KB", comparison.network_diff / 1024);
+            println!(
+                "  Network Difference: {} KB",
+                comparison.network_diff / 1024
+            );
 
             Ok(())
         }
@@ -1323,14 +1348,23 @@ async fn handle_optimize_command(
     system: &PerformanceOptimizationSystem,
 ) -> Result<()> {
     match command {
-        OptimizeCommand::Run { target, level, strategy, dry_run, force, overrides: _ } => {
+        OptimizeCommand::Run {
+            target,
+            level,
+            strategy,
+            dry_run,
+            force,
+            overrides: _,
+        } => {
             println!("Running optimization for target: {}", target);
 
             if dry_run {
                 println!("DRY RUN MODE - No changes will be applied");
             }
 
-            let result = system.optimize_with_params(&target, level, strategy).await?;
+            let result = system
+                .optimize_with_params(&target, level, strategy)
+                .await?;
 
             println!("\nOptimization Results:");
             println!("  Performance Gain: {:.2}%", result.performance_gain);
@@ -1378,7 +1412,11 @@ async fn handle_optimize_command(
             Ok(())
         }
 
-        OptimizeCommand::History { limit, metrics, export } => {
+        OptimizeCommand::History {
+            limit,
+            metrics,
+            export,
+        } => {
             println!("Retrieving optimization history...");
 
             let history = system.get_optimization_history(limit).await?;
@@ -1399,10 +1437,17 @@ async fn handle_optimize_command(
             Ok(())
         }
 
-        OptimizeCommand::Plan { targets, budget, time_limit, detailed } => {
+        OptimizeCommand::Plan {
+            targets,
+            budget,
+            time_limit,
+            detailed,
+        } => {
             println!("Creating optimization plan for {} targets", targets.len());
 
-            let plan = system.create_optimization_plan(targets, budget, time_limit).await?;
+            let plan = system
+                .create_optimization_plan(targets, budget, time_limit)
+                .await?;
 
             println!("\nOptimization Plan:");
             for step in &plan.steps {
@@ -1423,10 +1468,19 @@ async fn handle_autotune_command(
     system: &PerformanceOptimizationSystem,
 ) -> Result<()> {
     match command {
-        AutoTuneCommand::Start { config, algorithm, max_iterations, target: _, exploration: _, background } => {
+        AutoTuneCommand::Start {
+            config,
+            algorithm,
+            max_iterations,
+            target: _,
+            exploration: _,
+            background,
+        } => {
             println!("Starting auto-tuning session...");
 
-            let session_id = system.start_autotuning(config, algorithm, max_iterations).await?;
+            let session_id = system
+                .start_autotuning(config, algorithm, max_iterations)
+                .await?;
 
             println!("Auto-tuning session started: {}", session_id);
 
@@ -1441,21 +1495,34 @@ async fn handle_autotune_command(
             Ok(())
         }
 
-        AutoTuneCommand::Progress { id, graph, refresh: _ } => {
+        AutoTuneCommand::Progress {
+            id,
+            graph,
+            refresh: _,
+        } => {
             println!("Checking auto-tuning progress for: {}", id);
 
             let progress = system.get_autotuning_progress(&id).await?;
 
             println!("\nProgress Report:");
-            println!("  Iteration: {}/{}", progress.current_iteration, progress.max_iterations);
+            println!(
+                "  Iteration: {}/{}",
+                progress.current_iteration, progress.max_iterations
+            );
             println!("  Best Score: {:.3}", progress.best_score);
             println!("  Current Score: {:.3}", progress.current_score);
             println!("  Improvement: {:.2}%", progress.improvement);
 
             if graph {
-                println!("  Progress: [{}{}]",
-                    "█".repeat(progress.current_iteration as usize * 20 / progress.max_iterations as usize),
-                    "░".repeat(20 - progress.current_iteration as usize * 20 / progress.max_iterations as usize)
+                println!(
+                    "  Progress: [{}{}]",
+                    "█".repeat(
+                        progress.current_iteration as usize * 20 / progress.max_iterations as usize
+                    ),
+                    "░".repeat(
+                        20 - progress.current_iteration as usize * 20
+                            / progress.max_iterations as usize
+                    )
                 );
             }
 
@@ -1471,8 +1538,12 @@ async fn handle_autotune_command(
 
         AutoTuneCommand::List { active, detailed } => {
             println!("Listing auto-tuning sessions...");
-            if active { println!("Showing active sessions only"); }
-            if detailed { println!("Showing detailed information"); }
+            if active {
+                println!("Showing active sessions only");
+            }
+            if detailed {
+                println!("Showing detailed information");
+            }
             println!("No sessions found"); // Simplified
             Ok(())
         }
@@ -1491,7 +1562,11 @@ async fn handle_autotune_command(
             Ok(())
         }
 
-        AutoTuneCommand::Export { id, history, output } => {
+        AutoTuneCommand::Export {
+            id,
+            history,
+            output,
+        } => {
             println!("Exporting auto-tuning configuration: {}", id);
 
             let config = system.export_autotuning(&id, history).await?;
@@ -1513,7 +1588,14 @@ async fn handle_resource_command(
     system: &PerformanceOptimizationSystem,
 ) -> Result<()> {
     match command {
-        ResourceCommand::Usage { resource_type, window, history, monitor, interval: _, alerts: _ } => {
+        ResourceCommand::Usage {
+            resource_type,
+            window,
+            history,
+            monitor,
+            interval: _,
+            alerts: _,
+        } => {
             if monitor {
                 println!("Starting resource monitoring...");
                 loop {
@@ -1521,7 +1603,8 @@ async fn handle_resource_command(
 
                     println!("\nResource Usage:");
                     println!("  CPU: {:.2}%", stats.cpu_usage);
-                    println!("  Memory: {} / {} GB",
+                    println!(
+                        "  Memory: {} / {} GB",
                         stats.memory_used / 1_073_741_824,
                         stats.memory_total / 1_073_741_824
                     );
@@ -1550,15 +1633,31 @@ async fn handle_resource_command(
             Ok(())
         }
 
-        ResourceCommand::Limit { cpu, memory, gpu_memory, io_bandwidth, network_bandwidth } => {
+        ResourceCommand::Limit {
+            cpu,
+            memory,
+            gpu_memory,
+            io_bandwidth,
+            network_bandwidth,
+        } => {
             println!("Setting resource limits...");
 
             let mut limits = HashMap::new();
-            if let Some(val) = cpu { limits.insert("cpu".to_string(), val.to_string()); }
-            if let Some(val) = memory { limits.insert("memory".to_string(), val.to_string()); }
-            if let Some(val) = gpu_memory { limits.insert("gpu_memory".to_string(), val.to_string()); }
-            if let Some(val) = io_bandwidth { limits.insert("io_bandwidth".to_string(), val.to_string()); }
-            if let Some(val) = network_bandwidth { limits.insert("network_bandwidth".to_string(), val.to_string()); }
+            if let Some(val) = cpu {
+                limits.insert("cpu".to_string(), val.to_string());
+            }
+            if let Some(val) = memory {
+                limits.insert("memory".to_string(), val.to_string());
+            }
+            if let Some(val) = gpu_memory {
+                limits.insert("gpu_memory".to_string(), val.to_string());
+            }
+            if let Some(val) = io_bandwidth {
+                limits.insert("io_bandwidth".to_string(), val.to_string());
+            }
+            if let Some(val) = network_bandwidth {
+                limits.insert("network_bandwidth".to_string(), val.to_string());
+            }
 
             system.set_resource_limits(limits).await?;
             println!("Resource limits applied");
@@ -1566,12 +1665,27 @@ async fn handle_resource_command(
             Ok(())
         }
 
-        ResourceCommand::AutoScale { enable, policy, min, max, scale_up, scale_down } => {
+        ResourceCommand::AutoScale {
+            enable,
+            policy,
+            min,
+            max,
+            scale_up,
+            scale_down,
+        } => {
             if enable {
                 println!("Enabling auto-scaling...");
                 let min_parsed = parse_key_value_pairs(min);
                 let max_parsed = parse_key_value_pairs(max);
-                system.enable_autoscaling(policy, Some(min_parsed.keys().cloned().collect()), Some(max_parsed.keys().cloned().collect()), scale_up, scale_down).await?;
+                system
+                    .enable_autoscaling(
+                        policy,
+                        Some(min_parsed.keys().cloned().collect()),
+                        Some(max_parsed.keys().cloned().collect()),
+                        scale_up,
+                        scale_down,
+                    )
+                    .await?;
                 println!("Auto-scaling enabled");
             } else {
                 println!("Disabling auto-scaling...");
@@ -1582,7 +1696,11 @@ async fn handle_resource_command(
             Ok(())
         }
 
-        ResourceCommand::Allocate { target, specs, priority } => {
+        ResourceCommand::Allocate {
+            target,
+            specs,
+            priority,
+        } => {
             println!("Allocating resources for: {}", target);
 
             system.allocate_resources(&target, specs, priority).await?;
@@ -1591,7 +1709,12 @@ async fn handle_resource_command(
             Ok(())
         }
 
-        ResourceCommand::Report { period, group_by, format: _, output } => {
+        ResourceCommand::Report {
+            period,
+            group_by,
+            format: _,
+            output,
+        } => {
             println!("Generating resource report...");
 
             let report = system.generate_resource_report(period, group_by).await?;
@@ -1618,7 +1741,11 @@ async fn handle_cache_command(
     system: &PerformanceOptimizationSystem,
 ) -> Result<()> {
     match command {
-        CacheCommand::Stats { level, detailed, history } => {
+        CacheCommand::Stats {
+            level,
+            detailed,
+            history,
+        } => {
             println!("Retrieving cache statistics...");
 
             let stats = system.get_cache_stats(level).await?;
@@ -1644,7 +1771,11 @@ async fn handle_cache_command(
             Ok(())
         }
 
-        CacheCommand::Clear { level, pattern, force } => {
+        CacheCommand::Clear {
+            level,
+            pattern,
+            force,
+        } => {
             if force {
                 println!("Force clearing cache...");
             } else {
@@ -1657,7 +1788,11 @@ async fn handle_cache_command(
             Ok(())
         }
 
-        CacheCommand::Warmup { models, patterns, parallel } => {
+        CacheCommand::Warmup {
+            models,
+            patterns,
+            parallel,
+        } => {
             println!("Starting cache warmup...");
 
             let warmed = system.warmup_cache(models, patterns, parallel).await?;
@@ -1666,7 +1801,11 @@ async fn handle_cache_command(
             Ok(())
         }
 
-        CacheCommand::Policy { policy, parameters, level: _ } => {
+        CacheCommand::Policy {
+            policy,
+            parameters,
+            level: _,
+        } => {
             println!("Setting cache policy: {}", policy);
 
             let policy_config = parse_key_value_pairs(parameters);
@@ -1676,14 +1815,21 @@ async fn handle_cache_command(
             Ok(())
         }
 
-        CacheCommand::Analyze { period, recommend, export } => {
+        CacheCommand::Analyze {
+            period,
+            recommend,
+            export,
+        } => {
             println!("Analyzing cache performance...");
 
             let analysis = system.analyze_cache(period).await?;
 
             println!("\nCache Analysis:");
             println!("  Efficiency Score: {:.1}/10", analysis.efficiency_score);
-            println!("  Memory Efficiency: {:.1}%", analysis.memory_efficiency * 100.0);
+            println!(
+                "  Memory Efficiency: {:.1}%",
+                analysis.memory_efficiency * 100.0
+            );
             println!("  Access Pattern: {}", analysis.access_pattern);
 
             if recommend {
@@ -1708,14 +1854,27 @@ async fn handle_parallel_command(
     system: &PerformanceOptimizationSystem,
 ) -> Result<()> {
     match command {
-        ParallelCommand::Config { workers, queue_size, timeout, strategy } => {
+        ParallelCommand::Config {
+            workers,
+            queue_size,
+            timeout,
+            strategy,
+        } => {
             println!("Configuring parallel processing...");
 
             let mut config = HashMap::new();
-            if let Some(w) = workers { config.insert("workers".to_string(), w.to_string()); }
-            if let Some(q) = queue_size { config.insert("queue_size".to_string(), q.to_string()); }
-            if let Some(t) = timeout { config.insert("timeout".to_string(), t.to_string()); }
-            if let Some(s) = strategy { config.insert("strategy".to_string(), s); }
+            if let Some(w) = workers {
+                config.insert("workers".to_string(), w.to_string());
+            }
+            if let Some(q) = queue_size {
+                config.insert("queue_size".to_string(), q.to_string());
+            }
+            if let Some(t) = timeout {
+                config.insert("timeout".to_string(), t.to_string());
+            }
+            if let Some(s) = strategy {
+                config.insert("strategy".to_string(), s);
+            }
 
             system.configure_parallelization(config).await?;
             println!("Parallel processing configured");
@@ -1723,7 +1882,10 @@ async fn handle_parallel_command(
             Ok(())
         }
 
-        ParallelCommand::Stats { tasks: _, bottlenecks } => {
+        ParallelCommand::Stats {
+            tasks: _,
+            bottlenecks,
+        } => {
             println!("Retrieving parallel processing statistics...");
 
             let stats = system.get_parallel_stats().await?;
@@ -1737,17 +1899,27 @@ async fn handle_parallel_command(
             if bottlenecks {
                 println!("\nBottlenecks:");
                 for bottleneck in stats.bottlenecks {
-                    println!("  • {} (Impact: {:.1}%)", bottleneck.name, bottleneck.impact * 100.0);
+                    println!(
+                        "  • {} (Impact: {:.1}%)",
+                        bottleneck.name,
+                        bottleneck.impact * 100.0
+                    );
                 }
             }
 
             Ok(())
         }
 
-        ParallelCommand::Optimize { throughput, latency, auto } => {
+        ParallelCommand::Optimize {
+            throughput,
+            latency,
+            auto,
+        } => {
             println!("Optimizing parallel processing...");
 
-            let result = system.optimize_parallelization(throughput, latency, auto).await?;
+            let result = system
+                .optimize_parallelization(throughput, latency, auto)
+                .await?;
 
             println!("\nOptimization Results:");
             println!("  Throughput Gain: {:.2}%", result.throughput_gain);
@@ -1765,8 +1937,14 @@ async fn handle_parallel_command(
 
             println!("\nTask Distribution Analysis:");
             println!("  Balance Score: {:.1}/10", analysis.balance_score);
-            println!("  Worker Utilization: {:.1}%", analysis.worker_utilization * 100.0);
-            println!("  Queue Efficiency: {:.1}%", analysis.queue_efficiency * 100.0);
+            println!(
+                "  Worker Utilization: {:.1}%",
+                analysis.worker_utilization * 100.0
+            );
+            println!(
+                "  Queue Efficiency: {:.1}%",
+                analysis.queue_efficiency * 100.0
+            );
 
             if recommend {
                 println!("\nRecommendations would be shown here");
@@ -1782,7 +1960,11 @@ async fn handle_memory_command(
     system: &PerformanceOptimizationSystem,
 ) -> Result<()> {
     match command {
-        MemoryCommand::Stats { heap, allocations, group_by: _ } => {
+        MemoryCommand::Stats {
+            heap,
+            allocations,
+            group_by: _,
+        } => {
             println!("Retrieving memory statistics...");
 
             let stats = system.get_memory_stats().await?;
@@ -1810,19 +1992,33 @@ async fn handle_memory_command(
             Ok(())
         }
 
-        MemoryCommand::Pool { name, size, preallocate, growth } => {
+        MemoryCommand::Pool {
+            name,
+            size,
+            preallocate,
+            growth,
+        } => {
             println!("Configuring memory pool: {}", name);
 
-            system.configure_memory_pool(&name, size, preallocate, growth).await?;
+            system
+                .configure_memory_pool(&name, size, preallocate, growth)
+                .await?;
             println!("Memory pool configured");
 
             Ok(())
         }
 
-        MemoryCommand::Optimize { target, compression, dedup, gc } => {
+        MemoryCommand::Optimize {
+            target,
+            compression,
+            dedup,
+            gc,
+        } => {
             println!("Optimizing memory usage...");
 
-            let result = system.optimize_memory(target, compression, dedup, gc).await?;
+            let result = system
+                .optimize_memory(target, compression, dedup, gc)
+                .await?;
 
             println!("\nMemory Optimization Results:");
             println!("  Memory Saved: {} MB", result.memory_saved / 1_048_576);
@@ -1832,7 +2028,11 @@ async fn handle_memory_command(
             Ok(())
         }
 
-        MemoryCommand::Leak { start, stop, analyze } => {
+        MemoryCommand::Leak {
+            start,
+            stop,
+            analyze,
+        } => {
             if start {
                 println!("Starting memory leak detection...");
                 system.start_leak_detection().await?;
@@ -1861,16 +2061,25 @@ async fn handle_memory_command(
             Ok(())
         }
 
-        MemoryCommand::Test { duration, pattern, target } => {
+        MemoryCommand::Test {
+            duration,
+            pattern,
+            target,
+        } => {
             println!("Running memory pressure test...");
 
-            let result = system.run_memory_pressure_test(duration, pattern, target).await?;
+            let result = system
+                .run_memory_pressure_test(duration, pattern, target)
+                .await?;
 
             println!("\nMemory Pressure Test Results:");
             println!("  Peak Usage: {} GB", result.peak_usage / 1_073_741_824);
             println!("  Avg Usage: {} GB", result.avg_usage / 1_073_741_824);
             println!("  OOM Events: {}", result.oom_events);
-            println!("  Performance Impact: {:.1}%", result.performance_impact * 100.0);
+            println!(
+                "  Performance Impact: {:.1}%",
+                result.performance_impact * 100.0
+            );
 
             Ok(())
         }
@@ -1882,7 +2091,11 @@ async fn handle_io_command(
     system: &PerformanceOptimizationSystem,
 ) -> Result<()> {
     match command {
-        IOCommand::Stats { device, latency, throughput: _ } => {
+        IOCommand::Stats {
+            device,
+            latency,
+            throughput: _,
+        } => {
             println!("Retrieving I/O statistics...");
 
             let stats = system.get_io_stats(device).await?;
@@ -1890,8 +2103,14 @@ async fn handle_io_command(
             println!("\nI/O Statistics:");
             println!("  Read Operations: {}", stats.read_ops);
             println!("  Write Operations: {}", stats.write_ops);
-            println!("  Read Throughput: {} MB/s", stats.read_throughput / 1_048_576);
-            println!("  Write Throughput: {} MB/s", stats.write_throughput / 1_048_576);
+            println!(
+                "  Read Throughput: {} MB/s",
+                stats.read_throughput / 1_048_576
+            );
+            println!(
+                "  Write Throughput: {} MB/s",
+                stats.write_throughput / 1_048_576
+            );
 
             if latency {
                 println!("  Read Latency: {:.2} ms", stats.read_latency_ms);
@@ -1901,14 +2120,27 @@ async fn handle_io_command(
             Ok(())
         }
 
-        IOCommand::Config { buffer_size, read_ahead, write_behind, queue_depth } => {
+        IOCommand::Config {
+            buffer_size,
+            read_ahead,
+            write_behind,
+            queue_depth,
+        } => {
             println!("Configuring I/O optimization...");
 
             let mut config = HashMap::new();
-            if let Some(b) = buffer_size { config.insert("buffer_size".to_string(), b.to_string()); }
-            if let Some(r) = read_ahead { config.insert("read_ahead".to_string(), r.to_string()); }
-            if let Some(w) = write_behind { config.insert("write_behind".to_string(), w.to_string()); }
-            if let Some(q) = queue_depth { config.insert("queue_depth".to_string(), q.to_string()); }
+            if let Some(b) = buffer_size {
+                config.insert("buffer_size".to_string(), b.to_string());
+            }
+            if let Some(r) = read_ahead {
+                config.insert("read_ahead".to_string(), r.to_string());
+            }
+            if let Some(w) = write_behind {
+                config.insert("write_behind".to_string(), w.to_string());
+            }
+            if let Some(q) = queue_depth {
+                config.insert("queue_depth".to_string(), q.to_string());
+            }
 
             system.configure_io(config).await?;
             println!("I/O configuration updated");
@@ -1916,25 +2148,44 @@ async fn handle_io_command(
             Ok(())
         }
 
-        IOCommand::Schedule { scheduler, priorities, bandwidth } => {
+        IOCommand::Schedule {
+            scheduler,
+            priorities,
+            bandwidth,
+        } => {
             println!("Configuring I/O scheduling...");
 
-            system.configure_io_scheduling(scheduler, priorities, bandwidth).await?;
+            system
+                .configure_io_scheduling(scheduler, priorities, bandwidth)
+                .await?;
             println!("I/O scheduling configured");
 
             Ok(())
         }
 
-        IOCommand::Test { test_type, size, block_size, duration } => {
+        IOCommand::Test {
+            test_type,
+            size,
+            block_size,
+            duration,
+        } => {
             println!("Running I/O performance test...");
 
-            let result = system.run_io_test(test_type, size, block_size, duration).await?;
+            let result = system
+                .run_io_test(test_type, size, block_size, duration)
+                .await?;
 
             println!("\nI/O Test Results:");
             println!("  Read IOPS: {}", result.read_iops);
             println!("  Write IOPS: {}", result.write_iops);
-            println!("  Read Bandwidth: {} MB/s", result.read_bandwidth / 1_048_576);
-            println!("  Write Bandwidth: {} MB/s", result.write_bandwidth / 1_048_576);
+            println!(
+                "  Read Bandwidth: {} MB/s",
+                result.read_bandwidth / 1_048_576
+            );
+            println!(
+                "  Write Bandwidth: {} MB/s",
+                result.write_bandwidth / 1_048_576
+            );
             println!("  Avg Latency: {:.2} ms", result.avg_latency_ms);
 
             Ok(())
@@ -1947,7 +2198,12 @@ async fn handle_network_command(
     system: &PerformanceOptimizationSystem,
 ) -> Result<()> {
     match command {
-        NetworkCommand::Stats { interface, latency, bandwidth, errors } => {
+        NetworkCommand::Stats {
+            interface,
+            latency,
+            bandwidth,
+            errors,
+        } => {
             println!("Retrieving network statistics...");
 
             let stats = system.get_network_stats(interface).await?;
@@ -1959,8 +2215,14 @@ async fn handle_network_command(
             println!("  Bytes Received: {} MB", stats.bytes_received / 1_048_576);
 
             if bandwidth {
-                println!("  Upload Bandwidth: {} Mbps", stats.upload_bandwidth * 8 / 1_000_000);
-                println!("  Download Bandwidth: {} Mbps", stats.download_bandwidth * 8 / 1_000_000);
+                println!(
+                    "  Upload Bandwidth: {} Mbps",
+                    stats.upload_bandwidth * 8 / 1_000_000
+                );
+                println!(
+                    "  Download Bandwidth: {} Mbps",
+                    stats.download_bandwidth * 8 / 1_000_000
+                );
             }
 
             if latency {
@@ -1978,7 +2240,12 @@ async fn handle_network_command(
             Ok(())
         }
 
-        NetworkCommand::Config { buffers, window_size, keep_alive, compression } => {
+        NetworkCommand::Config {
+            buffers,
+            window_size,
+            keep_alive,
+            compression,
+        } => {
             println!("Configuring network optimization...");
 
             let mut config = HashMap::new();
@@ -1990,9 +2257,15 @@ async fn handle_network_command(
                     }
                 }
             }
-            if let Some(w) = window_size { config.insert("window_size".to_string(), w.to_string()); }
-            if let Some(k) = keep_alive { config.insert("keep_alive".to_string(), k.to_string()); }
-            if let Some(c) = compression { config.insert("compression".to_string(), c.to_string()); }
+            if let Some(w) = window_size {
+                config.insert("window_size".to_string(), w.to_string());
+            }
+            if let Some(k) = keep_alive {
+                config.insert("keep_alive".to_string(), k.to_string());
+            }
+            if let Some(c) = compression {
+                config.insert("compression".to_string(), c.to_string());
+            }
 
             system.configure_network(config).await?;
             println!("Network configuration updated");
@@ -2000,19 +2273,33 @@ async fn handle_network_command(
             Ok(())
         }
 
-        NetworkCommand::Pool { min, max, idle_timeout, validation } => {
+        NetworkCommand::Pool {
+            min,
+            max,
+            idle_timeout,
+            validation,
+        } => {
             println!("Configuring connection pool...");
 
-            system.configure_connection_pool(min, max, idle_timeout, validation).await?;
+            system
+                .configure_connection_pool(min, max, idle_timeout, validation)
+                .await?;
             println!("Connection pool configured");
 
             Ok(())
         }
 
-        NetworkCommand::Test { test_type, host, duration, parallel } => {
+        NetworkCommand::Test {
+            test_type,
+            host,
+            duration,
+            parallel,
+        } => {
             println!("Running network performance test...");
 
-            let result = system.run_network_test(test_type, host, duration, parallel).await?;
+            let result = system
+                .run_network_test(test_type, host, duration, parallel)
+                .await?;
 
             println!("\nNetwork Test Results:");
             println!("  Throughput: {} Mbps", result.throughput * 8 / 1_000_000);
@@ -2030,10 +2317,18 @@ async fn handle_model_opt_command(
     system: &PerformanceOptimizationSystem,
 ) -> Result<()> {
     match command {
-        ModelCommand::Quantize { model, quant_type, bits, calibration, output } => {
+        ModelCommand::Quantize {
+            model,
+            quant_type,
+            bits,
+            calibration,
+            output,
+        } => {
             println!("Quantizing model: {}", model);
 
-            let result = system.quantize_model(&model, quant_type, bits, calibration).await?;
+            let result = system
+                .quantize_model(&model, quant_type, bits, calibration)
+                .await?;
 
             println!("\nQuantization Results:");
             println!("  Original Size: {} MB", result.original_size / 1_048_576);
@@ -2048,13 +2343,24 @@ async fn handle_model_opt_command(
             Ok(())
         }
 
-        ModelCommand::Prune { model, ratio, method, preserve_accuracy, output } => {
+        ModelCommand::Prune {
+            model,
+            ratio,
+            method,
+            preserve_accuracy,
+            output,
+        } => {
             println!("Pruning model: {}", model);
 
-            let result = system.prune_model(&model, ratio, method, preserve_accuracy).await?;
+            let result = system
+                .prune_model(&model, ratio, method, preserve_accuracy)
+                .await?;
 
             println!("\nPruning Results:");
-            println!("  Parameters Removed: {:.1}%", result.parameters_removed * 100.0);
+            println!(
+                "  Parameters Removed: {:.1}%",
+                result.parameters_removed * 100.0
+            );
             println!("  Size Reduction: {} bytes", result.size_reduction);
             println!("  Speed Improvement: {:.2}x", result.speed_improvement);
             println!("  Accuracy Impact: {:.3}%", result.accuracy_impact * 100.0);
@@ -2066,16 +2372,27 @@ async fn handle_model_opt_command(
             Ok(())
         }
 
-        ModelCommand::Distill { teacher, student, data, epochs, output } => {
+        ModelCommand::Distill {
+            teacher,
+            student,
+            data,
+            epochs,
+            output,
+        } => {
             println!("Distilling model: {} -> {}", teacher, student);
 
-            let result = system.distill_model(&teacher, &student, data, epochs).await?;
+            let result = system
+                .distill_model(&teacher, &student, data, epochs)
+                .await?;
 
             println!("\nDistillation Results:");
             println!("  Student Size: {} MB", result.student_size / 1_048_576);
             println!("  Size Reduction: {} bytes", result.size_reduction);
             println!("  Speed Improvement: {:.2}x", result.speed_improvement);
-            println!("  Knowledge Transfer: {:.2}%", result.knowledge_transfer * 100.0);
+            println!(
+                "  Knowledge Transfer: {:.2}%",
+                result.knowledge_transfer * 100.0
+            );
 
             if let Some(path) = output {
                 println!("Model saved to: {}", path.display());
@@ -2084,15 +2401,28 @@ async fn handle_model_opt_command(
             Ok(())
         }
 
-        ModelCommand::Fuse { model, patterns, level, output } => {
+        ModelCommand::Fuse {
+            model,
+            patterns,
+            level,
+            output,
+        } => {
             println!("Fusing operations in model: {}", model);
 
-            let result = system.fuse_model_operations(&model, patterns, level).await?;
+            let result = system
+                .fuse_model_operations(&model, patterns, level)
+                .await?;
 
             println!("\nOperation Fusion Results:");
             println!("  Operations Fused: {}", result.operations_fused);
-            println!("  Latency Reduction: {:.1}%", result.latency_reduction * 100.0);
-            println!("  Memory Reduction: {:.1}%", result.memory_reduction * 100.0);
+            println!(
+                "  Latency Reduction: {:.1}%",
+                result.latency_reduction * 100.0
+            );
+            println!(
+                "  Memory Reduction: {:.1}%",
+                result.memory_reduction * 100.0
+            );
 
             if let Some(path) = output {
                 println!("Model saved to: {}", path.display());
@@ -2101,7 +2431,12 @@ async fn handle_model_opt_command(
             Ok(())
         }
 
-        ModelCommand::Compile { model, backend, flags, output } => {
+        ModelCommand::Compile {
+            model,
+            backend,
+            flags,
+            output,
+        } => {
             println!("Compiling model: {}", model);
 
             let result = system.compile_model(&model, backend, flags).await?;
@@ -2125,10 +2460,18 @@ async fn handle_benchmark_command(
     system: &PerformanceOptimizationSystem,
 ) -> Result<()> {
     match command {
-        BenchmarkCommand::Run { suite, models, iterations, parallel, output } => {
+        BenchmarkCommand::Run {
+            suite,
+            models,
+            iterations,
+            parallel,
+            output,
+        } => {
             println!("Running benchmark suite...");
 
-            let results = system.run_benchmark(suite, models, iterations, parallel).await?;
+            let results = system
+                .run_benchmark(suite, models, iterations, parallel)
+                .await?;
 
             println!("\nBenchmark Results:");
             for result in &results {
@@ -2146,13 +2489,23 @@ async fn handle_benchmark_command(
             Ok(())
         }
 
-        BenchmarkCommand::Compare { baseline, comparison, metrics: _, format: _ } => {
+        BenchmarkCommand::Compare {
+            baseline,
+            comparison,
+            metrics: _,
+            format: _,
+        } => {
             println!("Comparing benchmarks: {} vs {}", baseline, comparison);
 
-            let result = system.compare_benchmarks(&baseline, &comparison, None).await?;
+            let result = system
+                .compare_benchmarks(&baseline, &comparison, None)
+                .await?;
 
             println!("\nComparison Results:");
-            println!("  Throughput Change: {:+.1}%", result.throughput_change * 100.0);
+            println!(
+                "  Throughput Change: {:+.1}%",
+                result.throughput_change * 100.0
+            );
             println!("  Latency Change: {:+.1}%", result.latency_change * 100.0);
             println!("  Memory Change: {:+.1}%", result.memory_change * 100.0);
 
@@ -2165,7 +2518,11 @@ async fn handle_benchmark_command(
             Ok(())
         }
 
-        BenchmarkCommand::Suite { name, config, tests } => {
+        BenchmarkCommand::Suite {
+            name,
+            config,
+            tests,
+        } => {
             println!("Creating benchmark suite: {}", name);
 
             system.create_benchmark_suite(&name, config, tests).await?;
@@ -2189,10 +2546,17 @@ async fn handle_benchmark_command(
             Ok(())
         }
 
-        BenchmarkCommand::Continuous { enable, schedule, detect_regression, alerts } => {
+        BenchmarkCommand::Continuous {
+            enable,
+            schedule,
+            detect_regression,
+            alerts,
+        } => {
             if enable {
                 println!("Enabling continuous benchmarking...");
-                system.enable_continuous_benchmarking(schedule, detect_regression, alerts).await?;
+                system
+                    .enable_continuous_benchmarking(schedule, detect_regression, alerts)
+                    .await?;
                 println!("Continuous benchmarking enabled");
             } else {
                 println!("Disabling continuous benchmarking...");
@@ -2219,7 +2583,8 @@ async fn handle_status_command(
         println!("Performance Optimization Status");
         println!("==============================");
         println!("  CPU Usage: {:.1}%", status.cpu_usage);
-        println!("  Memory: {} / {} GB",
+        println!(
+            "  Memory: {} / {} GB",
             status.memory_used / 1_073_741_824,
             status.memory_total / 1_073_741_824
         );
@@ -2231,10 +2596,19 @@ async fn handle_status_command(
             println!("\nDetailed Metrics:");
             println!("  Active Optimizations: {}", status.active_optimizations);
             println!("  Cache Hit Rate: {:.1}%", status.cache_hit_rate * 100.0);
-            println!("  Task Parallelism: {:.1}%", status.task_parallelism * 100.0);
+            println!(
+                "  Task Parallelism: {:.1}%",
+                status.task_parallelism * 100.0
+            );
             println!("  I/O Efficiency: {:.1}%", status.io_efficiency * 100.0);
-            println!("  Network Efficiency: {:.1}%", status.network_efficiency * 100.0);
-            println!("  Current Throughput: {:.1} req/s", status.current_throughput);
+            println!(
+                "  Network Efficiency: {:.1}%",
+                status.network_efficiency * 100.0
+            );
+            println!(
+                "  Current Throughput: {:.1} req/s",
+                status.current_throughput
+            );
             println!("  Current Latency: {:.1} ms", status.current_latency_ms);
             println!("  Active Workers: {}", status.active_workers);
             println!("  Queue Length: {}", status.queue_length);

@@ -140,7 +140,10 @@ impl Default for HelmConfig {
             values_file: PathBuf::from("helm/values.yaml"),
             environment_values: HashMap::from([
                 ("dev".to_string(), PathBuf::from("helm/values-dev.yaml")),
-                ("staging".to_string(), PathBuf::from("helm/values-staging.yaml")),
+                (
+                    "staging".to_string(),
+                    PathBuf::from("helm/values-staging.yaml"),
+                ),
                 ("prod".to_string(), PathBuf::from("helm/values-prod.yaml")),
             ]),
             hooks: HelmHooks::default(),
@@ -221,13 +224,11 @@ impl Default for AutoScalingConfig {
             max_replicas: 20,
             target_cpu_utilization: 70,
             target_memory_utilization: 80,
-            custom_metrics: vec![
-                CustomMetric {
-                    name: "inference_queue_length".to_string(),
-                    target_value: 10.0,
-                    target_type: "AverageValue".to_string(),
-                },
-            ],
+            custom_metrics: vec![CustomMetric {
+                name: "inference_queue_length".to_string(),
+                target_value: 10.0,
+                target_type: "AverageValue".to_string(),
+            }],
             vpa_enabled: false,
             cluster_autoscaler: ClusterAutoscalerConfig::default(),
         }
@@ -537,30 +538,24 @@ pub struct HelmHooks {
 impl Default for HelmHooks {
     fn default() -> Self {
         Self {
-            pre_install: vec![
-                HookConfig {
-                    name: "create-namespace".to_string(),
-                    job_spec: "jobs/create-namespace.yaml".to_string(),
-                    weight: -5,
-                },
-            ],
-            post_install: vec![
-                HookConfig {
-                    name: "validate-deployment".to_string(),
-                    job_spec: "jobs/validate-deployment.yaml".to_string(),
-                    weight: 1,
-                },
-            ],
+            pre_install: vec![HookConfig {
+                name: "create-namespace".to_string(),
+                job_spec: "jobs/create-namespace.yaml".to_string(),
+                weight: -5,
+            }],
+            post_install: vec![HookConfig {
+                name: "validate-deployment".to_string(),
+                job_spec: "jobs/validate-deployment.yaml".to_string(),
+                weight: 1,
+            }],
             pre_upgrade: vec![],
             post_upgrade: vec![],
             pre_delete: vec![],
-            post_delete: vec![
-                HookConfig {
-                    name: "cleanup-resources".to_string(),
-                    job_spec: "jobs/cleanup.yaml".to_string(),
-                    weight: 1,
-                },
-            ],
+            post_delete: vec![HookConfig {
+                name: "cleanup-resources".to_string(),
+                job_spec: "jobs/cleanup.yaml".to_string(),
+                weight: 1,
+            }],
         }
     }
 }
@@ -627,19 +622,15 @@ impl Default for ClusterAutoscalerConfig {
             enabled: true,
             min_nodes: 1,
             max_nodes: 10,
-            node_groups: vec![
-                NodeGroup {
-                    name: "inference-nodes".to_string(),
-                    instance_type: "n1-standard-4".to_string(),
-                    min_size: 1,
-                    max_size: 5,
-                    desired_size: 2,
-                    labels: HashMap::from([
-                        ("workload".to_string(), "inference".to_string()),
-                    ]),
-                    taints: vec![],
-                },
-            ],
+            node_groups: vec![NodeGroup {
+                name: "inference-nodes".to_string(),
+                instance_type: "n1-standard-4".to_string(),
+                min_size: 1,
+                max_size: 5,
+                desired_size: 2,
+                labels: HashMap::from([("workload".to_string(), "inference".to_string())]),
+                taints: vec![],
+            }],
         }
     }
 }
@@ -770,13 +761,11 @@ impl Default for SecretsConfig {
         Self {
             provider: "kubernetes".to_string(),
             vault_config: None,
-            kubernetes_secrets: vec![
-                KubernetesSecret {
-                    name: "inferno-api-keys".to_string(),
-                    secret_type: "Opaque".to_string(),
-                    data_keys: vec!["openai_api_key".to_string(), "model_api_key".to_string()],
-                },
-            ],
+            kubernetes_secrets: vec![KubernetesSecret {
+                name: "inferno-api-keys".to_string(),
+                secret_type: "Opaque".to_string(),
+                data_keys: vec!["openai_api_key".to_string(), "model_api_key".to_string()],
+            }],
         }
     }
 }
@@ -816,7 +805,13 @@ impl Default for RbacConfig {
                 RbacPermission {
                     api_groups: vec!["apps".to_string()],
                     resources: vec!["deployments".to_string(), "replicasets".to_string()],
-                    verbs: vec!["get".to_string(), "list".to_string(), "watch".to_string(), "create".to_string(), "update".to_string()],
+                    verbs: vec![
+                        "get".to_string(),
+                        "list".to_string(),
+                        "watch".to_string(),
+                        "create".to_string(),
+                        "update".to_string(),
+                    ],
                 },
             ],
         }
@@ -866,13 +861,11 @@ impl Default for GrafanaConfig {
                 "inferno-dashboard".to_string(),
                 "system-dashboard".to_string(),
             ],
-            data_sources: vec![
-                DataSource {
-                    name: "Prometheus".to_string(),
-                    url: "http://prometheus:9090".to_string(),
-                    data_type: "prometheus".to_string(),
-                },
-            ],
+            data_sources: vec![DataSource {
+                name: "Prometheus".to_string(),
+                url: "http://prometheus:9090".to_string(),
+                data_type: "prometheus".to_string(),
+            }],
         }
     }
 }
@@ -1073,9 +1066,10 @@ impl IngressConfig {
             hostname: "inferno-dev.local".to_string(),
             tls_enabled: false,
             tls_secret_name: None,
-            annotations: HashMap::from([
-                ("nginx.ingress.kubernetes.io/rewrite-target".to_string(), "/".to_string()),
-            ]),
+            annotations: HashMap::from([(
+                "nginx.ingress.kubernetes.io/rewrite-target".to_string(),
+                "/".to_string(),
+            )]),
         }
     }
 
@@ -1087,8 +1081,14 @@ impl IngressConfig {
             tls_enabled: true,
             tls_secret_name: Some("inferno-tls-staging".to_string()),
             annotations: HashMap::from([
-                ("cert-manager.io/cluster-issuer".to_string(), "letsencrypt-staging".to_string()),
-                ("nginx.ingress.kubernetes.io/ssl-redirect".to_string(), "true".to_string()),
+                (
+                    "cert-manager.io/cluster-issuer".to_string(),
+                    "letsencrypt-staging".to_string(),
+                ),
+                (
+                    "nginx.ingress.kubernetes.io/ssl-redirect".to_string(),
+                    "true".to_string(),
+                ),
             ]),
         }
     }
@@ -1101,9 +1101,18 @@ impl IngressConfig {
             tls_enabled: true,
             tls_secret_name: Some("inferno-tls-prod".to_string()),
             annotations: HashMap::from([
-                ("cert-manager.io/cluster-issuer".to_string(), "letsencrypt-prod".to_string()),
-                ("nginx.ingress.kubernetes.io/ssl-redirect".to_string(), "true".to_string()),
-                ("nginx.ingress.kubernetes.io/rate-limit".to_string(), "100".to_string()),
+                (
+                    "cert-manager.io/cluster-issuer".to_string(),
+                    "letsencrypt-prod".to_string(),
+                ),
+                (
+                    "nginx.ingress.kubernetes.io/ssl-redirect".to_string(),
+                    "true".to_string(),
+                ),
+                (
+                    "nginx.ingress.kubernetes.io/rate-limit".to_string(),
+                    "100".to_string(),
+                ),
             ]),
         }
     }
@@ -1350,11 +1359,19 @@ impl DeploymentManager {
     pub async fn deploy(&mut self, args: &DeploymentArgs) -> Result<DeploymentResult> {
         let deployment_id = Uuid::new_v4().to_string();
 
-        info!("Starting deployment {} to environment: {}", deployment_id, args.environment);
+        info!(
+            "Starting deployment {} to environment: {}",
+            deployment_id, args.environment
+        );
 
         // Get environment configuration
-        let env_config = self.config.environments.get(&args.environment)
-            .ok_or_else(|| InfernoError::InvalidArgument(format!("Unknown environment: {}", args.environment)))?;
+        let env_config = self
+            .config
+            .environments
+            .get(&args.environment)
+            .ok_or_else(|| {
+                InfernoError::InvalidArgument(format!("Unknown environment: {}", args.environment))
+            })?;
 
         // Create deployment status
         let deployment_status = DeploymentStatus {
@@ -1364,10 +1381,19 @@ impl DeploymentManager {
             created_at: Utc::now(),
             updated_at: Utc::now(),
             deployed_version: args.version.clone(),
-            helm_release_name: self.config.helm.release_name_template.replace("{environment}", &args.environment),
-            kubernetes_namespace: args.namespace.clone().unwrap_or_else(|| self.config.kubernetes.namespace.clone()),
+            helm_release_name: self
+                .config
+                .helm
+                .release_name_template
+                .replace("{environment}", &args.environment),
+            kubernetes_namespace: args
+                .namespace
+                .clone()
+                .unwrap_or_else(|| self.config.kubernetes.namespace.clone()),
             replicas: ReplicaStatus {
-                desired: args.replicas.unwrap_or((self.config.autoscaling.min_replicas as f64 * env_config.scale_factor) as u32),
+                desired: args.replicas.unwrap_or(
+                    (self.config.autoscaling.min_replicas as f64 * env_config.scale_factor) as u32,
+                ),
                 current: 0,
                 ready: 0,
                 available: 0,
@@ -1411,10 +1437,15 @@ impl DeploymentManager {
             let version_clone = args.version.clone();
 
             tokio::spawn(async move {
-                if let Err(e) = manager_clone.execute_deployment(&deployment_id_clone, &environment_clone, &version_clone).await {
+                if let Err(e) = manager_clone
+                    .execute_deployment(&deployment_id_clone, &environment_clone, &version_clone)
+                    .await
+                {
                     tracing::error!("Deployment failed: {}", e);
                     // Update deployment status to failed
-                    let _ = manager_clone.update_deployment_status(&deployment_id_clone, DeploymentState::Failed).await;
+                    let _ = manager_clone
+                        .update_deployment_status(&deployment_id_clone, DeploymentState::Failed)
+                        .await;
                 }
             });
         } else {
@@ -1425,14 +1456,22 @@ impl DeploymentManager {
             deployment_id: deployment_id.clone(),
             status: "Success".to_string(),
             manifest_preview,
-            service_urls: HashMap::from([
-                ("main".to_string(), format!("http://inferno-{}.{}.svc.cluster.local:8080", args.environment, args.namespace.as_deref().unwrap_or("default")))
-            ]),
+            service_urls: HashMap::from([(
+                "main".to_string(),
+                format!(
+                    "http://inferno-{}.{}.svc.cluster.local:8080",
+                    args.environment,
+                    args.namespace.as_deref().unwrap_or("default")
+                ),
+            )]),
         })
     }
 
     /// Get deployment status
-    pub async fn get_deployment_status(&self, deployment_id: &str) -> Result<Option<DeploymentStatus>> {
+    pub async fn get_deployment_status(
+        &self,
+        deployment_id: &str,
+    ) -> Result<Option<DeploymentStatus>> {
         let deployments = self.active_deployments.read().await;
         Ok(deployments.get(deployment_id).cloned())
     }
@@ -1444,13 +1483,20 @@ impl DeploymentManager {
     }
 
     /// Rollback deployment
-    pub async fn rollback(&mut self, environment: &str, revision: Option<u32>) -> Result<RollbackResult> {
+    pub async fn rollback(
+        &mut self,
+        environment: &str,
+        revision: Option<u32>,
+    ) -> Result<RollbackResult> {
         info!("Rolling back deployment in environment: {}", environment);
 
         let rollback_revision = revision.unwrap_or(1);
 
         // In a real implementation, this would execute helm rollback
-        info!("Rollback to revision {} initiated for environment {}", rollback_revision, environment);
+        info!(
+            "Rollback to revision {} initiated for environment {}",
+            rollback_revision, environment
+        );
 
         Ok(RollbackResult {
             revision: rollback_revision,
@@ -1460,7 +1506,10 @@ impl DeploymentManager {
 
     /// Scale deployment
     pub async fn scale(&mut self, environment: &str, replicas: u32) -> Result<ScaleResult> {
-        info!("Scaling deployment in environment {} to {} replicas", environment, replicas);
+        info!(
+            "Scaling deployment in environment {} to {} replicas",
+            environment, replicas
+        );
 
         // In a real implementation, this would update the HPA or deployment
 
@@ -1490,16 +1539,36 @@ impl DeploymentManager {
     }
 
     /// Generate Kubernetes manifests
-    pub async fn generate_manifests(&mut self, environment: &str, version: &str) -> Result<HashMap<String, String>> {
-        info!("Generating Kubernetes manifests for environment: {}", environment);
+    pub async fn generate_manifests(
+        &mut self,
+        environment: &str,
+        version: &str,
+    ) -> Result<HashMap<String, String>> {
+        info!(
+            "Generating Kubernetes manifests for environment: {}",
+            environment
+        );
 
         let mut manifests = HashMap::new();
 
         // Generate manifests (mock implementation)
-        manifests.insert("deployment".to_string(), self.create_deployment_manifest(environment, version).await?);
-        manifests.insert("service".to_string(), self.create_service_manifest(environment).await?);
-        manifests.insert("configmap".to_string(), self.create_configmap_manifest(environment).await?);
-        manifests.insert("hpa".to_string(), self.create_hpa_manifest(environment).await?);
+        manifests.insert(
+            "deployment".to_string(),
+            self.create_deployment_manifest(environment, version)
+                .await?,
+        );
+        manifests.insert(
+            "service".to_string(),
+            self.create_service_manifest(environment).await?,
+        );
+        manifests.insert(
+            "configmap".to_string(),
+            self.create_configmap_manifest(environment).await?,
+        );
+        manifests.insert(
+            "hpa".to_string(),
+            self.create_hpa_manifest(environment).await?,
+        );
 
         Ok(manifests)
     }
@@ -1545,9 +1614,15 @@ impl DeploymentManager {
         Ok(())
     }
 
-    async fn execute_deployment(&self, deployment_id: &str, _environment: &str, _version: &str) -> Result<()> {
+    async fn execute_deployment(
+        &self,
+        deployment_id: &str,
+        _environment: &str,
+        _version: &str,
+    ) -> Result<()> {
         // Update status to in progress
-        self.update_deployment_status(deployment_id, DeploymentState::InProgress).await?;
+        self.update_deployment_status(deployment_id, DeploymentState::InProgress)
+            .await?;
 
         // Mock deployment steps
         info!("Executing pre-deployment hooks");
@@ -1566,13 +1641,18 @@ impl DeploymentManager {
         tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
 
         // Update status to deployed
-        self.update_deployment_status(deployment_id, DeploymentState::Deployed).await?;
+        self.update_deployment_status(deployment_id, DeploymentState::Deployed)
+            .await?;
 
         info!("Deployment {} completed successfully", deployment_id);
         Ok(())
     }
 
-    async fn update_deployment_status(&self, deployment_id: &str, state: DeploymentState) -> Result<()> {
+    async fn update_deployment_status(
+        &self,
+        deployment_id: &str,
+        state: DeploymentState,
+    ) -> Result<()> {
         let mut deployments = self.active_deployments.write().await;
         if let Some(deployment) = deployments.get_mut(deployment_id) {
             deployment.status = state;
@@ -1581,10 +1661,15 @@ impl DeploymentManager {
         Ok(())
     }
 
-    async fn generate_deployment_manifest(&self, environment: &str, output_dir: &Path) -> Result<()> {
+    async fn generate_deployment_manifest(
+        &self,
+        environment: &str,
+        output_dir: &Path,
+    ) -> Result<()> {
         let env_config = self.config.environments.get(environment).unwrap();
 
-        let manifest = format!(r#"apiVersion: apps/v1
+        let manifest = format!(
+            r#"apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: inferno-{environment}
@@ -1656,11 +1741,15 @@ spec:
 "#,
             environment = environment,
             namespace = self.config.kubernetes.namespace,
-            replicas = (self.config.autoscaling.min_replicas as f64 * env_config.scale_factor) as u32,
+            replicas =
+                (self.config.autoscaling.min_replicas as f64 * env_config.scale_factor) as u32,
             service_account = self.config.kubernetes.service_account,
             registry = self.config.registry.url,
             repository = format!("{}/inferno", self.config.registry.repository_prefix),
-            log_level = env_config.environment_variables.get("LOG_LEVEL").unwrap_or(&"info".to_string()),
+            log_level = env_config
+                .environment_variables
+                .get("LOG_LEVEL")
+                .unwrap_or(&"info".to_string()),
             cpu_request = self.config.resources.cpu.request,
             memory_request = self.config.resources.memory.request,
             cpu_limit = self.config.resources.cpu.limit,
@@ -1673,7 +1762,8 @@ spec:
     }
 
     async fn generate_service_manifest(&self, environment: &str, output_dir: &Path) -> Result<()> {
-        let manifest = format!(r#"apiVersion: v1
+        let manifest = format!(
+            r#"apiVersion: v1
 kind: Service
 metadata:
   name: inferno-{environment}
@@ -1703,7 +1793,11 @@ spec:
         Ok(())
     }
 
-    async fn generate_configmap_manifest(&self, environment: &str, output_dir: &Path) -> Result<()> {
+    async fn generate_configmap_manifest(
+        &self,
+        environment: &str,
+        output_dir: &Path,
+    ) -> Result<()> {
         let env_config = self.config.environments.get(environment).unwrap();
 
         let mut env_vars = String::new();
@@ -1711,7 +1805,8 @@ spec:
             env_vars.push_str(&format!("  {}: \"{}\"\n", key, value));
         }
 
-        let manifest = format!(r#"apiVersion: v1
+        let manifest = format!(
+            r#"apiVersion: v1
 kind: ConfigMap
 metadata:
   name: inferno-config-{environment}
@@ -1734,7 +1829,8 @@ data:
     async fn generate_hpa_manifest(&self, environment: &str, output_dir: &Path) -> Result<()> {
         let env_config = self.config.environments.get(environment).unwrap();
 
-        let manifest = format!(r#"apiVersion: autoscaling/v2
+        let manifest = format!(
+            r#"apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
   name: inferno-hpa-{environment}
@@ -1765,8 +1861,10 @@ spec:
 "#,
             environment = environment,
             namespace = self.config.kubernetes.namespace,
-            min_replicas = (self.config.autoscaling.min_replicas as f64 * env_config.scale_factor) as u32,
-            max_replicas = (self.config.autoscaling.max_replicas as f64 * env_config.scale_factor) as u32,
+            min_replicas =
+                (self.config.autoscaling.min_replicas as f64 * env_config.scale_factor) as u32,
+            max_replicas =
+                (self.config.autoscaling.max_replicas as f64 * env_config.scale_factor) as u32,
             cpu_target = self.config.autoscaling.target_cpu_utilization,
             memory_target = self.config.autoscaling.target_memory_utilization,
         );
@@ -1777,7 +1875,8 @@ spec:
     }
 
     async fn generate_chart_yaml(&self, chart_dir: &Path) -> Result<()> {
-        let chart_yaml = format!(r#"apiVersion: v2
+        let chart_yaml = format!(
+            r#"apiVersion: v2
 name: {name}
 description: Inferno AI/ML inference server Helm chart
 type: application
@@ -1799,9 +1898,15 @@ dependencies:
 {dependencies}"#,
             name = self.config.helm.chart_name,
             version = self.config.helm.chart_version,
-            dependencies = self.config.helm.dependencies.iter()
-                .map(|dep| format!("  - name: {}\n    version: {}\n    repository: {}\n    condition: {}",
-                    dep.name, dep.version, dep.repository, dep.condition))
+            dependencies = self
+                .config
+                .helm
+                .dependencies
+                .iter()
+                .map(|dep| format!(
+                    "  - name: {}\n    version: {}\n    repository: {}\n    condition: {}",
+                    dep.name, dep.version, dep.repository, dep.condition
+                ))
                 .collect::<Vec<_>>()
                 .join("\n"),
         );
@@ -2055,7 +2160,11 @@ spec:
     }
 
     /// Get deployment status
-    pub async fn get_status(&mut self, environment: &str, _namespace: Option<&str>) -> Result<StatusInfo> {
+    pub async fn get_status(
+        &mut self,
+        environment: &str,
+        _namespace: Option<&str>,
+    ) -> Result<StatusInfo> {
         info!("Getting status for environment: {}", environment);
 
         Ok(StatusInfo {
@@ -2078,8 +2187,20 @@ spec:
                 },
             ],
             service_urls: HashMap::from([
-                ("main".to_string(), format!("http://inferno-{}.default.svc.cluster.local:8080", environment)),
-                ("metrics".to_string(), format!("http://inferno-{}.default.svc.cluster.local:9090", environment)),
+                (
+                    "main".to_string(),
+                    format!(
+                        "http://inferno-{}.default.svc.cluster.local:8080",
+                        environment
+                    ),
+                ),
+                (
+                    "metrics".to_string(),
+                    format!(
+                        "http://inferno-{}.default.svc.cluster.local:9090",
+                        environment
+                    ),
+                ),
             ]),
             health_checks: vec![
                 HealthCheck {
@@ -2095,7 +2216,14 @@ spec:
     }
 
     /// Get deployment logs
-    pub async fn get_logs(&mut self, environment: &str, _namespace: Option<&str>, lines: u32, _since: Option<&str>, _selector: Option<&str>) -> Result<Vec<LogEntry>> {
+    pub async fn get_logs(
+        &mut self,
+        environment: &str,
+        _namespace: Option<&str>,
+        lines: u32,
+        _since: Option<&str>,
+        _selector: Option<&str>,
+    ) -> Result<Vec<LogEntry>> {
         info!("Getting logs for environment: {}", environment);
 
         let mut logs = Vec::new();
@@ -2111,7 +2239,13 @@ spec:
     }
 
     /// Validate deployment configuration
-    pub async fn validate_config(&mut self, environment: &str, _config_file: Option<&Path>, _namespace: Option<&str>, cluster: bool) -> Result<ValidationResult> {
+    pub async fn validate_config(
+        &mut self,
+        environment: &str,
+        _config_file: Option<&Path>,
+        _namespace: Option<&str>,
+        cluster: bool,
+    ) -> Result<ValidationResult> {
         info!("Validating configuration for environment: {}", environment);
 
         let mut warnings = Vec::new();
@@ -2144,8 +2278,16 @@ spec:
     }
 
     /// Get deployment history
-    pub async fn get_deployment_history(&mut self, environment: &str, _namespace: Option<&str>, limit: u32) -> Result<Vec<DeploymentHistoryEntry>> {
-        info!("Getting deployment history for environment: {}", environment);
+    pub async fn get_deployment_history(
+        &mut self,
+        environment: &str,
+        _namespace: Option<&str>,
+        limit: u32,
+    ) -> Result<Vec<DeploymentHistoryEntry>> {
+        info!(
+            "Getting deployment history for environment: {}",
+            environment
+        );
 
         let mut history = Vec::new();
         for i in 0..limit.min(5) {
@@ -2162,8 +2304,19 @@ spec:
     }
 
     /// Enable autoscaling
-    pub async fn enable_autoscaling(&mut self, environment: &str, _namespace: Option<&str>, min_replicas: u32, max_replicas: u32, cpu_percent: u32, _memory_percent: Option<u32>) -> Result<()> {
-        info!("Enabling autoscaling for environment: {} (min: {}, max: {}, cpu: {}%)", environment, min_replicas, max_replicas, cpu_percent);
+    pub async fn enable_autoscaling(
+        &mut self,
+        environment: &str,
+        _namespace: Option<&str>,
+        min_replicas: u32,
+        max_replicas: u32,
+        cpu_percent: u32,
+        _memory_percent: Option<u32>,
+    ) -> Result<()> {
+        info!(
+            "Enabling autoscaling for environment: {} (min: {}, max: {}, cpu: {}%)",
+            environment, min_replicas, max_replicas, cpu_percent
+        );
 
         // In a real implementation, this would configure HPA
 
@@ -2171,7 +2324,11 @@ spec:
     }
 
     /// Disable autoscaling
-    pub async fn disable_autoscaling(&mut self, environment: &str, _namespace: Option<&str>) -> Result<()> {
+    pub async fn disable_autoscaling(
+        &mut self,
+        environment: &str,
+        _namespace: Option<&str>,
+    ) -> Result<()> {
         info!("Disabling autoscaling for environment: {}", environment);
 
         // In a real implementation, this would remove HPA
@@ -2180,8 +2337,15 @@ spec:
     }
 
     /// Get autoscaling status
-    pub async fn get_autoscaling_status(&mut self, environment: &str, _namespace: Option<&str>) -> Result<AutoscalingStatus> {
-        info!("Getting autoscaling status for environment: {}", environment);
+    pub async fn get_autoscaling_status(
+        &mut self,
+        environment: &str,
+        _namespace: Option<&str>,
+    ) -> Result<AutoscalingStatus> {
+        info!(
+            "Getting autoscaling status for environment: {}",
+            environment
+        );
 
         Ok(AutoscalingStatus {
             enabled: true,
@@ -2197,7 +2361,15 @@ spec:
     }
 
     /// Update autoscaling
-    pub async fn update_autoscaling(&mut self, environment: &str, _namespace: Option<&str>, _min_replicas: Option<u32>, _max_replicas: Option<u32>, _cpu_percent: Option<u32>, _memory_percent: Option<u32>) -> Result<()> {
+    pub async fn update_autoscaling(
+        &mut self,
+        environment: &str,
+        _namespace: Option<&str>,
+        _min_replicas: Option<u32>,
+        _max_replicas: Option<u32>,
+        _cpu_percent: Option<u32>,
+        _memory_percent: Option<u32>,
+    ) -> Result<()> {
         info!("Updating autoscaling for environment: {}", environment);
 
         // In a real implementation, this would update HPA configuration
@@ -2206,8 +2378,20 @@ spec:
     }
 
     /// Set configuration
-    pub async fn set_config(&mut self, environment: &str, _namespace: Option<&str>, key: &str, _value: &str, secret: bool) -> Result<()> {
-        info!("Setting {} {} in environment: {}", if secret { "secret" } else { "config" }, key, environment);
+    pub async fn set_config(
+        &mut self,
+        environment: &str,
+        _namespace: Option<&str>,
+        key: &str,
+        _value: &str,
+        secret: bool,
+    ) -> Result<()> {
+        info!(
+            "Setting {} {} in environment: {}",
+            if secret { "secret" } else { "config" },
+            key,
+            environment
+        );
 
         // In a real implementation, this would create/update ConfigMap or Secret
 
@@ -2215,7 +2399,12 @@ spec:
     }
 
     /// Get configuration
-    pub async fn get_config(&mut self, environment: &str, _namespace: Option<&str>, key: &str) -> Result<String> {
+    pub async fn get_config(
+        &mut self,
+        environment: &str,
+        _namespace: Option<&str>,
+        key: &str,
+    ) -> Result<String> {
         info!("Getting config {} in environment: {}", key, environment);
 
         // In a real implementation, this would read from ConfigMap or Secret
@@ -2223,8 +2412,16 @@ spec:
     }
 
     /// List configuration
-    pub async fn list_config(&mut self, environment: &str, _namespace: Option<&str>, include_secrets: bool) -> Result<Vec<ConfigEntry>> {
-        info!("Listing config for environment: {} (secrets: {})", environment, include_secrets);
+    pub async fn list_config(
+        &mut self,
+        environment: &str,
+        _namespace: Option<&str>,
+        include_secrets: bool,
+    ) -> Result<Vec<ConfigEntry>> {
+        info!(
+            "Listing config for environment: {} (secrets: {})",
+            environment, include_secrets
+        );
 
         let mut configs = vec![
             ConfigEntry {
@@ -2251,7 +2448,12 @@ spec:
     }
 
     /// Delete configuration
-    pub async fn delete_config(&mut self, environment: &str, _namespace: Option<&str>, key: &str) -> Result<()> {
+    pub async fn delete_config(
+        &mut self,
+        environment: &str,
+        _namespace: Option<&str>,
+        key: &str,
+    ) -> Result<()> {
         info!("Deleting config {} in environment: {}", key, environment);
 
         // In a real implementation, this would remove from ConfigMap or Secret
@@ -2260,8 +2462,18 @@ spec:
     }
 
     /// Import configuration
-    pub async fn import_config(&mut self, environment: &str, _namespace: Option<&str>, _file: &Path, secrets: bool) -> Result<()> {
-        info!("Importing {} from file for environment: {}", if secrets { "secrets" } else { "config" }, environment);
+    pub async fn import_config(
+        &mut self,
+        environment: &str,
+        _namespace: Option<&str>,
+        _file: &Path,
+        secrets: bool,
+    ) -> Result<()> {
+        info!(
+            "Importing {} from file for environment: {}",
+            if secrets { "secrets" } else { "config" },
+            environment
+        );
 
         // In a real implementation, this would read file and create ConfigMap/Secret
 
@@ -2269,8 +2481,21 @@ spec:
     }
 
     /// Export configuration
-    pub async fn export_config(&mut self, environment: &str, _namespace: Option<&str>, file: &Path, include_secrets: bool, format: &str) -> Result<()> {
-        info!("Exporting config for environment: {} to {} (format: {}, secrets: {})", environment, file.display(), format, include_secrets);
+    pub async fn export_config(
+        &mut self,
+        environment: &str,
+        _namespace: Option<&str>,
+        file: &Path,
+        include_secrets: bool,
+        format: &str,
+    ) -> Result<()> {
+        info!(
+            "Exporting config for environment: {} to {} (format: {}, secrets: {})",
+            environment,
+            file.display(),
+            format,
+            include_secrets
+        );
 
         // In a real implementation, this would export ConfigMap/Secret to file
         let content = match format {
@@ -2286,7 +2511,11 @@ spec:
     }
 
     /// Check health
-    pub async fn check_health(&mut self, environment: &str, _namespace: Option<&str>) -> Result<HealthReport> {
+    pub async fn check_health(
+        &mut self,
+        environment: &str,
+        _namespace: Option<&str>,
+    ) -> Result<HealthReport> {
         info!("Checking health for environment: {}", environment);
 
         Ok(HealthReport {
@@ -2318,7 +2547,8 @@ spec:
     async fn create_deployment_manifest(&self, environment: &str, version: &str) -> Result<String> {
         let env_config = self.config.environments.get(environment).unwrap();
 
-        let manifest = format!(r#"apiVersion: apps/v1
+        let manifest = format!(
+            r#"apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: inferno-{environment}
@@ -2343,7 +2573,8 @@ spec:
 "#,
             environment = environment,
             namespace = self.config.kubernetes.namespace,
-            replicas = (self.config.autoscaling.min_replicas as f64 * env_config.scale_factor) as u32,
+            replicas =
+                (self.config.autoscaling.min_replicas as f64 * env_config.scale_factor) as u32,
             registry = self.config.registry.url,
             repository = format!("{}/inferno", self.config.registry.repository_prefix),
             version = version,
@@ -2353,7 +2584,8 @@ spec:
     }
 
     async fn create_service_manifest(&self, environment: &str) -> Result<String> {
-        let manifest = format!(r#"apiVersion: v1
+        let manifest = format!(
+            r#"apiVersion: v1
 kind: Service
 metadata:
   name: inferno-{environment}
@@ -2374,7 +2606,8 @@ spec:
     }
 
     async fn create_configmap_manifest(&self, environment: &str) -> Result<String> {
-        let manifest = format!(r#"apiVersion: v1
+        let manifest = format!(
+            r#"apiVersion: v1
 kind: ConfigMap
 metadata:
   name: inferno-config-{environment}
@@ -2390,7 +2623,8 @@ data:
     }
 
     async fn create_hpa_manifest(&self, environment: &str) -> Result<String> {
-        let manifest = format!(r#"apiVersion: autoscaling/v2
+        let manifest = format!(
+            r#"apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
   name: inferno-hpa-{environment}

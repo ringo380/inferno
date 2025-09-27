@@ -1,15 +1,9 @@
 use crate::{config::Config, metrics::MetricsCollector};
 use anyhow::Result;
-use axum::{
-    extract::State,
-    http::StatusCode,
-    response::IntoResponse,
-    routing::get,
-    Json, Router,
-};
+use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
 use clap::{Args, Subcommand};
 use serde_json::json;
-use std::{net::SocketAddr, sync::Arc};
+use std::sync::Arc;
 use tokio::signal;
 use tracing::info;
 
@@ -35,7 +29,12 @@ pub enum MetricsCommand {
 
     #[command(about = "Start standalone metrics server")]
     Server {
-        #[arg(short, long, help = "Server bind address", default_value = "127.0.0.1:9090")]
+        #[arg(
+            short,
+            long,
+            help = "Server bind address",
+            default_value = "127.0.0.1:9090"
+        )]
         bind: String,
     },
 }
@@ -81,16 +80,10 @@ pub async fn execute(args: MetricsArgs, _config: &Config) -> Result<()> {
 }
 
 async fn start_metrics_server(bind_addr: &str) -> Result<()> {
-    use axum::{
-        extract::State,
-        http::StatusCode,
-        response::IntoResponse,
-        routing::get,
-        Json, Router,
-    };
-    use serde_json::json;
+    use axum::{routing::get, Router};
+
     use std::sync::Arc;
-    use tokio::signal;
+
     use tower::ServiceBuilder;
     use tower_http::{cors::CorsLayer, trace::TraceLayer};
 
@@ -112,7 +105,7 @@ async fn start_metrics_server(bind_addr: &str) -> Result<()> {
         .layer(
             ServiceBuilder::new()
                 .layer(TraceLayer::new_for_http())
-                .layer(CorsLayer::permissive())
+                .layer(CorsLayer::permissive()),
         )
         .with_state(state);
 
@@ -161,18 +154,28 @@ async fn health_check() -> impl IntoResponse {
     }))
 }
 
-async fn metrics_prometheus_handler(State(state): State<Arc<MetricsServerState>>) -> impl IntoResponse {
+async fn metrics_prometheus_handler(
+    State(state): State<Arc<MetricsServerState>>,
+) -> impl IntoResponse {
     use axum::http::header;
 
     match state.metrics.export_prometheus_format().await {
         Ok(metrics) => (
             StatusCode::OK,
-            [(header::CONTENT_TYPE, "text/plain; version=0.0.4; charset=utf-8")],
-            metrics
-        ).into_response(),
+            [(
+                header::CONTENT_TYPE,
+                "text/plain; version=0.0.4; charset=utf-8",
+            )],
+            metrics,
+        )
+            .into_response(),
         Err(e) => {
             tracing::warn!("Failed to export Prometheus metrics: {}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, "Failed to export metrics").into_response()
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to export metrics",
+            )
+                .into_response()
         }
     }
 }
@@ -182,19 +185,29 @@ async fn metrics_json_handler(State(state): State<Arc<MetricsServerState>>) -> i
         Ok(metrics_json) => (StatusCode::OK, metrics_json).into_response(),
         Err(e) => {
             tracing::warn!("Failed to export JSON metrics: {}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, "Failed to export metrics").into_response()
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to export metrics",
+            )
+                .into_response()
         }
     }
 }
 
-async fn metrics_snapshot_handler(State(state): State<Arc<MetricsServerState>>) -> impl IntoResponse {
+async fn metrics_snapshot_handler(
+    State(state): State<Arc<MetricsServerState>>,
+) -> impl IntoResponse {
     match state.metrics.get_snapshot().await {
         Ok(snapshot) => Json(snapshot).into_response(),
         Err(e) => {
             tracing::warn!("Failed to get metrics snapshot: {}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({
-                "error": "Failed to get metrics snapshot"
-            }))).into_response()
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({
+                    "error": "Failed to get metrics snapshot"
+                })),
+            )
+                .into_response()
         }
     }
 }

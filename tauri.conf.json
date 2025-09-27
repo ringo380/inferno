@@ -1,101 +1,20 @@
 {
-  "$schema": "../node_modules/@tauri-apps/cli/schema.json",
   "build": {
-    "beforeBuildCommand": "npm run build",
-    "beforeDevCommand": "npm run dev",
+    "beforeDevCommand": "cd dashboard && npm run dev",
+    "beforeBuildCommand": "cd dashboard && npm run build",
     "devPath": "http://localhost:3457",
-    "distDir": "../dist",
-    "withGlobalTauri": true
+    "distDir": "../dashboard/out",
+    "withGlobalTauri": false
   },
   "package": {
-    "productName": "Inferno",
-    "version": "1.0.0"
+    "productName": "Inferno AI Runner",
+    "version": "0.1.0"
   },
   "tauri": {
-    "allowlist": {
-      "all": false,
-      "shell": {
-        "all": false,
-        "open": true
-      },
-      "dialog": {
-        "all": false,
-        "ask": true,
-        "confirm": true,
-        "message": true,
-        "open": true,
-        "save": true
-      },
-      "fs": {
-        "all": false,
-        "readFile": true,
-        "writeFile": true,
-        "readDir": true,
-        "copyFile": true,
-        "createDir": true,
-        "removeDir": true,
-        "removeFile": true,
-        "renameFile": true,
-        "exists": true,
-        "scope": ["**"]
-      },
-      "path": {
-        "all": true
-      },
-      "os": {
-        "all": true
-      },
-      "notification": {
-        "all": true
-      },
-      "globalShortcut": {
-        "all": true
-      },
-      "window": {
-        "all": false,
-        "close": true,
-        "hide": true,
-        "show": true,
-        "maximize": true,
-        "minimize": true,
-        "unmaximize": true,
-        "unminimize": true,
-        "startDragging": true,
-        "print": true,
-        "setResizable": true,
-        "setTitle": true,
-        "setMaximizable": true,
-        "setMinimizable": true,
-        "setClosable": true,
-        "setDecorations": true,
-        "setAlwaysOnTop": true,
-        "setContentProtected": true,
-        "setSize": true,
-        "setMinSize": true,
-        "setMaxSize": true,
-        "setPosition": true,
-        "setFullscreen": true,
-        "setFocus": true,
-        "setIcon": true,
-        "setSkipTaskbar": true,
-        "setCursorGrab": true,
-        "setCursorVisible": true,
-        "setCursorIcon": true,
-        "setCursorPosition": true,
-        "setIgnoreCursorEvents": true,
-        "center": true,
-        "requestUserAttention": true,
-        "setProgressBar": true
-      }
-    },
     "bundle": {
       "active": true,
-      "category": "DeveloperTool",
-      "copyright": "",
-      "deb": {
-        "depends": []
-      },
-      "externalBin": [],
+      "targets": "all",
+      "identifier": "com.inferno.ai.runner",
       "icon": [
         "icons/32x32.png",
         "icons/128x128.png",
@@ -103,52 +22,64 @@
         "icons/icon.icns",
         "icons/icon.ico"
       ],
-      "identifier": "com.inferno.app",
-      "longDescription": "Your Personal AI Infrastructure - Run any AI model locally with enterprise-grade performance and privacy",
-      "macOS": {
-        "entitlements": "entitlements.plist",
-        "exceptionDomain": "",
-        "frameworks": [],
-        "providerShortName": null,
-        "signingIdentity": null
-      },
       "resources": [],
-      "shortDescription": "Local AI Inference Server",
-      "targets": "all",
+      "externalBin": [],
+      "copyright": "",
+      "category": "DeveloperTool",
+      "shortDescription": "Offline AI/ML model runner for GGUF and ONNX models",
+      "longDescription": "An enterprise-grade offline AI/ML model runner with support for GGUF and ONNX models, featuring performance optimization, distributed inference, and comprehensive monitoring.",
+      "macOS": {
+        "frameworks": [],
+        "minimumSystemVersion": "11.0",
+        "exceptionDomain": "",
+        "signingIdentity": null,
+        "providerShortName": null,
+        "entitlements": "entitlements.plist"
+      },
       "windows": {
         "certificateThumbprint": null,
         "digestAlgorithm": "sha256",
         "timestampUrl": ""
+      },
+      "linux": {
+        "deb": {
+          "depends": []
+        }
       }
     },
     "security": {
       "csp": null
     },
-    "systemTray": {
-      "iconPath": "icons/icon.png",
-      "iconAsTemplate": true,
-      "menuOnLeftClick": false
-    },
-    "updater": {
-      "active": false
-    },
     "windows": [
       {
         "fullscreen": false,
-        "height": 900,
         "resizable": true,
-        "title": "Inferno",
-        "width": 1400,
+        "title": "Inferno AI Runner",
+        "width": 1200,
+        "height": 800,
         "minWidth": 800,
         "minHeight": 600,
-        "center": true,
-        "transparent": false,
+        "maximized": false,
+        "visible": true,
         "decorations": true,
         "alwaysOnTop": false,
         "skipTaskbar": false,
-        "visible": true,
-        "maximized": false
+        "center": true,
+        "titleBarStyle": "Transparent",
+        "transparent": false,
+        "hiddenTitle": false,
+        "acceptFirstMouse": false,
+        "tabbingIdentifier": null,
+        "userAgent": null,
+        "label": "main"
       }
-    ]
+    ],
+    "systemTray": {
+      "iconPath": "icons/icon.png",
+      "iconAsTemplate": true,
+      "menuOnLeftClick": false,
+      "tooltip": "Inferno AI Runner"
+    },
+    "macOSPrivateApi": true
   }
 }

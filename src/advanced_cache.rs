@@ -1,12 +1,11 @@
 use anyhow::Result;
-use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet, VecDeque, BTreeMap};
-use std::sync::Arc;
-use tokio::sync::RwLock;
-use std::time::{Duration, Instant, SystemTime};
-use uuid::Uuid;
-use chrono::{DateTime, Utc};
 use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
+use std::time::{Duration, Instant, SystemTime};
+use tokio::sync::RwLock;
+use uuid::Uuid;
 
 // Configuration structures
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -106,23 +105,23 @@ pub enum InclusionPolicy {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ReplacementPolicy {
-    Lru,           // Least Recently Used
-    Lfu,           // Least Frequently Used
-    Mru,           // Most Recently Used
-    Fifo,          // First In First Out
-    Lifo,          // Last In First Out
-    Random,        // Random Replacement
-    Arc,           // Adaptive Replacement Cache
-    TwoQ,          // Two Queue
-    Slru,          // Segmented LRU
-    Tlru,          // Time-aware LRU
-    Plru,          // Pseudo-LRU
-    Clock,         // Clock algorithm
-    ClockPro,      // Clock-Pro algorithm
-    Lirs,          // Low Inter-reference Recency Set
-    MultiQueue,    // Multi-Queue replacement
-    Gdsf,          // Greedy Dual Size Frequency
-    Lfuda,         // LFU with Dynamic Aging
+    Lru,        // Least Recently Used
+    Lfu,        // Least Frequently Used
+    Mru,        // Most Recently Used
+    Fifo,       // First In First Out
+    Lifo,       // Last In First Out
+    Random,     // Random Replacement
+    Arc,        // Adaptive Replacement Cache
+    TwoQ,       // Two Queue
+    Slru,       // Segmented LRU
+    Tlru,       // Time-aware LRU
+    Plru,       // Pseudo-LRU
+    Clock,      // Clock algorithm
+    ClockPro,   // Clock-Pro algorithm
+    Lirs,       // Low Inter-reference Recency Set
+    MultiQueue, // Multi-Queue replacement
+    Gdsf,       // Greedy Dual Size Frequency
+    Lfuda,      // LFU with Dynamic Aging
     Custom(String),
 }
 
@@ -468,10 +467,10 @@ pub struct CoherenceConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum CoherenceProtocol {
-    Msi,    // Modified, Shared, Invalid
-    Mesi,   // Modified, Exclusive, Shared, Invalid
-    Moesi,  // Modified, Owned, Exclusive, Shared, Invalid
-    Mesif,  // Modified, Exclusive, Shared, Invalid, Forward
+    Msi,   // Modified, Shared, Invalid
+    Mesi,  // Modified, Exclusive, Shared, Invalid
+    Moesi, // Modified, Owned, Exclusive, Shared, Invalid
+    Mesif, // Modified, Exclusive, Shared, Invalid, Forward
     Dragon,
     Custom(String),
 }
@@ -957,7 +956,10 @@ pub trait CacheMonitor: Send + Sync {
 #[async_trait]
 pub trait CacheOptimizer: Send + Sync {
     async fn analyze_workload(&self, operations: &[CacheOperation]) -> WorkloadPattern;
-    async fn recommend_optimizations(&self, stats: &CacheStatistics) -> Vec<OptimizationRecommendation>;
+    async fn recommend_optimizations(
+        &self,
+        stats: &CacheStatistics,
+    ) -> Vec<OptimizationRecommendation>;
     async fn auto_tune(&mut self, config: &mut AdvancedCacheConfig);
     async fn detect_hot_keys(&self, stats: &CacheStatistics) -> Vec<HotKey>;
 }
@@ -1084,7 +1086,7 @@ impl Default for MemoryManagementConfig {
     fn default() -> Self {
         Self {
             total_memory_bytes: 1024 * 1024 * 1024, // 1 GB
-            max_object_size: 10 * 1024 * 1024, // 10 MB
+            max_object_size: 10 * 1024 * 1024,      // 10 MB
             memory_allocator: MemoryAllocator::System,
             garbage_collection: GarbageCollectionConfig::default(),
             memory_pooling: MemoryPoolingConfig::default(),
@@ -1144,7 +1146,7 @@ impl Default for MemoryPoolingConfig {
 impl Default for MemoryLimitsConfig {
     fn default() -> Self {
         Self {
-            soft_limit: 800 * 1024 * 1024, // 800 MB
+            soft_limit: 800 * 1024 * 1024,  // 800 MB
             hard_limit: 1024 * 1024 * 1024, // 1 GB
             oom_handler: OomHandler::Evict,
             memory_pressure_threshold: 0.9,
@@ -1459,11 +1461,14 @@ impl AdvancedCacheSystem {
     pub async fn put(&self, key: &str, value: Vec<u8>, ttl: Option<Duration>) -> Result<()> {
         // Check memory pressure
         if self.should_evict().await? {
-            self.evict_entries(self.config.eviction_policies.eviction_batch_size).await?;
+            self.evict_entries(self.config.eviction_policies.eviction_batch_size)
+                .await?;
         }
 
         // Compress if needed
-        let final_value = if self.config.compression.enabled && value.len() >= self.config.compression.min_size_bytes {
+        let final_value = if self.config.compression.enabled
+            && value.len() >= self.config.compression.min_size_bytes
+        {
             self.compression_engine.compress(&value).await?
         } else {
             value
@@ -1494,9 +1499,15 @@ impl AdvancedCacheSystem {
 
     async fn should_evict(&self) -> Result<bool> {
         let stats = self.memory_stats.read().await;
-        let usage_ratio = stats.total_used as f64 / self.config.memory_management.total_memory_bytes as f64;
+        let usage_ratio =
+            stats.total_used as f64 / self.config.memory_management.total_memory_bytes as f64;
 
-        Ok(usage_ratio >= self.config.memory_management.memory_limits.memory_pressure_threshold as f64)
+        Ok(usage_ratio
+            >= self
+                .config
+                .memory_management
+                .memory_limits
+                .memory_pressure_threshold as f64)
     }
 
     async fn evict_entries(&self, count: usize) -> Result<()> {
@@ -1720,10 +1731,7 @@ pub struct MockCacheMonitor {
 
 impl MockCacheMonitor {
     pub fn new() -> Self {
-        Self {
-            hits: 0,
-            misses: 0,
-        }
+        Self { hits: 0, misses: 0 }
     }
 }
 
@@ -1785,7 +1793,10 @@ impl CacheOptimizer for MockCacheOptimizer {
         }
     }
 
-    async fn recommend_optimizations(&self, _stats: &CacheStatistics) -> Vec<OptimizationRecommendation> {
+    async fn recommend_optimizations(
+        &self,
+        _stats: &CacheStatistics,
+    ) -> Vec<OptimizationRecommendation> {
         vec![]
     }
 
