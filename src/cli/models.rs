@@ -50,7 +50,10 @@ pub async fn execute(args: ModelsArgs, config: &Config) -> Result<()> {
             }
 
             println!("Available models:");
-            println!("{:<30} {:<15} {:<20} {:<15}", "Name", "Type", "Size", "Modified");
+            println!(
+                "{:<30} {:<15} {:<20} {:<15}",
+                "Name", "Type", "Size", "Modified"
+            );
             println!("{}", "─".repeat(80));
 
             for model in models {
@@ -70,7 +73,10 @@ pub async fn execute(args: ModelsArgs, config: &Config) -> Result<()> {
             println!("  Path: {}", model_info.path.display());
             println!("  Type: {}", model_info.backend_type);
             println!("  Size: {}", format_size(model_info.size));
-            println!("  Modified: {}", model_info.modified.format("%Y-%m-%d %H:%M:%S"));
+            println!(
+                "  Modified: {}",
+                model_info.modified.format("%Y-%m-%d %H:%M:%S")
+            );
 
             if let Some(checksum) = &model_info.checksum {
                 println!("  SHA256: {}", checksum);

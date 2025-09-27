@@ -155,7 +155,9 @@ async fn validate_model_file(path: &PathBuf, args: &ValidateArgs, config: &Confi
     }
 
     // Use comprehensive validation instead of the old method
-    let validation_result = model_manager.validate_model_comprehensive(path, Some(config)).await?;
+    let validation_result = model_manager
+        .validate_model_comprehensive(path, Some(config))
+        .await?;
 
     // Print validation results
     if validation_result.is_valid {
@@ -185,13 +187,31 @@ async fn validate_model_file(path: &PathBuf, args: &ValidateArgs, config: &Confi
 fn print_validation_details(result: &crate::models::ValidationResult, verbose: bool) {
     if verbose {
         println!("  Validation Details:");
-        println!("    File readable: {}", if result.file_readable { "✓" } else { "✗" });
-        println!("    Format valid: {}", if result.format_valid { "✓" } else { "✗" });
-        println!("    Size valid: {}", if result.size_valid { "✓" } else { "✗" });
-        println!("    Security valid: {}", if result.security_valid { "✓" } else { "✗" });
-        println!("    Metadata valid: {}", if result.metadata_valid { "✓" } else { "✗" });
+        println!(
+            "    File readable: {}",
+            if result.file_readable { "✓" } else { "✗" }
+        );
+        println!(
+            "    Format valid: {}",
+            if result.format_valid { "✓" } else { "✗" }
+        );
+        println!(
+            "    Size valid: {}",
+            if result.size_valid { "✓" } else { "✗" }
+        );
+        println!(
+            "    Security valid: {}",
+            if result.security_valid { "✓" } else { "✗" }
+        );
+        println!(
+            "    Metadata valid: {}",
+            if result.metadata_valid { "✓" } else { "✗" }
+        );
         if let Some(checksum_valid) = result.checksum_valid {
-            println!("    Checksum valid: {}", if checksum_valid { "✓" } else { "✗" });
+            println!(
+                "    Checksum valid: {}",
+                if checksum_valid { "✓" } else { "✗" }
+            );
         }
     }
 
@@ -289,8 +309,9 @@ async fn deep_validate_model(path: &PathBuf, config: &Config) -> Result<bool> {
     use crate::backends::{Backend, BackendType};
     use crate::models::ModelInfo;
 
-    let backend_type = BackendType::from_model_path(path);
-    let mut backend = Backend::new(backend_type, &config.backend_config)?;
+    let backend_type = BackendType::from_model_path(path)
+        .ok_or_else(|| anyhow::anyhow!("No suitable backend found for model: {}", path.display()))?;
+    let mut backend = Backend::new(backend_type.clone(), &config.backend_config)?;
 
     let model_info = ModelInfo {
         name: path.file_name().unwrap().to_string_lossy().to_string(),

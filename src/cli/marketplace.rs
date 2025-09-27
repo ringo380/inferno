@@ -1,7 +1,7 @@
 use crate::config::Config;
 use crate::marketplace::{
-    ModelMarketplace, MarketplaceConfig, SearchFilters, ModelCategory, PublishRequest,
-    ModelListing, ModelVisibility, PricingInfo, DownloadStatus
+    DownloadStatus, MarketplaceConfig, ModelCategory, ModelListing, ModelMarketplace,
+    ModelVisibility, PricingInfo, PublishRequest, SearchFilters,
 };
 use anyhow::{Context, Result};
 use clap::{Args, Subcommand, ValueEnum};
@@ -9,8 +9,8 @@ use serde_json;
 use serde_yaml;
 use std::collections::HashMap;
 use std::path::PathBuf;
-use tracing::{error, info, warn};
-use tokio::time::{Duration, interval as tokio_interval};
+use tokio::time::{interval as tokio_interval, Duration};
+use tracing::{error, info};
 
 #[derive(Args)]
 pub struct MarketplaceArgs {
@@ -402,9 +402,7 @@ pub async fn handle_marketplace_command(args: MarketplaceArgs) -> Result<()> {
             output,
             skip_checks,
             background,
-        } => {
-            handle_download(&marketplace, model_id, output, skip_checks, background).await
-        }
+        } => handle_download(&marketplace, model_id, output, skip_checks, background).await,
 
         MarketplaceCommands::Install {
             id,
@@ -534,28 +532,45 @@ async fn handle_search(
         license,
         min_rating,
         max_size_gb: max_size,
-        tags: tags.map(|t| t.split(',').map(|s| s.trim().to_string()).collect()).unwrap_or_default(),
-        frameworks: frameworks.map(|f| f.split(',').map(|s| s.trim().to_string()).collect()).unwrap_or_default(),
-        languages: languages.map(|l| l.split(',').map(|s| s.trim().to_string()).collect()).unwrap_or_default(),
-        platforms: platforms.map(|p| p.split(',').map(|s| s.trim().to_string()).collect()).unwrap_or_default(),
+        tags: tags
+            .map(|t| t.split(',').map(|s| s.trim().to_string()).collect())
+            .unwrap_or_default(),
+        frameworks: frameworks
+            .map(|f| f.split(',').map(|s| s.trim().to_string()).collect())
+            .unwrap_or_default(),
+        languages: languages
+            .map(|l| l.split(',').map(|s| s.trim().to_string()).collect())
+            .unwrap_or_default(),
+        platforms: platforms
+            .map(|p| p.split(',').map(|s| s.trim().to_string()).collect())
+            .unwrap_or_default(),
         free_only,
         verified_only,
     });
 
-    let results = marketplace.search_models(&query, filters, page, per_page).await?;
+    let results = marketplace
+        .search_models(&query, filters, page, per_page)
+        .await?;
 
     match output {
         OutputFormat::Table => {
-            println!("Search Results (Page {} of {})", results.page, results.total_pages);
+            println!(
+                "Search Results (Page {} of {})",
+                results.page, results.total_pages
+            );
             println!("Found {} models total", results.total_count);
             println!();
-            println!("{:<40} {:<20} {:<15} {:<10} {:<15}", "MODEL", "PUBLISHER", "VERSION", "SIZE", "DOWNLOADS");
+            println!(
+                "{:<40} {:<20} {:<15} {:<10} {:<15}",
+                "MODEL", "PUBLISHER", "VERSION", "SIZE", "DOWNLOADS"
+            );
             println!("{}", "-".repeat(100));
 
             for model in &results.models {
                 let size_str = format_size(model.size_bytes);
                 let downloads_str = format_number(model.downloads);
-                println!("{:<40} {:<20} {:<15} {:<10} {:<15}",
+                println!(
+                    "{:<40} {:<20} {:<15} {:<10} {:<15}",
                     truncate(&model.name, 38),
                     truncate(&model.publisher, 18),
                     truncate(&model.version, 13),
@@ -584,8 +599,14 @@ async fn handle_search(
 
         OutputFormat::Compact => {
             for model in &results.models {
-                println!("{} - {} v{} by {} ({})",
-                    model.id, model.name, model.version, model.publisher, format_size(model.size_bytes));
+                println!(
+                    "{} - {} v{} by {} ({})",
+                    model.id,
+                    model.name,
+                    model.version,
+                    model.publisher,
+                    format_size(model.size_bytes)
+                );
             }
         }
 
@@ -641,7 +662,10 @@ async fn handle_download(
 
     if !skip_checks {
         let model = marketplace.get_model_details(&model_id).await?;
-        println!("Model: {} v{} by {}", model.name, model.version, model.publisher);
+        println!(
+            "Model: {} v{} by {}",
+            model.name, model.version, model.publisher
+        );
         println!("Size: {}", format_size(model.size_bytes));
         println!("License: {}", model.license);
 
@@ -662,7 +686,8 @@ async fn handle_download(
             match marketplace.get_download_progress(&download_id).await {
                 Ok(progress) => {
                     if progress.progress_percent != last_progress {
-                        print!("\rProgress: {:.1}% ({}) - {:.1} MB/s",
+                        print!(
+                            "\rProgress: {:.1}% ({}) - {:.1} MB/s",
                             progress.progress_percent,
                             format_bytes(progress.bytes_downloaded, progress.total_bytes),
                             progress.download_speed_mbps
@@ -676,7 +701,10 @@ async fn handle_download(
                             break;
                         }
                         DownloadStatus::Failed => {
-                            println!("\n✗ Download failed: {}", progress.error.unwrap_or_default());
+                            println!(
+                                "\n✗ Download failed: {}",
+                                progress.error.unwrap_or_default()
+                            );
                             return Err(anyhow::anyhow!("Download failed"));
                         }
                         DownloadStatus::Cancelled => {
@@ -694,7 +722,10 @@ async fn handle_download(
             tokio::time::sleep(Duration::from_millis(500)).await;
         }
     } else {
-        println!("Download running in background. Use 'inferno marketplace progress {}' to monitor.", download_id);
+        println!(
+            "Download running in background. Use 'inferno marketplace progress {}' to monitor.",
+            download_id
+        );
     }
 
     Ok(())
@@ -733,7 +764,10 @@ async fn handle_install(
                         break;
                     }
                     DownloadStatus::Failed => {
-                        return Err(anyhow::anyhow!("Download failed: {}", progress.error.unwrap_or_default()));
+                        return Err(anyhow::anyhow!(
+                            "Download failed: {}",
+                            progress.error.unwrap_or_default()
+                        ));
                     }
                     _ => {
                         tokio::time::sleep(Duration::from_secs(1)).await;
@@ -788,7 +822,11 @@ async fn handle_list(
     let mut models = marketplace.list_installed_models().await?;
 
     if let Some(filter_source) = source {
-        models.retain(|model| format!("{:?}", model.source).to_lowercase().contains(&filter_source.to_lowercase()));
+        models.retain(|model| {
+            format!("{:?}", model.source)
+                .to_lowercase()
+                .contains(&filter_source.to_lowercase())
+        });
     }
 
     match output {
@@ -809,9 +847,19 @@ async fn handle_list(
                     println!("Model ID: {}", model.model_id);
                     println!("Version: {}", model.version);
                     println!("Source: {:?}", model.source);
-                    println!("Installed: {}", model.installed_at.format("%Y-%m-%d %H:%M:%S"));
+                    println!(
+                        "Installed: {}",
+                        model.installed_at.format("%Y-%m-%d %H:%M:%S")
+                    );
                     println!("Path: {}", model.local_path.display());
-                    println!("Auto-update: {}", if model.auto_update_enabled { "Yes" } else { "No" });
+                    println!(
+                        "Auto-update: {}",
+                        if model.auto_update_enabled {
+                            "Yes"
+                        } else {
+                            "No"
+                        }
+                    );
                     println!("Usage count: {}", model.usage_count);
                     if let Some(last_used) = model.last_used {
                         println!("Last used: {}", last_used.format("%Y-%m-%d %H:%M:%S"));
@@ -819,16 +867,24 @@ async fn handle_list(
                     println!("Verified: {}", if model.verified { "Yes" } else { "No" });
                 }
             } else {
-                println!("{:<40} {:<15} {:<12} {:<20} {:<8}", "MODEL ID", "VERSION", "SOURCE", "INSTALLED", "AUTO-UPDATE");
+                println!(
+                    "{:<40} {:<15} {:<12} {:<20} {:<8}",
+                    "MODEL ID", "VERSION", "SOURCE", "INSTALLED", "AUTO-UPDATE"
+                );
                 println!("{}", "-".repeat(95));
 
                 for model in &models {
-                    println!("{:<40} {:<15} {:<12} {:<20} {:<8}",
+                    println!(
+                        "{:<40} {:<15} {:<12} {:<20} {:<8}",
                         truncate(&model.model_id, 38),
                         truncate(&model.version, 13),
                         format!("{:?}", model.source),
                         model.installed_at.format("%Y-%m-%d"),
-                        if model.auto_update_enabled { "Yes" } else { "No" }
+                        if model.auto_update_enabled {
+                            "Yes"
+                        } else {
+                            "No"
+                        }
                     );
                 }
             }
@@ -846,7 +902,12 @@ async fn handle_list(
 
         _ => {
             for model in &models {
-                println!("{} v{} ({})", model.model_id, model.version, format!("{:?}", model.source));
+                println!(
+                    "{} v{} ({})",
+                    model.model_id,
+                    model.version,
+                    format!("{:?}", model.source)
+                );
             }
         }
     }
@@ -869,7 +930,8 @@ async fn handle_progress(
                 match marketplace.get_download_progress(&id).await {
                     Ok(progress) => {
                         print!("\r{}", " ".repeat(80)); // Clear line
-                        print!("\rProgress: {:.1}% ({}) - {:.1} MB/s - ETA: {}s",
+                        print!(
+                            "\rProgress: {:.1}% ({}) - {:.1} MB/s - ETA: {}s",
                             progress.progress_percent,
                             format_bytes(progress.bytes_downloaded, progress.total_bytes),
                             progress.download_speed_mbps,
@@ -882,7 +944,10 @@ async fn handle_progress(
                                 break;
                             }
                             DownloadStatus::Failed => {
-                                println!("\n✗ Download failed: {}", progress.error.unwrap_or_default());
+                                println!(
+                                    "\n✗ Download failed: {}",
+                                    progress.error.unwrap_or_default()
+                                );
                                 break;
                             }
                             DownloadStatus::Cancelled => {
@@ -905,10 +970,16 @@ async fn handle_progress(
             println!("Model: {}", progress.model_id);
             println!("Status: {:?}", progress.status);
             println!("Progress: {:.1}%", progress.progress_percent);
-            println!("Downloaded: {}", format_bytes(progress.bytes_downloaded, progress.total_bytes));
+            println!(
+                "Downloaded: {}",
+                format_bytes(progress.bytes_downloaded, progress.total_bytes)
+            );
             println!("Speed: {:.1} MB/s", progress.download_speed_mbps);
             println!("ETA: {}s", progress.eta_seconds);
-            println!("Started: {}", progress.started_at.format("%Y-%m-%d %H:%M:%S"));
+            println!(
+                "Started: {}",
+                progress.started_at.format("%Y-%m-%d %H:%M:%S")
+            );
 
             if let Some(error) = progress.error {
                 println!("Error: {}", error);
@@ -921,10 +992,7 @@ async fn handle_progress(
     Ok(())
 }
 
-async fn handle_cancel(
-    marketplace: &ModelMarketplace,
-    download_id: String,
-) -> Result<()> {
+async fn handle_cancel(marketplace: &ModelMarketplace, download_id: String) -> Result<()> {
     info!("Cancelling download: {}", download_id);
 
     marketplace.cancel_download(&download_id).await?;
@@ -944,7 +1012,9 @@ async fn handle_updates(
 
     if let Some(id) = model_id {
         // Check specific model
-        let current_model = marketplace.list_installed_models().await?
+        let current_model = marketplace
+            .list_installed_models()
+            .await?
             .into_iter()
             .find(|m| m.model_id == id)
             .ok_or_else(|| anyhow::anyhow!("Model not installed: {}", id))?;
@@ -1010,11 +1080,7 @@ async fn handle_updates(
     Ok(())
 }
 
-async fn handle_update(
-    marketplace: &ModelMarketplace,
-    model_id: String,
-    wait: bool,
-) -> Result<()> {
+async fn handle_update(marketplace: &ModelMarketplace, model_id: String, wait: bool) -> Result<()> {
     info!("Updating model: {}", model_id);
 
     let download_id = marketplace.update_model(&model_id).await?;
@@ -1033,7 +1099,10 @@ async fn handle_update(
                     break;
                 }
                 DownloadStatus::Failed => {
-                    return Err(anyhow::anyhow!("Update failed: {}", progress.error.unwrap_or_default()));
+                    return Err(anyhow::anyhow!(
+                        "Update failed: {}",
+                        progress.error.unwrap_or_default()
+                    ));
                 }
                 DownloadStatus::Cancelled => {
                     println!("⚠ Update cancelled");
@@ -1069,7 +1138,10 @@ async fn handle_publish(
     info!("Publishing model: {}", name);
 
     if !model_path.exists() {
-        return Err(anyhow::anyhow!("Model file not found: {}", model_path.display()));
+        return Err(anyhow::anyhow!(
+            "Model file not found: {}",
+            model_path.display()
+        ));
     }
 
     // Create basic model metadata
@@ -1083,7 +1155,7 @@ async fn handle_publish(
         license: license.clone(),
         size_bytes: std::fs::metadata(&model_path)?.len(),
         download_url: String::new(), // Will be set by registry
-        checksum: String::new(), // Will be calculated
+        checksum: String::new(),     // Will be calculated
         signature: None,
         metadata: crate::marketplace::ModelMetadata {
             framework: "Unknown".to_string(),
@@ -1103,7 +1175,11 @@ async fn handle_publish(
             minimum_ram_gb: 4.0,
             minimum_vram_gb: None,
             supported_backends: vec!["gguf".to_string()],
-            supported_platforms: vec!["linux".to_string(), "macos".to_string(), "windows".to_string()],
+            supported_platforms: vec![
+                "linux".to_string(),
+                "macos".to_string(),
+                "windows".to_string(),
+            ],
             gpu_architectures: vec![],
             cpu_instructions: vec![],
         },
@@ -1119,7 +1195,9 @@ async fn handle_publish(
         updated_at: chrono::Utc::now(),
         downloads: 0,
         rating: None,
-        tags: tags.map(|t| t.split(',').map(|s| s.trim().to_string()).collect()).unwrap_or_default(),
+        tags: tags
+            .map(|t| t.split(',').map(|s| s.trim().to_string()).collect())
+            .unwrap_or_default(),
         dependencies: vec![],
     };
 
@@ -1158,7 +1236,9 @@ async fn handle_popular(
 ) -> Result<()> {
     info!("Fetching popular models");
 
-    let models = marketplace.get_popular_models(category.map(|c| c.into()), limit).await?;
+    let models = marketplace
+        .get_popular_models(category.map(|c| c.into()), limit)
+        .await?;
 
     match output {
         OutputFormat::Table => {
@@ -1170,13 +1250,20 @@ async fn handle_popular(
                 return Ok(());
             }
 
-            println!("{:<40} {:<20} {:<15} {:<10} {:<15}", "MODEL", "PUBLISHER", "VERSION", "RATING", "DOWNLOADS");
+            println!(
+                "{:<40} {:<20} {:<15} {:<10} {:<15}",
+                "MODEL", "PUBLISHER", "VERSION", "RATING", "DOWNLOADS"
+            );
             println!("{}", "-".repeat(100));
 
             for model in &models {
-                let rating_str = model.rating.map(|r| format!("{:.1}★", r)).unwrap_or_else(|| "N/A".to_string());
+                let rating_str = model
+                    .rating
+                    .map(|r| format!("{:.1}★", r))
+                    .unwrap_or_else(|| "N/A".to_string());
                 let downloads_str = format_number(model.downloads);
-                println!("{:<40} {:<20} {:<15} {:<10} {:<15}",
+                println!(
+                    "{:<40} {:<20} {:<15} {:<10} {:<15}",
                     truncate(&model.name, 38),
                     truncate(&model.publisher, 18),
                     truncate(&model.version, 13),
@@ -1198,8 +1285,14 @@ async fn handle_popular(
 
         _ => {
             for model in &models {
-                let rating_str = model.rating.map(|r| format!(" ({:.1}★)", r)).unwrap_or_default();
-                println!("{} v{} by {}{}", model.name, model.version, model.publisher, rating_str);
+                let rating_str = model
+                    .rating
+                    .map(|r| format!(" ({:.1}★)", r))
+                    .unwrap_or_default();
+                println!(
+                    "{} v{} by {}{}",
+                    model.name, model.version, model.publisher, rating_str
+                );
             }
         }
     }
@@ -1215,7 +1308,9 @@ async fn handle_recommendations(
 ) -> Result<()> {
     info!("Fetching model recommendations");
 
-    let models = marketplace.get_recommended_models(user_id.as_deref()).await?;
+    let models = marketplace
+        .get_recommended_models(user_id.as_deref())
+        .await?;
     let models: Vec<_> = models.into_iter().take(limit).collect();
 
     match output {
@@ -1229,12 +1324,22 @@ async fn handle_recommendations(
             }
 
             for (i, model) in models.iter().enumerate() {
-                println!("{}. {} v{} by {}", i + 1, model.name, model.version, model.publisher);
+                println!(
+                    "{}. {} v{} by {}",
+                    i + 1,
+                    model.name,
+                    model.version,
+                    model.publisher
+                );
                 println!("   {}", model.description);
-                println!("   Category: {:?} | Downloads: {} | Rating: {}",
+                println!(
+                    "   Category: {:?} | Downloads: {} | Rating: {}",
                     model.category,
                     format_number(model.downloads),
-                    model.rating.map(|r| format!("{:.1}★", r)).unwrap_or_else(|| "N/A".to_string())
+                    model
+                        .rating
+                        .map(|r| format!("{:.1}★", r))
+                        .unwrap_or_else(|| "N/A".to_string())
                 );
                 println!();
             }
@@ -1399,12 +1504,21 @@ fn print_model_details(model: &ModelListing) {
     }
 
     println!("\nCompatibility:");
-    println!("  Minimum RAM: {:.1} GB", model.compatibility.minimum_ram_gb);
+    println!(
+        "  Minimum RAM: {:.1} GB",
+        model.compatibility.minimum_ram_gb
+    );
     if let Some(vram) = model.compatibility.minimum_vram_gb {
         println!("  Minimum VRAM: {:.1} GB", vram);
     }
-    println!("  Platforms: {}", model.compatibility.supported_platforms.join(", "));
-    println!("  Backends: {}", model.compatibility.supported_backends.join(", "));
+    println!(
+        "  Platforms: {}",
+        model.compatibility.supported_platforms.join(", ")
+    );
+    println!(
+        "  Backends: {}",
+        model.compatibility.supported_backends.join(", ")
+    );
 
     println!("\nMetadata:");
     println!("  Framework: {}", model.metadata.framework);
@@ -1460,6 +1574,8 @@ fn truncate(s: &str, max_len: usize) -> String {
 fn confirm(message: &str) -> Result<bool> {
     println!("{} (y/N): ", message);
     let mut input = String::new();
-    std::io::stdin().read_line(&mut input).context("Failed to read input")?;
+    std::io::stdin()
+        .read_line(&mut input)
+        .context("Failed to read input")?;
     Ok(input.trim().to_lowercase().starts_with('y'))
 }

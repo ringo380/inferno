@@ -10,8 +10,8 @@ import { InferenceHistory } from './inference-history';
 import { StreamingOutput } from './streaming-output';
 import {
   Play,
-  Stop,
-  Clear,
+  Square,
+  Trash2,
   Save,
   Share,
   Settings,
@@ -20,6 +20,8 @@ import {
   RotateCcw,
 } from 'lucide-react';
 import { InferenceParams, InferenceResponse } from '@/types/inferno';
+import { useInference, useLoadedModels } from '@/hooks/use-tauri-api';
+import { toast } from 'react-hot-toast';
 
 const examplePrompts = [
   "Write a short story about AI in the future",
@@ -30,9 +32,11 @@ const examplePrompts = [
 ];
 
 export function InferenceConsole() {
-  const [selectedModel, setSelectedModel] = useState('llama-7b-q4');
+  const { data: loadedModels, isLoading: modelsLoading } = useLoadedModels();
+  const inferMutation = useInference();
+
+  const [selectedModel, setSelectedModel] = useState('');
   const [prompt, setPrompt] = useState('');
-  const [isRunning, setIsRunning] = useState(false);
   const [response, setResponse] = useState('');
   const [currentParams, setCurrentParams] = useState<InferenceParams>({
     temperature: 0.7,
@@ -48,79 +52,75 @@ export function InferenceConsole() {
     tokensPerSecond: 0,
   });
 
+  // Auto-select first loaded model when models are available
+  useEffect(() => {
+    if (loadedModels && loadedModels.length > 0 && !selectedModel) {
+      setSelectedModel(loadedModels[0]);
+    }
+  }, [loadedModels, selectedModel]);
+
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!prompt.trim() || isRunning) return;
+    if (!prompt.trim() || inferMutation.isPending || !selectedModel) return;
 
-    setIsRunning(true);
+    if (!selectedModel) {
+      toast.error('Please select a model first');
+      return;
+    }
+
     setResponse('');
     setMetrics({ tokensGenerated: 0, inferenceTime: 0, tokensPerSecond: 0 });
 
     const startTime = Date.now();
 
     try {
-      // Simulate streaming response
-      const words = [
-        "I'll help you with that question.",
-        "Let me think about this step by step.",
-        "Here's what I understand about your request:",
-        "Based on the information provided,",
-        "I can offer several perspectives on this topic.",
-        "First, let's consider the main aspects:",
-        "The key points to remember are:",
-        "In conclusion, this approach would work well",
-        "because it addresses the core requirements",
-        "while maintaining simplicity and efficiency."
-      ];
+      const result = await inferMutation.mutateAsync({
+        backendId: selectedModel,
+        prompt: prompt.trim(),
+        params: currentParams,
+      });
 
-      let tokenCount = 0;
-      let currentResponse = '';
+      const endTime = Date.now();
+      const inferenceTime = endTime - startTime;
+      const tokenCount = result.length; // Rough estimate
+      const tokensPerSecond = tokenCount / (inferenceTime / 1000);
 
-      for (let i = 0; i < words.length; i++) {
-        if (!isRunning) break;
-
-        const word = words[i] + ' ';
-        currentResponse += word;
-        tokenCount += word.split(' ').length;
-
-        setResponse(currentResponse);
-        setMetrics(prev => ({
-          ...prev,
-          tokensGenerated: tokenCount,
-          inferenceTime: Date.now() - startTime,
-          tokensPerSecond: tokenCount / ((Date.now() - startTime) / 1000) || 0,
-        }));
-
-        // Simulate typing delay
-        await new Promise(resolve => setTimeout(resolve, 200 + Math.random() * 300));
-      }
+      setResponse(result);
+      setMetrics({
+        tokensGenerated: tokenCount,
+        inferenceTime,
+        tokensPerSecond,
+      });
 
       // Add to history
       const newResponse: InferenceResponse = {
         id: Math.random().toString(36).substr(2, 9),
         model_id: selectedModel,
         prompt,
-        response: currentResponse,
+        response: result,
         tokens_generated: tokenCount,
-        inference_time_ms: Date.now() - startTime,
-        tokens_per_second: tokenCount / ((Date.now() - startTime) / 1000),
+        inference_time_ms: inferenceTime,
+        tokens_per_second: tokensPerSecond,
         timestamp: new Date().toISOString(),
         status: 'success',
       };
 
       setHistory(prev => [newResponse, ...prev]);
+      toast.success('Inference completed successfully');
 
     } catch (error) {
       console.error('Inference error:', error);
-    } finally {
-      setIsRunning(false);
+      toast.error('Inference failed: ' + (error instanceof Error ? error.message : 'Unknown error'));
+      setResponse('Error: Failed to generate response');
     }
   };
 
   const stopInference = () => {
-    setIsRunning(false);
+    // Note: Currently Tauri doesn't support canceling in-progress inference
+    // This would need to be implemented in the backend
+    toast('Inference cancellation not yet supported');
   };
 
   const clearConsole = () => {
@@ -145,8 +145,8 @@ export function InferenceConsole() {
           </p>
         </div>
         <div className="flex items-center space-x-2">
-          <Badge variant={isRunning ? 'default' : 'secondary'} className="flex items-center gap-1">
-            {isRunning ? (
+          <Badge variant={inferMutation.isPending ? 'default' : 'secondary'} className="flex items-center gap-1">
+            {inferMutation.isPending ? (
               <>
                 <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
                 Running
@@ -199,7 +199,7 @@ export function InferenceConsole() {
                     variant="outline"
                     size="sm"
                     onClick={clearConsole}
-                    disabled={isRunning}
+                    disabled={inferMutation.isPending}
                   >
                     <RotateCcw className="h-4 w-4 mr-2" />
                     Clear
@@ -220,7 +220,7 @@ export function InferenceConsole() {
                       variant="outline"
                       size="sm"
                       onClick={() => loadExample(example)}
-                      disabled={isRunning}
+                      disabled={inferMutation.isPending}
                       className="text-xs"
                     >
                       {example.slice(0, 30)}...
@@ -237,29 +237,29 @@ export function InferenceConsole() {
                   onChange={(e) => setPrompt(e.target.value)}
                   placeholder="Enter your prompt here..."
                   className="w-full h-32 p-3 border rounded-lg bg-background resize-none focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                  disabled={isRunning}
+                  disabled={inferMutation.isPending}
                 />
                 <div className="flex items-center justify-between">
                   <div className="text-sm text-muted-foreground">
                     {prompt.length} characters
                   </div>
                   <div className="flex items-center space-x-2">
-                    {isRunning && (
+                    {inferMutation.isPending && (
                       <Button
                         type="button"
                         variant="outline"
                         onClick={stopInference}
                       >
-                        <Stop className="h-4 w-4 mr-2" />
+                        <Square className="h-4 w-4 mr-2" />
                         Stop
                       </Button>
                     )}
                     <Button
                       type="submit"
-                      disabled={!prompt.trim() || isRunning}
+                      disabled={!prompt.trim() || inferMutation.isPending}
                     >
                       <Play className="h-4 w-4 mr-2" />
-                      {isRunning ? 'Generating...' : 'Run Inference'}
+                      {inferMutation.isPending ? 'Generating...' : 'Run Inference'}
                     </Button>
                   </div>
                 </div>
@@ -292,7 +292,7 @@ export function InferenceConsole() {
             <CardContent>
               <StreamingOutput
                 response={response}
-                isStreaming={isRunning}
+                isStreaming={inferMutation.isPending}
                 metrics={metrics}
               />
             </CardContent>
@@ -337,7 +337,7 @@ export function InferenceConsole() {
                 </div>
               </div>
 
-              {isRunning && (
+              {inferMutation.isPending && (
                 <div className="pt-3 border-t">
                   <div className="flex items-center space-x-2 text-sm text-muted-foreground">
                     <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />

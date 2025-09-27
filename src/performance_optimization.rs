@@ -9,13 +9,12 @@ use uuid::Uuid;
 
 // Import CLI helper types
 use super::cli::performance_optimization::{
-    ProfileAnalysisResult, ProfileInfo, ProfileComparison, OptimizationResultExt,
-    OptimizationHistoryEntry, OptimizationPlan, OptimizationStep, AutoTuningProgress,
-    ResourceStats, ResourceReport, CacheStatsExt, CacheAnalysis, ParallelStats,
-    Bottleneck, ParallelOptResult, TaskDistributionAnalysis, MemoryStatsExt,
-    MemoryOptResult, MemoryLeak, MemoryPressureResult, IoStatsExt, IoTestResult,
-    NetworkStatsExt, NetworkTestResult, ModelOptResult, BenchmarkResult,
-    BenchmarkComparison, PerformanceStatus,
+    AutoTuningProgress, BenchmarkComparison, BenchmarkResult, Bottleneck, CacheAnalysis,
+    CacheStatsExt, IoStatsExt, IoTestResult, MemoryLeak, MemoryOptResult, MemoryPressureResult,
+    MemoryStatsExt, ModelOptResult, NetworkStatsExt, NetworkTestResult, OptimizationHistoryEntry,
+    OptimizationPlan, OptimizationResultExt, OptimizationStep, ParallelOptResult, ParallelStats,
+    PerformanceStatus, ProfileAnalysisResult, ProfileComparison, ProfileInfo, ResourceReport,
+    ResourceStats, TaskDistributionAnalysis,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -480,11 +479,7 @@ impl Default for ModelValidationConfig {
         Self {
             cross_validation_folds: 5,
             validation_split_ratio: 0.2,
-            performance_metrics: vec![
-                "mse".to_string(),
-                "mae".to_string(),
-                "r2".to_string(),
-            ],
+            performance_metrics: vec!["mse".to_string(), "mae".to_string(), "r2".to_string()],
             early_stopping: true,
             overfitting_detection: true,
         }
@@ -1020,15 +1015,8 @@ impl Default for CachingOptimizationConfig {
     fn default() -> Self {
         Self {
             enabled: true,
-            cache_hierarchy: vec![
-                CacheLevel::l1(),
-                CacheLevel::l2(),
-                CacheLevel::l3(),
-            ],
-            cache_strategies: vec![
-                CacheStrategy::WriteThrough,
-                CacheStrategy::Adaptive,
-            ],
+            cache_hierarchy: vec![CacheLevel::l1(), CacheLevel::l2(), CacheLevel::l3()],
+            cache_strategies: vec![CacheStrategy::WriteThrough, CacheStrategy::Adaptive],
             cache_warming: CacheWarmingConfig::default(),
             cache_invalidation: CacheInvalidationConfig::default(),
             distributed_cache: DistributedCacheConfig::default(),
@@ -1392,9 +1380,18 @@ impl Default for MemoryPoolingConfig {
         Self {
             enabled: true,
             pool_sizes: vec![
-                PoolSize { size_bytes: 64, count: 1000 },
-                PoolSize { size_bytes: 256, count: 500 },
-                PoolSize { size_bytes: 1024, count: 100 },
+                PoolSize {
+                    size_bytes: 64,
+                    count: 1000,
+                },
+                PoolSize {
+                    size_bytes: 256,
+                    count: 500,
+                },
+                PoolSize {
+                    size_bytes: 1024,
+                    count: 100,
+                },
             ],
             pre_allocation: true,
             zero_on_free: true,
@@ -1991,7 +1988,9 @@ impl PerformanceOptimizationSystem {
         let profiler = Arc::new(SystemProfiler::new(&config.profiling_config)?);
         let optimizer = Arc::new(SystemOptimizer::new(&config.optimization_config)?);
         let auto_tuner = Arc::new(SystemAutoTuner::new(&config.auto_tuning_config)?);
-        let resource_manager = Arc::new(SystemResourceManager::new(&config.resource_management_config)?);
+        let resource_manager = Arc::new(SystemResourceManager::new(
+            &config.resource_management_config,
+        )?);
         let cache_manager = Arc::new(SystemCacheManager::new(&config.caching_config)?);
         let monitoring = Arc::new(SystemPerformanceMonitoring::new(&config.monitoring_config)?);
         let ml_engine = Arc::new(SystemMlEngine::new(&config.ml_optimization_config)?);
@@ -2059,11 +2058,15 @@ impl PerformanceOptimizationSystem {
         self.cache_manager.get_statistics().await
     }
 
-    pub async fn get_optimization_recommendations(&self) -> Result<Vec<OptimizationRecommendation>> {
+    pub async fn get_optimization_recommendations(
+        &self,
+    ) -> Result<Vec<OptimizationRecommendation>> {
         let profiles = self.profiles.read().await;
         let recent_profiles: Vec<_> = profiles.iter().cloned().collect();
 
-        self.ml_engine.generate_recommendations(&recent_profiles).await
+        self.ml_engine
+            .generate_recommendations(&recent_profiles)
+            .await
     }
 
     pub async fn apply_optimization(&self, optimization_id: &str) -> Result<()> {
@@ -2079,7 +2082,11 @@ impl PerformanceOptimizationSystem {
     }
 
     // Additional methods for CLI support
-    pub async fn start_profiling_with_name(&self, _name: &str, _options: HashMap<String, String>) -> Result<()> {
+    pub async fn start_profiling_with_name(
+        &self,
+        _name: &str,
+        _options: HashMap<String, String>,
+    ) -> Result<()> {
         let _profile_id = self.start_profiling().await?;
         // Store mapping of name to profile_id (simplified for now)
         Ok(())
@@ -2117,7 +2124,11 @@ impl PerformanceOptimizationSystem {
         ])
     }
 
-    pub async fn compare_profiles(&self, _profile1: &str, _profile2: &str) -> Result<ProfileComparison> {
+    pub async fn compare_profiles(
+        &self,
+        _profile1: &str,
+        _profile2: &str,
+    ) -> Result<ProfileComparison> {
         Ok(ProfileComparison {
             cpu_diff: 5.0,
             memory_diff: 1024 * 1024 * 50,
@@ -2126,7 +2137,12 @@ impl PerformanceOptimizationSystem {
         })
     }
 
-    pub async fn optimize_with_params(&self, _target: &str, _level: Option<String>, _strategy: Option<String>) -> Result<OptimizationResultExt> {
+    pub async fn optimize_with_params(
+        &self,
+        _target: &str,
+        _level: Option<String>,
+        _strategy: Option<String>,
+    ) -> Result<OptimizationResultExt> {
         Ok(OptimizationResultExt {
             performance_gain: 20.0,
             resource_reduction: 15.0,
@@ -2138,22 +2154,32 @@ impl PerformanceOptimizationSystem {
         Ok(())
     }
 
-    pub async fn rollback_optimization_with_point(&self, id: &str, _point: Option<String>) -> Result<()> {
+    pub async fn rollback_optimization_with_point(
+        &self,
+        id: &str,
+        _point: Option<String>,
+    ) -> Result<()> {
         self.rollback_optimization(id).await
     }
 
-    pub async fn get_optimization_history(&self, _limit: Option<usize>) -> Result<Vec<OptimizationHistoryEntry>> {
-        Ok(vec![
-            OptimizationHistoryEntry {
-                timestamp: "2024-01-01T00:00:00Z".to_string(),
-                target: "cache_optimization".to_string(),
-                performance_gain: 15.0,
-                resource_reduction: 10.0,
-            },
-        ])
+    pub async fn get_optimization_history(
+        &self,
+        _limit: Option<usize>,
+    ) -> Result<Vec<OptimizationHistoryEntry>> {
+        Ok(vec![OptimizationHistoryEntry {
+            timestamp: "2024-01-01T00:00:00Z".to_string(),
+            target: "cache_optimization".to_string(),
+            performance_gain: 15.0,
+            resource_reduction: 10.0,
+        }])
     }
 
-    pub async fn create_optimization_plan(&self, _targets: Vec<String>, _budget: Option<String>, _time_limit: Option<u64>) -> Result<OptimizationPlan> {
+    pub async fn create_optimization_plan(
+        &self,
+        _targets: Vec<String>,
+        _budget: Option<String>,
+        _time_limit: Option<u64>,
+    ) -> Result<OptimizationPlan> {
         Ok(OptimizationPlan {
             steps: vec![
                 OptimizationStep {
@@ -2172,7 +2198,12 @@ impl PerformanceOptimizationSystem {
         })
     }
 
-    pub async fn start_autotuning(&self, _config: Option<PathBuf>, _algorithm: Option<String>, _max_iterations: Option<u32>) -> Result<String> {
+    pub async fn start_autotuning(
+        &self,
+        _config: Option<PathBuf>,
+        _algorithm: Option<String>,
+        _max_iterations: Option<u32>,
+    ) -> Result<String> {
         Ok("session_12345".to_string())
     }
 
@@ -2226,7 +2257,14 @@ impl PerformanceOptimizationSystem {
         Ok(())
     }
 
-    pub async fn enable_autoscaling(&self, _policy: Option<String>, _min: Option<Vec<String>>, _max: Option<Vec<String>>, _scale_up: Option<f64>, _scale_down: Option<f64>) -> Result<()> {
+    pub async fn enable_autoscaling(
+        &self,
+        _policy: Option<String>,
+        _min: Option<Vec<String>>,
+        _max: Option<Vec<String>>,
+        _scale_up: Option<f64>,
+        _scale_down: Option<f64>,
+    ) -> Result<()> {
         Ok(())
     }
 
@@ -2234,11 +2272,20 @@ impl PerformanceOptimizationSystem {
         Ok(())
     }
 
-    pub async fn allocate_resources(&self, _target: &str, _specs: Vec<String>, _priority: Option<u8>) -> Result<()> {
+    pub async fn allocate_resources(
+        &self,
+        _target: &str,
+        _specs: Vec<String>,
+        _priority: Option<u8>,
+    ) -> Result<()> {
         Ok(())
     }
 
-    pub async fn generate_resource_report(&self, _period: Option<String>, _group_by: Option<String>) -> Result<ResourceReport> {
+    pub async fn generate_resource_report(
+        &self,
+        _period: Option<String>,
+        _group_by: Option<String>,
+    ) -> Result<ResourceReport> {
         Ok(ResourceReport {
             period: "24h".to_string(),
             cpu_hours: 100.5,
@@ -2263,11 +2310,20 @@ impl PerformanceOptimizationSystem {
         })
     }
 
-    pub async fn clear_cache(&self, _level: Option<String>, _pattern: Option<String>) -> Result<u32> {
+    pub async fn clear_cache(
+        &self,
+        _level: Option<String>,
+        _pattern: Option<String>,
+    ) -> Result<u32> {
         Ok(1000)
     }
 
-    pub async fn warmup_cache(&self, _models: Option<Vec<String>>, _patterns: Option<PathBuf>, _parallel: bool) -> Result<u32> {
+    pub async fn warmup_cache(
+        &self,
+        _models: Option<Vec<String>>,
+        _patterns: Option<PathBuf>,
+        _parallel: bool,
+    ) -> Result<u32> {
         Ok(500)
     }
 
@@ -2297,16 +2353,19 @@ impl PerformanceOptimizationSystem {
             queue_length: 25,
             tasks_completed: 15000,
             avg_task_time_ms: 150.0,
-            bottlenecks: vec![
-                Bottleneck {
-                    name: "I/O Wait".to_string(),
-                    impact: 0.25,
-                },
-            ],
+            bottlenecks: vec![Bottleneck {
+                name: "I/O Wait".to_string(),
+                impact: 0.25,
+            }],
         })
     }
 
-    pub async fn optimize_parallelization(&self, _throughput: Option<f64>, _latency: Option<u64>, _auto: bool) -> Result<ParallelOptResult> {
+    pub async fn optimize_parallelization(
+        &self,
+        _throughput: Option<f64>,
+        _latency: Option<u64>,
+        _auto: bool,
+    ) -> Result<ParallelOptResult> {
         Ok(ParallelOptResult {
             throughput_gain: 25.0,
             latency_reduction: 15.0,
@@ -2315,7 +2374,10 @@ impl PerformanceOptimizationSystem {
         })
     }
 
-    pub async fn analyze_task_distribution(&self, _window: Option<String>) -> Result<TaskDistributionAnalysis> {
+    pub async fn analyze_task_distribution(
+        &self,
+        _window: Option<String>,
+    ) -> Result<TaskDistributionAnalysis> {
         Ok(TaskDistributionAnalysis {
             balance_score: 8.0,
             worker_utilization: 0.85,
@@ -2341,11 +2403,23 @@ impl PerformanceOptimizationSystem {
         })
     }
 
-    pub async fn configure_memory_pool(&self, _name: &str, _size: Option<u64>, _preallocate: bool, _growth: Option<String>) -> Result<()> {
+    pub async fn configure_memory_pool(
+        &self,
+        _name: &str,
+        _size: Option<u64>,
+        _preallocate: bool,
+        _growth: Option<String>,
+    ) -> Result<()> {
         Ok(())
     }
 
-    pub async fn optimize_memory(&self, _target: Option<u64>, _compression: bool, _dedup: bool, _gc: Option<String>) -> Result<MemoryOptResult> {
+    pub async fn optimize_memory(
+        &self,
+        _target: Option<u64>,
+        _compression: bool,
+        _dedup: bool,
+        _gc: Option<String>,
+    ) -> Result<MemoryOptResult> {
         Ok(MemoryOptResult {
             memory_saved: 1024 * 1024 * 100,
             reduction_percentage: 0.20,
@@ -2362,16 +2436,19 @@ impl PerformanceOptimizationSystem {
     }
 
     pub async fn analyze_leaks(&self) -> Result<Vec<MemoryLeak>> {
-        Ok(vec![
-            MemoryLeak {
-                location: "src/models/inference.rs:42".to_string(),
-                size: 1024 * 50,
-                count: 10,
-            },
-        ])
+        Ok(vec![MemoryLeak {
+            location: "src/models/inference.rs:42".to_string(),
+            size: 1024 * 50,
+            count: 10,
+        }])
     }
 
-    pub async fn run_memory_pressure_test(&self, _duration: Option<u64>, _pattern: Option<String>, _target: Option<f64>) -> Result<MemoryPressureResult> {
+    pub async fn run_memory_pressure_test(
+        &self,
+        _duration: Option<u64>,
+        _pattern: Option<String>,
+        _target: Option<f64>,
+    ) -> Result<MemoryPressureResult> {
         Ok(MemoryPressureResult {
             peak_usage: 1024 * 1024 * 1024 * 8,
             avg_usage: 1024 * 1024 * 1024 * 6,
@@ -2395,11 +2472,22 @@ impl PerformanceOptimizationSystem {
         Ok(())
     }
 
-    pub async fn configure_io_scheduling(&self, _scheduler: Option<String>, _priorities: Option<Vec<String>>, _bandwidth: Option<Vec<String>>) -> Result<()> {
+    pub async fn configure_io_scheduling(
+        &self,
+        _scheduler: Option<String>,
+        _priorities: Option<Vec<String>>,
+        _bandwidth: Option<Vec<String>>,
+    ) -> Result<()> {
         Ok(())
     }
 
-    pub async fn run_io_test(&self, _test_type: Option<String>, _size: Option<u64>, _block_size: Option<usize>, _duration: Option<u64>) -> Result<IoTestResult> {
+    pub async fn run_io_test(
+        &self,
+        _test_type: Option<String>,
+        _size: Option<u64>,
+        _block_size: Option<usize>,
+        _duration: Option<u64>,
+    ) -> Result<IoTestResult> {
         Ok(IoTestResult {
             read_iops: 10000,
             write_iops: 5000,
@@ -2430,11 +2518,23 @@ impl PerformanceOptimizationSystem {
         Ok(())
     }
 
-    pub async fn configure_connection_pool(&self, _min: Option<usize>, _max: Option<usize>, _idle_timeout: Option<u64>, _validation: Option<u64>) -> Result<()> {
+    pub async fn configure_connection_pool(
+        &self,
+        _min: Option<usize>,
+        _max: Option<usize>,
+        _idle_timeout: Option<u64>,
+        _validation: Option<u64>,
+    ) -> Result<()> {
         Ok(())
     }
 
-    pub async fn run_network_test(&self, _test_type: Option<String>, _host: Option<String>, _duration: Option<u64>, _parallel: Option<usize>) -> Result<NetworkTestResult> {
+    pub async fn run_network_test(
+        &self,
+        _test_type: Option<String>,
+        _host: Option<String>,
+        _duration: Option<u64>,
+        _parallel: Option<usize>,
+    ) -> Result<NetworkTestResult> {
         Ok(NetworkTestResult {
             throughput: 125_000 * 150,
             latency_ms: 20.0,
@@ -2443,7 +2543,13 @@ impl PerformanceOptimizationSystem {
         })
     }
 
-    pub async fn quantize_model(&self, _model: &str, _quant_type: Option<String>, _bits: Option<u8>, _calibration: Option<PathBuf>) -> Result<ModelOptResult> {
+    pub async fn quantize_model(
+        &self,
+        _model: &str,
+        _quant_type: Option<String>,
+        _bits: Option<u8>,
+        _calibration: Option<PathBuf>,
+    ) -> Result<ModelOptResult> {
         Ok(ModelOptResult {
             original_size: 1024 * 1024 * 1024,
             quantized_size: 1024 * 1024 * 256,
@@ -2464,7 +2570,13 @@ impl PerformanceOptimizationSystem {
         })
     }
 
-    pub async fn prune_model(&self, _model: &str, _ratio: Option<f32>, _method: Option<String>, _preserve_accuracy: Option<f32>) -> Result<ModelOptResult> {
+    pub async fn prune_model(
+        &self,
+        _model: &str,
+        _ratio: Option<f32>,
+        _method: Option<String>,
+        _preserve_accuracy: Option<f32>,
+    ) -> Result<ModelOptResult> {
         Ok(ModelOptResult {
             original_size: 1024 * 1024 * 1024,
             quantized_size: 0,
@@ -2485,7 +2597,13 @@ impl PerformanceOptimizationSystem {
         })
     }
 
-    pub async fn distill_model(&self, _teacher: &str, _student: &str, _data: PathBuf, _epochs: Option<u32>) -> Result<ModelOptResult> {
+    pub async fn distill_model(
+        &self,
+        _teacher: &str,
+        _student: &str,
+        _data: PathBuf,
+        _epochs: Option<u32>,
+    ) -> Result<ModelOptResult> {
         Ok(ModelOptResult {
             original_size: 0,
             quantized_size: 0,
@@ -2506,7 +2624,12 @@ impl PerformanceOptimizationSystem {
         })
     }
 
-    pub async fn fuse_model_operations(&self, _model: &str, _patterns: Option<Vec<String>>, _level: Option<u8>) -> Result<ModelOptResult> {
+    pub async fn fuse_model_operations(
+        &self,
+        _model: &str,
+        _patterns: Option<Vec<String>>,
+        _level: Option<u8>,
+    ) -> Result<ModelOptResult> {
         Ok(ModelOptResult {
             original_size: 0,
             quantized_size: 0,
@@ -2527,7 +2650,12 @@ impl PerformanceOptimizationSystem {
         })
     }
 
-    pub async fn compile_model(&self, _model: &str, _backend: Option<String>, _flags: Option<Vec<String>>) -> Result<ModelOptResult> {
+    pub async fn compile_model(
+        &self,
+        _model: &str,
+        _backend: Option<String>,
+        _flags: Option<Vec<String>>,
+    ) -> Result<ModelOptResult> {
         Ok(ModelOptResult {
             original_size: 0,
             quantized_size: 0,
@@ -2548,7 +2676,13 @@ impl PerformanceOptimizationSystem {
         })
     }
 
-    pub async fn run_benchmark(&self, _suite: Option<String>, _models: Option<Vec<String>>, _iterations: Option<u32>, _parallel: bool) -> Result<Vec<BenchmarkResult>> {
+    pub async fn run_benchmark(
+        &self,
+        _suite: Option<String>,
+        _models: Option<Vec<String>>,
+        _iterations: Option<u32>,
+        _parallel: bool,
+    ) -> Result<Vec<BenchmarkResult>> {
         Ok(vec![
             BenchmarkResult {
                 name: "model_a".to_string(),
@@ -2565,7 +2699,12 @@ impl PerformanceOptimizationSystem {
         ])
     }
 
-    pub async fn compare_benchmarks(&self, _baseline: &str, _comparison: &str, _metrics: Option<Vec<String>>) -> Result<BenchmarkComparison> {
+    pub async fn compare_benchmarks(
+        &self,
+        _baseline: &str,
+        _comparison: &str,
+        _metrics: Option<Vec<String>>,
+    ) -> Result<BenchmarkComparison> {
         Ok(BenchmarkComparison {
             throughput_change: 0.15,
             latency_change: -0.10,
@@ -2573,7 +2712,12 @@ impl PerformanceOptimizationSystem {
         })
     }
 
-    pub async fn create_benchmark_suite(&self, _name: &str, _config: Option<PathBuf>, _tests: Option<Vec<String>>) -> Result<()> {
+    pub async fn create_benchmark_suite(
+        &self,
+        _name: &str,
+        _config: Option<PathBuf>,
+        _tests: Option<Vec<String>>,
+    ) -> Result<()> {
         Ok(())
     }
 
@@ -2581,7 +2725,12 @@ impl PerformanceOptimizationSystem {
         Ok("benchmark results exported".to_string())
     }
 
-    pub async fn enable_continuous_benchmarking(&self, _schedule: Option<String>, _detect_regression: bool, _alerts: Option<Vec<String>>) -> Result<()> {
+    pub async fn enable_continuous_benchmarking(
+        &self,
+        _schedule: Option<String>,
+        _detect_regression: bool,
+        _alerts: Option<Vec<String>>,
+    ) -> Result<()> {
         Ok(())
     }
 
@@ -2743,7 +2892,10 @@ pub trait PerformanceMonitoring: Send + Sync {
 pub trait MlEngine: Send + Sync {
     async fn train_model(&self, data: &[PerformanceProfile]) -> Result<()>;
     async fn predict(&self, features: &[f64]) -> Result<f64>;
-    async fn generate_recommendations(&self, profiles: &[PerformanceProfile]) -> Result<Vec<OptimizationRecommendation>>;
+    async fn generate_recommendations(
+        &self,
+        profiles: &[PerformanceProfile],
+    ) -> Result<Vec<OptimizationRecommendation>>;
     async fn update_model(&self, new_data: &[PerformanceProfile]) -> Result<()>;
 }
 
@@ -2755,7 +2907,9 @@ pub struct SystemProfiler {
 
 impl SystemProfiler {
     pub fn new(config: &ProfilingConfig) -> Result<Self> {
-        Ok(Self { config: config.clone() })
+        Ok(Self {
+            config: config.clone(),
+        })
     }
 }
 
@@ -2827,7 +2981,9 @@ pub struct SystemOptimizer {
 
 impl SystemOptimizer {
     pub fn new(config: &OptimizationConfig) -> Result<Self> {
-        Ok(Self { config: config.clone() })
+        Ok(Self {
+            config: config.clone(),
+        })
     }
 }
 
@@ -2874,25 +3030,25 @@ pub struct SystemAutoTuner {
 
 impl SystemAutoTuner {
     pub fn new(config: &AutoTuningConfig) -> Result<Self> {
-        Ok(Self { config: config.clone() })
+        Ok(Self {
+            config: config.clone(),
+        })
     }
 }
 
 #[async_trait::async_trait]
 impl AutoTuner for SystemAutoTuner {
     async fn tune(&self, _profiles: &[PerformanceProfile]) -> Result<Vec<TuningParameter>> {
-        Ok(vec![
-            TuningParameter {
-                name: "thread_pool_size".to_string(),
-                parameter_type: ParameterType::ThreadPoolSize,
-                current_value: 16.0,
-                min_value: 4.0,
-                max_value: 64.0,
-                step_size: 4.0,
-                unit: "threads".to_string(),
-                impact_score: 0.8,
-            }
-        ])
+        Ok(vec![TuningParameter {
+            name: "thread_pool_size".to_string(),
+            parameter_type: ParameterType::ThreadPoolSize,
+            current_value: 16.0,
+            min_value: 4.0,
+            max_value: 64.0,
+            step_size: 4.0,
+            unit: "threads".to_string(),
+            impact_score: 0.8,
+        }])
     }
 
     async fn apply_tuning(&self, _parameters: &[TuningParameter]) -> Result<()> {
@@ -2910,7 +3066,9 @@ pub struct SystemResourceManager {
 
 impl SystemResourceManager {
     pub fn new(config: &ResourceManagementConfig) -> Result<Self> {
-        Ok(Self { config: config.clone() })
+        Ok(Self {
+            config: config.clone(),
+        })
     }
 }
 
@@ -2949,7 +3107,9 @@ pub struct SystemCacheManager {
 
 impl SystemCacheManager {
     pub fn new(config: &CachingOptimizationConfig) -> Result<Self> {
-        Ok(Self { config: config.clone() })
+        Ok(Self {
+            config: config.clone(),
+        })
     }
 }
 
@@ -2989,7 +3149,9 @@ pub struct SystemPerformanceMonitoring {
 
 impl SystemPerformanceMonitoring {
     pub fn new(config: &PerformanceMonitoringConfig) -> Result<Self> {
-        Ok(Self { config: config.clone() })
+        Ok(Self {
+            config: config.clone(),
+        })
     }
 }
 
@@ -3044,7 +3206,9 @@ pub struct SystemMlEngine {
 
 impl SystemMlEngine {
     pub fn new(config: &MlOptimizationConfig) -> Result<Self> {
-        Ok(Self { config: config.clone() })
+        Ok(Self {
+            config: config.clone(),
+        })
     }
 }
 
@@ -3058,21 +3222,22 @@ impl MlEngine for SystemMlEngine {
         Ok(0.85)
     }
 
-    async fn generate_recommendations(&self, _profiles: &[PerformanceProfile]) -> Result<Vec<OptimizationRecommendation>> {
-        Ok(vec![
-            OptimizationRecommendation {
-                recommendation_type: "CacheOptimization".to_string(),
-                description: "Increase L2 cache size to improve hit rate".to_string(),
-                expected_impact: 0.15,
-                effort_level: EffortLevel::Low,
-                risk_level: RiskLevel::Low,
-                implementation_steps: vec![
-                    "Analyze current cache usage patterns".to_string(),
-                    "Increase L2 cache size from 512MB to 1GB".to_string(),
-                    "Monitor cache hit rate improvements".to_string(),
-                ],
-            }
-        ])
+    async fn generate_recommendations(
+        &self,
+        _profiles: &[PerformanceProfile],
+    ) -> Result<Vec<OptimizationRecommendation>> {
+        Ok(vec![OptimizationRecommendation {
+            recommendation_type: "CacheOptimization".to_string(),
+            description: "Increase L2 cache size to improve hit rate".to_string(),
+            expected_impact: 0.15,
+            effort_level: EffortLevel::Low,
+            risk_level: RiskLevel::Low,
+            implementation_steps: vec![
+                "Analyze current cache usage patterns".to_string(),
+                "Increase L2 cache size from 512MB to 1GB".to_string(),
+                "Monitor cache hit rate improvements".to_string(),
+            ],
+        }])
     }
 
     async fn update_model(&self, _new_data: &[PerformanceProfile]) -> Result<()> {

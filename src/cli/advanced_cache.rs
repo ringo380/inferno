@@ -1,19 +1,14 @@
-use crate::config::Config;
 use crate::advanced_cache::{
-    AdvancedCacheSystem, AdvancedCacheConfig, CacheStatistics, MemoryStatistics,
-    MockCacheBackend, MockEvictionPolicy, MockPrefetchStrategy, MockCompressionEngine,
-    MockCacheMonitor, MockCacheOptimizer, WarmingSource, SourceType, CacheBackup,
-    ReplacementPolicy, EvictionPolicy as EvictionPolicyEnum, CompressionAlgorithm,
-    CacheTopology, ConsistencyLevel, TierType, PatternType, PressureLevel,
+    AdvancedCacheConfig, AdvancedCacheSystem, MockCacheBackend, MockCacheMonitor,
+    MockCacheOptimizer, MockCompressionEngine, SourceType, WarmingSource,
 };
+use crate::config::Config;
 use anyhow::Result;
 use clap::{Args, Subcommand};
-use std::collections::HashMap;
 use std::path::PathBuf;
-use std::time::Duration;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::RwLock;
-use uuid::Uuid;
 
 #[derive(Args)]
 pub struct AdvancedCacheArgs {
@@ -892,42 +887,30 @@ pub async fn execute(args: AdvancedCacheArgs, _config: &Config) -> Result<()> {
     let cache_system = create_cache_system()?;
 
     match args.command {
-        CacheCommand::Cache { command } => {
-            handle_cache_command(command, &cache_system).await
-        }
-        CacheCommand::Memory { command } => {
-            handle_memory_command(command, &cache_system).await
-        }
-        CacheCommand::Eviction { command } => {
-            handle_eviction_command(command, &cache_system).await
-        }
-        CacheCommand::Prefetch { command } => {
-            handle_prefetch_command(command, &cache_system).await
-        }
-        CacheCommand::Tiers { command } => {
-            handle_tier_command(command, &cache_system).await
-        }
+        CacheCommand::Cache { command } => handle_cache_command(command, &cache_system).await,
+        CacheCommand::Memory { command } => handle_memory_command(command, &cache_system).await,
+        CacheCommand::Eviction { command } => handle_eviction_command(command, &cache_system).await,
+        CacheCommand::Prefetch { command } => handle_prefetch_command(command, &cache_system).await,
+        CacheCommand::Tiers { command } => handle_tier_command(command, &cache_system).await,
         CacheCommand::Distributed { command } => {
             handle_distributed_command(command, &cache_system).await
         }
         CacheCommand::Compression { command } => {
             handle_compression_command(command, &cache_system).await
         }
-        CacheCommand::Monitor { command } => {
-            handle_monitor_command(command, &cache_system).await
-        }
-        CacheCommand::Optimize { command } => {
-            handle_optimize_command(command, &cache_system).await
-        }
-        CacheCommand::Backup { command } => {
-            handle_backup_command(command, &cache_system).await
-        }
+        CacheCommand::Monitor { command } => handle_monitor_command(command, &cache_system).await,
+        CacheCommand::Optimize { command } => handle_optimize_command(command, &cache_system).await,
+        CacheCommand::Backup { command } => handle_backup_command(command, &cache_system).await,
         CacheCommand::Coherence { command } => {
             handle_coherence_command(command, &cache_system).await
         }
-        CacheCommand::Status { detailed, tiers, memory, hot_keys, refresh } => {
-            handle_status_command(&cache_system, detailed, tiers, memory, hot_keys, refresh).await
-        }
+        CacheCommand::Status {
+            detailed,
+            tiers,
+            memory,
+            hot_keys,
+            refresh,
+        } => handle_status_command(&cache_system, detailed, tiers, memory, hot_keys, refresh).await,
     }
 }
 
@@ -957,7 +940,11 @@ async fn handle_cache_command(
     system: &AdvancedCacheSystem,
 ) -> Result<()> {
     match command {
-        CacheOperationCommand::Get { key, metadata, stats } => {
+        CacheOperationCommand::Get {
+            key,
+            metadata,
+            stats,
+        } => {
             println!("Getting key: {}", key);
 
             match system.get(&key).await? {
@@ -981,7 +968,13 @@ async fn handle_cache_command(
             }
             Ok(())
         }
-        CacheOperationCommand::Put { key, value, ttl, priority, compress } => {
+        CacheOperationCommand::Put {
+            key,
+            value,
+            ttl,
+            priority,
+            compress,
+        } => {
             println!("Putting key: {}", key);
 
             let ttl_duration = ttl.map(Duration::from_secs);
@@ -999,7 +992,7 @@ async fn handle_cache_command(
             }
             Ok(())
         }
-        CacheOperationCommand::Delete { key, pattern } => {
+        CacheOperationCommand::Delete { key, pattern: _ } => {
             println!("Deleting key: {}", key);
 
             let deleted = system.delete(&key).await?;
@@ -1011,7 +1004,11 @@ async fn handle_cache_command(
             }
             Ok(())
         }
-        CacheOperationCommand::Clear { tier, force, preserve_hot } => {
+        CacheOperationCommand::Clear {
+            tier: _,
+            force,
+            preserve_hot,
+        } => {
             if !force {
                 println!("This will clear the cache. Use --force to confirm.");
                 return Ok(());
@@ -1027,7 +1024,11 @@ async fn handle_cache_command(
             }
             Ok(())
         }
-        CacheOperationCommand::List { pattern, limit, sort } => {
+        CacheOperationCommand::List {
+            pattern,
+            limit,
+            sort,
+        } => {
             println!("Cache Keys");
             println!("==========");
 
@@ -1041,7 +1042,11 @@ async fn handle_cache_command(
             }
             Ok(())
         }
-        CacheOperationCommand::Invalidate { pattern, cascade, broadcast } => {
+        CacheOperationCommand::Invalidate {
+            pattern,
+            cascade,
+            broadcast,
+        } => {
             println!("Invalidating pattern: {}", pattern);
 
             if cascade {
@@ -1057,12 +1062,13 @@ async fn handle_cache_command(
     }
 }
 
-async fn handle_memory_command(
-    command: MemoryCommand,
-    system: &AdvancedCacheSystem,
-) -> Result<()> {
+async fn handle_memory_command(command: MemoryCommand, system: &AdvancedCacheSystem) -> Result<()> {
     match command {
-        MemoryCommand::Stats { pools, fragmentation, allocations } => {
+        MemoryCommand::Stats {
+            pools,
+            fragmentation,
+            allocations,
+        } => {
             let stats = system.get_memory_statistics().await;
 
             println!("Memory Statistics");
@@ -1094,7 +1100,11 @@ async fn handle_memory_command(
 
             Ok(())
         }
-        MemoryCommand::Limits { soft, hard, oom_handler } => {
+        MemoryCommand::Limits {
+            soft,
+            hard,
+            oom_handler,
+        } => {
             println!("Configuring memory limits...");
 
             if let Some(s) = soft {
@@ -1110,10 +1120,12 @@ async fn handle_memory_command(
             println!("✓ Memory limits configured");
             Ok(())
         }
-        MemoryCommand::Pools { command } => {
-            handle_pool_command(command).await
-        }
-        MemoryCommand::GC { gc_type, full, concurrent } => {
+        MemoryCommand::Pools { command } => handle_pool_command(command).await,
+        MemoryCommand::GC {
+            gc_type,
+            full,
+            concurrent,
+        } => {
             println!("Triggering garbage collection...");
 
             if full {
@@ -1128,7 +1140,10 @@ async fn handle_memory_command(
             println!("  Duration: 25 ms");
             Ok(())
         }
-        MemoryCommand::Pressure { recommend, threshold } => {
+        MemoryCommand::Pressure {
+            recommend,
+            threshold,
+        } => {
             println!("Memory Pressure Analysis");
             println!("=======================");
             println!("  Current level: Medium");
@@ -1144,7 +1159,11 @@ async fn handle_memory_command(
 
             Ok(())
         }
-        MemoryCommand::Profile { duration, heap, output } => {
+        MemoryCommand::Profile {
+            duration,
+            heap,
+            output,
+        } => {
             println!("Starting memory profiling...");
 
             if let Some(d) = duration {
@@ -1215,7 +1234,12 @@ async fn handle_eviction_command(
     system: &AdvancedCacheSystem,
 ) -> Result<()> {
     match command {
-        EvictionCommand::Policy { policy, max_entries, max_size, ttl } => {
+        EvictionCommand::Policy {
+            policy,
+            max_entries,
+            max_size,
+            ttl,
+        } => {
             println!("Configuring eviction policy: {}", policy);
 
             if let Some(entries) = max_entries {
@@ -1231,7 +1255,11 @@ async fn handle_eviction_command(
             println!("✓ Eviction policy configured");
             Ok(())
         }
-        EvictionCommand::Evict { count, tier, reason } => {
+        EvictionCommand::Evict {
+            count,
+            tier,
+            reason,
+        } => {
             println!("Triggering eviction...");
 
             let evict_count = count.unwrap_or(100);
@@ -1247,7 +1275,11 @@ async fn handle_eviction_command(
             println!("✓ Evicted {} entries", evict_count);
             Ok(())
         }
-        EvictionCommand::Stats { range, by_policy, by_reason } => {
+        EvictionCommand::Stats {
+            range,
+            by_policy,
+            by_reason,
+        } => {
             println!("Eviction Statistics");
             println!("==================");
             println!("  Total evicted: 10,000");
@@ -1270,7 +1302,11 @@ async fn handle_eviction_command(
 
             Ok(())
         }
-        EvictionCommand::Adaptive { enable, learning_rate, window } => {
+        EvictionCommand::Adaptive {
+            enable,
+            learning_rate,
+            window,
+        } => {
             if enable {
                 println!("Enabling adaptive eviction");
                 if let Some(rate) = learning_rate {
@@ -1286,7 +1322,10 @@ async fn handle_eviction_command(
             println!("✓ Adaptive eviction configured");
             Ok(())
         }
-        EvictionCommand::Priority { threshold, preserve } => {
+        EvictionCommand::Priority {
+            threshold,
+            preserve,
+        } => {
             println!("Configuring priority-based eviction");
 
             if let Some(t) = threshold {
@@ -1307,7 +1346,12 @@ async fn handle_prefetch_command(
     system: &AdvancedCacheSystem,
 ) -> Result<()> {
     match command {
-        PrefetchCommand::Config { enable, strategy, distance, degree } => {
+        PrefetchCommand::Config {
+            enable,
+            strategy,
+            distance,
+            degree,
+        } => {
             if enable {
                 println!("Enabling prefetching");
                 if let Some(s) = strategy {
@@ -1326,7 +1370,13 @@ async fn handle_prefetch_command(
             println!("✓ Prefetching configured");
             Ok(())
         }
-        PrefetchCommand::Warm { source, location, filter, parallel, batch } => {
+        PrefetchCommand::Warm {
+            source,
+            location,
+            filter,
+            parallel,
+            batch,
+        } => {
             println!("Warming cache from source: {}", source);
             println!("  Location: {}", location);
 
@@ -1349,7 +1399,11 @@ async fn handle_prefetch_command(
             println!("✓ Warmed {} entries", warmed);
             Ok(())
         }
-        PrefetchCommand::Prefetch { keys, async_mode, priority } => {
+        PrefetchCommand::Prefetch {
+            keys,
+            async_mode,
+            priority,
+        } => {
             println!("Prefetching {} keys", keys.len());
 
             if async_mode {
@@ -1362,7 +1416,11 @@ async fn handle_prefetch_command(
             println!("✓ Prefetch initiated");
             Ok(())
         }
-        PrefetchCommand::Patterns { enable, confidence, show } => {
+        PrefetchCommand::Patterns {
+            enable,
+            confidence,
+            show,
+        } => {
             if show {
                 println!("Detected Patterns");
                 println!("================");
@@ -1382,7 +1440,11 @@ async fn handle_prefetch_command(
 
             Ok(())
         }
-        PrefetchCommand::Stats { accuracy, coverage, patterns } => {
+        PrefetchCommand::Stats {
+            accuracy,
+            coverage,
+            patterns,
+        } => {
             println!("Prefetch Statistics");
             println!("==================");
             println!("  Prefetch count: 10,000");
@@ -1406,12 +1468,14 @@ async fn handle_prefetch_command(
     }
 }
 
-async fn handle_tier_command(
-    command: TierCommand,
-    system: &AdvancedCacheSystem,
-) -> Result<()> {
+async fn handle_tier_command(command: TierCommand, system: &AdvancedCacheSystem) -> Result<()> {
     match command {
-        TierCommand::Config { tier, capacity, latency, cost } => {
+        TierCommand::Config {
+            tier,
+            capacity,
+            latency,
+            cost,
+        } => {
             println!("Configuring tier: {}", tier);
 
             if let Some(c) = capacity {
@@ -1427,7 +1491,10 @@ async fn handle_tier_command(
             println!("✓ Tier configured");
             Ok(())
         }
-        TierCommand::List { utilization, performance } => {
+        TierCommand::List {
+            utilization,
+            performance,
+        } => {
             println!("Cache Tiers");
             println!("===========");
             println!("Tier     | Type    | Capacity | Latency | Cost");
@@ -1452,7 +1519,12 @@ async fn handle_tier_command(
 
             Ok(())
         }
-        TierCommand::Promote { from, to, policy, count } => {
+        TierCommand::Promote {
+            from,
+            to,
+            policy,
+            count,
+        } => {
             println!("Promoting entries from {} to {}", from, to);
 
             if let Some(p) = policy {
@@ -1465,7 +1537,12 @@ async fn handle_tier_command(
             println!("✓ Promotion completed");
             Ok(())
         }
-        TierCommand::Demote { from, to, policy, count } => {
+        TierCommand::Demote {
+            from,
+            to,
+            policy,
+            count,
+        } => {
             println!("Demoting entries from {} to {}", from, to);
 
             if let Some(p) = policy {
@@ -1478,7 +1555,11 @@ async fn handle_tier_command(
             println!("✓ Demotion completed");
             Ok(())
         }
-        TierCommand::Migrate { auto, threshold, interval } => {
+        TierCommand::Migrate {
+            auto,
+            threshold,
+            interval,
+        } => {
             if auto {
                 println!("Enabling auto-migration");
                 if let Some(t) = threshold {
@@ -1503,7 +1584,12 @@ async fn handle_distributed_command(
     system: &AdvancedCacheSystem,
 ) -> Result<()> {
     match command {
-        DistributedCommand::Config { topology, consistency, replication, partitioning } => {
+        DistributedCommand::Config {
+            topology,
+            consistency,
+            replication,
+            partitioning,
+        } => {
             println!("Configuring distributed cache");
 
             if let Some(t) = topology {
@@ -1522,9 +1608,7 @@ async fn handle_distributed_command(
             println!("✓ Distributed cache configured");
             Ok(())
         }
-        DistributedCommand::Nodes { command } => {
-            handle_node_command(command).await
-        }
+        DistributedCommand::Nodes { command } => handle_node_command(command).await,
         DistributedCommand::Replication { status, sync, lag } => {
             if status {
                 println!("Replication Status");
@@ -1547,7 +1631,11 @@ async fn handle_distributed_command(
 
             Ok(())
         }
-        DistributedCommand::Partition { rebalance, distribution, plan } => {
+        DistributedCommand::Partition {
+            rebalance,
+            distribution,
+            plan,
+        } => {
             if distribution {
                 println!("Partition Distribution");
                 println!("====================");
@@ -1571,7 +1659,11 @@ async fn handle_distributed_command(
 
             Ok(())
         }
-        DistributedCommand::Consistency { check, repair, conflicts } => {
+        DistributedCommand::Consistency {
+            check,
+            repair,
+            conflicts,
+        } => {
             if check {
                 println!("Checking consistency...");
                 println!("✓ Consistency check passed");
@@ -1594,7 +1686,11 @@ async fn handle_distributed_command(
 
 async fn handle_node_command(command: NodeCommand) -> Result<()> {
     match command {
-        NodeCommand::Add { address, capacity, role } => {
+        NodeCommand::Add {
+            address,
+            capacity,
+            role,
+        } => {
             println!("Adding cache node: {}", address);
 
             if let Some(c) = capacity {
@@ -1607,7 +1703,11 @@ async fn handle_node_command(command: NodeCommand) -> Result<()> {
             println!("✓ Node added successfully");
             Ok(())
         }
-        NodeCommand::Remove { node_id, graceful, redistribute } => {
+        NodeCommand::Remove {
+            node_id,
+            graceful,
+            redistribute,
+        } => {
             println!("Removing node: {}", node_id);
 
             if graceful {
@@ -1637,7 +1737,10 @@ async fn handle_node_command(command: NodeCommand) -> Result<()> {
 
             Ok(())
         }
-        NodeCommand::Health { node_id, diagnostics } => {
+        NodeCommand::Health {
+            node_id,
+            diagnostics,
+        } => {
             let node = node_id.unwrap_or("all".to_string());
             println!("Health Check: {}", node);
             println!("=============");
@@ -1662,7 +1765,12 @@ async fn handle_compression_command(
     system: &AdvancedCacheSystem,
 ) -> Result<()> {
     match command {
-        CompressionCommand::Config { enable, algorithm, level, min_size } => {
+        CompressionCommand::Config {
+            enable,
+            algorithm,
+            level,
+            min_size,
+        } => {
             if enable {
                 println!("Enabling compression");
                 if let Some(a) = algorithm {
@@ -1681,7 +1789,11 @@ async fn handle_compression_command(
             println!("✓ Compression configured");
             Ok(())
         }
-        CompressionCommand::Stats { ratios, performance, by_algorithm } => {
+        CompressionCommand::Stats {
+            ratios,
+            performance,
+            by_algorithm,
+        } => {
             println!("Compression Statistics");
             println!("=====================");
             println!("  Compressed entries: 5,000");
@@ -1709,7 +1821,11 @@ async fn handle_compression_command(
 
             Ok(())
         }
-        CompressionCommand::Test { size, algorithm, iterations } => {
+        CompressionCommand::Test {
+            size,
+            algorithm,
+            iterations,
+        } => {
             println!("Testing compression");
             println!("  Data size: {} bytes", size);
 
@@ -1726,7 +1842,11 @@ async fn handle_compression_command(
 
             Ok(())
         }
-        CompressionCommand::Adaptive { enable, threshold, sample_rate } => {
+        CompressionCommand::Adaptive {
+            enable,
+            threshold,
+            sample_rate,
+        } => {
             if enable {
                 println!("Enabling adaptive compression");
                 if let Some(t) = threshold {
@@ -1751,7 +1871,12 @@ async fn handle_monitor_command(
     system: &AdvancedCacheSystem,
 ) -> Result<()> {
     match command {
-        MonitorCommand::Metrics { metric, range, aggregation, export } => {
+        MonitorCommand::Metrics {
+            metric,
+            range,
+            aggregation,
+            export,
+        } => {
             let stats = system.get_statistics().await;
 
             println!("Cache Metrics");
@@ -1769,7 +1894,12 @@ async fn handle_monitor_command(
 
             Ok(())
         }
-        MonitorCommand::HotKeys { top, threshold, window, promote } => {
+        MonitorCommand::HotKeys {
+            top,
+            threshold,
+            window,
+            promote,
+        } => {
             let hot_keys = system.detect_hot_keys().await?;
 
             println!("Hot Keys Analysis");
@@ -1788,7 +1918,11 @@ async fn handle_monitor_command(
 
             Ok(())
         }
-        MonitorCommand::Performance { latency, throughput, percentiles } => {
+        MonitorCommand::Performance {
+            latency,
+            throughput,
+            percentiles,
+        } => {
             let stats = system.get_statistics().await;
 
             println!("Performance Metrics");
@@ -1813,7 +1947,11 @@ async fn handle_monitor_command(
 
             Ok(())
         }
-        MonitorCommand::Alerts { alert_type, threshold, action } => {
+        MonitorCommand::Alerts {
+            alert_type,
+            threshold,
+            action,
+        } => {
             println!("Configuring alerts");
 
             if let Some(t) = alert_type {
@@ -1829,7 +1967,11 @@ async fn handle_monitor_command(
             println!("✓ Alert configured");
             Ok(())
         }
-        MonitorCommand::Workload { patterns, distribution, predict } => {
+        MonitorCommand::Workload {
+            patterns,
+            distribution,
+            predict,
+        } => {
             println!("Workload Analysis");
             println!("================");
 
@@ -1863,7 +2005,12 @@ async fn handle_optimize_command(
     system: &AdvancedCacheSystem,
 ) -> Result<()> {
     match command {
-        OptimizeCommand::Run { target, auto_tune, ml, dry_run } => {
+        OptimizeCommand::Run {
+            target,
+            auto_tune,
+            ml,
+            dry_run,
+        } => {
             println!("Running optimization...");
 
             if let Some(t) = target {
@@ -1888,7 +2035,11 @@ async fn handle_optimize_command(
 
             Ok(())
         }
-        OptimizeCommand::Recommend { depth, cost, priority } => {
+        OptimizeCommand::Recommend {
+            depth,
+            cost,
+            priority,
+        } => {
             println!("Optimization Recommendations");
             println!("===========================");
 
@@ -1913,7 +2064,11 @@ async fn handle_optimize_command(
 
             Ok(())
         }
-        OptimizeCommand::AutoTune { enable, interval, model } => {
+        OptimizeCommand::AutoTune {
+            enable,
+            interval,
+            model,
+        } => {
             if enable {
                 println!("Enabling auto-tuning");
                 if let Some(i) = interval {
@@ -1930,7 +2085,11 @@ async fn handle_optimize_command(
 
             Ok(())
         }
-        OptimizeCommand::Size { hit_rate, budget, apply } => {
+        OptimizeCommand::Size {
+            hit_rate,
+            budget,
+            apply,
+        } => {
             println!("Size Optimization");
             println!("================");
 
@@ -1950,7 +2109,10 @@ async fn handle_optimize_command(
 
             Ok(())
         }
-        OptimizeCommand::Workload { workload, optimize_for } => {
+        OptimizeCommand::Workload {
+            workload,
+            optimize_for,
+        } => {
             println!("Workload Optimization");
 
             if let Some(w) = workload {
@@ -1970,12 +2132,14 @@ async fn handle_optimize_command(
     }
 }
 
-async fn handle_backup_command(
-    command: BackupCommand,
-    system: &AdvancedCacheSystem,
-) -> Result<()> {
+async fn handle_backup_command(command: BackupCommand, system: &AdvancedCacheSystem) -> Result<()> {
     match command {
-        BackupCommand::Create { backup_type, destination, compress, encrypt } => {
+        BackupCommand::Create {
+            backup_type,
+            destination,
+            compress,
+            encrypt,
+        } => {
             println!("Creating backup...");
 
             let backup = system.backup().await?;
@@ -1994,7 +2158,11 @@ async fn handle_backup_command(
 
             Ok(())
         }
-        BackupCommand::Restore { backup_id, point, verify } => {
+        BackupCommand::Restore {
+            backup_id,
+            point,
+            verify,
+        } => {
             println!("Restoring from backup: {}", backup_id);
 
             if let Some(p) = point {
@@ -2021,7 +2189,11 @@ async fn handle_backup_command(
 
             Ok(())
         }
-        BackupCommand::Schedule { enable, schedule, retention } => {
+        BackupCommand::Schedule {
+            enable,
+            schedule,
+            retention,
+        } => {
             if enable {
                 println!("Enabling backup schedule");
                 if let Some(s) = schedule {
@@ -2046,7 +2218,11 @@ async fn handle_coherence_command(
     system: &AdvancedCacheSystem,
 ) -> Result<()> {
     match command {
-        CoherenceCommand::Protocol { protocol, invalidation, propagation } => {
+        CoherenceCommand::Protocol {
+            protocol,
+            invalidation,
+            propagation,
+        } => {
             println!("Configuring coherence protocol");
 
             if let Some(p) = protocol {
@@ -2062,7 +2238,11 @@ async fn handle_coherence_command(
             println!("✓ Coherence protocol configured");
             Ok(())
         }
-        CoherenceCommand::Check { level, replicas, fix } => {
+        CoherenceCommand::Check {
+            level,
+            replicas,
+            fix,
+        } => {
             println!("Checking cache coherence...");
 
             if let Some(l) = level {
@@ -2080,7 +2260,11 @@ async fn handle_coherence_command(
 
             Ok(())
         }
-        CoherenceCommand::Invalidate { scope, broadcast, wait } => {
+        CoherenceCommand::Invalidate {
+            scope,
+            broadcast,
+            wait,
+        } => {
             println!("Invalidating cache entries");
 
             if let Some(s) = scope {
@@ -2096,7 +2280,11 @@ async fn handle_coherence_command(
             println!("✓ Invalidation completed");
             Ok(())
         }
-        CoherenceCommand::Conflicts { show, strategy, auto_resolve } => {
+        CoherenceCommand::Conflicts {
+            show,
+            strategy,
+            auto_resolve,
+        } => {
             if show {
                 println!("Cache Conflicts");
                 println!("==============");
@@ -2153,7 +2341,10 @@ async fn handle_status_command(
             println!("  Allocated: {} MB", mem_stats.total_allocated / 1_048_576);
             println!("  Used: {} MB", mem_stats.total_used / 1_048_576);
             println!("  Free: {} MB", mem_stats.total_free / 1_048_576);
-            println!("  Fragmentation: {:.2}%", mem_stats.fragmentation_ratio * 100.0);
+            println!(
+                "  Fragmentation: {:.2}%",
+                mem_stats.fragmentation_ratio * 100.0
+            );
             println!("  GC Count: {}", mem_stats.gc_count);
         }
 

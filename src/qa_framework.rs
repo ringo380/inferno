@@ -1,12 +1,12 @@
 use anyhow::Result;
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
-use std::sync::Arc;
-use tokio::sync::RwLock;
-use std::time::Duration;
-use uuid::Uuid;
-use chrono::{DateTime, Utc};
 use std::path::PathBuf;
+use std::sync::Arc;
+use std::time::Duration;
+use tokio::sync::RwLock;
+use uuid::Uuid;
 
 // Configuration structures
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -359,9 +359,19 @@ pub struct PerformanceTest {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum LoadProfile {
-    Constant { rps: u32 },
-    Ramp { start_rps: u32, end_rps: u32, duration: Duration },
-    Spike { base_rps: u32, spike_rps: u32, spike_duration: Duration },
+    Constant {
+        rps: u32,
+    },
+    Ramp {
+        start_rps: u32,
+        end_rps: u32,
+        duration: Duration,
+    },
+    Spike {
+        base_rps: u32,
+        spike_rps: u32,
+        spike_duration: Duration,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -593,7 +603,6 @@ pub struct TestExclusions {
     pub patterns: Vec<String>,
 }
 
-
 // Test execution structures
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TestExecution {
@@ -613,8 +622,6 @@ pub struct TestExecution {
     pub retry_count: u32,
     pub parent_execution: Option<Uuid>,
 }
-
-
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ErrorDetails {
@@ -791,7 +798,6 @@ pub enum PerformanceTestType {
     Baseline,
 }
 
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum RampUpStrategy {
     Linear,
@@ -851,7 +857,6 @@ pub enum HttpMethod {
 }
 
 // Security testing structures
-
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SecurityTestTarget {
@@ -1054,25 +1059,25 @@ pub struct TestEnvironment {
 }
 
 impl TestEnvironment {
-    pub fn Development() -> Self {
+    pub fn development() -> Self {
         Self::new("development".to_string(), EnvironmentType::Development)
     }
 
-    pub fn Testing() -> Self {
+    pub fn testing() -> Self {
         Self::new("testing".to_string(), EnvironmentType::Testing)
     }
 
-    pub fn Staging() -> Self {
+    pub fn staging() -> Self {
         Self::new("staging".to_string(), EnvironmentType::Staging)
     }
 
-    pub fn Production() -> Self {
+    pub fn production() -> Self {
         Self::new("production".to_string(), EnvironmentType::Production)
     }
 
     fn new(name: String, env_type: EnvironmentType) -> Self {
-        use uuid::Uuid;
         use std::collections::HashMap;
+        use uuid::Uuid;
 
         Self {
             environment_id: Uuid::new_v4().to_string(),
@@ -1330,7 +1335,6 @@ impl Default for E2ETestConfig {
     }
 }
 
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LoadTestingConfig {
     pub max_virtual_users: u32,
@@ -1366,7 +1370,9 @@ impl Default for QAFrameworkConfig {
             ml_testing: MLTestingCompat { enabled: false },
             chaos_testing: ChaosTestingCompat { enabled: false },
             test_automation: TestAutomationCompat { enabled: false },
-            execution: ExecutionCompat { default_timeout: Duration::from_secs(300) },
+            execution: ExecutionCompat {
+                default_timeout: Duration::from_secs(300),
+            },
         }
     }
 }
@@ -1654,7 +1660,6 @@ pub struct QualityMetricsConfig {
     pub trend_analysis: bool,
 }
 
-
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct StressTestingConfig {
     pub max_load_multiplier: f32,
@@ -1691,7 +1696,6 @@ pub struct PerformanceBudget {
     pub threshold: f64,
     pub unit: String,
 }
-
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct VulnerabilityScanConfig {
@@ -2104,11 +2108,12 @@ impl QAFrameworkSystem {
         };
 
         let mut analyzer = self.quality_analyzer.write().await;
-        analyzer.quality_reports.insert(report.report_id, report.clone());
+        analyzer
+            .quality_reports
+            .insert(report.report_id, report.clone());
 
         Ok(report)
     }
-
 
     pub async fn run_security_test(&self, test: SecurityTest) -> Result<SecurityTestResult> {
         // Mock security test execution
@@ -2138,7 +2143,10 @@ impl QAFrameworkSystem {
         })
     }
 
-    pub async fn run_performance_test(&self, test: PerformanceTest) -> Result<PerformanceTestResult> {
+    pub async fn run_performance_test(
+        &self,
+        test: PerformanceTest,
+    ) -> Result<PerformanceTestResult> {
         // Mock performance test execution
         Ok(PerformanceTestResult {
             test_id: test.id,
@@ -2584,8 +2592,6 @@ pub struct MonitoringConfig {
     pub metrics_collection: Vec<String>,
     pub alerting: HashMap<String, serde_json::Value>,
 }
-
-
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AlertConfig {

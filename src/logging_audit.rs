@@ -1,16 +1,16 @@
 // Logging audit functionality - re-export from main audit module
 // This module provides additional types for CLI compatibility
 
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::SystemTime;
-use chrono::{DateTime, Utc};
 
 // Re-export main audit types
 pub use crate::audit::{
-    AuditEvent, AuditLogger as LoggingAuditSystem, AuditQuery as AuditSearchQuery,
-    AuditStatistics, EventType as AuditEventType, Severity as EventSeverity,
-    ActorType, SortOrder, ExportFormat
+    ActorType, AuditEvent, AuditLogger as LoggingAuditSystem, AuditQuery as AuditSearchQuery,
+    AuditStatistics, EventType as AuditEventType, ExportFormat, Severity as EventSeverity,
+    SortOrder,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

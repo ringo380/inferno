@@ -1,10 +1,9 @@
-use crate::{
-    metrics::MetricsCollector,
-};
+use crate::metrics::MetricsCollector;
 use anyhow::{Context, Result};
+use blake3;
+use flate2::{read::GzDecoder, write::GzEncoder, Compression};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use blake3;
 use std::{
     collections::HashMap,
     io::{Read, Write},
@@ -16,11 +15,6 @@ use tokio::{
     time::interval,
 };
 use tracing::{debug, info, warn};
-use flate2::{
-    Compression,
-    read::GzDecoder,
-    write::GzEncoder,
-};
 use zstd;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -49,7 +43,7 @@ impl Default for ResponseCacheConfig {
             deduplication_enabled: true,
             compression_enabled: true,
             compression_algorithm: CompressionAlgorithm::Gzip,
-            compression_level: 6, // Balanced compression level
+            compression_level: 6,              // Balanced compression level
             compression_threshold_bytes: 1024, // Only compress if >= 1KB
             hash_algorithm: HashAlgorithm::Sha256,
             cache_strategy: CacheStrategy::Smart,
@@ -96,7 +90,12 @@ pub struct CacheKey {
 }
 
 impl CacheKey {
-    pub fn new(request_text: &str, model_id: &str, parameters: &str, algorithm: &HashAlgorithm) -> Self {
+    pub fn new(
+        request_text: &str,
+        model_id: &str,
+        parameters: &str,
+        algorithm: &HashAlgorithm,
+    ) -> Self {
         let request_hash = Self::compute_hash(request_text, algorithm);
         let parameters_hash = Self::compute_hash(parameters, algorithm);
 
@@ -126,7 +125,10 @@ impl CacheKey {
     }
 
     pub fn to_string(&self) -> String {
-        format!("{}:{}:{}", self.model_id, self.request_hash, self.parameters_hash)
+        format!(
+            "{}:{}:{}",
+            self.model_id, self.request_hash, self.parameters_hash
+        )
     }
 }
 
@@ -250,10 +252,16 @@ impl ResponseCache {
             self.update_access_stats(&actual_key).await;
 
             let response_data = if cached_response.compressed {
-                match self.decompress_data(&cached_response.response_data, &cached_response.compression_algorithm) {
+                match self.decompress_data(
+                    &cached_response.response_data,
+                    &cached_response.compression_algorithm,
+                ) {
                     Ok(decompressed) => decompressed,
                     Err(e) => {
-                        warn!("Decompression failed for key {}: {}, removing entry", actual_key, e);
+                        warn!(
+                            "Decompression failed for key {}: {}, removing entry",
+                            actual_key, e
+                        );
                         drop(cache);
                         self.remove_expired_entry(&actual_key).await;
                         return None;
@@ -305,26 +313,34 @@ impl ResponseCache {
         }
 
         // Compress data if enabled and above threshold
-        let (final_data, compressed, original_size, compression_algo) = if self.config.compression_enabled &&
-            response_data.len() >= self.config.compression_threshold_bytes {
-            match self.compress_data(&response_data) {
-                Ok(compressed_data) => {
-                    let compression_ratio = compressed_data.len() as f32 / response_data.len() as f32;
-                    // Only use compression if it actually reduces size by at least 10%
-                    if compression_ratio < 0.9 {
-                        (compressed_data, true, Some(response_data.len()), Some(self.config.compression_algorithm.clone()))
-                    } else {
+        let (final_data, compressed, original_size, compression_algo) =
+            if self.config.compression_enabled
+                && response_data.len() >= self.config.compression_threshold_bytes
+            {
+                match self.compress_data(&response_data) {
+                    Ok(compressed_data) => {
+                        let compression_ratio =
+                            compressed_data.len() as f32 / response_data.len() as f32;
+                        // Only use compression if it actually reduces size by at least 10%
+                        if compression_ratio < 0.9 {
+                            (
+                                compressed_data,
+                                true,
+                                Some(response_data.len()),
+                                Some(self.config.compression_algorithm.clone()),
+                            )
+                        } else {
+                            (response_data.clone(), false, None, None)
+                        }
+                    }
+                    Err(e) => {
+                        warn!("Compression failed: {}, storing uncompressed", e);
                         (response_data.clone(), false, None, None)
                     }
                 }
-                Err(e) => {
-                    warn!("Compression failed: {}, storing uncompressed", e);
-                    (response_data.clone(), false, None, None)
-                }
-            }
-        } else {
-            (response_data.clone(), false, None, None)
-        };
+            } else {
+                (response_data.clone(), false, None, None)
+            };
 
         let cached_response = Arc::new(CachedResponse {
             response_data: final_data.clone(),
@@ -346,8 +362,12 @@ impl ResponseCache {
 
         self.update_stats().await;
 
-        debug!("Cached response for key: {} (compressed: {}, size: {} bytes)",
-               cache_key, compressed, final_data.len());
+        debug!(
+            "Cached response for key: {} (compressed: {}, size: {} bytes)",
+            cache_key,
+            compressed,
+            final_data.len()
+        );
 
         Ok(())
     }
@@ -381,7 +401,10 @@ impl ResponseCache {
 
         self.update_stats().await;
 
-        info!("Invalidated {} cache entries matching pattern: {}", removed_count, pattern);
+        info!(
+            "Invalidated {} cache entries matching pattern: {}",
+            removed_count, pattern
+        );
         Ok(removed_count)
     }
 
@@ -429,13 +452,13 @@ impl ResponseCache {
     fn compress_data(&self, data: &[u8]) -> Result<Vec<u8>> {
         match self.config.compression_algorithm {
             CompressionAlgorithm::Gzip => {
-                let mut encoder = GzEncoder::new(
-                    Vec::new(),
-                    Compression::new(self.config.compression_level)
-                );
-                encoder.write_all(data)
+                let mut encoder =
+                    GzEncoder::new(Vec::new(), Compression::new(self.config.compression_level));
+                encoder
+                    .write_all(data)
                     .context("Failed to write data to gzip encoder")?;
-                encoder.finish()
+                encoder
+                    .finish()
                     .context("Failed to finalize gzip compression")
             }
             CompressionAlgorithm::Zstd => {
@@ -445,27 +468,37 @@ impl ResponseCache {
         }
     }
 
-    fn decompress_data(&self, data: &[u8], algorithm: &Option<CompressionAlgorithm>) -> Result<Vec<u8>> {
-        let algo = algorithm.as_ref().unwrap_or(&self.config.compression_algorithm);
+    fn decompress_data(
+        &self,
+        data: &[u8],
+        algorithm: &Option<CompressionAlgorithm>,
+    ) -> Result<Vec<u8>> {
+        let algo = algorithm
+            .as_ref()
+            .unwrap_or(&self.config.compression_algorithm);
 
         match algo {
             CompressionAlgorithm::Gzip => {
                 let mut decoder = GzDecoder::new(data);
                 let mut decompressed = Vec::new();
-                decoder.read_to_end(&mut decompressed)
+                decoder
+                    .read_to_end(&mut decompressed)
                     .context("Failed to decompress gzip data")?;
                 Ok(decompressed)
             }
             CompressionAlgorithm::Zstd => {
-                zstd::decode_all(data)
-                    .context("Failed to decompress zstd data")
+                zstd::decode_all(data).context("Failed to decompress zstd data")
             }
         }
     }
 
     fn is_expired(&self, cached_response: &CachedResponse) -> bool {
         let ttl = Duration::from_secs(self.config.ttl_seconds);
-        cached_response.created_at.elapsed().unwrap_or(Duration::ZERO) > ttl
+        cached_response
+            .created_at
+            .elapsed()
+            .unwrap_or(Duration::ZERO)
+            > ttl
     }
 
     async fn remove_expired_entry(&self, key: &str) {
@@ -492,8 +525,9 @@ impl ResponseCache {
         let current_memory = self.calculate_memory_usage(&cache).await;
         let max_memory = (self.config.max_memory_mb * 1024 * 1024) as usize;
 
-        if cache.len() >= self.config.max_entries ||
-           current_memory + new_entry.size_bytes > max_memory {
+        if cache.len() >= self.config.max_entries
+            || current_memory + new_entry.size_bytes > max_memory
+        {
             drop(cache);
             self.evict_entries().await?;
         }
@@ -515,7 +549,11 @@ impl ResponseCache {
                     .map(|(k, v)| (k.clone(), v.last_accessed))
                     .collect();
                 entries.sort_by_key(|(_, time)| *time);
-                entries.into_iter().map(|(k, _)| k).take(cache.len() / 4).collect::<Vec<String>>()
+                entries
+                    .into_iter()
+                    .map(|(k, _)| k)
+                    .take(cache.len() / 4)
+                    .collect::<Vec<String>>()
             }
             EvictionPolicy::LeastFrequentlyUsed => {
                 let mut entries: Vec<(String, u64)> = cache
@@ -523,15 +561,17 @@ impl ResponseCache {
                     .map(|(k, v)| (k.clone(), v.access_count))
                     .collect();
                 entries.sort_by_key(|(_, count)| *count);
-                entries.into_iter().map(|(k, _)| k).take(cache.len() / 4).collect::<Vec<String>>()
+                entries
+                    .into_iter()
+                    .map(|(k, _)| k)
+                    .take(cache.len() / 4)
+                    .collect::<Vec<String>>()
             }
-            EvictionPolicy::TimeToLive => {
-                cache
-                    .iter()
-                    .filter(|(_, v)| self.is_expired(v))
-                    .map(|(k, _)| k.clone())
-                    .collect()
-            }
+            EvictionPolicy::TimeToLive => cache
+                .iter()
+                .filter(|(_, v)| self.is_expired(v))
+                .map(|(k, _)| k.clone())
+                .collect(),
             EvictionPolicy::Random => {
                 use std::collections::hash_map::RandomState;
                 use std::hash::{BuildHasher, Hasher};
@@ -550,7 +590,11 @@ impl ResponseCache {
                     .map(|(k, v)| (k.clone(), v.created_at))
                     .collect();
                 entries.sort_by_key(|(_, time)| *time);
-                entries.into_iter().map(|(k, _)| k).take(cache.len() / 4).collect::<Vec<String>>()
+                entries
+                    .into_iter()
+                    .map(|(k, _)| k)
+                    .take(cache.len() / 4)
+                    .collect::<Vec<String>>()
             }
         };
 
@@ -562,7 +606,10 @@ impl ResponseCache {
         let mut stats = self.stats.lock().await;
         stats.evictions += evicted_count as u64;
 
-        info!("Evicted {} cache entries using {:?} policy", evicted_count, self.config.eviction_policy);
+        info!(
+            "Evicted {} cache entries using {:?} policy",
+            evicted_count, self.config.eviction_policy
+        );
 
         Ok(())
     }
@@ -646,7 +693,10 @@ impl ResponseCache {
                     stats_guard.expired_entries += expired_count as u64;
                     drop(stats_guard);
 
-                    info!("Background cleanup removed {} expired cache entries", expired_count);
+                    info!(
+                        "Background cleanup removed {} expired cache entries",
+                        expired_count
+                    );
                 }
             }
         });
@@ -705,10 +755,18 @@ mod tests {
         let test_input = "Test reproducibility";
 
         // Test that each algorithm produces consistent results
-        for algorithm in &[HashAlgorithm::Sha256, HashAlgorithm::Blake3, HashAlgorithm::Xxhash] {
+        for algorithm in &[
+            HashAlgorithm::Sha256,
+            HashAlgorithm::Blake3,
+            HashAlgorithm::Xxhash,
+        ] {
             let hash1 = CacheKey::compute_hash(test_input, algorithm);
             let hash2 = CacheKey::compute_hash(test_input, algorithm);
-            assert_eq!(hash1, hash2, "Hash algorithm {:?} should be reproducible", algorithm);
+            assert_eq!(
+                hash1, hash2,
+                "Hash algorithm {:?} should be reproducible",
+                algorithm
+            );
         }
     }
 
@@ -722,18 +780,30 @@ mod tests {
             "🦀 Rust with unicode characters 中文 🎉",
         ];
 
-        for algorithm in &[HashAlgorithm::Sha256, HashAlgorithm::Blake3, HashAlgorithm::Xxhash] {
+        for algorithm in &[
+            HashAlgorithm::Sha256,
+            HashAlgorithm::Blake3,
+            HashAlgorithm::Xxhash,
+        ] {
             let mut hashes = std::collections::HashSet::new();
 
             for input in &inputs {
                 let hash = CacheKey::compute_hash(input, algorithm);
 
                 // Ensure hash is not empty
-                assert!(!hash.is_empty(), "Hash should not be empty for algorithm {:?}", algorithm);
+                assert!(
+                    !hash.is_empty(),
+                    "Hash should not be empty for algorithm {:?}",
+                    algorithm
+                );
 
                 // Ensure hash is unique for different inputs
-                assert!(hashes.insert(hash.clone()),
-                    "Hash collision detected for algorithm {:?} with input: {}", algorithm, input);
+                assert!(
+                    hashes.insert(hash.clone()),
+                    "Hash collision detected for algorithm {:?} with input: {}",
+                    algorithm,
+                    input
+                );
             }
         }
     }
@@ -744,7 +814,11 @@ mod tests {
         let model_id = "gpt-3.5-turbo";
         let parameters = "temperature=0.7,max_tokens=100";
 
-        for algorithm in &[HashAlgorithm::Sha256, HashAlgorithm::Blake3, HashAlgorithm::Xxhash] {
+        for algorithm in &[
+            HashAlgorithm::Sha256,
+            HashAlgorithm::Blake3,
+            HashAlgorithm::Xxhash,
+        ] {
             let key = CacheKey::new(request_text, model_id, parameters, algorithm);
 
             assert_eq!(key.model_id, model_id);
@@ -787,15 +861,23 @@ mod tests {
         let test_data = "x".repeat(10000); // 10KB of data
 
         // Test that all hash functions can handle larger data
-        for algorithm in &[HashAlgorithm::Sha256, HashAlgorithm::Blake3, HashAlgorithm::Xxhash] {
+        for algorithm in &[
+            HashAlgorithm::Sha256,
+            HashAlgorithm::Blake3,
+            HashAlgorithm::Xxhash,
+        ] {
             let start = std::time::Instant::now();
             let hash = CacheKey::compute_hash(&test_data, algorithm);
             let duration = start.elapsed();
 
             assert!(!hash.is_empty());
             // Hash should complete in reasonable time (less than 1ms for 10KB)
-            assert!(duration < std::time::Duration::from_millis(1),
-                "Hash algorithm {:?} took too long: {:?}", algorithm, duration);
+            assert!(
+                duration < std::time::Duration::from_millis(1),
+                "Hash algorithm {:?} took too long: {:?}",
+                algorithm,
+                duration
+            );
         }
     }
 
@@ -805,15 +887,25 @@ mod tests {
         let base_input = "The quick brown fox jumps over the lazy dog";
         let modified_input = "The quick brown fox jumps over the lazy cat"; // Changed 'dog' to 'cat'
 
-        for algorithm in &[HashAlgorithm::Sha256, HashAlgorithm::Blake3, HashAlgorithm::Xxhash] {
+        for algorithm in &[
+            HashAlgorithm::Sha256,
+            HashAlgorithm::Blake3,
+            HashAlgorithm::Xxhash,
+        ] {
             let hash1 = CacheKey::compute_hash(base_input, algorithm);
             let hash2 = CacheKey::compute_hash(modified_input, algorithm);
 
-            assert_ne!(hash1, hash2, "Small input changes should produce different hashes for {:?}", algorithm);
+            assert_ne!(
+                hash1, hash2,
+                "Small input changes should produce different hashes for {:?}",
+                algorithm
+            );
 
             // For cryptographic hashes, check avalanche effect (at least 25% of bits should change)
             if matches!(algorithm, HashAlgorithm::Sha256 | HashAlgorithm::Blake3) {
-                let different_chars = hash1.chars().zip(hash2.chars())
+                let different_chars = hash1
+                    .chars()
+                    .zip(hash2.chars())
                     .filter(|(a, b)| a != b)
                     .count();
                 let total_chars = hash1.len();
@@ -835,16 +927,25 @@ mod tests {
         };
 
         // Create a mock ResponseCache for testing compression
-        let test_data = b"Hello, World! This is a test string that should compress well when repeated. ".repeat(50);
+        let test_data =
+            b"Hello, World! This is a test string that should compress well when repeated. "
+                .repeat(50);
 
         // Test compression
-        let compressed = compress_test_data(&test_data, &config).expect("Compression should succeed");
-        assert!(compressed.len() < test_data.len(), "Compressed data should be smaller than original");
+        let compressed =
+            compress_test_data(&test_data, &config).expect("Compression should succeed");
+        assert!(
+            compressed.len() < test_data.len(),
+            "Compressed data should be smaller than original"
+        );
 
         // Test decompression
         let decompressed = decompress_test_data(&compressed, &Some(CompressionAlgorithm::Gzip))
             .expect("Decompression should succeed");
-        assert_eq!(decompressed, test_data, "Decompressed data should match original");
+        assert_eq!(
+            decompressed, test_data,
+            "Decompressed data should match original"
+        );
     }
 
     #[test]
@@ -858,13 +959,20 @@ mod tests {
         let test_data = b"ZSTD compression test data. ".repeat(100);
 
         // Test compression
-        let compressed = compress_test_data(&test_data, &config).expect("ZSTD compression should succeed");
-        assert!(compressed.len() < test_data.len(), "ZSTD compressed data should be smaller than original");
+        let compressed =
+            compress_test_data(&test_data, &config).expect("ZSTD compression should succeed");
+        assert!(
+            compressed.len() < test_data.len(),
+            "ZSTD compressed data should be smaller than original"
+        );
 
         // Test decompression
         let decompressed = decompress_test_data(&compressed, &Some(CompressionAlgorithm::Zstd))
             .expect("ZSTD decompression should succeed");
-        assert_eq!(decompressed, test_data, "ZSTD decompressed data should match original");
+        assert_eq!(
+            decompressed, test_data,
+            "ZSTD decompressed data should match original"
+        );
     }
 
     #[test]
@@ -883,18 +991,22 @@ mod tests {
             ..Default::default()
         };
 
-        let gzip_compressed = compress_test_data(&test_data, &gzip_config).expect("Gzip compression should work");
-        let zstd_compressed = compress_test_data(&test_data, &zstd_config).expect("Zstd compression should work");
+        let gzip_compressed =
+            compress_test_data(&test_data, &gzip_config).expect("Gzip compression should work");
+        let zstd_compressed =
+            compress_test_data(&test_data, &zstd_config).expect("Zstd compression should work");
 
         // Both should compress the data
         assert!(gzip_compressed.len() < test_data.len());
         assert!(zstd_compressed.len() < test_data.len());
 
         // Both should decompress correctly
-        let gzip_decompressed = decompress_test_data(&gzip_compressed, &Some(CompressionAlgorithm::Gzip))
-            .expect("Gzip decompression should work");
-        let zstd_decompressed = decompress_test_data(&zstd_compressed, &Some(CompressionAlgorithm::Zstd))
-            .expect("Zstd decompression should work");
+        let gzip_decompressed =
+            decompress_test_data(&gzip_compressed, &Some(CompressionAlgorithm::Gzip))
+                .expect("Gzip decompression should work");
+        let zstd_decompressed =
+            decompress_test_data(&zstd_compressed, &Some(CompressionAlgorithm::Zstd))
+                .expect("Zstd decompression should work");
 
         assert_eq!(gzip_decompressed, test_data);
         assert_eq!(zstd_decompressed, test_data);
@@ -944,51 +1056,70 @@ mod tests {
         // Test empty data
         let empty_data = b"";
         let compressed = compress_test_data(empty_data, &config).expect("Should handle empty data");
-        let decompressed = decompress_test_data(&compressed, &Some(config.compression_algorithm.clone()))
-            .expect("Should decompress empty data");
+        let decompressed =
+            decompress_test_data(&compressed, &Some(config.compression_algorithm.clone()))
+                .expect("Should decompress empty data");
         assert_eq!(decompressed, empty_data);
 
         // Test single byte
         let single_byte = b"A";
-        let compressed = compress_test_data(single_byte, &config).expect("Should handle single byte");
-        let decompressed = decompress_test_data(&compressed, &Some(config.compression_algorithm.clone()))
-            .expect("Should decompress single byte");
+        let compressed =
+            compress_test_data(single_byte, &config).expect("Should handle single byte");
+        let decompressed =
+            decompress_test_data(&compressed, &Some(config.compression_algorithm.clone()))
+                .expect("Should decompress single byte");
         assert_eq!(decompressed, single_byte);
 
         // Test binary data
         let binary_data: Vec<u8> = (0..=255).collect();
-        let compressed = compress_test_data(&binary_data, &config).expect("Should handle binary data");
-        let decompressed = decompress_test_data(&compressed, &Some(config.compression_algorithm.clone()))
-            .expect("Should decompress binary data");
+        let compressed =
+            compress_test_data(&binary_data, &config).expect("Should handle binary data");
+        let decompressed =
+            decompress_test_data(&compressed, &Some(config.compression_algorithm.clone()))
+                .expect("Should decompress binary data");
         assert_eq!(decompressed, binary_data);
     }
 
     #[test]
     fn test_compression_performance_characteristics() {
-        let large_data = b"Performance test data with repeated patterns for compression efficiency testing. ".repeat(1000);
+        let large_data =
+            b"Performance test data with repeated patterns for compression efficiency testing. "
+                .repeat(1000);
 
         let config = ResponseCacheConfig::default();
 
         let start = std::time::Instant::now();
-        let compressed = compress_test_data(&large_data, &config).expect("Compression should complete");
+        let compressed =
+            compress_test_data(&large_data, &config).expect("Compression should complete");
         let compression_time = start.elapsed();
 
         let start = std::time::Instant::now();
-        let decompressed = decompress_test_data(&compressed, &Some(config.compression_algorithm.clone()))
-            .expect("Decompression should complete");
+        let decompressed =
+            decompress_test_data(&compressed, &Some(config.compression_algorithm.clone()))
+                .expect("Decompression should complete");
         let decompression_time = start.elapsed();
 
         assert_eq!(decompressed, large_data);
 
         // Compression and decompression should complete in reasonable time
-        assert!(compression_time < std::time::Duration::from_millis(100),
-            "Compression took too long: {:?}", compression_time);
-        assert!(decompression_time < std::time::Duration::from_millis(50),
-            "Decompression took too long: {:?}", decompression_time);
+        assert!(
+            compression_time < std::time::Duration::from_millis(100),
+            "Compression took too long: {:?}",
+            compression_time
+        );
+        assert!(
+            decompression_time < std::time::Duration::from_millis(50),
+            "Decompression took too long: {:?}",
+            decompression_time
+        );
 
         // Should achieve some compression
         let compression_ratio = large_data.len() as f32 / compressed.len() as f32;
-        assert!(compression_ratio > 1.5, "Should achieve reasonable compression ratio: {:.2}", compression_ratio);
+        assert!(
+            compression_ratio > 1.5,
+            "Should achieve reasonable compression ratio: {:.2}",
+            compression_ratio
+        );
     }
 
     // Helper functions for testing compression without needing a full ResponseCache instance
@@ -998,7 +1129,7 @@ mod tests {
                 use std::io::Write;
                 let mut encoder = flate2::write::GzEncoder::new(
                     Vec::new(),
-                    flate2::Compression::new(config.compression_level)
+                    flate2::Compression::new(config.compression_level),
                 );
                 encoder.write_all(data)?;
                 encoder.finish().map_err(Into::into)
@@ -1009,7 +1140,10 @@ mod tests {
         }
     }
 
-    fn decompress_test_data(data: &[u8], algorithm: &Option<CompressionAlgorithm>) -> Result<Vec<u8>> {
+    fn decompress_test_data(
+        data: &[u8],
+        algorithm: &Option<CompressionAlgorithm>,
+    ) -> Result<Vec<u8>> {
         match algorithm.as_ref().unwrap() {
             CompressionAlgorithm::Gzip => {
                 use std::io::Read;
@@ -1018,9 +1152,7 @@ mod tests {
                 decoder.read_to_end(&mut decompressed)?;
                 Ok(decompressed)
             }
-            CompressionAlgorithm::Zstd => {
-                zstd::decode_all(data).map_err(Into::into)
-            }
+            CompressionAlgorithm::Zstd => zstd::decode_all(data).map_err(Into::into),
         }
     }
 }
@@ -1045,7 +1177,12 @@ impl SmartCachingStrategy {
         }
     }
 
-    pub async fn should_cache(&self, key: &CacheKey, response_time_ms: u64, response_size: usize) -> bool {
+    pub async fn should_cache(
+        &self,
+        key: &CacheKey,
+        response_time_ms: u64,
+        response_size: usize,
+    ) -> bool {
         let pattern_key = format!("{}:{}", key.model_id, key.request_hash[..8].to_string());
         let mut patterns = self.request_patterns.write().await;
 

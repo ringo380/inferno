@@ -7,9 +7,8 @@ mod dashboard_api_tests {
     };
     use hyper::Body;
     use inferno::dashboard::{
-        DashboardConfig, DashboardServer, CreateModelRequest, CreateDeploymentRequest,
-        ScaleDeploymentRequest, UpdateModelRequest, UpdateDeploymentRequest,
-        DeployModelRequest
+        CreateDeploymentRequest, CreateModelRequest, DashboardConfig, DashboardServer,
+        DeployModelRequest, ScaleDeploymentRequest, UpdateDeploymentRequest, UpdateModelRequest,
     };
     use serde_json::json;
     use tower::ServiceExt;

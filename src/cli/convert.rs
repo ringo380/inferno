@@ -2,14 +2,14 @@ use crate::{
     config::Config,
     conversion::{
         ConversionConfig, ModelConverter, ModelFormat, OptimizationLevel, OptimizationOptions,
-        QuantizationType, Precision,
+        Precision, QuantizationType,
     },
     models::ModelManager,
 };
 use anyhow::Result;
 use clap::{Args, Subcommand, ValueEnum};
 use std::{path::PathBuf, sync::Arc};
-use tracing::{info, warn};
+use tracing::warn;
 
 #[derive(Args)]
 pub struct ConvertArgs {
@@ -30,7 +30,12 @@ pub enum ConvertCommand {
         #[arg(long, help = "Target format", value_enum)]
         format: ModelFormatArg,
 
-        #[arg(long, help = "Optimization level", value_enum, default_value = "balanced")]
+        #[arg(
+            long,
+            help = "Optimization level",
+            value_enum,
+            default_value = "balanced"
+        )]
         optimization: OptimizationLevelArg,
 
         #[arg(long, help = "Quantization type", value_enum)]
@@ -111,7 +116,12 @@ pub enum ConvertCommand {
         #[arg(long, help = "File pattern filter")]
         pattern: Option<String>,
 
-        #[arg(long, help = "Optimization level", value_enum, default_value = "balanced")]
+        #[arg(
+            long,
+            help = "Optimization level",
+            value_enum,
+            default_value = "balanced"
+        )]
         optimization: OptimizationLevelArg,
 
         #[arg(long, help = "Quantization type", value_enum)]
@@ -280,7 +290,8 @@ pub async fn execute(args: ConvertArgs, config: &Config) -> Result<()> {
                 batch_size,
                 preserve_metadata,
                 !no_verify,
-            ).await
+            )
+            .await
         }
 
         ConvertCommand::Optimize {
@@ -307,7 +318,8 @@ pub async fn execute(args: ConvertArgs, config: &Config) -> Result<()> {
                 inference_opt,
                 graph_simplify,
                 operator_fusion,
-            ).await
+            )
+            .await
         }
 
         ConvertCommand::Quantize {
@@ -333,7 +345,8 @@ pub async fn execute(args: ConvertArgs, config: &Config) -> Result<()> {
                 pattern,
                 optimization,
                 quantization,
-            ).await
+            )
+            .await
         }
 
         ConvertCommand::Analyze {
@@ -349,7 +362,14 @@ pub async fn execute(args: ConvertArgs, config: &Config) -> Result<()> {
             all_optimizations,
             all_quantizations,
         } => {
-            benchmark_conversion(&converter, model, iterations, all_optimizations, all_quantizations).await
+            benchmark_conversion(
+                &converter,
+                model,
+                iterations,
+                all_optimizations,
+                all_quantizations,
+            )
+            .await
         }
     }
 }
@@ -367,7 +387,11 @@ async fn convert_model(
     preserve_metadata: bool,
     verify_output: bool,
 ) -> Result<()> {
-    println!("Converting model: {} -> {}", input.display(), output.display());
+    println!(
+        "Converting model: {} -> {}",
+        input.display(),
+        output.display()
+    );
     println!("Target format: {:?}", format);
     println!("Optimization: {:?}", optimization);
 
@@ -386,12 +410,20 @@ async fn convert_model(
         verify_output,
     };
 
-    let result = converter.convert_model(&input, &output, &conversion_config).await?;
+    let result = converter
+        .convert_model(&input, &output, &conversion_config)
+        .await?;
 
     if result.success {
         println!("✓ Conversion completed successfully!");
-        println!("  Input size: {:.2} MB", result.input_size as f64 / (1024.0 * 1024.0));
-        println!("  Output size: {:.2} MB", result.output_size as f64 / (1024.0 * 1024.0));
+        println!(
+            "  Input size: {:.2} MB",
+            result.input_size as f64 / (1024.0 * 1024.0)
+        );
+        println!(
+            "  Output size: {:.2} MB",
+            result.output_size as f64 / (1024.0 * 1024.0)
+        );
         println!("  Compression ratio: {:.2}x", result.compression_ratio);
         println!("  Conversion time: {:?}", result.conversion_time);
         println!("  Metadata preserved: {}", result.metadata_preserved);
@@ -425,7 +457,11 @@ async fn optimize_model(
     graph_simplify: bool,
     operator_fusion: bool,
 ) -> Result<()> {
-    println!("Optimizing model: {} -> {}", input.display(), output.display());
+    println!(
+        "Optimizing model: {} -> {}",
+        input.display(),
+        output.display()
+    );
 
     let optimization_options = OptimizationOptions {
         remove_unused_layers: remove_unused,
@@ -439,22 +475,57 @@ async fn optimize_model(
     };
 
     println!("Optimization options:");
-    println!("  Remove unused layers: {}", optimization_options.remove_unused_layers);
-    println!("  Merge consecutive ops: {}", optimization_options.merge_consecutive_ops);
-    println!("  Constant folding: {}", optimization_options.constant_folding);
-    println!("  Dead code elimination: {}", optimization_options.dead_code_elimination);
-    println!("  Memory optimization: {}", optimization_options.memory_optimization);
-    println!("  Inference optimization: {}", optimization_options.inference_optimization);
-    println!("  Graph simplification: {}", optimization_options.graph_simplification);
-    println!("  Operator fusion: {}", optimization_options.operator_fusion);
+    println!(
+        "  Remove unused layers: {}",
+        optimization_options.remove_unused_layers
+    );
+    println!(
+        "  Merge consecutive ops: {}",
+        optimization_options.merge_consecutive_ops
+    );
+    println!(
+        "  Constant folding: {}",
+        optimization_options.constant_folding
+    );
+    println!(
+        "  Dead code elimination: {}",
+        optimization_options.dead_code_elimination
+    );
+    println!(
+        "  Memory optimization: {}",
+        optimization_options.memory_optimization
+    );
+    println!(
+        "  Inference optimization: {}",
+        optimization_options.inference_optimization
+    );
+    println!(
+        "  Graph simplification: {}",
+        optimization_options.graph_simplification
+    );
+    println!(
+        "  Operator fusion: {}",
+        optimization_options.operator_fusion
+    );
 
-    let result = converter.optimize_model(&input, &output, &optimization_options).await?;
+    let result = converter
+        .optimize_model(&input, &output, &optimization_options)
+        .await?;
 
     if result.success {
         println!("✓ Optimization completed successfully!");
-        println!("  Input size: {:.2} MB", result.input_size as f64 / (1024.0 * 1024.0));
-        println!("  Output size: {:.2} MB", result.output_size as f64 / (1024.0 * 1024.0));
-        println!("  Size reduction: {:.2}%", (1.0 - result.compression_ratio) * 100.0);
+        println!(
+            "  Input size: {:.2} MB",
+            result.input_size as f64 / (1024.0 * 1024.0)
+        );
+        println!(
+            "  Output size: {:.2} MB",
+            result.output_size as f64 / (1024.0 * 1024.0)
+        );
+        println!(
+            "  Size reduction: {:.2}%",
+            (1.0 - result.compression_ratio) * 100.0
+        );
         println!("  Optimization time: {:?}", result.conversion_time);
 
         if !result.warnings.is_empty() {
@@ -479,16 +550,31 @@ async fn quantize_model(
     output: PathBuf,
     quantization: QuantizationTypeArg,
 ) -> Result<()> {
-    println!("Quantizing model: {} -> {}", input.display(), output.display());
+    println!(
+        "Quantizing model: {} -> {}",
+        input.display(),
+        output.display()
+    );
     println!("Quantization type: {:?}", quantization);
 
-    let result = converter.quantize_model(&input, &output, quantization.into()).await?;
+    let result = converter
+        .quantize_model(&input, &output, quantization.into())
+        .await?;
 
     if result.success {
         println!("✓ Quantization completed successfully!");
-        println!("  Input size: {:.2} MB", result.input_size as f64 / (1024.0 * 1024.0));
-        println!("  Output size: {:.2} MB", result.output_size as f64 / (1024.0 * 1024.0));
-        println!("  Size reduction: {:.1}%", (1.0 - result.compression_ratio) * 100.0);
+        println!(
+            "  Input size: {:.2} MB",
+            result.input_size as f64 / (1024.0 * 1024.0)
+        );
+        println!(
+            "  Output size: {:.2} MB",
+            result.output_size as f64 / (1024.0 * 1024.0)
+        );
+        println!(
+            "  Size reduction: {:.1}%",
+            (1.0 - result.compression_ratio) * 100.0
+        );
         println!("  Quantization time: {:?}", result.conversion_time);
 
         if !result.warnings.is_empty() {
@@ -516,7 +602,11 @@ async fn batch_convert_models(
     optimization: OptimizationLevelArg,
     quantization: Option<QuantizationTypeArg>,
 ) -> Result<()> {
-    println!("Batch converting models from {} to {}", input_dir.display(), output_dir.display());
+    println!(
+        "Batch converting models from {} to {}",
+        input_dir.display(),
+        output_dir.display()
+    );
     println!("Target format: {:?}", format);
     if let Some(ref pat) = pattern {
         println!("File pattern filter: {}", pat);
@@ -533,12 +623,14 @@ async fn batch_convert_models(
         verify_output: true,
     };
 
-    let results = converter.batch_convert_models(
-        &input_dir,
-        &output_dir,
-        &conversion_config,
-        pattern.as_deref(),
-    ).await?;
+    let results = converter
+        .batch_convert_models(
+            &input_dir,
+            &output_dir,
+            &conversion_config,
+            pattern.as_deref(),
+        )
+        .await?;
 
     let successful = results.iter().filter(|r| r.success).count();
     let total_input_size: u64 = results.iter().map(|r| r.input_size).sum();
@@ -550,16 +642,30 @@ async fn batch_convert_models(
     };
 
     println!("\n=== Batch Conversion Results ===");
-    println!("Successfully converted: {}/{} models", successful, results.len());
-    println!("Total input size: {:.2} MB", total_input_size as f64 / (1024.0 * 1024.0));
-    println!("Total output size: {:.2} MB", total_output_size as f64 / (1024.0 * 1024.0));
+    println!(
+        "Successfully converted: {}/{} models",
+        successful,
+        results.len()
+    );
+    println!(
+        "Total input size: {:.2} MB",
+        total_input_size as f64 / (1024.0 * 1024.0)
+    );
+    println!(
+        "Total output size: {:.2} MB",
+        total_output_size as f64 / (1024.0 * 1024.0)
+    );
     println!("Average compression: {:.2}x", average_compression);
 
     if successful < results.len() {
         println!("\nFailed conversions:");
         for result in &results {
             if !result.success {
-                println!("  ✗ {}: {:?}", result.input_path.file_name().unwrap().to_string_lossy(), result.errors);
+                println!(
+                    "  ✗ {}: {:?}",
+                    result.input_path.file_name().unwrap().to_string_lossy(),
+                    result.errors
+                );
             }
         }
     }
@@ -577,17 +683,25 @@ async fn analyze_model(
     println!("Analyzing model: {}", path.display());
 
     if !path.exists() {
-        return Err(anyhow::anyhow!("Model file does not exist: {}", path.display()));
+        return Err(anyhow::anyhow!(
+            "Model file does not exist: {}",
+            path.display()
+        ));
     }
 
     let model_info = model_manager.resolve_model(&path.to_string_lossy()).await?;
-    let validation_result = model_manager.validate_model_comprehensive(&path, None).await?;
+    let validation_result = model_manager
+        .validate_model_comprehensive(&path, None)
+        .await?;
 
     println!("\n=== Model Information ===");
     println!("Name: {}", model_info.name);
     println!("Path: {}", model_info.path.display());
     println!("Size: {:.2} MB", model_info.size as f64 / (1024.0 * 1024.0));
-    println!("Modified: {}", model_info.modified.format("%Y-%m-%d %H:%M:%S UTC"));
+    println!(
+        "Modified: {}",
+        model_info.modified.format("%Y-%m-%d %H:%M:%S UTC")
+    );
     println!("Backend: {}", model_info.backend_type);
 
     if let Some(checksum) = &model_info.checksum {
@@ -624,34 +738,36 @@ async fn analyze_model(
         println!("\n=== Detailed Analysis ===");
 
         match model_info.backend_type.as_str() {
-            "gguf" => {
-                match model_manager.get_gguf_metadata(&path).await {
-                    Ok(metadata) => {
-                        println!("Architecture: {}", metadata.architecture);
-                        println!("Parameters: {:.1}B", metadata.parameter_count as f64 / 1_000_000_000.0);
-                        println!("Quantization: {}", metadata.quantization);
-                        println!("Context length: {}", metadata.context_length);
-                    }
-                    Err(e) => {
-                        warn!("Failed to read GGUF metadata: {}", e);
-                    }
+            "gguf" => match model_manager.get_gguf_metadata(&path).await {
+                Ok(metadata) => {
+                    println!("Architecture: {}", metadata.architecture);
+                    println!(
+                        "Parameters: {:.1}B",
+                        metadata.parameter_count as f64 / 1_000_000_000.0
+                    );
+                    println!("Quantization: {}", metadata.quantization);
+                    println!("Context length: {}", metadata.context_length);
                 }
-            }
-            "onnx" => {
-                match model_manager.get_onnx_metadata(&path).await {
-                    Ok(metadata) => {
-                        println!("ONNX version: {}", metadata.version);
-                        println!("Producer: {}", metadata.producer);
-                        println!("Input count: {}", metadata.input_count);
-                        println!("Output count: {}", metadata.output_count);
-                    }
-                    Err(e) => {
-                        warn!("Failed to read ONNX metadata: {}", e);
-                    }
+                Err(e) => {
+                    warn!("Failed to read GGUF metadata: {}", e);
                 }
-            }
+            },
+            "onnx" => match model_manager.get_onnx_metadata(&path).await {
+                Ok(metadata) => {
+                    println!("ONNX version: {}", metadata.version);
+                    println!("Producer: {}", metadata.producer);
+                    println!("Input count: {}", metadata.input_count);
+                    println!("Output count: {}", metadata.output_count);
+                }
+                Err(e) => {
+                    warn!("Failed to read ONNX metadata: {}", e);
+                }
+            },
             _ => {
-                println!("Detailed analysis not available for {} format", model_info.backend_type);
+                println!(
+                    "Detailed analysis not available for {} format",
+                    model_info.backend_type
+                );
             }
         }
 
@@ -710,11 +826,17 @@ async fn benchmark_conversion(
     all_optimizations: bool,
     all_quantizations: bool,
 ) -> Result<()> {
-    println!("Benchmarking conversion performance for: {}", model.display());
+    println!(
+        "Benchmarking conversion performance for: {}",
+        model.display()
+    );
     println!("Iterations: {}", iterations);
 
     if !model.exists() {
-        return Err(anyhow::anyhow!("Model file does not exist: {}", model.display()));
+        return Err(anyhow::anyhow!(
+            "Model file does not exist: {}",
+            model.display()
+        ));
     }
 
     let temp_dir = std::env::temp_dir().join("inferno_benchmark");
@@ -729,7 +851,9 @@ async fn benchmark_conversion(
         let config = ConversionConfig::default();
 
         let start = std::time::Instant::now();
-        let result = converter.convert_model(&model, &output_path, &config).await?;
+        let result = converter
+            .convert_model(&model, &output_path, &config)
+            .await?;
         let duration = start.elapsed();
 
         if result.success {
@@ -744,7 +868,8 @@ async fn benchmark_conversion(
     }
 
     if !baseline_times.is_empty() {
-        let avg_time = baseline_times.iter().sum::<std::time::Duration>() / baseline_times.len() as u32;
+        let avg_time =
+            baseline_times.iter().sum::<std::time::Duration>() / baseline_times.len() as u32;
         println!("  Average time: {:?}", avg_time);
     }
 
@@ -771,7 +896,9 @@ async fn benchmark_conversion(
                 };
 
                 let start = std::time::Instant::now();
-                let result = converter.convert_model(&model, &output_path, &config).await?;
+                let result = converter
+                    .convert_model(&model, &output_path, &config)
+                    .await?;
                 let duration = start.elapsed();
 
                 if result.success {
@@ -807,12 +934,19 @@ async fn benchmark_conversion(
                 let output_path = temp_dir.join(format!("quant_{:?}_{}.gguf", quant_type, i));
 
                 let start = std::time::Instant::now();
-                let result = converter.quantize_model(&model, &output_path, quant_type.clone()).await?;
+                let result = converter
+                    .quantize_model(&model, &output_path, quant_type.clone())
+                    .await?;
                 let duration = start.elapsed();
 
                 if result.success {
                     times.push(duration);
-                    println!("    Iteration {}: {:?} (compression: {:.2}x)", i + 1, duration, result.compression_ratio);
+                    println!(
+                        "    Iteration {}: {:?} (compression: {:.2}x)",
+                        i + 1,
+                        duration,
+                        result.compression_ratio
+                    );
                 }
 
                 let _ = tokio::fs::remove_file(&output_path).await;

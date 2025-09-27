@@ -1,25 +1,25 @@
+use anyhow::Result;
 use inferno::{
+    backends::{BackendConfig, BackendType, InferenceParams},
     batch::{
+        processor::{BatchProcessor, ProcessingResult, ProcessorConfig},
         queue::{
-            JobQueue, JobQueueManager, JobQueueConfig, BatchJob, JobPriority,
-            JobStatus, QueueStatus, JobMetrics, QueueMetrics, RetryPolicy,
-            ResourceRequirements, JobResult, JobExecutionContext,
+            BatchJob, JobExecutionContext, JobMetrics, JobPriority, JobQueue, JobQueueConfig,
+            JobQueueManager, JobResult, JobStatus, QueueMetrics, QueueStatus, ResourceRequirements,
+            RetryPolicy,
         },
         scheduler::{
-            BatchScheduler, SchedulerConfig, ScheduleEntry, ScheduleType,
-            CronSchedule, IntervalSchedule, OneTimeSchedule,
+            BatchScheduler, CronSchedule, IntervalSchedule, OneTimeSchedule, ScheduleEntry,
+            ScheduleType, SchedulerConfig,
         },
-        processor::{BatchProcessor, ProcessorConfig, ProcessingResult},
-        BatchConfig, BatchInput, BatchOutput, BatchContext,
+        BatchConfig, BatchContext, BatchInput, BatchOutput,
     },
-    backends::{BackendConfig, BackendType, InferenceParams},
-    models::{ModelManager, ModelInfo},
-    cache::{ModelCache, CacheConfig},
-    metrics::MetricsCollector,
+    cache::{CacheConfig, ModelCache},
     cron::{CronExpression, CronSchedule as CronScheduleParser},
+    metrics::MetricsCollector,
+    models::{ModelInfo, ModelManager},
     InfernoError,
 };
-use anyhow::Result;
 use std::{
     collections::HashMap,
     path::PathBuf,
@@ -194,7 +194,9 @@ mod batch_test_utils {
         let start = std::time::Instant::now();
         while start.elapsed() < timeout_duration {
             if let Some(job_info) = manager.get_job_status(queue_id, job_id).await? {
-                if std::mem::discriminant(&job_info.status) == std::mem::discriminant(&expected_status) {
+                if std::mem::discriminant(&job_info.status)
+                    == std::mem::discriminant(&expected_status)
+                {
                     return Ok(true);
                 }
             }
@@ -242,22 +244,28 @@ async fn test_complete_batch_workflow() -> Result<()> {
     let model_manager = Arc::new(ModelManager::new(models_dir));
     let cache_config = CacheConfig::default();
     let backend_config = BackendConfig::default();
-    let cache = Arc::new(ModelCache::new(cache_config, backend_config.clone(), model_manager.clone(), None).await?);
+    let cache = Arc::new(
+        ModelCache::new(
+            cache_config,
+            backend_config.clone(),
+            model_manager.clone(),
+            None,
+        )
+        .await?,
+    );
 
-    let processor = Arc::new(BatchProcessor::new(
-        processor_config,
-        queue_manager.clone(),
-        cache,
-        None,
-    ).await?);
+    let processor =
+        Arc::new(BatchProcessor::new(processor_config, queue_manager.clone(), cache, None).await?);
 
     // 1. Create a queue
     let queue_id = "integration-test-queue";
-    queue_manager.create_queue(
-        queue_id.to_string(),
-        "Integration Test Queue".to_string(),
-        "Queue for end-to-end integration testing".to_string(),
-    ).await?;
+    queue_manager
+        .create_queue(
+            queue_id.to_string(),
+            "Integration Test Queue".to_string(),
+            "Queue for end-to-end integration testing".to_string(),
+        )
+        .await?;
 
     // 2. Submit multiple jobs with different priorities
     let jobs = vec![
@@ -273,18 +281,14 @@ async fn test_complete_batch_workflow() -> Result<()> {
     // 3. Start processor
     let processor_handle = tokio::spawn({
         let processor = processor.clone();
-        async move {
-            processor.start_processing().await
-        }
+        async move { processor.start_processing().await }
     });
 
     // 4. Wait for jobs to be processed
     let processing_timeout = Duration::from_secs(30);
-    let all_processed = batch_test_utils::wait_for_queue_empty(
-        &queue_manager,
-        queue_id,
-        processing_timeout,
-    ).await?;
+    let all_processed =
+        batch_test_utils::wait_for_queue_empty(&queue_manager, queue_id, processing_timeout)
+            .await?;
 
     // Stop processor
     processor.stop_processing().await?;
@@ -327,11 +331,13 @@ async fn test_batch_scheduling() -> Result<()> {
 
     // Create queue
     let queue_id = "scheduled-queue";
-    queue_manager.create_queue(
-        queue_id.to_string(),
-        "Scheduled Queue".to_string(),
-        "Queue for scheduled jobs".to_string(),
-    ).await?;
+    queue_manager
+        .create_queue(
+            queue_id.to_string(),
+            "Scheduled Queue".to_string(),
+            "Queue for scheduled jobs".to_string(),
+        )
+        .await?;
 
     // 1. Test one-time schedule
     let one_time_schedule = ScheduleEntry {
@@ -342,7 +348,11 @@ async fn test_batch_scheduling() -> Result<()> {
             execute_at: SystemTime::now() + Duration::from_secs(2),
         }),
         queue_id: queue_id.to_string(),
-        job_template: batch_test_utils::create_test_job("scheduled-job-1", "test_model", JobPriority::Normal),
+        job_template: batch_test_utils::create_test_job(
+            "scheduled-job-1",
+            "test_model",
+            JobPriority::Normal,
+        ),
         enabled: true,
         created_at: SystemTime::now(),
         last_executed: None,
@@ -365,7 +375,11 @@ async fn test_batch_scheduling() -> Result<()> {
             end_time: Some(SystemTime::now() + Duration::from_secs(15)),
         }),
         queue_id: queue_id.to_string(),
-        job_template: batch_test_utils::create_test_job("scheduled-job-2", "test_model", JobPriority::Normal),
+        job_template: batch_test_utils::create_test_job(
+            "scheduled-job-2",
+            "test_model",
+            JobPriority::Normal,
+        ),
         enabled: true,
         created_at: SystemTime::now(),
         last_executed: None,
@@ -389,7 +403,11 @@ async fn test_batch_scheduling() -> Result<()> {
             end_time: Some(SystemTime::now() + Duration::from_secs(25)),
         }),
         queue_id: queue_id.to_string(),
-        job_template: batch_test_utils::create_test_job("scheduled-job-3", "test_model", JobPriority::Normal),
+        job_template: batch_test_utils::create_test_job(
+            "scheduled-job-3",
+            "test_model",
+            JobPriority::Normal,
+        ),
         enabled: true,
         created_at: SystemTime::now(),
         last_executed: None,
@@ -404,9 +422,7 @@ async fn test_batch_scheduling() -> Result<()> {
     // Start scheduler
     let scheduler_handle = tokio::spawn({
         let scheduler = scheduler.clone();
-        async move {
-            scheduler.start().await
-        }
+        async move { scheduler.start().await }
     });
 
     // Wait for schedules to execute
@@ -418,12 +434,20 @@ async fn test_batch_scheduling() -> Result<()> {
 
     // Verify scheduled jobs were created
     let jobs = queue_manager.list_jobs(queue_id, None).await?;
-    assert!(jobs.len() >= 3, "Should have at least 3 scheduled jobs, got {}", jobs.len());
+    assert!(
+        jobs.len() >= 3,
+        "Should have at least 3 scheduled jobs, got {}",
+        jobs.len()
+    );
 
     // Check schedule execution counts
     let schedules = scheduler.list_schedules().await?;
     for schedule in schedules {
-        assert!(schedule.execution_count > 0, "Schedule {} should have executed", schedule.id);
+        assert!(
+            schedule.execution_count > 0,
+            "Schedule {} should have executed",
+            schedule.id
+        );
     }
 
     Ok(())
@@ -441,14 +465,17 @@ async fn test_retry_and_error_handling() -> Result<()> {
 
     // Create queue
     let queue_id = "retry-queue";
-    queue_manager.create_queue(
-        queue_id.to_string(),
-        "Retry Test Queue".to_string(),
-        "Queue for testing retry mechanisms".to_string(),
-    ).await?;
+    queue_manager
+        .create_queue(
+            queue_id.to_string(),
+            "Retry Test Queue".to_string(),
+            "Queue for testing retry mechanisms".to_string(),
+        )
+        .await?;
 
     // Create a job that will fail (using non-existent model)
-    let mut failing_job = batch_test_utils::create_test_job("failing-job", "nonexistent_model", JobPriority::Normal);
+    let mut failing_job =
+        batch_test_utils::create_test_job("failing-job", "nonexistent_model", JobPriority::Normal);
     failing_job.max_retries = 2;
 
     queue_manager.submit_job(queue_id, failing_job).await?;
@@ -464,19 +491,13 @@ async fn test_retry_and_error_handling() -> Result<()> {
     let backend_config = BackendConfig::default();
     let cache = Arc::new(ModelCache::new(cache_config, backend_config, model_manager, None).await?);
 
-    let processor = Arc::new(BatchProcessor::new(
-        processor_config,
-        queue_manager.clone(),
-        cache,
-        None,
-    ).await?);
+    let processor =
+        Arc::new(BatchProcessor::new(processor_config, queue_manager.clone(), cache, None).await?);
 
     // Start processor
     let processor_handle = tokio::spawn({
         let processor = processor.clone();
-        async move {
-            processor.start_processing().await
-        }
+        async move { processor.start_processing().await }
     });
 
     // Wait for retries to complete
@@ -487,12 +508,17 @@ async fn test_retry_and_error_handling() -> Result<()> {
     let _ = timeout(Duration::from_secs(5), processor_handle).await;
 
     // Verify the job failed after retries
-    let job_status = queue_manager.get_job_status(queue_id, "failing-job").await?;
+    let job_status = queue_manager
+        .get_job_status(queue_id, "failing-job")
+        .await?;
     assert!(job_status.is_some());
 
     let job_info = job_status.unwrap();
     assert!(matches!(job_info.status, JobStatus::Failed));
-    assert_eq!(job_info.retry_count, 2, "Job should have been retried 2 times");
+    assert_eq!(
+        job_info.retry_count, 2,
+        "Job should have been retried 2 times"
+    );
 
     // Check dead letter queue if enabled
     if queue_manager.has_deadletter_queue(queue_id).await? {
@@ -522,11 +548,13 @@ async fn test_concurrent_batch_processing() -> Result<()> {
 
     // Create queue
     let queue_id = "concurrent-queue";
-    queue_manager.create_queue(
-        queue_id.to_string(),
-        "Concurrent Test Queue".to_string(),
-        "Queue for testing concurrent processing".to_string(),
-    ).await?;
+    queue_manager
+        .create_queue(
+            queue_id.to_string(),
+            "Concurrent Test Queue".to_string(),
+            "Queue for testing concurrent processing".to_string(),
+        )
+        .await?;
 
     // Submit multiple jobs
     for i in 0..10 {
@@ -548,28 +576,20 @@ async fn test_concurrent_batch_processing() -> Result<()> {
     let backend_config = BackendConfig::default();
     let cache = Arc::new(ModelCache::new(cache_config, backend_config, model_manager, None).await?);
 
-    let processor = Arc::new(BatchProcessor::new(
-        processor_config,
-        queue_manager.clone(),
-        cache,
-        None,
-    ).await?);
+    let processor =
+        Arc::new(BatchProcessor::new(processor_config, queue_manager.clone(), cache, None).await?);
 
     // Start processor
     let start_time = std::time::Instant::now();
     let processor_handle = tokio::spawn({
         let processor = processor.clone();
-        async move {
-            processor.start_processing().await
-        }
+        async move { processor.start_processing().await }
     });
 
     // Wait for all jobs to be processed
-    let all_processed = batch_test_utils::wait_for_queue_empty(
-        &queue_manager,
-        queue_id,
-        Duration::from_secs(60),
-    ).await?;
+    let all_processed =
+        batch_test_utils::wait_for_queue_empty(&queue_manager, queue_id, Duration::from_secs(60))
+            .await?;
 
     let processing_time = start_time.elapsed();
 
@@ -581,8 +601,10 @@ async fn test_concurrent_batch_processing() -> Result<()> {
 
     // Verify concurrent processing improved performance
     // With 3 concurrent workers, it should be faster than sequential processing
-    assert!(processing_time < Duration::from_secs(50),
-           "Concurrent processing should complete faster");
+    assert!(
+        processing_time < Duration::from_secs(50),
+        "Concurrent processing should complete faster"
+    );
 
     // Check that jobs were processed concurrently
     let queue_metrics = queue_manager.get_queue_metrics(queue_id).await;
@@ -605,20 +627,25 @@ async fn test_resource_constraints() -> Result<()> {
 
     // Create queue
     let queue_id = "resource-queue";
-    queue_manager.create_queue(
-        queue_id.to_string(),
-        "Resource Test Queue".to_string(),
-        "Queue for testing resource constraints".to_string(),
-    ).await?;
+    queue_manager
+        .create_queue(
+            queue_id.to_string(),
+            "Resource Test Queue".to_string(),
+            "Queue for testing resource constraints".to_string(),
+        )
+        .await?;
 
     // Create jobs with different resource requirements
-    let mut high_memory_job = batch_test_utils::create_test_job("high-mem-job", "test_model", JobPriority::Normal);
+    let mut high_memory_job =
+        batch_test_utils::create_test_job("high-mem-job", "test_model", JobPriority::Normal);
     high_memory_job.resource_requirements.min_memory_mb = 4096; // High memory requirement
 
-    let mut low_memory_job = batch_test_utils::create_test_job("low-mem-job", "test_model", JobPriority::Normal);
+    let mut low_memory_job =
+        batch_test_utils::create_test_job("low-mem-job", "test_model", JobPriority::Normal);
     low_memory_job.resource_requirements.min_memory_mb = 256; // Low memory requirement
 
-    let mut gpu_job = batch_test_utils::create_test_job("gpu-job", "test_model", JobPriority::Normal);
+    let mut gpu_job =
+        batch_test_utils::create_test_job("gpu-job", "test_model", JobPriority::Normal);
     gpu_job.resource_requirements.required_gpu = true;
     gpu_job.resource_requirements.min_gpu_memory_mb = Some(2048);
 
@@ -632,7 +659,9 @@ async fn test_resource_constraints() -> Result<()> {
     assert!(resource_status.available_memory_mb >= 0);
 
     // Test job filtering by resource requirements
-    let eligible_jobs = queue_manager.get_eligible_jobs(queue_id, &resource_status).await?;
+    let eligible_jobs = queue_manager
+        .get_eligible_jobs(queue_id, &resource_status)
+        .await?;
 
     // Only jobs that can run with current resources should be eligible
     for job in eligible_jobs {
@@ -660,11 +689,13 @@ async fn test_batch_metrics_monitoring() -> Result<()> {
 
     // Create queue
     let queue_id = "metrics-queue";
-    queue_manager.create_queue(
-        queue_id.to_string(),
-        "Metrics Test Queue".to_string(),
-        "Queue for testing metrics collection".to_string(),
-    ).await?;
+    queue_manager
+        .create_queue(
+            queue_id.to_string(),
+            "Metrics Test Queue".to_string(),
+            "Queue for testing metrics collection".to_string(),
+        )
+        .await?;
 
     // Submit various types of jobs
     let jobs = vec![
@@ -685,19 +716,20 @@ async fn test_batch_metrics_monitoring() -> Result<()> {
     let cache = Arc::new(ModelCache::new(cache_config, backend_config, model_manager, None).await?);
     let metrics_collector = Arc::new(MetricsCollector::new());
 
-    let processor = Arc::new(BatchProcessor::new(
-        processor_config,
-        queue_manager.clone(),
-        cache,
-        Some(metrics_collector.clone()),
-    ).await?);
+    let processor = Arc::new(
+        BatchProcessor::new(
+            processor_config,
+            queue_manager.clone(),
+            cache,
+            Some(metrics_collector.clone()),
+        )
+        .await?,
+    );
 
     // Start processor
     let processor_handle = tokio::spawn({
         let processor = processor.clone();
-        async move {
-            processor.start_processing().await
-        }
+        async move { processor.start_processing().await }
     });
 
     // Wait for some processing
@@ -729,11 +761,13 @@ async fn test_batch_metrics_monitoring() -> Result<()> {
     let _ = timeout(Duration::from_secs(5), processor_handle).await;
 
     // Check historical metrics
-    let historical_metrics = queue_manager.get_historical_metrics(
-        queue_id,
-        SystemTime::now() - Duration::from_secs(3600),
-        SystemTime::now(),
-    ).await?;
+    let historical_metrics = queue_manager
+        .get_historical_metrics(
+            queue_id,
+            SystemTime::now() - Duration::from_secs(3600),
+            SystemTime::now(),
+        )
+        .await?;
 
     assert!(!historical_metrics.is_empty());
 
@@ -748,19 +782,23 @@ async fn test_job_dependencies() -> Result<()> {
 
     // Create queue
     let queue_id = "dependency-queue";
-    queue_manager.create_queue(
-        queue_id.to_string(),
-        "Dependency Test Queue".to_string(),
-        "Queue for testing job dependencies".to_string(),
-    ).await?;
+    queue_manager
+        .create_queue(
+            queue_id.to_string(),
+            "Dependency Test Queue".to_string(),
+            "Queue for testing job dependencies".to_string(),
+        )
+        .await?;
 
     // Create jobs with dependencies
     let job1 = batch_test_utils::create_test_job("dep-job-1", "test_model", JobPriority::Normal);
 
-    let mut job2 = batch_test_utils::create_test_job("dep-job-2", "test_model", JobPriority::Normal);
+    let mut job2 =
+        batch_test_utils::create_test_job("dep-job-2", "test_model", JobPriority::Normal);
     job2.dependencies = vec!["dep-job-1".to_string()];
 
-    let mut job3 = batch_test_utils::create_test_job("dep-job-3", "test_model", JobPriority::Normal);
+    let mut job3 =
+        batch_test_utils::create_test_job("dep-job-3", "test_model", JobPriority::Normal);
     job3.dependencies = vec!["dep-job-1".to_string(), "dep-job-2".to_string()];
 
     // Submit jobs in reverse order to test dependency resolution
@@ -778,23 +816,41 @@ async fn test_job_dependencies() -> Result<()> {
     let can_execute_job2 = queue_manager.can_execute_job(queue_id, "dep-job-2").await?;
     let can_execute_job3 = queue_manager.can_execute_job(queue_id, "dep-job-3").await?;
 
-    assert!(can_execute_job1, "Job 1 should be executable (no dependencies)");
-    assert!(!can_execute_job2, "Job 2 should not be executable (depends on job 1)");
-    assert!(!can_execute_job3, "Job 3 should not be executable (depends on job 1 and 2)");
+    assert!(
+        can_execute_job1,
+        "Job 1 should be executable (no dependencies)"
+    );
+    assert!(
+        !can_execute_job2,
+        "Job 2 should not be executable (depends on job 1)"
+    );
+    assert!(
+        !can_execute_job3,
+        "Job 3 should not be executable (depends on job 1 and 2)"
+    );
 
     // Simulate job 1 completion
-    queue_manager.mark_job_completed(queue_id, "dep-job-1", JobResult {
-        success: true,
-        outputs: vec![],
-        error_message: None,
-        execution_time_seconds: 5.0,
-        resources_used: ResourceRequirements::default(),
-        metrics: HashMap::new(),
-    }).await?;
+    queue_manager
+        .mark_job_completed(
+            queue_id,
+            "dep-job-1",
+            JobResult {
+                success: true,
+                outputs: vec![],
+                error_message: None,
+                execution_time_seconds: 5.0,
+                resources_used: ResourceRequirements::default(),
+                metrics: HashMap::new(),
+            },
+        )
+        .await?;
 
     // Now job 2 should be executable
     let can_execute_job2_after = queue_manager.can_execute_job(queue_id, "dep-job-2").await?;
-    assert!(can_execute_job2_after, "Job 2 should be executable after job 1 completes");
+    assert!(
+        can_execute_job2_after,
+        "Job 2 should be executable after job 1 completes"
+    );
 
     Ok(())
 }
@@ -815,11 +871,13 @@ async fn test_queue_persistence_recovery() -> Result<()> {
 
         // Create queue and jobs
         let queue_id = "persistent-queue";
-        queue_manager.create_queue(
-            queue_id.to_string(),
-            "Persistent Test Queue".to_string(),
-            "Queue for testing persistence".to_string(),
-        ).await?;
+        queue_manager
+            .create_queue(
+                queue_id.to_string(),
+                "Persistent Test Queue".to_string(),
+                "Queue for testing persistence".to_string(),
+            )
+            .await?;
 
         for i in 0..3 {
             let job = batch_test_utils::create_test_job(

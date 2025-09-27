@@ -997,16 +997,18 @@ impl FederatedNode {
         }));
 
         let coordinator = match config.coordinator.role {
-            NodeRole::Coordinator | NodeRole::Both => {
-                Some(Arc::new(FederatedCoordinator::new(&config, node_id.clone())?))
-            }
+            NodeRole::Coordinator | NodeRole::Both => Some(Arc::new(FederatedCoordinator::new(
+                &config,
+                node_id.clone(),
+            )?)),
             _ => None,
         };
 
         let participant = match config.coordinator.role {
-            NodeRole::Participant | NodeRole::Both => {
-                Some(Arc::new(FederatedParticipant::new(&config, node_id.clone())?))
-            }
+            NodeRole::Participant | NodeRole::Both => Some(Arc::new(FederatedParticipant::new(
+                &config,
+                node_id.clone(),
+            )?)),
             _ => None,
         };
 
@@ -1228,7 +1230,8 @@ impl FederatedCoordinator {
         info!("Starting federated round: {}", round_id);
 
         let participants = self.select_participants().await?;
-        let deadline = Utc::now() + chrono::Duration::seconds(self.config.coordinator.round_timeout_seconds as i64);
+        let deadline = Utc::now()
+            + chrono::Duration::seconds(self.config.coordinator.round_timeout_seconds as i64);
 
         let round = FederatedRound {
             round_id,
@@ -1246,7 +1249,8 @@ impl FederatedCoordinator {
         }
 
         // Notify participants to start training
-        self.notify_participants_start_training(round_id, &participants).await?;
+        self.notify_participants_start_training(round_id, &participants)
+            .await?;
 
         Ok(round_id)
     }
@@ -1269,9 +1273,17 @@ impl FederatedCoordinator {
         Ok(selected)
     }
 
-    async fn notify_participants_start_training(&self, round_id: u64, participants: &[String]) -> Result<()> {
+    async fn notify_participants_start_training(
+        &self,
+        round_id: u64,
+        participants: &[String],
+    ) -> Result<()> {
         // Implementation would send training start notifications
-        info!("Notifying {} participants to start training for round {}", participants.len(), round_id);
+        info!(
+            "Notifying {} participants to start training for round {}",
+            participants.len(),
+            round_id
+        );
         Ok(())
     }
 
@@ -1280,7 +1292,8 @@ impl FederatedCoordinator {
 
         let model_updates = {
             let rounds = self.rounds.read().await;
-            let round = rounds.get(&round_id)
+            let round = rounds
+                .get(&round_id)
                 .ok_or_else(|| anyhow::anyhow!("Round not found: {}", round_id))?;
             round.model_updates.clone()
         };
@@ -1307,7 +1320,11 @@ impl FederatedCoordinator {
         Ok(aggregated_model)
     }
 
-    async fn perform_aggregation(&self, round_id: u64, updates: HashMap<String, ModelUpdate>) -> Result<GlobalModel> {
+    async fn perform_aggregation(
+        &self,
+        round_id: u64,
+        updates: HashMap<String, ModelUpdate>,
+    ) -> Result<GlobalModel> {
         // Mock aggregation implementation
         let total_data_size: u64 = updates.values().map(|u| u.metadata.data_size).sum();
         let participants_count = updates.len() as u32;
@@ -1549,7 +1566,8 @@ impl FederatedModelManager {
         let models = self.models.read().await;
         let key = format!("{}:{}", id, version);
 
-        models.get(&key)
+        models
+            .get(&key)
             .cloned()
             .ok_or_else(|| anyhow::anyhow!("Model not found: {}", key))
     }

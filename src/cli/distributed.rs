@@ -1,9 +1,6 @@
 use crate::{
-    backends::InferenceParams,
-    config::Config,
-    distributed::DistributedInference,
-    metrics::MetricsCollector,
-    models::ModelManager,
+    backends::InferenceParams, config::Config, distributed::DistributedInference,
+    metrics::MetricsCollector, models::ModelManager,
 };
 use anyhow::Result;
 use clap::{Args, Subcommand};
@@ -30,7 +27,11 @@ pub enum DistributedCommand {
         #[arg(long, help = "Enable load balancing", default_value = "true")]
         load_balancing: bool,
 
-        #[arg(long, help = "Maximum concurrent requests per worker", default_value = "4")]
+        #[arg(
+            long,
+            help = "Maximum concurrent requests per worker",
+            default_value = "4"
+        )]
         max_concurrent: usize,
     },
 
@@ -39,10 +40,20 @@ pub enum DistributedCommand {
         #[arg(short, long, help = "Model name to benchmark")]
         model: String,
 
-        #[arg(short, long, help = "Number of concurrent requests", default_value = "10")]
+        #[arg(
+            short,
+            long,
+            help = "Number of concurrent requests",
+            default_value = "10"
+        )]
         concurrent: usize,
 
-        #[arg(short, long, help = "Number of requests per client", default_value = "5")]
+        #[arg(
+            short,
+            long,
+            help = "Number of requests per client",
+            default_value = "5"
+        )]
         requests: usize,
 
         #[arg(short, long, help = "Test prompt", default_value = "Hello, world!")]
@@ -85,28 +96,23 @@ pub async fn execute(args: DistributedArgs, config: &Config) -> Result<()> {
                 preload_model,
                 load_balancing,
                 max_concurrent,
-            ).await
+            )
+            .await
         }
         DistributedCommand::Benchmark {
             model,
             concurrent,
             requests,
             prompt,
-        } => {
-            benchmark_distributed_inference(config, &model, concurrent, requests, &prompt).await
-        }
-        DistributedCommand::Stats => {
-            show_worker_stats(config).await
-        }
+        } => benchmark_distributed_inference(config, &model, concurrent, requests, &prompt).await,
+        DistributedCommand::Stats => show_worker_stats(config).await,
         DistributedCommand::Test {
             model,
             input,
             stream,
             max_tokens,
             temperature,
-        } => {
-            test_inference(config, &model, &input, stream, max_tokens, temperature).await
-        }
+        } => test_inference(config, &model, &input, stream, max_tokens, temperature).await,
     }
 }
 
@@ -137,15 +143,18 @@ async fn start_distributed_server(
         distributed_config.preload_models = true;
     }
 
-    info!("Initializing {} workers with max {} concurrent requests each",
-          distributed_config.worker_count, distributed_config.max_concurrent_per_worker);
+    info!(
+        "Initializing {} workers with max {} concurrent requests each",
+        distributed_config.worker_count, distributed_config.max_concurrent_per_worker
+    );
 
     let mut distributed = DistributedInference::new(
         distributed_config,
         config.backend_config.clone(),
         model_manager,
         metrics,
-    ).await?;
+    )
+    .await?;
 
     info!("Distributed inference system started successfully");
 
@@ -185,12 +194,15 @@ async fn benchmark_distributed_inference(
         collector
     }));
 
-    let distributed = Arc::new(DistributedInference::new(
-        config.distributed.clone(),
-        config.backend_config.clone(),
-        model_manager,
-        metrics,
-    ).await?);
+    let distributed = Arc::new(
+        DistributedInference::new(
+            config.distributed.clone(),
+            config.backend_config.clone(),
+            model_manager,
+            metrics,
+        )
+        .await?,
+    );
 
     info!("Warming up workers...");
     tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
@@ -226,8 +238,13 @@ async fn benchmark_distributed_inference(
                         client_stats.record_success(duration, response.tokens_generated);
 
                         if request_id % 10 == 0 {
-                            println!("Client {}: Request {}/{} completed in {:?}",
-                                   client_id, request_id + 1, requests_per_client, duration);
+                            println!(
+                                "Client {}: Request {}/{} completed in {:?}",
+                                client_id,
+                                request_id + 1,
+                                requests_per_client,
+                                duration
+                            );
                         }
                     }
                     Err(e) => {
@@ -260,9 +277,11 @@ async fn benchmark_distributed_inference(
     let total_tokens = all_stats.iter().map(|s| s.total_tokens).sum::<u32>();
 
     let avg_response_time = if total_successful > 0 {
-        all_stats.iter()
+        all_stats
+            .iter()
             .map(|s| s.total_response_time.as_millis() as u64)
-            .sum::<u64>() / total_successful
+            .sum::<u64>()
+            / total_successful
     } else {
         0
     };
@@ -272,19 +291,33 @@ async fn benchmark_distributed_inference(
     println!("Total Requests: {}", total_requests);
     println!("Successful Requests: {}", total_successful);
     println!("Failed Requests: {}", total_failed);
-    println!("Success Rate: {:.2}%", (total_successful as f64 / total_requests as f64) * 100.0);
+    println!(
+        "Success Rate: {:.2}%",
+        (total_successful as f64 / total_requests as f64) * 100.0
+    );
     println!("Average Response Time: {}ms", avg_response_time);
-    println!("Requests per Second: {:.2}", total_successful as f64 / total_duration.as_secs_f64());
+    println!(
+        "Requests per Second: {:.2}",
+        total_successful as f64 / total_duration.as_secs_f64()
+    );
     println!("Total Tokens Generated: {}", total_tokens);
-    println!("Tokens per Second: {:.2}", total_tokens as f64 / total_duration.as_secs_f64());
+    println!(
+        "Tokens per Second: {:.2}",
+        total_tokens as f64 / total_duration.as_secs_f64()
+    );
 
     // Get worker statistics
     let worker_stats = distributed.get_detailed_stats().await?;
     println!("\n=== Worker Statistics ===");
     for (worker_id, stats) in worker_stats {
-        println!("Worker {}: {} requests, {} successful, {} failed, avg: {:?}",
-                 worker_id, stats.total_requests, stats.successful_requests,
-                 stats.failed_requests, stats.average_response_time);
+        println!(
+            "Worker {}: {} requests, {} successful, {} failed, avg: {:?}",
+            worker_id,
+            stats.total_requests,
+            stats.successful_requests,
+            stats.failed_requests,
+            stats.average_response_time
+        );
     }
 
     Ok(())
@@ -326,7 +359,8 @@ async fn test_inference(
         config.backend_config.clone(),
         model_manager,
         metrics,
-    ).await?;
+    )
+    .await?;
 
     let params = InferenceParams {
         max_tokens,

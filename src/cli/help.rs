@@ -280,18 +280,10 @@ impl HelpSystem {
     /// Check prerequisites for common commands
     pub fn check_prerequisites(command: &str) -> Option<String> {
         match command {
-            "install" | "package install" => {
-                Self::check_install_prerequisites()
-            }
-            "search" | "package search" => {
-                Self::check_search_prerequisites()
-            }
-            "serve" => {
-                Self::check_serve_prerequisites()
-            }
-            "run" => {
-                Self::check_run_prerequisites()
-            }
+            "install" | "package install" => Self::check_install_prerequisites(),
+            "search" | "package search" => Self::check_search_prerequisites(),
+            "serve" => Self::check_serve_prerequisites(),
+            "run" => Self::check_run_prerequisites(),
             _ => None,
         }
     }
@@ -311,7 +303,8 @@ impl HelpSystem {
                      export HTTP_PROXY=http://proxy.company.com:8080\n\n\
                 💡 Alternatively, install models manually:\n\
                    • Download models to your models directory\n\
-                   • Use: inferno models list\n".to_string()
+                   • Use: inferno models list\n"
+                    .to_string(),
             );
         }
 
@@ -329,7 +322,8 @@ impl HelpSystem {
                    2. Or update existing repositories:\n\
                       inferno repo update\n\n\
                    3. List available repositories:\n\
-                      inferno repo list\n".to_string()
+                      inferno repo list\n"
+                    .to_string(),
             );
         }
 
@@ -348,7 +342,8 @@ impl HelpSystem {
                       inferno models list\n\
                       inferno list\n\n\
                    3. Verify models directory:\n\
-                      inferno config get models_dir\n".to_string()
+                      inferno config get models_dir\n"
+                    .to_string(),
             );
         }
 
@@ -366,7 +361,8 @@ impl HelpSystem {
                    2. Or specify model path:\n\
                       inferno run --model /path/to/model.gguf --prompt \"Hello\"\n\n\
                    3. List available models:\n\
-                      inferno models list\n".to_string()
+                      inferno models list\n"
+                    .to_string(),
             );
         }
 
@@ -413,7 +409,8 @@ impl HelpSystem {
         inferno install bert-base --yes --no-deps\n\n\
         # Install from specific repository\n\
         inferno search llama --repo ollama\n\
-        inferno install ollama/llama2:7b\n".to_string()
+        inferno install ollama/llama2:7b\n"
+            .to_string()
     }
 
     fn search_examples() -> String {
@@ -426,7 +423,8 @@ impl HelpSystem {
         inferno search \"llama\" --repo huggingface\n\
         inferno search \"resnet\" --repo onnx-models\n\n\
         # Detailed search\n\
-        inferno search \"transformer\" --limit 10 --detailed\n".to_string()
+        inferno search \"transformer\" --limit 10 --detailed\n"
+            .to_string()
     }
 
     fn remove_examples() -> String {
@@ -438,7 +436,8 @@ impl HelpSystem {
         inferno remove old-model --yes\n\
         inferno package autoremove\n\n\
         # Clean up\n\
-        inferno package clean --all\n".to_string()
+        inferno package clean --all\n"
+            .to_string()
     }
 
     fn list_examples() -> String {
@@ -450,7 +449,8 @@ impl HelpSystem {
         # List all models (including unmanaged)\n\
         inferno models list\n\n\
         # Package-specific listing\n\
-        inferno package list --auto-only\n".to_string()
+        inferno package list --auto-only\n"
+            .to_string()
     }
 
     fn repo_examples() -> String {
@@ -464,7 +464,8 @@ impl HelpSystem {
         # Manage repositories\n\
         inferno repo update huggingface\n\
         inferno repo test ollama\n\
-        inferno repo priority huggingface 1\n".to_string()
+        inferno repo priority huggingface 1\n"
+            .to_string()
     }
 
     fn package_examples() -> String {
@@ -476,7 +477,8 @@ impl HelpSystem {
         # Maintenance\n\
         inferno package clean --all\n\
         inferno package check --deep\n\
-        inferno package depends gpt2 --tree\n".to_string()
+        inferno package depends gpt2 --tree\n"
+            .to_string()
     }
 
     fn general_examples() -> String {
@@ -493,6 +495,7 @@ impl HelpSystem {
         inferno repo list\n\n\
         # Help\n\
         inferno --help\n\
-        inferno [command] --help\n".to_string()
+        inferno [command] --help\n"
+            .to_string()
     }
 }

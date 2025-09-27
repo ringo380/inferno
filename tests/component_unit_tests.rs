@@ -6,8 +6,8 @@ use tokio::fs;
 #[tokio::test]
 async fn test_batch_queue_manager() {
     use inferno::batch::queue::{
-        JobQueueManager, JobQueueConfig, BatchJob, JobPriority,
-        JobSchedule, ResourceRequirements, RetryPolicy
+        BatchJob, JobPriority, JobQueueConfig, JobQueueManager, JobSchedule, ResourceRequirements,
+        RetryPolicy,
     };
 
     let config = JobQueueConfig {
@@ -31,7 +31,10 @@ async fn test_batch_queue_manager() {
     let manager = JobQueueManager::new(config).await.unwrap();
 
     // Test queue creation
-    manager.create_queue("test-queue".to_string()).await.unwrap();
+    manager
+        .create_queue("test-queue".to_string())
+        .await
+        .unwrap();
 
     // Test job submission
     let job = BatchJob {
@@ -63,8 +66,7 @@ async fn test_batch_queue_manager() {
 #[tokio::test]
 async fn test_model_versioning_system() {
     use inferno::versioning::{
-        ModelVersionManager, ModelVersion, SemanticVersion,
-        VersionStatus, DeploymentTarget
+        DeploymentTarget, ModelVersion, ModelVersionManager, SemanticVersion, VersionStatus,
     };
 
     let temp_dir = tempdir().unwrap();
@@ -75,14 +77,21 @@ async fn test_model_versioning_system() {
 
     // Create a test model file
     let model_path = temp_dir.path().join("test-model.gguf");
-    fs::write(&model_path, b"GGUF\x00\x00\x00\x01test model data").await.unwrap();
+    fs::write(&model_path, b"GGUF\x00\x00\x00\x01test model data")
+        .await
+        .unwrap();
 
     // Test version creation
     let version = ModelVersion {
         id: "test-model-v1".to_string(),
         model_name: "test-model".to_string(),
         version: "1.0.0".to_string(),
-        semantic_version: SemanticVersion { major: 1, minor: 0, patch: 0, pre_release: None },
+        semantic_version: SemanticVersion {
+            major: 1,
+            minor: 0,
+            patch: 0,
+            pre_release: None,
+        },
         file_path: model_path.clone(),
         checksum: "test-checksum".to_string(),
         size_bytes: 1024,
@@ -103,20 +112,33 @@ async fn test_model_versioning_system() {
     assert_eq!(versions[0].version, "1.0.0");
 
     // Test version promotion
-    manager.promote_version(&version.id, VersionStatus::Staging, "test-user".to_string()).await.unwrap();
+    manager
+        .promote_version(&version.id, VersionStatus::Staging, "test-user".to_string())
+        .await
+        .unwrap();
 
     // Test deployment
-    manager.deploy_version(&version.id, DeploymentTarget::Production, "test-user".to_string()).await.unwrap();
+    manager
+        .deploy_version(
+            &version.id,
+            DeploymentTarget::Production,
+            "test-user".to_string(),
+        )
+        .await
+        .unwrap();
 
     // Test version comparison
-    let comparison = manager.compare_versions(&version.id, &version.id).await.unwrap();
+    let comparison = manager
+        .compare_versions(&version.id, &version.id)
+        .await
+        .unwrap();
     assert_eq!(comparison.checksum_changed, false);
     assert_eq!(comparison.size_difference, 0);
 }
 
 #[tokio::test]
 async fn test_gpu_manager() {
-    use inferno::gpu::{GpuManager, GpuConfiguration, GpuVendor};
+    use inferno::gpu::{GpuConfiguration, GpuManager, GpuVendor};
 
     let config = GpuConfiguration {
         enabled: true,
@@ -148,8 +170,8 @@ async fn test_gpu_manager() {
 #[tokio::test]
 async fn test_audit_logger() {
     use inferno::audit::{
-        AuditLogger, AuditEvent, EventType, Severity, Actor, Resource,
-        AuditConfiguration, RetentionPolicy, CompressionSettings
+        Actor, AuditConfiguration, AuditEvent, AuditLogger, CompressionSettings, EventType,
+        Resource, RetentionPolicy, Severity,
     };
 
     let temp_dir = tempdir().unwrap();
@@ -210,14 +232,17 @@ async fn test_audit_logger() {
     tokio::time::sleep(Duration::from_millis(100)).await;
 
     // Test event querying
-    let events = logger.query_events(
-        Some(SystemTime::now() - Duration::from_secs(60)),
-        Some(SystemTime::now()),
-        None,
-        None,
-        None,
-        Some(10)
-    ).await.unwrap();
+    let events = logger
+        .query_events(
+            Some(SystemTime::now() - Duration::from_secs(60)),
+            Some(SystemTime::now()),
+            None,
+            None,
+            None,
+            Some(10),
+        )
+        .await
+        .unwrap();
 
     assert!(!events.is_empty());
     assert_eq!(events[0].id, "test-event-1");
@@ -226,8 +251,8 @@ async fn test_audit_logger() {
 #[tokio::test]
 async fn test_monitoring_system() {
     use inferno::monitoring::{
-        MonitoringSystem, AlertManager, MetricsThreshold, AlertRule,
-        NotificationChannel, AlertSeverity
+        AlertManager, AlertRule, AlertSeverity, MetricsThreshold, MonitoringSystem,
+        NotificationChannel,
     };
 
     let temp_dir = tempdir().unwrap();
@@ -246,13 +271,11 @@ async fn test_monitoring_system() {
         duration_seconds: 300,
         severity: AlertSeverity::Warning,
         enabled: true,
-        notification_channels: vec![
-            NotificationChannel {
-                id: "email-1".to_string(),
-                channel_type: "email".to_string(),
-                config: std::collections::HashMap::new(),
-            }
-        ],
+        notification_channels: vec![NotificationChannel {
+            id: "email-1".to_string(),
+            channel_type: "email".to_string(),
+            config: std::collections::HashMap::new(),
+        }],
         labels: std::collections::HashMap::new(),
         cooldown_seconds: 600,
         created_at: SystemTime::now(),
@@ -276,8 +299,8 @@ async fn test_monitoring_system() {
 #[tokio::test]
 async fn test_response_cache_system() {
     use inferno::response_cache::{
-        ResponseCache, CacheKey, ResponseMetadata, HashAlgorithm,
-        SmartCachingStrategy, CacheEvictionPolicy
+        CacheEvictionPolicy, CacheKey, HashAlgorithm, ResponseCache, ResponseMetadata,
+        SmartCachingStrategy,
     };
 
     let temp_dir = tempdir().unwrap();
@@ -291,7 +314,9 @@ async fn test_response_cache_system() {
         HashAlgorithm::Sha256,
         CacheEvictionPolicy::LeastRecentlyUsed,
         SmartCachingStrategy::new(),
-    ).await.unwrap();
+    )
+    .await
+    .unwrap();
 
     // Test cache operations
     let key = CacheKey {
@@ -313,7 +338,10 @@ async fn test_response_cache_system() {
     };
 
     // Test cache storage
-    cache.store(key.clone(), response.clone(), metadata.clone()).await.unwrap();
+    cache
+        .store(key.clone(), response.clone(), metadata.clone())
+        .await
+        .unwrap();
 
     // Test cache retrieval
     let cached_response = cache.get(&key).await.unwrap();
@@ -329,8 +357,7 @@ async fn test_response_cache_system() {
 #[tokio::test]
 async fn test_distributed_inference() {
     use inferno::distributed::{
-        DistributedInference, WorkerNode, WorkerPool, LoadBalancer,
-        DistributedConfig, NodeStatus
+        DistributedConfig, DistributedInference, LoadBalancer, NodeStatus, WorkerNode, WorkerPool,
     };
 
     let config = DistributedConfig {
@@ -374,8 +401,7 @@ async fn test_distributed_inference() {
 #[tokio::test]
 async fn test_model_conversion_system() {
     use inferno::conversion::{
-        ModelConverter, ConversionConfig, ConversionOptions,
-        ConversionFormat, OptimizationLevel
+        ConversionConfig, ConversionFormat, ConversionOptions, ModelConverter, OptimizationLevel,
     };
 
     let temp_dir = tempdir().unwrap();
@@ -386,7 +412,9 @@ async fn test_model_conversion_system() {
 
     // Create mock input file
     let input_path = input_dir.join("test-model.gguf");
-    fs::write(&input_path, b"GGUF\x00\x00\x00\x01mock model data").await.unwrap();
+    fs::write(&input_path, b"GGUF\x00\x00\x00\x01mock model data")
+        .await
+        .unwrap();
 
     let config = ConversionConfig {
         temp_directory: temp_dir.path().join("temp"),

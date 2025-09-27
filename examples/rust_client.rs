@@ -10,18 +10,17 @@ tokio-tungstenite = "0.20"
 url = "2.3"
 */
 
+use futures::{SinkExt, StreamExt};
 /**
  * Inferno Rust Client Example
  *
  * This example demonstrates how to use the Inferno API with Rust.
  * Includes basic inference, streaming, WebSocket communication, and more.
  */
-
 use reqwest::{Client, Response};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
-use futures::{SinkExt, StreamExt};
 use url::Url;
 
 #[derive(Clone)]
@@ -463,9 +462,7 @@ impl InfernoWebSocketClient {
                 "type": "auth",
                 "token": api_key
             });
-            write
-                .send(Message::Text(auth_msg.to_string()))
-                .await?;
+            write.send(Message::Text(auth_msg.to_string())).await?;
         }
 
         // Send inference request
@@ -478,9 +475,7 @@ impl InfernoWebSocketClient {
             "stream": true
         });
 
-        write
-            .send(Message::Text(request.to_string()))
-            .await?;
+        write.send(Message::Text(request.to_string())).await?;
 
         // Handle incoming messages
         while let Some(message) = read.next().await {
@@ -528,7 +523,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("=== Inferno Rust Client Example ===\n");
 
     // Initialize client
-    let client = InfernoClient::new("http://localhost:8080", Some("your_api_key_here".to_string()));
+    let client = InfernoClient::new(
+        "http://localhost:8080",
+        Some("your_api_key_here".to_string()),
+    );
 
     // 1. Health check
     println!("1. Health Check");

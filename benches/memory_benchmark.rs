@@ -1,15 +1,15 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId};
+use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 use inferno::{
-    backends::{Backend, BackendConfig, BackendType, InferenceParams},
-    models::{ModelInfo, ModelManager},
-    config::Config,
     advanced_cache::{AdvancedCache, CacheConfig, CompressionType},
+    backends::{Backend, BackendConfig, BackendType, InferenceParams},
+    config::Config,
+    models::{ModelInfo, ModelManager},
 };
-use std::{path::PathBuf, time::Duration, sync::Arc};
+use std::process;
+use std::{path::PathBuf, sync::Arc, time::Duration};
+use sysinfo::{ProcessExt, System, SystemExt};
 use tempfile::tempdir;
 use tokio::{fs, runtime::Runtime};
-use sysinfo::{System, SystemExt, ProcessExt};
-use std::process;
 
 /// Memory usage tracker for benchmarks
 struct MemoryTracker {
@@ -37,7 +37,8 @@ impl MemoryTracker {
     }
 
     fn current_memory_usage(&mut self) -> u64 {
-        self.system.refresh_process(sysinfo::Pid::from(self.pid as usize));
+        self.system
+            .refresh_process(sysinfo::Pid::from(self.pid as usize));
         self.system
             .process(sysinfo::Pid::from(self.pid as usize))
             .map(|p| p.memory())
@@ -95,7 +96,8 @@ fn bench_memory_model_loading(c: &mut Criterion) {
                         let start = std::time::Instant::now();
 
                         rt.block_on(async {
-                            let mut backend = Backend::new(BackendType::Gguf, &backend_config).unwrap();
+                            let mut backend =
+                                Backend::new(BackendType::Gguf, &backend_config).unwrap();
                             let _ = backend.load_model(black_box(&model)).await;
                             let _ = backend.unload_model().await;
                         });
@@ -106,7 +108,11 @@ fn bench_memory_model_loading(c: &mut Criterion) {
                     let final_memory = tracker.current_memory_usage();
                     let memory_delta = final_memory as i64 - initial_memory as i64;
 
-                    eprintln!("Memory delta for {}MB model: {} KB", size, memory_delta / 1024);
+                    eprintln!(
+                        "Memory delta for {}MB model: {} KB",
+                        size,
+                        memory_delta / 1024
+                    );
                     total_time
                 })
             },
@@ -150,7 +156,8 @@ fn bench_memory_concurrent_models(c: &mut Criterion) {
                                     let model = model.clone();
                                     let config = backend_config.clone();
                                     tokio::spawn(async move {
-                                        let mut backend = Backend::new(BackendType::Gguf, &config).unwrap();
+                                        let mut backend =
+                                            Backend::new(BackendType::Gguf, &config).unwrap();
                                         let _ = backend.load_model(&model).await;
                                         tokio::time::sleep(Duration::from_millis(100)).await;
                                         let _ = backend.unload_model().await;
@@ -167,7 +174,11 @@ fn bench_memory_concurrent_models(c: &mut Criterion) {
 
                         let final_memory = tracker.current_memory_usage();
                         let memory_delta = final_memory as i64 - initial_memory as i64;
-                        eprintln!("Memory delta for {} concurrent models: {} KB", count, memory_delta / 1024);
+                        eprintln!(
+                            "Memory delta for {} concurrent models: {} KB",
+                            count,
+                            memory_delta / 1024
+                        );
                     }
 
                     total_time
@@ -197,47 +208,47 @@ fn bench_memory_cache_operations(c: &mut Criterion) {
     group.sample_size(10);
 
     for size in cache_sizes {
-        group.bench_with_input(
-            BenchmarkId::new("cache_fill", size),
-            &size,
-            |b, &size| {
-                b.iter_custom(|iters| {
-                    let mut total_time = Duration::new(0, 0);
+        group.bench_with_input(BenchmarkId::new("cache_fill", size), &size, |b, &size| {
+            b.iter_custom(|iters| {
+                let mut total_time = Duration::new(0, 0);
 
-                    for _ in 0..iters {
-                        let mut tracker = MemoryTracker::new();
-                        let initial_memory = tracker.current_memory_usage();
+                for _ in 0..iters {
+                    let mut tracker = MemoryTracker::new();
+                    let initial_memory = tracker.current_memory_usage();
 
-                        let start = std::time::Instant::now();
+                    let start = std::time::Instant::now();
 
-                        rt.block_on(async {
-                            let cache = AdvancedCache::new(cache_config.clone()).await.unwrap();
+                    rt.block_on(async {
+                        let cache = AdvancedCache::new(cache_config.clone()).await.unwrap();
 
-                            // Fill cache with data
-                            for i in 0..size {
-                                let key = format!("key_{}", i);
-                                let value = format!("value_{}", "x".repeat(1024)); // 1KB per entry
-                                cache.set(key, value).await.unwrap();
-                            }
+                        // Fill cache with data
+                        for i in 0..size {
+                            let key = format!("key_{}", i);
+                            let value = format!("value_{}", "x".repeat(1024)); // 1KB per entry
+                            cache.set(key, value).await.unwrap();
+                        }
 
-                            // Read all entries
-                            for i in 0..size {
-                                let key = format!("key_{}", i);
-                                let _ = cache.get(&key).await;
-                            }
-                        });
+                        // Read all entries
+                        for i in 0..size {
+                            let key = format!("key_{}", i);
+                            let _ = cache.get(&key).await;
+                        }
+                    });
 
-                        total_time += start.elapsed();
+                    total_time += start.elapsed();
 
-                        let final_memory = tracker.current_memory_usage();
-                        let memory_delta = final_memory as i64 - initial_memory as i64;
-                        eprintln!("Memory delta for {} cache entries: {} KB", size, memory_delta / 1024);
-                    }
+                    let final_memory = tracker.current_memory_usage();
+                    let memory_delta = final_memory as i64 - initial_memory as i64;
+                    eprintln!(
+                        "Memory delta for {} cache entries: {} KB",
+                        size,
+                        memory_delta / 1024
+                    );
+                }
 
-                    total_time
-                })
-            },
-        );
+                total_time
+            })
+        });
     }
 
     group.finish();
@@ -272,7 +283,8 @@ fn bench_memory_inference_batches(c: &mut Criterion) {
                         let start = std::time::Instant::now();
 
                         rt.block_on(async {
-                            let mut backend = Backend::new(BackendType::Gguf, &backend_config).unwrap();
+                            let mut backend =
+                                Backend::new(BackendType::Gguf, &backend_config).unwrap();
                             backend.load_model(&model).await.unwrap();
 
                             let inference_params = InferenceParams {
@@ -285,10 +297,9 @@ fn bench_memory_inference_batches(c: &mut Criterion) {
                             // Run batch of inferences
                             let handles: Vec<_> = (0..batch_size)
                                 .map(|i| {
-                                    let prompt = format!("Test prompt number {} with some content", i);
-                                    async move {
-                                        backend.infer(&prompt, &inference_params).await
-                                    }
+                                    let prompt =
+                                        format!("Test prompt number {} with some content", i);
+                                    async move { backend.infer(&prompt, &inference_params).await }
                                 })
                                 .collect();
 
@@ -303,7 +314,11 @@ fn bench_memory_inference_batches(c: &mut Criterion) {
 
                         let final_memory = tracker.current_memory_usage();
                         let memory_delta = final_memory as i64 - initial_memory as i64;
-                        eprintln!("Memory delta for batch size {}: {} KB", batch_size, memory_delta / 1024);
+                        eprintln!(
+                            "Memory delta for batch size {}: {} KB",
+                            batch_size,
+                            memory_delta / 1024
+                        );
                     }
 
                     total_time
@@ -338,7 +353,9 @@ fn bench_memory_stress_test(c: &mut Criterion) {
 
                     // Sustained load/unload cycles
                     for cycle in 0..20 {
-                        let model_path = temp_dir.path().join(format!("stress_model_{}.gguf", cycle % 5));
+                        let model_path = temp_dir
+                            .path()
+                            .join(format!("stress_model_{}.gguf", cycle % 5));
                         let model = create_large_mock_model(&model_path, 5); // 5MB models
 
                         let mut backend = Backend::new(BackendType::Gguf, &backend_config).unwrap();

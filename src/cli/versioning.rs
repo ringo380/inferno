@@ -1,18 +1,14 @@
 use crate::{
-    versioning::{
-        ModelVersionManager, VersioningConfig, SemanticVersion, ModelMetadata,
-        VersionStatus, RollbackReason, TriggerType, ModelVersion, RollbackRecord,
-        ActiveDeployment
-    },
     config::Config,
+    versioning::{
+        ActiveDeployment, ModelMetadata, ModelVersion, ModelVersionManager, RollbackReason,
+        RollbackRecord, SemanticVersion, TriggerType, VersionStatus, VersioningConfig,
+    },
 };
 use anyhow::{anyhow, Result};
 use clap::{Args, Subcommand, ValueEnum};
 use serde_json;
-use std::{
-    collections::HashMap,
-    path::PathBuf,
-};
+use std::{collections::HashMap, path::PathBuf};
 
 #[derive(Args)]
 pub struct VersioningArgs {
@@ -284,7 +280,9 @@ impl From<RollbackReasonArg> for RollbackReason {
         match arg {
             RollbackReasonArg::Manual => RollbackReason::Manual,
             RollbackReasonArg::ErrorRate => RollbackReason::AutoTriggered(TriggerType::ErrorRate),
-            RollbackReasonArg::ResponseTime => RollbackReason::AutoTriggered(TriggerType::ResponseTime),
+            RollbackReasonArg::ResponseTime => {
+                RollbackReason::AutoTriggered(TriggerType::ResponseTime)
+            }
             RollbackReasonArg::Throughput => RollbackReason::AutoTriggered(TriggerType::Throughput),
             RollbackReasonArg::Accuracy => RollbackReason::AutoTriggered(TriggerType::Accuracy),
             RollbackReasonArg::HealthCheck => RollbackReason::HealthCheck,
@@ -349,19 +347,22 @@ pub async fn execute(args: VersioningArgs, _config: &Config) -> Result<()> {
                 custom_metadata: HashMap::new(),
             };
 
-            let tag_list = tags.map(|t| t.split(',').map(|s| s.trim().to_string()).collect())
+            let tag_list = tags
+                .map(|t| t.split(',').map(|s| s.trim().to_string()).collect())
                 .unwrap_or_default();
 
             println!("Creating new version for model '{}'...", model_name);
-            let version_id = manager.create_version(
-                &model_name,
-                &model_file,
-                semantic_version,
-                metadata,
-                description,
-                tag_list,
-                created_by,
-            ).await?;
+            let version_id = manager
+                .create_version(
+                    &model_name,
+                    &model_file,
+                    semantic_version,
+                    metadata,
+                    description,
+                    tag_list,
+                    created_by,
+                )
+                .await?;
 
             println!("Model version created successfully!");
             println!("Version ID: {}", version_id);
@@ -378,8 +379,12 @@ pub async fn execute(args: VersioningArgs, _config: &Config) -> Result<()> {
 
                 let filtered_versions: Vec<_> = if let Some(status_filter) = status {
                     let target_status = VersionStatus::from(status_filter);
-                    versions.into_iter()
-                        .filter(|v| std::mem::discriminant(&v.status) == std::mem::discriminant(&target_status))
+                    versions
+                        .into_iter()
+                        .filter(|v| {
+                            std::mem::discriminant(&v.status)
+                                == std::mem::discriminant(&target_status)
+                        })
                         .collect()
                 } else {
                     versions
@@ -435,7 +440,10 @@ pub async fn execute(args: VersioningArgs, _config: &Config) -> Result<()> {
                 println!("\nMetadata:");
                 println!("  Type: {}", version.metadata.model_type);
                 println!("  Architecture: {}", version.metadata.architecture);
-                println!("  Framework: {} {}", version.metadata.framework, version.metadata.framework_version);
+                println!(
+                    "  Framework: {} {}",
+                    version.metadata.framework, version.metadata.framework_version
+                );
                 println!("  Format: {}", version.metadata.file_format);
 
                 if let Some(params) = version.metadata.parameters_count {
@@ -452,7 +460,8 @@ pub async fn execute(args: VersioningArgs, _config: &Config) -> Result<()> {
 
             if deployments {
                 let active_deployments = manager.get_active_deployments().await;
-                let version_deployments: Vec<_> = active_deployments.values()
+                let version_deployments: Vec<_> = active_deployments
+                    .values()
                     .filter(|d| d.model_name == model_name && d.version_id == version_id)
                     .collect();
 
@@ -475,8 +484,13 @@ pub async fn execute(args: VersioningArgs, _config: &Config) -> Result<()> {
         } => {
             let target_status = VersionStatus::from(status);
 
-            println!("Promoting version {} of {} to {:?}...", version_id, model_name, target_status);
-            manager.promote_version(&model_name, &version_id, target_status, promoted_by).await?;
+            println!(
+                "Promoting version {} of {} to {:?}...",
+                version_id, model_name, target_status
+            );
+            manager
+                .promote_version(&model_name, &version_id, target_status, promoted_by)
+                .await?;
             println!("Version promoted successfully!");
         }
 
@@ -492,8 +506,13 @@ pub async fn execute(args: VersioningArgs, _config: &Config) -> Result<()> {
                 HashMap::new()
             };
 
-            println!("Deploying version {} of {} to {}...", version_id, model_name, environment);
-            manager.deploy_version(&model_name, &version_id, &environment, deployment_config).await?;
+            println!(
+                "Deploying version {} of {} to {}...",
+                version_id, model_name, environment
+            );
+            manager
+                .deploy_version(&model_name, &version_id, &environment, deployment_config)
+                .await?;
             println!("Version deployed successfully!");
         }
 
@@ -506,8 +525,10 @@ pub async fn execute(args: VersioningArgs, _config: &Config) -> Result<()> {
             force,
         } => {
             if !force {
-                print!("Are you sure you want to rollback {} in {} to version {}? [y/N]: ",
-                        model_name, environment, version_id);
+                print!(
+                    "Are you sure you want to rollback {} in {} to version {}? [y/N]: ",
+                    model_name, environment, version_id
+                );
                 let mut input = String::new();
                 std::io::stdin().read_line(&mut input)?;
                 if !input.trim().to_lowercase().starts_with('y') {
@@ -518,14 +539,19 @@ pub async fn execute(args: VersioningArgs, _config: &Config) -> Result<()> {
 
             let rollback_reason = RollbackReason::from(reason);
 
-            println!("Rolling back {} in {} to version {}...", model_name, environment, version_id);
-            let rollback_id = manager.rollback_model(
-                &model_name,
-                &version_id,
-                &environment,
-                rollback_reason,
-                triggered_by,
-            ).await?;
+            println!(
+                "Rolling back {} in {} to version {}...",
+                model_name, environment, version_id
+            );
+            let rollback_id = manager
+                .rollback_model(
+                    &model_name,
+                    &version_id,
+                    &environment,
+                    rollback_reason,
+                    triggered_by,
+                )
+                .await?;
 
             println!("Rollback completed successfully!");
             println!("Rollback ID: {}", rollback_id);
@@ -562,7 +588,10 @@ pub async fn execute(args: VersioningArgs, _config: &Config) -> Result<()> {
             let v1 = manager.get_version(&model_name, &version1).await?;
             let v2 = manager.get_version(&model_name, &version2).await?;
 
-            println!("Comparing versions {} and {} of {}:", version1, version2, model_name);
+            println!(
+                "Comparing versions {} and {} of {}:",
+                version1, version2, model_name
+            );
             println!("{:-<60}", "");
 
             println!("Version 1: {} | Version 2: {}", v1.version, v2.version);
@@ -572,20 +601,35 @@ pub async fn execute(args: VersioningArgs, _config: &Config) -> Result<()> {
 
             if metadata {
                 println!("\nMetadata Comparison:");
-                println!("Framework: {} {} | {} {}",
-                         v1.metadata.framework, v1.metadata.framework_version,
-                         v2.metadata.framework, v2.metadata.framework_version);
-                println!("Architecture: {} | {}", v1.metadata.architecture, v2.metadata.architecture);
-                println!("Format: {} | {}", v1.metadata.file_format, v2.metadata.file_format);
+                println!(
+                    "Framework: {} {} | {} {}",
+                    v1.metadata.framework,
+                    v1.metadata.framework_version,
+                    v2.metadata.framework,
+                    v2.metadata.framework_version
+                );
+                println!(
+                    "Architecture: {} | {}",
+                    v1.metadata.architecture, v2.metadata.architecture
+                );
+                println!(
+                    "Format: {} | {}",
+                    v1.metadata.file_format, v2.metadata.file_format
+                );
 
-                if let (Some(p1), Some(p2)) = (v1.metadata.parameters_count, v2.metadata.parameters_count) {
+                if let (Some(p1), Some(p2)) =
+                    (v1.metadata.parameters_count, v2.metadata.parameters_count)
+                {
                     println!("Parameters: {} | {}", p1, p2);
                 }
             }
 
             if performance {
                 println!("\nPerformance Metrics:");
-                let all_metrics: std::collections::HashSet<_> = v1.metadata.performance_metrics.keys()
+                let all_metrics: std::collections::HashSet<_> = v1
+                    .metadata
+                    .performance_metrics
+                    .keys()
                     .chain(v2.metadata.performance_metrics.keys())
                     .collect();
 
@@ -619,12 +663,15 @@ pub async fn execute(args: VersioningArgs, _config: &Config) -> Result<()> {
         } => {
             let deployments = manager.get_active_deployments().await;
 
-            let filtered_deployments: Vec<_> = deployments.values()
+            let filtered_deployments: Vec<_> = deployments
+                .values()
                 .filter(|d| {
-                    let model_match = model_name.as_ref()
+                    let model_match = model_name
+                        .as_ref()
                         .map(|m| &d.model_name == m)
                         .unwrap_or(true);
-                    let env_match = environment.as_ref()
+                    let env_match = environment
+                        .as_ref()
                         .map(|e| &d.environment == e)
                         .unwrap_or(true);
                     model_match && env_match
@@ -684,26 +731,39 @@ fn display_versions(versions: &[ModelVersion], detailed: bool, format: OutputFor
         OutputFormat::Table => {
             if detailed {
                 for version in versions {
-                    println!("ID: {} | Version: {} | Status: {:?} | Created: {:?}",
-                             version.id, version.version, version.status, version.created_at);
-                    println!("  File: {:?} | Size: {} bytes", version.file_path, version.size_bytes);
-                    println!("  Framework: {} {} | Format: {}",
-                             version.metadata.framework, version.metadata.framework_version,
-                             version.metadata.file_format);
+                    println!(
+                        "ID: {} | Version: {} | Status: {:?} | Created: {:?}",
+                        version.id, version.version, version.status, version.created_at
+                    );
+                    println!(
+                        "  File: {:?} | Size: {} bytes",
+                        version.file_path, version.size_bytes
+                    );
+                    println!(
+                        "  Framework: {} {} | Format: {}",
+                        version.metadata.framework,
+                        version.metadata.framework_version,
+                        version.metadata.file_format
+                    );
                     if !version.tags.is_empty() {
                         println!("  Tags: {}", version.tags.join(", "));
                     }
                     println!();
                 }
             } else {
-                println!("{:<8} {:<12} {:<12} {:<20}", "Version", "Status", "Size", "Created");
+                println!(
+                    "{:<8} {:<12} {:<12} {:<20}",
+                    "Version", "Status", "Size", "Created"
+                );
                 println!("{:-<60}", "");
                 for version in versions {
-                    println!("{:<8} {:<12} {:<12} {:<20}",
-                             version.version,
-                             format!("{:?}", version.status),
-                             format!("{}MB", version.size_bytes / 1024 / 1024),
-                             format!("{:?}", version.created_at));
+                    println!(
+                        "{:<8} {:<12} {:<12} {:<20}",
+                        version.version,
+                        format!("{:?}", version.status),
+                        format!("{}MB", version.size_bytes / 1024 / 1024),
+                        format!("{:?}", version.created_at)
+                    );
                 }
             }
         }
@@ -719,15 +779,20 @@ fn display_versions(versions: &[ModelVersion], detailed: bool, format: OutputFor
 fn display_rollback_history(history: &[RollbackRecord], format: OutputFormat) {
     match format {
         OutputFormat::Table => {
-            println!("{:<20} {:<12} {:<12} {:<12} {:<20}", "Model", "From", "To", "Status", "Triggered");
+            println!(
+                "{:<20} {:<12} {:<12} {:<12} {:<20}",
+                "Model", "From", "To", "Status", "Triggered"
+            );
             println!("{:-<80}", "");
             for record in history {
-                println!("{:<20} {:<12} {:<12} {:<12} {:<20}",
-                         record.model_name,
-                         &record.from_version[..8],
-                         &record.to_version[..8],
-                         format!("{:?}", record.status),
-                         format!("{:?}", record.triggered_at));
+                println!(
+                    "{:<20} {:<12} {:<12} {:<12} {:<20}",
+                    record.model_name,
+                    &record.from_version[..8],
+                    &record.to_version[..8],
+                    format!("{:?}", record.status),
+                    format!("{:?}", record.triggered_at)
+                );
             }
         }
         OutputFormat::Json => {
@@ -742,15 +807,20 @@ fn display_rollback_history(history: &[RollbackRecord], format: OutputFormat) {
 fn display_deployments(deployments: &[&ActiveDeployment], format: OutputFormat) {
     match format {
         OutputFormat::Table => {
-            println!("{:<20} {:<12} {:<12} {:<12} {:<20}", "Model", "Version", "Environment", "Health", "Deployed");
+            println!(
+                "{:<20} {:<12} {:<12} {:<12} {:<20}",
+                "Model", "Version", "Environment", "Health", "Deployed"
+            );
             println!("{:-<80}", "");
             for deployment in deployments {
-                println!("{:<20} {:<12} {:<12} {:<12} {:<20}",
-                         deployment.model_name,
-                         &deployment.version_id[..8],
-                         deployment.environment,
-                         format!("{:?}", deployment.health_status),
-                         format!("{:?}", deployment.deployed_at));
+                println!(
+                    "{:<20} {:<12} {:<12} {:<12} {:<20}",
+                    deployment.model_name,
+                    &deployment.version_id[..8],
+                    deployment.environment,
+                    format!("{:?}", deployment.health_status),
+                    format!("{:?}", deployment.deployed_at)
+                );
             }
         }
         OutputFormat::Json => {

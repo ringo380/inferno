@@ -1,13 +1,13 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId};
+use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
+use futures::future::join_all;
 use inferno::{
-    backends::{Backend, BackendConfig, BackendType, InferenceParams, BackendHandle},
-    models::{ModelInfo, ModelManager},
+    backends::{Backend, BackendConfig, BackendHandle, BackendType, InferenceParams},
     metrics::MetricsCollector,
+    models::{ModelInfo, ModelManager},
 };
-use std::{path::PathBuf, time::Duration, sync::Arc};
+use std::{path::PathBuf, sync::Arc, time::Duration};
 use tempfile::tempdir;
 use tokio::{fs, runtime::Runtime, sync::Semaphore, time::Instant};
-use futures::future::join_all;
 
 fn create_mock_model(path: &PathBuf, backend_type: &str) -> ModelInfo {
     let content = match backend_type {
@@ -51,7 +51,8 @@ fn bench_concurrent_model_loading(c: &mut Criterion) {
                                 let model = create_mock_model(&model_path, "gguf");
                                 let backend_config = BackendConfig::default();
 
-                                let mut backend = Backend::new(BackendType::Gguf, &backend_config).unwrap();
+                                let mut backend =
+                                    Backend::new(BackendType::Gguf, &backend_config).unwrap();
                                 let start = Instant::now();
                                 let result = backend.load_model(black_box(&model)).await;
                                 let duration = start.elapsed();
@@ -61,10 +62,7 @@ fn bench_concurrent_model_loading(c: &mut Criterion) {
                         .collect();
 
                     let results = join_all(handles).await;
-                    let total_time: Duration = results
-                        .into_iter()
-                        .map(|r| r.unwrap().1)
-                        .sum();
+                    let total_time: Duration = results.into_iter().map(|r| r.unwrap().1).sum();
 
                     black_box(total_time)
                 })
@@ -84,7 +82,8 @@ fn bench_concurrent_model_loading(c: &mut Criterion) {
                                 let model = create_mock_model(&model_path, "onnx");
                                 let backend_config = BackendConfig::default();
 
-                                let mut backend = Backend::new(BackendType::Onnx, &backend_config).unwrap();
+                                let mut backend =
+                                    Backend::new(BackendType::Onnx, &backend_config).unwrap();
                                 let start = Instant::now();
                                 let result = backend.load_model(black_box(&model)).await;
                                 let duration = start.elapsed();
@@ -94,10 +93,7 @@ fn bench_concurrent_model_loading(c: &mut Criterion) {
                         .collect();
 
                     let results = join_all(handles).await;
-                    let total_time: Duration = results
-                        .into_iter()
-                        .map(|r| r.unwrap().1)
-                        .sum();
+                    let total_time: Duration = results.into_iter().map(|r| r.unwrap().1).sum();
 
                     black_box(total_time)
                 })
@@ -128,7 +124,10 @@ fn bench_concurrent_inference(c: &mut Criterion) {
         gguf_backend.load_model(&gguf_model).await.unwrap();
         onnx_backend.load_model(&onnx_model).await.unwrap();
 
-        (Arc::new(BackendHandle::new(gguf_backend)), Arc::new(BackendHandle::new(onnx_backend)))
+        (
+            Arc::new(BackendHandle::new(gguf_backend)),
+            Arc::new(BackendHandle::new(onnx_backend)),
+        )
     });
 
     let concurrency_levels = vec![1, 5, 10, 25, 50, 100];
@@ -168,7 +167,8 @@ fn bench_concurrent_inference(c: &mut Criterion) {
                             tokio::spawn(async move {
                                 let _permit = semaphore.acquire().await.unwrap();
                                 let start = Instant::now();
-                                let result = backend.infer(black_box(prompt), black_box(&params)).await;
+                                let result =
+                                    backend.infer(black_box(prompt), black_box(&params)).await;
                                 let duration = start.elapsed();
                                 (result, duration)
                             })
@@ -211,7 +211,8 @@ fn bench_concurrent_inference(c: &mut Criterion) {
                             tokio::spawn(async move {
                                 let _permit = semaphore.acquire().await.unwrap();
                                 let start = Instant::now();
-                                let result = backend.infer(black_box(prompt), black_box(&params)).await;
+                                let result =
+                                    backend.infer(black_box(prompt), black_box(&params)).await;
                                 let duration = start.elapsed();
                                 (result, duration)
                             })
@@ -293,11 +294,7 @@ fn bench_concurrent_http_requests(_c: &mut Criterion) {
                                 });
 
                                 let start = Instant::now();
-                                let response = client
-                                    .post(&url)
-                                    .json(&request_body)
-                                    .send()
-                                    .await;
+                                let response = client.post(&url).json(&request_body).send().await;
                                 let duration = start.elapsed();
 
                                 match response {
@@ -378,13 +375,21 @@ fn bench_throughput_sustained_load(c: &mut Criterion) {
                                 .collect();
 
                             let results = join_all(handles).await;
-                            request_count += results.into_iter().filter_map(|r| r.ok()).filter(|r| r.is_ok()).count() as u64;
+                            request_count += results
+                                .into_iter()
+                                .filter_map(|r| r.ok())
+                                .filter(|r| r.is_ok())
+                                .count() as u64;
                         }
 
                         let actual_duration = start.elapsed();
-                        let requests_per_second = request_count as f64 / actual_duration.as_secs_f64();
+                        let requests_per_second =
+                            request_count as f64 / actual_duration.as_secs_f64();
 
-                        eprintln!("Sustained load for {:?}: {} requests/sec", test_duration, requests_per_second);
+                        eprintln!(
+                            "Sustained load for {:?}: {} requests/sec",
+                            test_duration, requests_per_second
+                        );
                         actual_duration
                     })
                 })

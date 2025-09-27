@@ -65,7 +65,12 @@ pub enum CacheCommand {
 
     #[command(about = "Benchmark cache performance")]
     Benchmark {
-        #[arg(short, long, help = "Number of test requests per model", default_value = "10")]
+        #[arg(
+            short,
+            long,
+            help = "Number of test requests per model",
+            default_value = "10"
+        )]
         requests: usize,
 
         #[arg(short, long, help = "Test models (space-separated)")]
@@ -147,15 +152,20 @@ pub async fn execute(args: CacheArgs, config: &Config) -> Result<()> {
                 warmup,
                 strategy,
                 always_warm,
-            ).await
+            )
+            .await
         }
         CacheCommand::Benchmark {
             requests,
             models,
             concurrent,
         } => benchmark_cache(config, requests, models, concurrent).await,
-        CacheCommand::Monitor { interval, detailed } => monitor_cache(config, interval, detailed).await,
-        CacheCommand::Export { output, format } => export_cache_config(config, output, format).await,
+        CacheCommand::Monitor { interval, detailed } => {
+            monitor_cache(config, interval, detailed).await
+        }
+        CacheCommand::Export { output, format } => {
+            export_cache_config(config, output, format).await
+        }
     }
 }
 
@@ -174,7 +184,8 @@ async fn show_cache_stats(config: &Config) -> Result<()> {
         config.backend_config.clone(),
         model_manager,
         metrics,
-    ).await?;
+    )
+    .await?;
 
     let stats = cache.get_stats().await;
 
@@ -198,9 +209,18 @@ async fn show_cache_stats(config: &Config) -> Result<()> {
         for (name, model_stats) in &stats.model_stats {
             println!("Model: {}", name);
             println!("  Requests: {}", model_stats.request_count);
-            println!("  Avg Response Time: {:?}", model_stats.average_response_time);
-            println!("  Memory Usage: {:.2} MB", model_stats.memory_usage as f64 / (1024.0 * 1024.0));
-            println!("  Usage Frequency: {:.2} req/hour", model_stats.usage_frequency);
+            println!(
+                "  Avg Response Time: {:?}",
+                model_stats.average_response_time
+            );
+            println!(
+                "  Memory Usage: {:.2} MB",
+                model_stats.memory_usage as f64 / (1024.0 * 1024.0)
+            );
+            println!(
+                "  Usage Frequency: {:.2} req/hour",
+                model_stats.usage_frequency
+            );
             println!("  Usage Trend: {:.2}", model_stats.usage_trend);
             println!();
         }
@@ -242,11 +262,15 @@ async fn warmup_models(
         config.backend_config.clone(),
         model_manager,
         metrics,
-    ).await?;
+    )
+    .await?;
 
     if models.is_empty() {
         // Use configured warmup strategy
-        info!("Running automatic warmup based on strategy: {:?}", cache.config.warmup_strategy);
+        info!(
+            "Running automatic warmup based on strategy: {:?}",
+            cache.config.warmup_strategy
+        );
         let start_time = Instant::now();
         cache.warmup_models().await?;
         let duration = start_time.elapsed();
@@ -298,12 +322,16 @@ async fn clear_cache(config: &Config, model: Option<String>, force: bool) -> Res
         config.backend_config.clone(),
         model_manager,
         metrics,
-    ).await?;
+    )
+    .await?;
 
     if let Some(model_name) = model {
         // Clear specific model
         if config.cache.always_warm.contains(&model_name) && !force {
-            warn!("Model {} is configured as always-warm. Use --force to clear.", model_name);
+            warn!(
+                "Model {} is configured as always-warm. Use --force to clear.",
+                model_name
+            );
             return Ok(());
         }
 
@@ -393,7 +421,8 @@ async fn benchmark_cache(
         config.backend_config.clone(),
         model_manager,
         metrics,
-    ).await?;
+    )
+    .await?;
 
     println!("\n=== Benchmark Results ===");
 
@@ -426,8 +455,14 @@ async fn benchmark_cache(
             println!("  Sequential results:");
             println!("    Successful requests: {}/{}", successful, requests);
             println!("    Total time: {:?}", total_duration);
-            println!("    Average per request: {:?}", total_duration / requests as u32);
-            println!("    Requests per second: {:.2}", requests as f64 / total_duration.as_secs_f64());
+            println!(
+                "    Average per request: {:?}",
+                total_duration / requests as u32
+            );
+            println!(
+                "    Requests per second: {:.2}",
+                requests as f64 / total_duration.as_secs_f64()
+            );
         }
     }
 
@@ -456,7 +491,8 @@ async fn monitor_cache(config: &Config, interval: u64, detailed: bool) -> Result
         config.backend_config.clone(),
         model_manager,
         metrics,
-    ).await?;
+    )
+    .await?;
 
     println!("Press Ctrl+C to stop monitoring");
     println!("Update interval: {} seconds", interval);
@@ -466,9 +502,15 @@ async fn monitor_cache(config: &Config, interval: u64, detailed: bool) -> Result
         if counter % 20 == 0 {
             // Print header every 20 iterations
             if detailed {
-                println!("\n{:<8} {:<6} {:<10} {:<8} {:<6} {:<6}", "Time", "Models", "Memory(MB)", "Hit%", "Evict", "Warmup");
+                println!(
+                    "\n{:<8} {:<6} {:<10} {:<8} {:<6} {:<6}",
+                    "Time", "Models", "Memory(MB)", "Hit%", "Evict", "Warmup"
+                );
             } else {
-                println!("\n{:<8} {:<6} {:<10} {:<8}", "Time", "Models", "Memory(MB)", "Hit%");
+                println!(
+                    "\n{:<8} {:<6} {:<10} {:<8}",
+                    "Time", "Models", "Memory(MB)", "Hit%"
+                );
             }
         }
 
@@ -476,7 +518,8 @@ async fn monitor_cache(config: &Config, interval: u64, detailed: bool) -> Result
         let now = chrono::Utc::now().format("%H:%M:%S");
 
         if detailed {
-            println!("{:<8} {:<6} {:<10.2} {:<8.1} {:<6} {:<6}",
+            println!(
+                "{:<8} {:<6} {:<10.2} {:<8.1} {:<6} {:<6}",
                 now,
                 stats.total_models,
                 stats.memory_usage_mb,
@@ -485,7 +528,8 @@ async fn monitor_cache(config: &Config, interval: u64, detailed: bool) -> Result
                 stats.warmup_count
             );
         } else {
-            println!("{:<8} {:<6} {:<10.2} {:<8.1}",
+            println!(
+                "{:<8} {:<6} {:<10.2} {:<8.1}",
                 now,
                 stats.total_models,
                 stats.memory_usage_mb,

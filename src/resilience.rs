@@ -18,18 +18,18 @@ use tracing::{debug, error, info, warn};
 /// Circuit breaker states
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum CircuitState {
-    Closed,    // Normal operation
-    Open,      // Failing, rejecting requests
-    HalfOpen,  // Testing if service recovered
+    Closed,   // Normal operation
+    Open,     // Failing, rejecting requests
+    HalfOpen, // Testing if service recovered
 }
 
 /// Circuit breaker configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CircuitBreakerConfig {
-    pub failure_threshold: u32,      // Number of failures to trigger open state
-    pub recovery_timeout_ms: u64,    // Time to wait before trying half-open
-    pub success_threshold: u32,      // Successes needed in half-open to close
-    pub timeout_ms: u64,            // Request timeout
+    pub failure_threshold: u32,   // Number of failures to trigger open state
+    pub recovery_timeout_ms: u64, // Time to wait before trying half-open
+    pub success_threshold: u32,   // Successes needed in half-open to close
+    pub timeout_ms: u64,          // Request timeout
     pub max_concurrent_requests: usize, // Max concurrent requests
 }
 
@@ -99,25 +99,29 @@ impl CircuitBreaker {
 
         // Check if circuit is open
         if self.should_reject_request().await? {
-            self.metrics.rejected_requests.fetch_add(1, Ordering::Relaxed);
+            self.metrics
+                .rejected_requests
+                .fetch_add(1, Ordering::Relaxed);
             return Err(anyhow!("Circuit breaker {} is OPEN", self.name));
         }
 
         // Acquire semaphore permit
         let _permit = self.semaphore.acquire().await.map_err(|_| {
-            anyhow!("Failed to acquire semaphore permit for circuit breaker {}", self.name)
+            anyhow!(
+                "Failed to acquire semaphore permit for circuit breaker {}",
+                self.name
+            )
         })?;
 
         // Execute with timeout
-        let result = timeout(
-            Duration::from_millis(self.config.timeout_ms),
-            operation()
-        ).await;
+        let result = timeout(Duration::from_millis(self.config.timeout_ms), operation()).await;
 
         match result {
             Ok(Ok(value)) => {
                 self.on_success().await;
-                self.metrics.successful_requests.fetch_add(1, Ordering::Relaxed);
+                self.metrics
+                    .successful_requests
+                    .fetch_add(1, Ordering::Relaxed);
                 Ok(value)
             }
             Ok(Err(e)) => {
@@ -128,19 +132,31 @@ impl CircuitBreaker {
             Err(_) => {
                 self.on_failure().await;
                 self.metrics.failed_requests.fetch_add(1, Ordering::Relaxed);
-                Err(anyhow!("Operation timed out in circuit breaker {}", self.name))
+                Err(anyhow!(
+                    "Operation timed out in circuit breaker {}",
+                    self.name
+                ))
             }
         }
     }
 
     async fn should_reject_request(&self) -> Result<bool> {
-        let state = self.state.read().map_err(|_| anyhow!("Failed to read circuit state"))?;
+        let state = self
+            .state
+            .read()
+            .map_err(|_| anyhow!("Failed to read circuit state"))?;
 
         match *state {
             CircuitState::Open => {
                 // Check if we should transition to half-open
-                if let Some(last_failure) = *self.last_failure_time.read().map_err(|_| anyhow!("Failed to read last failure time"))? {
-                    if last_failure.elapsed() > Duration::from_millis(self.config.recovery_timeout_ms) {
+                if let Some(last_failure) = *self
+                    .last_failure_time
+                    .read()
+                    .map_err(|_| anyhow!("Failed to read last failure time"))?
+                {
+                    if last_failure.elapsed()
+                        > Duration::from_millis(self.config.recovery_timeout_ms)
+                    {
                         drop(state);
                         self.transition_to_half_open().await?;
                         return Ok(false);
@@ -206,7 +222,10 @@ impl CircuitBreaker {
     }
 
     async fn transition_to_open(&self) -> Result<()> {
-        let mut state = self.state.write().map_err(|_| anyhow!("Failed to write circuit state"))?;
+        let mut state = self
+            .state
+            .write()
+            .map_err(|_| anyhow!("Failed to write circuit state"))?;
         if *state != CircuitState::Open {
             *state = CircuitState::Open;
             self.metrics.state_changes.fetch_add(1, Ordering::Relaxed);
@@ -216,7 +235,10 @@ impl CircuitBreaker {
     }
 
     async fn transition_to_half_open(&self) -> Result<()> {
-        let mut state = self.state.write().map_err(|_| anyhow!("Failed to write circuit state"))?;
+        let mut state = self
+            .state
+            .write()
+            .map_err(|_| anyhow!("Failed to write circuit state"))?;
         if *state != CircuitState::HalfOpen {
             *state = CircuitState::HalfOpen;
             self.success_count.store(0, Ordering::Relaxed);
@@ -227,7 +249,10 @@ impl CircuitBreaker {
     }
 
     async fn transition_to_closed(&self) -> Result<()> {
-        let mut state = self.state.write().map_err(|_| anyhow!("Failed to write circuit state"))?;
+        let mut state = self
+            .state
+            .write()
+            .map_err(|_| anyhow!("Failed to write circuit state"))?;
         if *state != CircuitState::Closed {
             *state = CircuitState::Closed;
             self.failure_count.store(0, Ordering::Relaxed);
@@ -470,7 +495,8 @@ impl HealthMonitor {
         let last_check = self.last_check.clone();
 
         tokio::spawn(async move {
-            let mut interval = tokio::time::interval(Duration::from_millis(config.check_interval_ms));
+            let mut interval =
+                tokio::time::interval(Duration::from_millis(config.check_interval_ms));
 
             loop {
                 tokio::select! {
@@ -588,7 +614,10 @@ impl ResilienceManager {
     /// Register a circuit breaker
     pub fn add_circuit_breaker(&self, name: String, config: CircuitBreakerConfig) -> Result<()> {
         let circuit_breaker = Arc::new(CircuitBreaker::new(name.clone(), config));
-        let mut breakers = self.circuit_breakers.write().map_err(|_| anyhow!("Failed to acquire write lock"))?;
+        let mut breakers = self
+            .circuit_breakers
+            .write()
+            .map_err(|_| anyhow!("Failed to acquire write lock"))?;
         breakers.insert(name.clone(), circuit_breaker);
         info!("Registered circuit breaker: {}", name);
         Ok(())
@@ -597,16 +626,25 @@ impl ResilienceManager {
     /// Register a bulkhead
     pub fn add_bulkhead(&self, name: String, max_concurrent: usize) -> Result<()> {
         let bulkhead = Arc::new(Bulkhead::new(name.clone(), max_concurrent));
-        let mut bulkheads = self.bulkheads.write().map_err(|_| anyhow!("Failed to acquire write lock"))?;
+        let mut bulkheads = self
+            .bulkheads
+            .write()
+            .map_err(|_| anyhow!("Failed to acquire write lock"))?;
         bulkheads.insert(name.clone(), bulkhead);
-        info!("Registered bulkhead: {} with max concurrent: {}", name, max_concurrent);
+        info!(
+            "Registered bulkhead: {} with max concurrent: {}",
+            name, max_concurrent
+        );
         Ok(())
     }
 
     /// Register a retry policy
     pub fn add_retry_policy(&self, name: String, config: RetryConfig) -> Result<()> {
         let retry_policy = Arc::new(RetryPolicy::new(config));
-        let mut policies = self.retry_policies.write().map_err(|_| anyhow!("Failed to acquire write lock"))?;
+        let mut policies = self
+            .retry_policies
+            .write()
+            .map_err(|_| anyhow!("Failed to acquire write lock"))?;
         policies.insert(name.clone(), retry_policy);
         info!("Registered retry policy: {}", name);
         Ok(())
@@ -655,9 +693,11 @@ impl ResilienceManager {
                             let op = op.clone();
                             let bh = bh.clone();
                             async move { bh.execute(|| op()).await }
-                        }).await
+                        })
+                        .await
                     }
-                }).await
+                })
+                .await
             }
             (Some(cb), Some(bh), None) => {
                 // Circuit breaker + bulkhead
@@ -665,7 +705,8 @@ impl ResilienceManager {
                     let op = operation.clone();
                     let bh = bh.clone();
                     async move { bh.execute(|| op()).await }
-                }).await
+                })
+                .await
             }
             (Some(cb), None, Some(rp)) => {
                 // Retry + circuit breaker
@@ -673,7 +714,8 @@ impl ResilienceManager {
                     let op = operation.clone();
                     let cb = cb.clone();
                     async move { cb.call(|| op()).await }
-                }).await
+                })
+                .await
             }
             (None, Some(bh), Some(rp)) => {
                 // Retry + bulkhead
@@ -681,7 +723,8 @@ impl ResilienceManager {
                     let op = operation.clone();
                     let bh = bh.clone();
                     async move { bh.execute(|| op()).await }
-                }).await
+                })
+                .await
             }
             (Some(cb), None, None) => {
                 // Circuit breaker only

@@ -1,6 +1,6 @@
 use crate::{
-    gpu::{GpuManager, GpuConfiguration, GpuVendor, GpuStatus},
     config::Config,
+    gpu::{ComputeCapability, GpuConfiguration, GpuManager, GpuPowerState, GpuStatus, GpuVendor},
 };
 use anyhow::Result;
 use clap::{Args, Subcommand, ValueEnum};
@@ -274,11 +274,16 @@ pub async fn execute(args: GpuArgs, _config: &Config) -> Result<()> {
             let filtered_gpus: Vec<_> = available_gpus
                 .into_iter()
                 .filter(|gpu| {
-                    let vendor_match = vendor.as_ref()
-                        .map(|v| std::mem::discriminant(&gpu.vendor) == std::mem::discriminant(&GpuVendor::from(v.clone())))
+                    let vendor_match = vendor
+                        .as_ref()
+                        .map(|v| {
+                            std::mem::discriminant(&gpu.vendor)
+                                == std::mem::discriminant(&GpuVendor::from(v.clone()))
+                        })
                         .unwrap_or(true);
 
-                    let status_match = status.as_ref()
+                    let status_match = status
+                        .as_ref()
                         .map(|s| match s {
                             StatusArg::Available => matches!(gpu.status, GpuStatus::Available),
                             StatusArg::InUse => matches!(gpu.status, GpuStatus::InUse),
@@ -363,7 +368,10 @@ pub async fn execute(args: GpuArgs, _config: &Config) -> Result<()> {
             duration,
         } => {
             if let Some(id) = gpu_id {
-                println!("Testing GPU {} with {:?} test for {} seconds...", id, test_type, duration);
+                println!(
+                    "Testing GPU {} with {:?} test for {} seconds...",
+                    id, test_type, duration
+                );
                 run_gpu_test(id, test_type, duration).await?;
             } else {
                 let gpus = manager.get_available_gpus().await;
@@ -380,7 +388,10 @@ pub async fn execute(args: GpuArgs, _config: &Config) -> Result<()> {
             iterations,
             memory_size,
         } => {
-            println!("Benchmarking GPU {} with {:?} benchmark...", gpu_id, bench_type);
+            println!(
+                "Benchmarking GPU {} with {:?} benchmark...",
+                gpu_id, bench_type
+            );
             run_gpu_benchmark(gpu_id, bench_type, iterations, memory_size).await?;
         }
 
@@ -392,7 +403,8 @@ pub async fn execute(args: GpuArgs, _config: &Config) -> Result<()> {
             let allocations = manager.get_gpu_allocations().await;
 
             let filtered_allocations: HashMap<_, _> = if let Some(id) = gpu_id {
-                allocations.into_iter()
+                allocations
+                    .into_iter()
                     .filter(|(gpu_id, _)| *gpu_id == id)
                     .collect()
             } else {
@@ -416,12 +428,22 @@ pub async fn execute(args: GpuArgs, _config: &Config) -> Result<()> {
 
             if let Some(id) = gpu_id {
                 // Allocate specific GPU
-                println!("Allocating {}MB on GPU {} for model '{}'...", memory_mb, id, model_name);
-                // TODO: Direct allocation to specific GPU
+                println!(
+                    "Allocating {}MB on GPU {} for model '{}'...",
+                    memory_mb, id, model_name
+                );
+                if manager.allocate_specific_gpu(id, memory_mb, model_name).await? {
+                    println!("Successfully allocated GPU {}", id);
+                } else {
+                    println!("Failed to allocate GPU {} (insufficient memory or unavailable)", id);
+                }
             } else {
                 // Auto-select best GPU
                 println!("Allocating {}MB for model '{}'...", memory_mb, model_name);
-                if let Some(allocated_gpu) = manager.allocate_gpu(memory_mb, model_name, preferred_vendor).await? {
+                if let Some(allocated_gpu) = manager
+                    .allocate_gpu(memory_mb, model_name, preferred_vendor)
+                    .await?
+                {
                     println!("Allocated GPU {} successfully", allocated_gpu);
                 } else {
                     println!("No suitable GPU found for allocation");
@@ -429,10 +451,7 @@ pub async fn execute(args: GpuArgs, _config: &Config) -> Result<()> {
             }
         }
 
-        GpuCommand::Deallocate {
-            gpu_id,
-            model_name,
-        } => {
+        GpuCommand::Deallocate { gpu_id, model_name } => {
             println!("Deallocating GPU {} for model '{}'...", gpu_id, model_name);
             manager.deallocate_gpu(gpu_id, &model_name).await?;
             println!("GPU deallocated successfully");
@@ -446,7 +465,8 @@ pub async fn execute(args: GpuArgs, _config: &Config) -> Result<()> {
             let health_status = manager.check_gpu_health().await?;
 
             let filtered_status: HashMap<_, _> = if let Some(id) = gpu_id {
-                health_status.into_iter()
+                health_status
+                    .into_iter()
                     .filter(|(gpu_id, _)| *gpu_id == id)
                     .collect()
             } else {
@@ -473,7 +493,10 @@ pub async fn execute(args: GpuArgs, _config: &Config) -> Result<()> {
                 println!("Max Utilization: {}%", config.max_utilization_percent);
                 println!("Temperature Limit: {}°C", config.temperature_limit_celsius);
                 println!("CPU Fallback: {}", config.fallback_to_cpu);
-                println!("Monitoring Interval: {}s", config.monitoring_interval_seconds);
+                println!(
+                    "Monitoring Interval: {}s",
+                    config.monitoring_interval_seconds
+                );
             } else {
                 let mut new_config = manager.get_configuration().clone();
 
@@ -550,10 +573,19 @@ pub async fn execute(args: GpuArgs, _config: &Config) -> Result<()> {
                 }
                 ExportType::All => {
                     let mut data = serde_json::Map::new();
-                    data.insert("gpus".to_string(), serde_json::to_value(&manager.get_available_gpus().await)?);
-                    data.insert("allocations".to_string(), serde_json::to_value(&manager.get_gpu_allocations().await)?);
+                    data.insert(
+                        "gpus".to_string(),
+                        serde_json::to_value(&manager.get_available_gpus().await)?,
+                    );
+                    data.insert(
+                        "allocations".to_string(),
+                        serde_json::to_value(&manager.get_gpu_allocations().await)?,
+                    );
                     if include_metrics {
-                        data.insert("metrics".to_string(), serde_json::to_value(&manager.get_gpu_metrics(None).await)?);
+                        data.insert(
+                            "metrics".to_string(),
+                            serde_json::to_value(&manager.get_gpu_metrics(None).await)?,
+                        );
                     }
                     serde_json::Value::Object(data)
                 }
@@ -562,17 +594,32 @@ pub async fn execute(args: GpuArgs, _config: &Config) -> Result<()> {
             let content = match format {
                 OutputFormat::Json => serde_json::to_string_pretty(&export_data)?,
                 OutputFormat::Yaml => serde_yaml::to_string(&export_data)?,
-                _ => return Err(anyhow::anyhow!("Format {:?} not supported for export", format)),
+                _ => {
+                    return Err(anyhow::anyhow!(
+                        "Format {:?} not supported for export",
+                        format
+                    ))
+                }
             };
 
             tokio::fs::write(&output, content).await?;
             println!("Export completed successfully");
         }
 
-        GpuCommand::Power { gpu_id, state, limit: _ } => {
-            println!("Setting power management for GPU {} to {:?}...", gpu_id, state);
-            // TODO: Implement GPU power management
-            println!("Power management updated (feature not yet implemented)");
+        GpuCommand::Power {
+            gpu_id,
+            state,
+            limit: _,
+        } => {
+            println!(
+                "Setting power management for GPU {} to {:?}...",
+                gpu_id, state
+            );
+            if manager.set_gpu_power_state(gpu_id, state).await? {
+                println!("Successfully updated power state for GPU {}", gpu_id);
+            } else {
+                println!("Failed to update power state for GPU {} (not supported or unavailable)", gpu_id);
+            }
         }
 
         GpuCommand::Reset { gpu_id, force } => {
@@ -587,8 +634,11 @@ pub async fn execute(args: GpuArgs, _config: &Config) -> Result<()> {
             }
 
             println!("Resetting GPU {}...", gpu_id);
-            // TODO: Implement GPU reset
-            println!("GPU reset completed (feature not yet implemented)");
+            if manager.reset_gpu(gpu_id).await? {
+                println!("Successfully reset GPU {}", gpu_id);
+            } else {
+                println!("Failed to reset GPU {} (not supported or unavailable)", gpu_id);
+            }
         }
     }
 
@@ -603,7 +653,10 @@ fn display_gpu_list(gpus: &[crate::gpu::GpuInfo], detailed: bool, format: Output
                     println!("GPU {}: {}", gpu.id, gpu.name);
                     println!("  Vendor: {:?}", gpu.vendor);
                     println!("  Driver: {}", gpu.driver_version);
-                    println!("  Memory: {} MB total, {} MB free", gpu.memory_total_mb, gpu.memory_free_mb);
+                    println!(
+                        "  Memory: {} MB total, {} MB free",
+                        gpu.memory_total_mb, gpu.memory_free_mb
+                    );
                     println!("  Utilization: {:.1}%", gpu.utilization_percent);
                     if let Some(temp) = gpu.temperature_celsius {
                         println!("  Temperature: {:.1}°C", temp);
@@ -612,16 +665,21 @@ fn display_gpu_list(gpus: &[crate::gpu::GpuInfo], detailed: bool, format: Output
                     println!();
                 }
             } else {
-                println!("{:<4} {:<20} {:<12} {:<12} {:<10} {:<12}", "ID", "Name", "Vendor", "Memory", "Util%", "Status");
+                println!(
+                    "{:<4} {:<20} {:<12} {:<12} {:<10} {:<12}",
+                    "ID", "Name", "Vendor", "Memory", "Util%", "Status"
+                );
                 println!("{:-<80}", "");
                 for gpu in gpus {
-                    println!("{:<4} {:<20} {:<12} {:<12} {:<10} {:<12}",
-                             gpu.id,
-                             &gpu.name[..gpu.name.len().min(20)],
-                             format!("{:?}", gpu.vendor),
-                             format!("{}MB", gpu.memory_total_mb),
-                             format!("{:.1}%", gpu.utilization_percent),
-                             format!("{:?}", gpu.status));
+                    println!(
+                        "{:<4} {:<20} {:<12} {:<12} {:<10} {:<12}",
+                        gpu.id,
+                        &gpu.name[..gpu.name.len().min(20)],
+                        format!("{:?}", gpu.vendor),
+                        format!("{}MB", gpu.memory_total_mb),
+                        format!("{:.1}%", gpu.utilization_percent),
+                        format!("{:?}", gpu.status)
+                    );
                 }
             }
         }
@@ -646,8 +704,10 @@ fn display_gpu_info(gpu: &crate::gpu::GpuInfo, _metrics: bool, _capabilities: bo
         println!("CUDA Version: {}", cuda_version);
     }
 
-    println!("Memory: {} MB total, {} MB free, {} MB used",
-             gpu.memory_total_mb, gpu.memory_free_mb, gpu.memory_used_mb);
+    println!(
+        "Memory: {} MB total, {} MB free, {} MB used",
+        gpu.memory_total_mb, gpu.memory_free_mb, gpu.memory_used_mb
+    );
     println!("Utilization: {:.1}%", gpu.utilization_percent);
 
     if let Some(temp) = gpu.temperature_celsius {
@@ -668,30 +728,36 @@ fn display_gpu_info(gpu: &crate::gpu::GpuInfo, _metrics: bool, _capabilities: bo
 }
 
 fn display_gpu_status(gpu: &crate::gpu::GpuInfo) {
-    println!("GPU {}: {} | Util: {:.1}% | Mem: {}/{}MB | Temp: {}°C | Status: {:?}",
-             gpu.id,
-             gpu.name,
-             gpu.utilization_percent,
-             gpu.memory_used_mb,
-             gpu.memory_total_mb,
-             gpu.temperature_celsius.unwrap_or(0.0),
-             gpu.status);
+    println!(
+        "GPU {}: {} | Util: {:.1}% | Mem: {}/{}MB | Temp: {}°C | Status: {:?}",
+        gpu.id,
+        gpu.name,
+        gpu.utilization_percent,
+        gpu.memory_used_mb,
+        gpu.memory_total_mb,
+        gpu.temperature_celsius.unwrap_or(0.0),
+        gpu.status
+    );
 }
 
 fn display_metrics(metrics: &[crate::gpu::GpuMetrics], format: OutputFormat) {
     match format {
         OutputFormat::Table => {
-            println!("{:<4} {:<12} {:<8} {:<8} {:<8} {:<8}",
-                     "GPU", "Time", "GPU%", "Mem%", "Temp°C", "Power W");
+            println!(
+                "{:<4} {:<12} {:<8} {:<8} {:<8} {:<8}",
+                "GPU", "Time", "GPU%", "Mem%", "Temp°C", "Power W"
+            );
             println!("{:-<60}", "");
             for metric in metrics {
-                println!("{:<4} {:<12} {:<8} {:<8} {:<8} {:<8}",
-                         metric.gpu_id,
-                         format!("{:?}", metric.timestamp),
-                         format!("{:.1}", metric.gpu_utilization_percent),
-                         format!("{:.1}", metric.memory_utilization_percent),
-                         format!("{:.1}", metric.temperature_celsius),
-                         format!("{:.1}", metric.power_usage_watts));
+                println!(
+                    "{:<4} {:<12} {:<8} {:<8} {:<8} {:<8}",
+                    metric.gpu_id,
+                    format!("{:?}", metric.timestamp),
+                    format!("{:.1}", metric.gpu_utilization_percent),
+                    format!("{:.1}", metric.memory_utilization_percent),
+                    format!("{:.1}", metric.temperature_celsius),
+                    format!("{:.1}", metric.power_usage_watts)
+                );
             }
         }
         OutputFormat::Json => {
@@ -703,18 +769,26 @@ fn display_metrics(metrics: &[crate::gpu::GpuMetrics], format: OutputFormat) {
     }
 }
 
-fn display_allocations(allocations: &HashMap<u32, Vec<crate::gpu::GpuAllocation>>, format: OutputFormat) {
+fn display_allocations(
+    allocations: &HashMap<u32, Vec<crate::gpu::GpuAllocation>>,
+    format: OutputFormat,
+) {
     match format {
         OutputFormat::Table => {
-            println!("{:<4} {:<15} {:<10} {:<20}", "GPU", "Model", "Memory MB", "Allocated At");
+            println!(
+                "{:<4} {:<15} {:<10} {:<20}",
+                "GPU", "Model", "Memory MB", "Allocated At"
+            );
             println!("{:-<60}", "");
             for (gpu_id, allocs) in allocations {
                 for alloc in allocs {
-                    println!("{:<4} {:<15} {:<10} {:<20}",
-                             gpu_id,
-                             &alloc.model_name[..alloc.model_name.len().min(15)],
-                             alloc.allocated_memory_mb,
-                             format!("{:?}", alloc.allocated_at));
+                    println!(
+                        "{:<4} {:<15} {:<10} {:<20}",
+                        gpu_id,
+                        &alloc.model_name[..alloc.model_name.len().min(15)],
+                        alloc.allocated_memory_mb,
+                        format!("{:?}", alloc.allocated_at)
+                    );
                 }
             }
         }
@@ -747,7 +821,10 @@ fn display_health_status(status: &HashMap<u32, GpuStatus>, format: OutputFormat,
 
 async fn run_gpu_test(gpu_id: u32, test_type: TestType, duration: u64) -> Result<()> {
     // Mock GPU test implementation
-    println!("Running {:?} test on GPU {} for {} seconds...", test_type, gpu_id, duration);
+    println!(
+        "Running {:?} test on GPU {} for {} seconds...",
+        test_type, gpu_id, duration
+    );
 
     for i in 1..=duration {
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
@@ -761,10 +838,17 @@ async fn run_gpu_test(gpu_id: u32, test_type: TestType, duration: u64) -> Result
     Ok(())
 }
 
-async fn run_gpu_benchmark(gpu_id: u32, bench_type: BenchmarkType, iterations: u32, memory_size: u64) -> Result<()> {
+async fn run_gpu_benchmark(
+    gpu_id: u32,
+    bench_type: BenchmarkType,
+    iterations: u32,
+    memory_size: u64,
+) -> Result<()> {
     // Mock GPU benchmark implementation
-    println!("Running {:?} benchmark on GPU {} ({} iterations, {}MB)...",
-             bench_type, gpu_id, iterations, memory_size);
+    println!(
+        "Running {:?} benchmark on GPU {} ({} iterations, {}MB)...",
+        bench_type, gpu_id, iterations, memory_size
+    );
 
     for i in 1..=iterations {
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;

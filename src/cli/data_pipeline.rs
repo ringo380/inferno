@@ -1,6 +1,6 @@
 use anyhow::Result;
 use clap::{Args, Subcommand};
-use serde::{Serialize, Deserialize};
+use serde::Serialize;
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -8,11 +8,9 @@ use uuid::Uuid;
 
 use crate::config::Config;
 use crate::data_pipeline::{
-    DataPipeline, DataPipelineSystem, DataPipelineConfig, PipelineStatus, ExecutionStatus,
-    ValidationRule, ValidationRuleType, PipelineType, AnomalyDetectionConfig, NotificationChannel,
-    PipelineTemplate,
+    AnomalyDetectionConfig, DataPipeline, DataPipelineConfig, DataPipelineSystem, ExecutionStatus,
+    PipelineStatus, PipelineType, ValidationRule, ValidationRuleType,
 };
-use crate::monitoring::AlertingConfig;
 
 // Mock structures for data pipeline metrics and quality reporting
 #[derive(Debug, Clone, Serialize)]
@@ -954,7 +952,7 @@ pub async fn execute(args: DataPipelineArgs, config: &Config) -> Result<()> {
                 let execution_id = system.start_pipeline(&pipeline_id, None).await?;
                 println!("✓ Pipeline started with execution ID: {}", execution_id);
             }
-        },
+        }
 
         DataPipelineCommand::List {
             status,
@@ -976,7 +974,8 @@ pub async fn execute(args: DataPipelineArgs, config: &Config) -> Result<()> {
 
             if let Some(type_filter) = pipeline_type {
                 let type_enum = parse_pipeline_type(&type_filter)?;
-                filtered_pipelines.retain(|(_, pipeline)| pipeline.config.pipeline_type == type_enum);
+                filtered_pipelines
+                    .retain(|(_, pipeline)| pipeline.config.pipeline_type == type_enum);
             }
 
             if !tags.is_empty() {
@@ -987,9 +986,14 @@ pub async fn execute(args: DataPipelineArgs, config: &Config) -> Result<()> {
 
             if let Some(sort_field) = sort_by {
                 match sort_field.as_str() {
-                    "name" => filtered_pipelines.sort_by(|(_, a), (_, b)| a.config.name.cmp(&b.config.name)),
-                    "created" => filtered_pipelines.sort_by(|(_, a), (_, b)| a.created_at.cmp(&b.created_at)),
-                    "status" => filtered_pipelines.sort_by(|(_, a), (_, b)| format!("{:?}", a.status).cmp(&format!("{:?}", b.status))),
+                    "name" => filtered_pipelines
+                        .sort_by(|(_, a), (_, b)| a.config.name.cmp(&b.config.name)),
+                    "created" => {
+                        filtered_pipelines.sort_by(|(_, a), (_, b)| a.created_at.cmp(&b.created_at))
+                    }
+                    "status" => filtered_pipelines.sort_by(|(_, a), (_, b)| {
+                        format!("{:?}", a.status).cmp(&format!("{:?}", b.status))
+                    }),
                     _ => return Err(anyhow::anyhow!("Invalid sort field: {}", sort_field)),
                 }
             }
@@ -1000,61 +1004,79 @@ pub async fn execute(args: DataPipelineArgs, config: &Config) -> Result<()> {
 
             match format.as_deref().unwrap_or("table") {
                 "json" => {
-                    let output: Value = filtered_pipelines.into_iter()
-                        .map(|(id, pipeline)| json!({
-                            "id": id,
-                            "name": pipeline.config.name,
-                            "type": format!("{:?}", pipeline.config.pipeline_type),
-                            "status": format!("{:?}", pipeline.status),
-                            "created_at": pipeline.created_at,
-                            "description": pipeline.config.description,
-                            "tags": pipeline.config.tags,
-                        }))
+                    let output: Value = filtered_pipelines
+                        .into_iter()
+                        .map(|(id, pipeline)| {
+                            json!({
+                                "id": id,
+                                "name": pipeline.config.name,
+                                "type": format!("{:?}", pipeline.config.pipeline_type),
+                                "status": format!("{:?}", pipeline.status),
+                                "created_at": pipeline.created_at,
+                                "description": pipeline.config.description,
+                                "tags": pipeline.config.tags,
+                            })
+                        })
                         .collect();
                     println!("{}", serde_json::to_string_pretty(&output)?);
-                },
+                }
                 "yaml" => {
-                    let output: Value = filtered_pipelines.into_iter()
-                        .map(|(id, pipeline)| json!({
-                            "id": id,
-                            "name": pipeline.config.name,
-                            "type": format!("{:?}", pipeline.config.pipeline_type),
-                            "status": format!("{:?}", pipeline.status),
-                            "created_at": pipeline.created_at,
-                            "description": pipeline.config.description,
-                            "tags": pipeline.config.tags,
-                        }))
+                    let output: Value = filtered_pipelines
+                        .into_iter()
+                        .map(|(id, pipeline)| {
+                            json!({
+                                "id": id,
+                                "name": pipeline.config.name,
+                                "type": format!("{:?}", pipeline.config.pipeline_type),
+                                "status": format!("{:?}", pipeline.status),
+                                "created_at": pipeline.created_at,
+                                "description": pipeline.config.description,
+                                "tags": pipeline.config.tags,
+                            })
+                        })
                         .collect();
                     println!("{}", serde_yaml::to_string(&output)?);
-                },
+                }
                 "table" | _ => {
                     if detailed {
-                        println!("{:<36} {:<30} {:<12} {:<12} {:<20} {:<50}",
-                                "ID", "NAME", "TYPE", "STATUS", "CREATED", "DESCRIPTION");
+                        println!(
+                            "{:<36} {:<30} {:<12} {:<12} {:<20} {:<50}",
+                            "ID", "NAME", "TYPE", "STATUS", "CREATED", "DESCRIPTION"
+                        );
                         println!("{}", "-".repeat(150));
                         for (id, pipeline) in filtered_pipelines {
-                            println!("{:<36} {:<30} {:<12} {:<12} {:<20} {:<50}",
-                                    id,
-                                    truncate_string(&pipeline.config.name, 30),
-                                    format!("{:?}", pipeline.config.pipeline_type),
-                                    format!("{:?}", pipeline.status),
-                                    pipeline.created_at.format("%Y-%m-%d %H:%M:%S"),
-                                    truncate_string(&pipeline.config.description.unwrap_or_default(), 50));
+                            println!(
+                                "{:<36} {:<30} {:<12} {:<12} {:<20} {:<50}",
+                                id,
+                                truncate_string(&pipeline.config.name, 30),
+                                format!("{:?}", pipeline.config.pipeline_type),
+                                format!("{:?}", pipeline.status),
+                                pipeline.created_at.format("%Y-%m-%d %H:%M:%S"),
+                                truncate_string(
+                                    &pipeline.config.description.unwrap_or_default(),
+                                    50
+                                )
+                            );
                         }
                     } else {
-                        println!("{:<36} {:<30} {:<12} {:<12}", "ID", "NAME", "TYPE", "STATUS");
+                        println!(
+                            "{:<36} {:<30} {:<12} {:<12}",
+                            "ID", "NAME", "TYPE", "STATUS"
+                        );
                         println!("{}", "-".repeat(90));
                         for (id, pipeline) in filtered_pipelines {
-                            println!("{:<36} {:<30} {:<12} {:<12}",
-                                    id,
-                                    truncate_string(&pipeline.config.name, 30),
-                                    format!("{:?}", pipeline.config.pipeline_type),
-                                    format!("{:?}", pipeline.status));
+                            println!(
+                                "{:<36} {:<30} {:<12} {:<12}",
+                                id,
+                                truncate_string(&pipeline.config.name, 30),
+                                format!("{:?}", pipeline.config.pipeline_type),
+                                format!("{:?}", pipeline.status)
+                            );
                         }
                     }
-                },
+                }
             }
-        },
+        }
 
         DataPipelineCommand::Show {
             pipeline,
@@ -1099,7 +1121,7 @@ pub async fn execute(args: DataPipelineArgs, config: &Config) -> Result<()> {
                     }
 
                     println!("{}", serde_json::to_string_pretty(&output)?);
-                },
+                }
                 "yaml" => {
                     let mut output = json!({
                         "id": pipeline,
@@ -1132,7 +1154,7 @@ pub async fn execute(args: DataPipelineArgs, config: &Config) -> Result<()> {
                     }
 
                     println!("{}", serde_yaml::to_string(&output)?);
-                },
+                }
                 "table" | _ => {
                     println!("Pipeline Details");
                     println!("================");
@@ -1160,10 +1182,10 @@ pub async fn execute(args: DataPipelineArgs, config: &Config) -> Result<()> {
                         println!("\nExecution History:");
                         println!("==================");
                         for execution in executions.iter().take(10) {
-                            println!("{} - {} - {:?}",
-                                    execution.execution_id,
-                                    execution.start_time,
-                                    execution.status);
+                            println!(
+                                "{} - {} - {:?}",
+                                execution.execution_id, execution.start_time, execution.status
+                            );
                         }
                     }
 
@@ -1185,9 +1207,9 @@ pub async fn execute(args: DataPipelineArgs, config: &Config) -> Result<()> {
                             println!("- {} ({:?}): {}", rule.name, rule.rule_type, rule.config);
                         }
                     }
-                },
+                }
             }
-        },
+        }
 
         DataPipelineCommand::Start {
             pipeline,
@@ -1200,9 +1222,14 @@ pub async fn execute(args: DataPipelineArgs, config: &Config) -> Result<()> {
         } => {
             if dry_run {
                 println!("Dry run mode - validating pipeline execution...");
-                let validation_result = system.validate_pipeline_execution(&pipeline, params.as_deref()).await?;
+                let validation_result = system
+                    .validate_pipeline_execution(&pipeline, params.as_deref())
+                    .await?;
                 println!("✓ Pipeline execution validation successful");
-                println!("Estimated duration: {:.2}s", validation_result.estimated_duration_secs);
+                println!(
+                    "Estimated duration: {:.2}s",
+                    validation_result.estimated_duration_secs
+                );
                 return Ok(());
             }
 
@@ -1216,7 +1243,9 @@ pub async fn execute(args: DataPipelineArgs, config: &Config) -> Result<()> {
             };
 
             let execution_id = if force {
-                system.force_start_pipeline(&pipeline, execution_params).await?
+                system
+                    .force_start_pipeline(&pipeline, execution_params)
+                    .await?
             } else {
                 system.start_pipeline(&pipeline, execution_params).await?
             };
@@ -1232,20 +1261,20 @@ pub async fn execute(args: DataPipelineArgs, config: &Config) -> Result<()> {
                     ExecutionStatus::Success => {
                         println!("✓ Pipeline completed successfully");
                         println!("Duration: {:.2}s", result.duration_secs.unwrap_or(0.0));
-                    },
+                    }
                     ExecutionStatus::Failed => {
                         println!("✗ Pipeline failed");
                         if let Some(error) = result.error {
                             println!("Error: {}", error);
                         }
                         std::process::exit(1);
-                    },
+                    }
                     _ => {
                         println!("Pipeline execution status: {:?}", result.status);
                     }
                 }
             }
-        },
+        }
 
         DataPipelineCommand::Stop {
             pipeline,
@@ -1267,9 +1296,13 @@ pub async fn execute(args: DataPipelineArgs, config: &Config) -> Result<()> {
                 system.stop_pipeline(&pipeline, force, grace_period).await?;
                 println!("✓ Pipeline stopped");
             }
-        },
+        }
 
-        DataPipelineCommand::Pause { pipeline, execution_id, reason } => {
+        DataPipelineCommand::Pause {
+            pipeline,
+            execution_id,
+            reason,
+        } => {
             if let Some(exec_id) = execution_id {
                 println!("Pausing execution: {}", exec_id);
                 system.pause_execution(&exec_id, reason.as_deref()).await?;
@@ -1279,19 +1312,27 @@ pub async fn execute(args: DataPipelineArgs, config: &Config) -> Result<()> {
                 system.pause_pipeline(&pipeline, reason.as_deref()).await?;
                 println!("✓ Pipeline paused");
             }
-        },
+        }
 
-        DataPipelineCommand::Resume { pipeline, execution_id, from_checkpoint } => {
+        DataPipelineCommand::Resume {
+            pipeline,
+            execution_id,
+            from_checkpoint,
+        } => {
             if let Some(exec_id) = execution_id {
                 println!("Resuming execution: {}", exec_id);
-                system.resume_execution(&exec_id, from_checkpoint.as_deref()).await?;
+                system
+                    .resume_execution(&exec_id, from_checkpoint.as_deref())
+                    .await?;
                 println!("✓ Execution resumed");
             } else {
                 println!("Resuming pipeline: {}", pipeline);
-                system.resume_pipeline(&pipeline, from_checkpoint.as_deref()).await?;
+                system
+                    .resume_pipeline(&pipeline, from_checkpoint.as_deref())
+                    .await?;
                 println!("✓ Pipeline resumed");
             }
-        },
+        }
 
         DataPipelineCommand::Delete {
             pipeline,
@@ -1306,9 +1347,11 @@ pub async fn execute(args: DataPipelineArgs, config: &Config) -> Result<()> {
             }
 
             println!("Deleting pipeline: {}", pipeline);
-            system.delete_pipeline(&pipeline, with_history, with_data).await?;
+            system
+                .delete_pipeline(&pipeline, with_history, with_data)
+                .await?;
             println!("✓ Pipeline deleted");
-        },
+        }
 
         DataPipelineCommand::Update {
             pipeline,
@@ -1352,7 +1395,7 @@ pub async fn execute(args: DataPipelineArgs, config: &Config) -> Result<()> {
 
             system.update_pipeline(&pipeline, updates).await?;
             println!("✓ Pipeline updated");
-        },
+        }
 
         DataPipelineCommand::Validate {
             pipeline,
@@ -1365,7 +1408,9 @@ pub async fn execute(args: DataPipelineArgs, config: &Config) -> Result<()> {
 
             if let Some(pipeline_id) = pipeline {
                 println!("Validating pipeline: {}", pipeline_id);
-                let result = system.validate_pipeline(&pipeline_id, Some(validation_level), warnings).await?;
+                let result = system
+                    .validate_pipeline(&pipeline_id, Some(validation_level), warnings)
+                    .await?;
                 // Convert bool result to ValidationResult for display
                 let validation_result = ValidationResult {
                     valid: result,
@@ -1378,36 +1423,39 @@ pub async fn execute(args: DataPipelineArgs, config: &Config) -> Result<()> {
                 println!("Validating configuration file: {}", config_file.display());
                 let config_content = std::fs::read_to_string(config_file)?;
                 let config: DataPipelineConfig = serde_json::from_str(&config_content)?;
-                let result = validate_pipeline_config_detailed(&config, validation_level, warnings)?;
+                let result =
+                    validate_pipeline_config_detailed(&config, validation_level, warnings)?;
                 display_validation_result(&result, format.as_deref())?;
             } else {
-                return Err(anyhow::anyhow!("Either --pipeline or --config must be specified"));
+                return Err(anyhow::anyhow!(
+                    "Either --pipeline or --config must be specified"
+                ));
             }
-        },
+        }
 
         DataPipelineCommand::Execution { command } => {
             handle_execution_command(command, &system).await?;
-        },
+        }
 
         DataPipelineCommand::Stage { command } => {
             handle_stage_command(command, &system).await?;
-        },
+        }
 
         DataPipelineCommand::Monitor { command } => {
             handle_monitor_command(command, &system).await?;
-        },
+        }
 
         DataPipelineCommand::Quality { command } => {
             handle_quality_command(command, &system).await?;
-        },
+        }
 
         DataPipelineCommand::Schedule { command } => {
             handle_schedule_command(command, &system).await?;
-        },
+        }
 
         DataPipelineCommand::Template { command } => {
             handle_template_command(command, &system).await?;
-        },
+        }
 
         DataPipelineCommand::Import {
             file,
@@ -1419,10 +1467,21 @@ pub async fn execute(args: DataPipelineArgs, config: &Config) -> Result<()> {
             println!("Importing pipelines from: {}", file.display());
 
             let import_format = format.as_deref().unwrap_or("json");
-            let result = system.import_pipelines(file.to_str().unwrap_or(""), import_format, overwrite, validate, dry_run).await?;
+            let result = system
+                .import_pipelines(
+                    file.to_str().unwrap_or(""),
+                    import_format,
+                    overwrite,
+                    validate,
+                    dry_run,
+                )
+                .await?;
 
             if dry_run {
-                println!("Dry run completed. {} pipelines would be imported", result.len());
+                println!(
+                    "Dry run completed. {} pipelines would be imported",
+                    result.len()
+                );
             } else {
                 println!("✓ Imported {} pipelines", result.len());
             }
@@ -1430,7 +1489,7 @@ pub async fn execute(args: DataPipelineArgs, config: &Config) -> Result<()> {
             for name in result {
                 println!("  {} - imported", name);
             }
-        },
+        }
 
         DataPipelineCommand::Export {
             pipeline,
@@ -1442,13 +1501,20 @@ pub async fn execute(args: DataPipelineArgs, config: &Config) -> Result<()> {
             println!("Exporting pipeline: {}", pipeline);
 
             let export_format = format.as_deref().unwrap_or("json");
-            let output_file = file.unwrap_or_else(|| {
-                PathBuf::from(format!("{}.{}", pipeline, export_format))
-            });
+            let output_file =
+                file.unwrap_or_else(|| PathBuf::from(format!("{}.{}", pipeline, export_format)));
 
-            system.export_pipeline(&pipeline, output_file.to_str().unwrap_or(""), export_format, with_history, with_metrics).await?;
+            system
+                .export_pipeline(
+                    &pipeline,
+                    output_file.to_str().unwrap_or(""),
+                    export_format,
+                    with_history,
+                    with_metrics,
+                )
+                .await?;
             println!("✓ Pipeline exported to: {}", output_file.display());
-        },
+        }
 
         DataPipelineCommand::Clone {
             source,
@@ -1458,17 +1524,28 @@ pub async fn execute(args: DataPipelineArgs, config: &Config) -> Result<()> {
         } => {
             println!("Cloning pipeline {} to {}", source, name);
 
-            let new_pipeline_id = system.clone_pipeline(&source, &name, config_only, description.as_deref()).await?;
+            let new_pipeline_id = system
+                .clone_pipeline(&source, &name, config_only, description.as_deref())
+                .await?;
             println!("✓ Pipeline cloned with ID: {}", new_pipeline_id);
-        },
+        }
     }
 
     Ok(())
 }
 
-async fn handle_execution_command(command: ExecutionCommand, system: &DataPipelineSystem) -> Result<()> {
+async fn handle_execution_command(
+    command: ExecutionCommand,
+    system: &DataPipelineSystem,
+) -> Result<()> {
     match command {
-        ExecutionCommand::List { pipeline, status, limit, detailed, format } => {
+        ExecutionCommand::List {
+            pipeline,
+            status,
+            limit,
+            detailed,
+            format,
+        } => {
             let executions = if let Some(pipeline_id) = pipeline {
                 system.get_execution_history(&pipeline_id).await?
             } else {
@@ -1489,44 +1566,62 @@ async fn handle_execution_command(command: ExecutionCommand, system: &DataPipeli
             match format.as_deref().unwrap_or("table") {
                 "json" => {
                     println!("{}", serde_json::to_string_pretty(&filtered_executions)?);
-                },
+                }
                 "yaml" => {
                     println!("{}", serde_yaml::to_string(&filtered_executions)?);
-                },
+                }
                 "table" | _ => {
                     if detailed {
-                        println!("{:<36} {:<30} {:<12} {:<20} {:<20} {:<10}",
-                                "EXECUTION_ID", "PIPELINE", "STATUS", "STARTED", "DURATION", "STAGES");
+                        println!(
+                            "{:<36} {:<30} {:<12} {:<20} {:<20} {:<10}",
+                            "EXECUTION_ID", "PIPELINE", "STATUS", "STARTED", "DURATION", "STAGES"
+                        );
                         println!("{}", "-".repeat(140));
                         for execution in filtered_executions {
-                            let duration = execution.end_time.map(|end| {
-                                let duration = end - execution.start_time;
-                                format!("{:.2}s", duration.num_seconds() as f64)
-                            }).unwrap_or("-".to_string());
-                            println!("{:<36} {:<30} {:<12} {:<20} {:<20} {:<10}",
-                                    execution.execution_id,
-                                    truncate_string(&execution.pipeline_id, 30),
-                                    format!("{:?}", execution.status),
-                                    execution.start_time.format("%Y-%m-%d %H:%M:%S"),
-                                    duration,
-                                    execution.task_executions.len());
+                            let duration = execution
+                                .end_time
+                                .map(|end| {
+                                    let duration = end - execution.start_time;
+                                    format!("{:.2}s", duration.num_seconds() as f64)
+                                })
+                                .unwrap_or("-".to_string());
+                            println!(
+                                "{:<36} {:<30} {:<12} {:<20} {:<20} {:<10}",
+                                execution.execution_id,
+                                truncate_string(&execution.pipeline_id, 30),
+                                format!("{:?}", execution.status),
+                                execution.start_time.format("%Y-%m-%d %H:%M:%S"),
+                                duration,
+                                execution.task_executions.len()
+                            );
                         }
                     } else {
-                        println!("{:<36} {:<30} {:<12} {:<20}", "EXECUTION_ID", "PIPELINE", "STATUS", "STARTED");
+                        println!(
+                            "{:<36} {:<30} {:<12} {:<20}",
+                            "EXECUTION_ID", "PIPELINE", "STATUS", "STARTED"
+                        );
                         println!("{}", "-".repeat(100));
                         for execution in filtered_executions {
-                            println!("{:<36} {:<30} {:<12} {:<20}",
-                                    execution.execution_id,
-                                    truncate_string(&execution.pipeline_id, 30),
-                                    format!("{:?}", execution.status),
-                                    execution.start_time.format("%Y-%m-%d %H:%M:%S"));
+                            println!(
+                                "{:<36} {:<30} {:<12} {:<20}",
+                                execution.execution_id,
+                                truncate_string(&execution.pipeline_id, 30),
+                                format!("{:?}", execution.status),
+                                execution.start_time.format("%Y-%m-%d %H:%M:%S")
+                            );
                         }
                     }
-                },
+                }
             }
-        },
+        }
 
-        ExecutionCommand::Show { execution_id, logs, metrics, stages, format } => {
+        ExecutionCommand::Show {
+            execution_id,
+            logs,
+            metrics,
+            stages,
+            format,
+        } => {
             let execution = system.get_execution(&execution_id).await?;
 
             match format.as_deref().unwrap_or("table") {
@@ -1544,7 +1639,7 @@ async fn handle_execution_command(command: ExecutionCommand, system: &DataPipeli
                     }
 
                     println!("{}", serde_json::to_string_pretty(&output)?);
-                },
+                }
                 "yaml" => {
                     let mut output = serde_json::to_value(&execution)?;
 
@@ -1559,7 +1654,7 @@ async fn handle_execution_command(command: ExecutionCommand, system: &DataPipeli
                     }
 
                     println!("{}", serde_yaml::to_string(&output)?);
-                },
+                }
                 "table" | _ => {
                     println!("Execution Details");
                     println!("=================");
@@ -1605,17 +1700,27 @@ async fn handle_execution_command(command: ExecutionCommand, system: &DataPipeli
                         println!("Data Volume: {} bytes", execution_metrics.data_size_bytes);
                         println!("CPU Usage: {:.2}%", execution_metrics.cpu_usage_percent);
                     }
-                },
+                }
             }
-        },
+        }
 
-        ExecutionCommand::Cancel { execution_id, force, reason } => {
+        ExecutionCommand::Cancel {
+            execution_id,
+            force,
+            reason,
+        } => {
             println!("Cancelling execution: {}", execution_id);
-            system.cancel_execution(&execution_id, force, reason.as_deref()).await?;
+            system
+                .cancel_execution(&execution_id, force, reason.as_deref())
+                .await?;
             println!("✓ Execution cancelled");
-        },
+        }
 
-        ExecutionCommand::Retry { execution_id, from_stage, params } => {
+        ExecutionCommand::Retry {
+            execution_id,
+            from_stage,
+            params,
+        } => {
             println!("Retrying execution: {}", execution_id);
 
             let retry_params = if let Some(params_str) = params {
@@ -1624,14 +1729,24 @@ async fn handle_execution_command(command: ExecutionCommand, system: &DataPipeli
                 None
             };
 
-            let new_execution_id = system.retry_execution(&execution_id, from_stage.as_deref(), retry_params).await?;
+            let new_execution_id = system
+                .retry_execution(&execution_id, from_stage.as_deref(), retry_params)
+                .await?;
             println!("✓ Retry started with execution ID: {}", new_execution_id);
-        },
+        }
 
-        ExecutionCommand::Logs { execution_id, follow, tail, stage, level } => {
+        ExecutionCommand::Logs {
+            execution_id,
+            follow,
+            tail,
+            stage,
+            level,
+        } => {
             if follow {
                 println!("Following logs for execution: {}", execution_id);
-                system.follow_execution_logs(&execution_id, stage.as_deref(), level.as_deref()).await?;
+                system
+                    .follow_execution_logs(&execution_id, stage.as_deref(), level.as_deref())
+                    .await?;
             } else {
                 let logs = system.get_execution_logs(&execution_id).await?;
 
@@ -1642,7 +1757,8 @@ async fn handle_execution_command(command: ExecutionCommand, system: &DataPipeli
                 }
 
                 if let Some(level_filter) = level {
-                    filtered_logs.retain(|log| log.level.to_lowercase() == level_filter.to_lowercase());
+                    filtered_logs
+                        .retain(|log| log.level.to_lowercase() == level_filter.to_lowercase());
                 }
 
                 if let Some(tail_count) = tail {
@@ -1651,11 +1767,18 @@ async fn handle_execution_command(command: ExecutionCommand, system: &DataPipeli
                 }
 
                 for log in filtered_logs {
-                    let stage_info = log.task_id.as_ref().map(|s| format!("[{}] ", s)).unwrap_or_default();
-                    println!("[{}] {}{}: {}", log.timestamp, stage_info, log.level, log.message);
+                    let stage_info = log
+                        .task_id
+                        .as_ref()
+                        .map(|s| format!("[{}] ", s))
+                        .unwrap_or_default();
+                    println!(
+                        "[{}] {}{}: {}",
+                        log.timestamp, stage_info, log.level, log.message
+                    );
                 }
             }
-        },
+        }
     }
 
     Ok(())
@@ -1663,12 +1786,18 @@ async fn handle_execution_command(command: ExecutionCommand, system: &DataPipeli
 
 async fn handle_stage_command(command: StageCommand, system: &DataPipelineSystem) -> Result<()> {
     match command {
-        StageCommand::List { pipeline, config, format } => {
+        StageCommand::List {
+            pipeline,
+            config,
+            format,
+        } => {
             let pipeline_data = system.get_pipeline(&pipeline).await?;
 
             match format.as_deref().unwrap_or("table") {
                 "json" => {
-                    let output: Value = pipeline_data.tasks.into_iter()
+                    let output: Value = pipeline_data
+                        .tasks
+                        .into_iter()
                         .map(|task| {
                             let mut task_json = json!({
                                 "name": task.name,
@@ -1677,16 +1806,19 @@ async fn handle_stage_command(command: StageCommand, system: &DataPipelineSystem
                             });
 
                             if config {
-                                task_json["config"] = serde_json::to_value(&task.config).unwrap_or_default();
+                                task_json["config"] =
+                                    serde_json::to_value(&task.config).unwrap_or_default();
                             }
 
                             task_json
                         })
                         .collect();
                     println!("{}", serde_json::to_string_pretty(&output)?);
-                },
+                }
                 "yaml" => {
-                    let output: Value = pipeline_data.tasks.into_iter()
+                    let output: Value = pipeline_data
+                        .tasks
+                        .into_iter()
                         .map(|task| {
                             let mut task_json = json!({
                                 "name": task.name,
@@ -1695,16 +1827,20 @@ async fn handle_stage_command(command: StageCommand, system: &DataPipelineSystem
                             });
 
                             if config {
-                                task_json["config"] = serde_json::to_value(&task.config).unwrap_or_default();
+                                task_json["config"] =
+                                    serde_json::to_value(&task.config).unwrap_or_default();
                             }
 
                             task_json
                         })
                         .collect();
                     println!("{}", serde_yaml::to_string(&output)?);
-                },
+                }
                 "table" | _ => {
-                    println!("{:<30} {:<15} {:<10} {:<30}", "NAME", "TYPE", "ENABLED", "DEPENDS_ON");
+                    println!(
+                        "{:<30} {:<15} {:<10} {:<30}",
+                        "NAME", "TYPE", "ENABLED", "DEPENDS_ON"
+                    );
                     println!("{}", "-".repeat(85));
                     for stage in pipeline_data.config.stages {
                         let depends_on = if stage.dependencies.is_empty() {
@@ -1712,17 +1848,26 @@ async fn handle_stage_command(command: StageCommand, system: &DataPipelineSystem
                         } else {
                             stage.dependencies.join(", ")
                         };
-                        println!("{:<30} {:<15} {:<10} {:<30}",
-                                stage.name,
-                                format!("{:?}", stage.task_type),
-                                "true", // PipelineTask doesn't have enabled field, default to true
-                                truncate_string(&depends_on, 30));
+                        println!(
+                            "{:<30} {:<15} {:<10} {:<30}",
+                            stage.name,
+                            format!("{:?}", stage.task_type),
+                            "true", // PipelineTask doesn't have enabled field, default to true
+                            truncate_string(&depends_on, 30)
+                        );
                     }
-                },
+                }
             }
-        },
+        }
 
-        StageCommand::Add { pipeline, name, stage_type, config, position, depends_on } => {
+        StageCommand::Add {
+            pipeline,
+            name,
+            stage_type,
+            config,
+            position,
+            depends_on,
+        } => {
             println!("Adding stage '{}' to pipeline '{}'", name, pipeline);
 
             let stage_config = if let Some(config_file) = config {
@@ -1732,22 +1877,43 @@ async fn handle_stage_command(command: StageCommand, system: &DataPipelineSystem
                 create_default_stage_config(&stage_type)?
             };
 
-            system.add_pipeline_stage(&pipeline, &name, &stage_type, stage_config, position, depends_on).await?;
+            system
+                .add_pipeline_stage(
+                    &pipeline,
+                    &name,
+                    &stage_type,
+                    stage_config,
+                    position,
+                    depends_on,
+                )
+                .await?;
             println!("✓ Stage added successfully");
-        },
+        }
 
-        StageCommand::Remove { pipeline, stage, force } => {
+        StageCommand::Remove {
+            pipeline,
+            stage,
+            force,
+        } => {
             if !force {
-                println!("This will remove the stage '{}' from pipeline '{}'. Use --force to confirm.", stage, pipeline);
+                println!(
+                    "This will remove the stage '{}' from pipeline '{}'. Use --force to confirm.",
+                    stage, pipeline
+                );
                 return Ok(());
             }
 
             println!("Removing stage '{}' from pipeline '{}'", stage, pipeline);
             system.remove_pipeline_stage(&pipeline, &stage).await?;
             println!("✓ Stage removed successfully");
-        },
+        }
 
-        StageCommand::Update { pipeline, stage, config, params } => {
+        StageCommand::Update {
+            pipeline,
+            stage,
+            config,
+            params,
+        } => {
             println!("Updating stage '{}' in pipeline '{}'", stage, pipeline);
 
             let mut updates = HashMap::new();
@@ -1763,14 +1929,23 @@ async fn handle_stage_command(command: StageCommand, system: &DataPipelineSystem
                 updates.insert("params".to_string(), params_value);
             }
 
-            system.update_pipeline_stage(&pipeline, &stage, updates).await?;
+            system
+                .update_pipeline_stage(&pipeline, &stage, updates)
+                .await?;
             println!("✓ Stage updated successfully");
-        },
+        }
 
-        StageCommand::Test { pipeline, stage, test_data, dry_run } => {
+        StageCommand::Test {
+            pipeline,
+            stage,
+            test_data,
+            dry_run,
+        } => {
             println!("Testing stage '{}' in pipeline '{}'", stage, pipeline);
 
-            let test_result = system.test_pipeline_stage(&pipeline, &stage, test_data.as_deref(), dry_run).await?;
+            let test_result = system
+                .test_pipeline_stage(&pipeline, &stage, test_data.as_deref(), dry_run)
+                .await?;
 
             if dry_run {
                 println!("✓ Stage test validation successful");
@@ -1784,32 +1959,59 @@ async fn handle_stage_command(command: StageCommand, system: &DataPipelineSystem
                     println!("Records Processed: {}", records);
                 }
             }
-        },
+        }
     }
 
     Ok(())
 }
 
-async fn handle_monitor_command(command: MonitorCommand, system: &DataPipelineSystem) -> Result<()> {
+async fn handle_monitor_command(
+    command: MonitorCommand,
+    system: &DataPipelineSystem,
+) -> Result<()> {
     match command {
-        MonitorCommand::Status { pipeline, refresh, metrics, alerts } => {
+        MonitorCommand::Status {
+            pipeline,
+            refresh,
+            metrics,
+            alerts,
+        } => {
             if let Some(pipeline_id) = pipeline.as_deref() {
                 if let Some(refresh_interval) = refresh {
-                    println!("Monitoring pipeline status (refresh every {}s, press Ctrl+C to exit)...", refresh_interval);
-                    system.monitor_pipeline_status(pipeline_id, refresh_interval, metrics, alerts).await?;
+                    println!(
+                        "Monitoring pipeline status (refresh every {}s, press Ctrl+C to exit)...",
+                        refresh_interval
+                    );
+                    system
+                        .monitor_pipeline_status(pipeline_id, refresh_interval, metrics, alerts)
+                        .await?;
                 } else {
                     let status = system.get_pipeline_status(pipeline_id).await?;
                     display_pipeline_status(&status, metrics, alerts)?;
                 }
             } else {
-                return Err(anyhow::anyhow!("Pipeline ID is required for status monitoring"));
+                return Err(anyhow::anyhow!(
+                    "Pipeline ID is required for status monitoring"
+                ));
             }
-        },
+        }
 
-        MonitorCommand::Metrics { pipeline, range, metrics, format, export } => {
+        MonitorCommand::Metrics {
+            pipeline,
+            range,
+            metrics,
+            format,
+            export,
+        } => {
             let time_range = range.as_deref().unwrap_or("24h");
-            let metrics_filter = if metrics.is_empty() { None } else { Some(metrics) };
-            let pipeline_metrics = system.get_pipeline_metrics_range(&pipeline, time_range, metrics_filter).await?;
+            let metrics_filter = if metrics.is_empty() {
+                None
+            } else {
+                Some(metrics)
+            };
+            let pipeline_metrics = system
+                .get_pipeline_metrics_range(&pipeline, time_range, metrics_filter)
+                .await?;
 
             match format.as_deref().unwrap_or("table") {
                 "json" => {
@@ -1820,7 +2022,7 @@ async fn handle_monitor_command(command: MonitorCommand, system: &DataPipelineSy
                     } else {
                         println!("{}", output);
                     }
-                },
+                }
                 "yaml" => {
                     let output = serde_yaml::to_string(&pipeline_metrics)?;
                     if let Some(export_file) = &export {
@@ -1829,30 +2031,34 @@ async fn handle_monitor_command(command: MonitorCommand, system: &DataPipelineSy
                     } else {
                         println!("{}", output);
                     }
-                },
+                }
                 "table" | _ => {
-                    let converted_metrics = convert_execution_metrics_to_pipeline_metrics(&pipeline_metrics);
+                    let converted_metrics =
+                        convert_execution_metrics_to_pipeline_metrics(&pipeline_metrics);
                     display_pipeline_metrics(&converted_metrics)?;
                     if let Some(export_file) = &export {
                         let output = serde_json::to_string_pretty(&converted_metrics)?;
                         std::fs::write(export_file, output)?;
                         println!("Metrics exported to: {}", export_file.display());
                     }
-                },
+                }
             }
-        },
+        }
 
         MonitorCommand::Alerts { command } => {
             handle_alert_command(command, system).await?;
-        },
+        }
 
         MonitorCommand::Dashboard { port, bind, open } => {
             let port = port.unwrap_or(8080);
             let bind_addr = bind.as_deref().unwrap_or("127.0.0.1");
 
-            println!("Starting pipeline dashboard at http://{}:{}", bind_addr, port);
+            println!(
+                "Starting pipeline dashboard at http://{}:{}",
+                bind_addr, port
+            );
             system.start_dashboard(bind_addr, port, open).await?;
-        },
+        }
     }
 
     Ok(())
@@ -1860,29 +2066,47 @@ async fn handle_monitor_command(command: MonitorCommand, system: &DataPipelineSy
 
 async fn handle_alert_command(command: AlertCommand, system: &DataPipelineSystem) -> Result<()> {
     match command {
-        AlertCommand::List { severity, status, limit } => {
-            let alerts = system.list_alerts(severity.as_deref(), status.as_deref(), limit).await?;
+        AlertCommand::List {
+            severity,
+            status,
+            limit,
+        } => {
+            let alerts = system
+                .list_alerts(severity.as_deref(), status.as_deref(), limit)
+                .await?;
 
-            println!("{:<36} {:<30} {:<10} {:<10} {:<20}", "ID", "NAME", "SEVERITY", "STATUS", "CREATED");
+            println!(
+                "{:<36} {:<30} {:<10} {:<10} {:<20}",
+                "ID", "NAME", "SEVERITY", "STATUS", "CREATED"
+            );
             println!("{}", "-".repeat(116));
             for alert in alerts {
-                println!("{:<36} {:<30} {:<10} {:<10} {:<20}",
-                        alert.id,
-                        truncate_string(&alert.name, 30),
-                        format!("{:?}", alert.severity),
-                        format!("{:?}", alert.status),
-                        alert.created_at.format("%Y-%m-%d %H:%M:%S"));
+                println!(
+                    "{:<36} {:<30} {:<10} {:<10} {:<20}",
+                    alert.id,
+                    truncate_string(&alert.name, 30),
+                    format!("{:?}", alert.severity),
+                    format!("{:?}", alert.status),
+                    alert.created_at.format("%Y-%m-%d %H:%M:%S")
+                );
             }
-        },
+        }
 
-        AlertCommand::Create { name, condition, severity, channels, config } => {
+        AlertCommand::Create {
+            name,
+            condition,
+            severity,
+            channels,
+            config,
+        } => {
             println!("Creating alert rule: {}", name);
 
             let alert_config = if let Some(config_file) = config {
                 let config_content = std::fs::read_to_string(config_file)?;
                 serde_json::from_str(&config_content)?
             } else {
-                let default_config = create_default_alert_config(&name, &condition, &severity, &channels)?;
+                let default_config =
+                    create_default_alert_config(&name, &condition, &severity, &channels)?;
                 // Convert AlertingConfig to HashMap<String, Value>
                 let config_value = serde_json::to_value(default_config)?;
                 serde_json::from_value(config_value)?
@@ -1890,9 +2114,13 @@ async fn handle_alert_command(command: AlertCommand, system: &DataPipelineSystem
 
             let alert_id = system.create_alert_rule(alert_config).await?;
             println!("✓ Alert rule created with ID: {}", alert_id);
-        },
+        }
 
-        AlertCommand::Update { name, config, enabled } => {
+        AlertCommand::Update {
+            name,
+            config,
+            enabled,
+        } => {
             println!("Updating alert rule: {}", name);
 
             let mut updates = HashMap::new();
@@ -1909,53 +2137,74 @@ async fn handle_alert_command(command: AlertCommand, system: &DataPipelineSystem
 
             system.update_alert_rule(&name, updates).await?;
             println!("✓ Alert rule updated");
-        },
+        }
 
         AlertCommand::Delete { name, confirm } => {
             if !confirm {
-                println!("This will delete the alert rule '{}'. Use --confirm to proceed.", name);
+                println!(
+                    "This will delete the alert rule '{}'. Use --confirm to proceed.",
+                    name
+                );
                 return Ok(());
             }
 
             println!("Deleting alert rule: {}", name);
             system.delete_alert_rule(&name).await?;
             println!("✓ Alert rule deleted");
-        },
+        }
     }
 
     Ok(())
 }
 
-async fn handle_quality_command(command: QualityCommand, system: &DataPipelineSystem) -> Result<()> {
+async fn handle_quality_command(
+    command: QualityCommand,
+    system: &DataPipelineSystem,
+) -> Result<()> {
     match command {
-        QualityCommand::Check { pipeline, execution_id, stage, rules, format } => {
+        QualityCommand::Check {
+            pipeline,
+            execution_id,
+            stage,
+            rules,
+            format,
+        } => {
             println!("Running data quality checks for pipeline: {}", pipeline);
 
-            let quality_report = system.run_quality_checks(
-                &pipeline,
-                vec![], // check_types - empty for now
-                stage.as_deref(), // severity parameter
-                rules
-            ).await?;
+            let quality_report = system
+                .run_quality_checks(
+                    &pipeline,
+                    vec![],           // check_types - empty for now
+                    stage.as_deref(), // severity parameter
+                    rules,
+                )
+                .await?;
 
             match format.as_deref().unwrap_or("table") {
                 "json" => {
                     println!("{}", serde_json::to_string_pretty(&quality_report)?);
-                },
+                }
                 "yaml" => {
                     println!("{}", serde_yaml::to_string(&quality_report)?);
-                },
+                }
                 "table" | _ => {
                     display_quality_report(&quality_report)?;
-                },
+                }
             }
-        },
+        }
 
-        QualityCommand::Report { pipeline, range, report_type, export } => {
+        QualityCommand::Report {
+            pipeline,
+            range,
+            report_type,
+            export,
+        } => {
             let time_range = range.as_deref().unwrap_or("7d");
             let report_type_enum = report_type.as_deref().unwrap_or("summary");
 
-            let quality_report = system.generate_quality_report(&pipeline, Some(time_range), Some(report_type_enum)).await?;
+            let quality_report = system
+                .generate_quality_report(&pipeline, Some(time_range), Some(report_type_enum))
+                .await?;
 
             if let Some(export_file) = &export {
                 let output = serde_json::to_string_pretty(&quality_report)?;
@@ -1964,15 +2213,15 @@ async fn handle_quality_command(command: QualityCommand, system: &DataPipelineSy
             } else {
                 display_quality_report(&quality_report)?;
             }
-        },
+        }
 
         QualityCommand::Rules { command } => {
             handle_rules_command(command, system).await?;
-        },
+        }
 
         QualityCommand::Anomaly { command } => {
             handle_anomaly_command(command, system).await?;
-        },
+        }
     }
 
     Ok(())
@@ -1980,7 +2229,11 @@ async fn handle_quality_command(command: QualityCommand, system: &DataPipelineSy
 
 async fn handle_rules_command(command: RulesCommand, system: &DataPipelineSystem) -> Result<()> {
     match command {
-        RulesCommand::List { pipeline, rule_type, detailed } => {
+        RulesCommand::List {
+            pipeline,
+            rule_type,
+            detailed,
+        } => {
             let rules = if let Some(pipeline_id) = pipeline {
                 system.get_validation_rules(&pipeline_id).await?
             } else {
@@ -1995,30 +2248,47 @@ async fn handle_rules_command(command: RulesCommand, system: &DataPipelineSystem
             }
 
             if detailed {
-                println!("{:<30} {:<15} {:<50} {:<10} {:<10}", "NAME", "TYPE", "EXPRESSION", "SEVERITY", "ENABLED");
+                println!(
+                    "{:<30} {:<15} {:<50} {:<10} {:<10}",
+                    "NAME", "TYPE", "EXPRESSION", "SEVERITY", "ENABLED"
+                );
                 println!("{}", "-".repeat(125));
                 for rule in filtered_rules {
-                    println!("{:<30} {:<15} {:<50} {:<10} {:<10}",
-                            truncate_string(&rule.name, 30),
-                            format!("{:?}", rule.rule_type),
-                            truncate_string(&rule.expression, 50),
-                            format!("{:?}", rule.severity),
-                            rule.enabled);
+                    println!(
+                        "{:<30} {:<15} {:<50} {:<10} {:<10}",
+                        truncate_string(&rule.name, 30),
+                        format!("{:?}", rule.rule_type),
+                        truncate_string(&rule.expression, 50),
+                        format!("{:?}", rule.severity),
+                        rule.enabled
+                    );
                 }
             } else {
                 println!("{:<30} {:<15} {:<10}", "NAME", "TYPE", "ENABLED");
                 println!("{}", "-".repeat(55));
                 for rule in filtered_rules {
-                    println!("{:<30} {:<15} {:<10}",
-                            truncate_string(&rule.name, 30),
-                            format!("{:?}", rule.rule_type),
-                            rule.enabled);
+                    println!(
+                        "{:<30} {:<15} {:<10}",
+                        truncate_string(&rule.name, 30),
+                        format!("{:?}", rule.rule_type),
+                        rule.enabled
+                    );
                 }
             }
-        },
+        }
 
-        RulesCommand::Add { pipeline, name, rule_type, expression, severity, config } => {
-            println!("Adding validation rule '{}' to pipeline '{}'", name, pipeline);
+        RulesCommand::Add {
+            pipeline,
+            name,
+            rule_type,
+            expression,
+            severity,
+            config,
+        } => {
+            println!(
+                "Adding validation rule '{}' to pipeline '{}'",
+                name, pipeline
+            );
 
             let rule_config = if let Some(config_file) = config {
                 let config_content = std::fs::read_to_string(config_file)?;
@@ -2029,10 +2299,18 @@ async fn handle_rules_command(command: RulesCommand, system: &DataPipelineSystem
 
             system.add_validation_rule(&pipeline, rule_config).await?;
             println!("✓ Validation rule added successfully");
-        },
+        }
 
-        RulesCommand::Update { pipeline, rule, config, enabled } => {
-            println!("Updating validation rule '{}' in pipeline '{}'", rule, pipeline);
+        RulesCommand::Update {
+            pipeline,
+            rule,
+            config,
+            enabled,
+        } => {
+            println!(
+                "Updating validation rule '{}' in pipeline '{}'",
+                rule, pipeline
+            );
 
             let mut updates = HashMap::new();
 
@@ -2046,86 +2324,138 @@ async fn handle_rules_command(command: RulesCommand, system: &DataPipelineSystem
                 updates.insert("enabled".to_string(), Value::Bool(enabled_flag));
             }
 
-            system.update_validation_rule(&pipeline, &rule, updates).await?;
+            system
+                .update_validation_rule(&pipeline, &rule, updates)
+                .await?;
             println!("✓ Validation rule updated successfully");
-        },
+        }
 
-        RulesCommand::Remove { pipeline, rule, confirm } => {
+        RulesCommand::Remove {
+            pipeline,
+            rule,
+            confirm,
+        } => {
             if !confirm {
                 println!("This will remove the validation rule '{}' from pipeline '{}'. Use --confirm to proceed.", rule, pipeline);
                 return Ok(());
             }
 
-            println!("Removing validation rule '{}' from pipeline '{}'", rule, pipeline);
+            println!(
+                "Removing validation rule '{}' from pipeline '{}'",
+                rule, pipeline
+            );
             system.remove_validation_rule(&pipeline, &rule).await?;
             println!("✓ Validation rule removed successfully");
-        },
+        }
     }
 
     Ok(())
 }
 
-async fn handle_anomaly_command(command: AnomalyCommand, system: &DataPipelineSystem) -> Result<()> {
+async fn handle_anomaly_command(
+    command: AnomalyCommand,
+    system: &DataPipelineSystem,
+) -> Result<()> {
     match command {
-        AnomalyCommand::Detect { pipeline, method, range, sensitivity } => {
+        AnomalyCommand::Detect {
+            pipeline,
+            method,
+            range,
+            sensitivity,
+        } => {
             let detection_method = method.as_deref().unwrap_or("statistical");
             let time_range = range.as_deref().unwrap_or("24h");
             let sensitivity_level = sensitivity.unwrap_or(0.95);
 
-            println!("Detecting anomalies in pipeline '{}' using {} method", pipeline, detection_method);
+            println!(
+                "Detecting anomalies in pipeline '{}' using {} method",
+                pipeline, detection_method
+            );
 
-            let anomalies = system.detect_anomalies(&pipeline, detection_method, time_range, sensitivity_level).await?;
+            let anomalies = system
+                .detect_anomalies(&pipeline, detection_method, time_range, sensitivity_level)
+                .await?;
 
             if anomalies.is_empty() {
                 println!("✓ No anomalies detected");
             } else {
                 println!("Found {} anomalies:", anomalies.len());
-                println!("{:<20} {:<15} {:<30} {:<10}", "TIMESTAMP", "TYPE", "DESCRIPTION", "SEVERITY");
+                println!(
+                    "{:<20} {:<15} {:<30} {:<10}",
+                    "TIMESTAMP", "TYPE", "DESCRIPTION", "SEVERITY"
+                );
                 println!("{}", "-".repeat(75));
                 for (_i, anomaly) in anomalies.iter().enumerate() {
-                    println!("{:<20} {:<15} {:<30} {:<10}",
-                            anomaly.timestamp.format("%Y-%m-%d %H:%M:%S"),
-                            format!("{:?}", anomaly.anomaly_type),
-                            truncate_string(&anomaly.description, 30),
-                            format!("{:?}", anomaly.severity));
+                    println!(
+                        "{:<20} {:<15} {:<30} {:<10}",
+                        anomaly.timestamp.format("%Y-%m-%d %H:%M:%S"),
+                        format!("{:?}", anomaly.anomaly_type),
+                        truncate_string(&anomaly.description, 30),
+                        format!("{:?}", anomaly.severity)
+                    );
                 }
             }
-        },
+        }
 
-        AnomalyCommand::Configure { pipeline, config, enabled } => {
+        AnomalyCommand::Configure {
+            pipeline,
+            config,
+            enabled,
+        } => {
             println!("Configuring anomaly detection for pipeline: {}", pipeline);
 
             let config_content = std::fs::read_to_string(config)?;
             let anomaly_config: AnomalyDetectionConfig = serde_json::from_str(&config_content)?;
 
-            system.configure_anomaly_detection(&pipeline, anomaly_config, enabled.unwrap_or(true)).await?;
+            system
+                .configure_anomaly_detection(&pipeline, anomaly_config, enabled.unwrap_or(true))
+                .await?;
             println!("✓ Anomaly detection configured successfully");
-        },
+        }
 
-        AnomalyCommand::History { pipeline, range, severity, limit } => {
+        AnomalyCommand::History {
+            pipeline,
+            range,
+            severity,
+            limit,
+        } => {
             let time_range = range.as_deref().unwrap_or("7d");
 
-            let anomaly_history = system.get_anomaly_history(&pipeline, time_range, severity.as_deref(), limit).await?;
+            let anomaly_history = system
+                .get_anomaly_history(&pipeline, time_range, severity.as_deref(), limit)
+                .await?;
 
-            println!("{:<20} {:<15} {:<30} {:<10} {:<20}", "TIMESTAMP", "TYPE", "DESCRIPTION", "SEVERITY", "STATUS");
+            println!(
+                "{:<20} {:<15} {:<30} {:<10} {:<20}",
+                "TIMESTAMP", "TYPE", "DESCRIPTION", "SEVERITY", "STATUS"
+            );
             println!("{}", "-".repeat(95));
             for anomaly in anomaly_history {
-                println!("{:<20} {:<15} {:<30} {:<10} {:<20}",
-                        anomaly.timestamp.format("%Y-%m-%d %H:%M:%S"),
-                        format!("{:?}", anomaly.anomaly_type),
-                        truncate_string(&anomaly.description, 30),
-                        format!("{:?}", anomaly.severity),
-                        format!("{:?}", anomaly.status));
+                println!(
+                    "{:<20} {:<15} {:<30} {:<10} {:<20}",
+                    anomaly.timestamp.format("%Y-%m-%d %H:%M:%S"),
+                    format!("{:?}", anomaly.anomaly_type),
+                    truncate_string(&anomaly.description, 30),
+                    format!("{:?}", anomaly.severity),
+                    format!("{:?}", anomaly.status)
+                );
             }
-        },
+        }
     }
 
     Ok(())
 }
 
-async fn handle_schedule_command(command: ScheduleCommand, system: &DataPipelineSystem) -> Result<()> {
+async fn handle_schedule_command(
+    command: ScheduleCommand,
+    system: &DataPipelineSystem,
+) -> Result<()> {
     match command {
-        ScheduleCommand::Show { pipeline, next, format } => {
+        ScheduleCommand::Show {
+            pipeline,
+            next,
+            format,
+        } => {
             let schedule = system.get_pipeline_schedule(&pipeline).await?;
 
             match format.as_deref().unwrap_or("table") {
@@ -2138,7 +2468,7 @@ async fn handle_schedule_command(command: ScheduleCommand, system: &DataPipeline
                     }
 
                     println!("{}", serde_json::to_string_pretty(&output)?);
-                },
+                }
                 "yaml" => {
                     let mut output = serde_json::to_value(&schedule)?;
 
@@ -2148,7 +2478,7 @@ async fn handle_schedule_command(command: ScheduleCommand, system: &DataPipeline
                     }
 
                     println!("{}", serde_yaml::to_string(&output)?);
-                },
+                }
                 "table" | _ => {
                     println!("Schedule for pipeline: {}", pipeline);
                     println!("=======================");
@@ -2165,14 +2495,24 @@ async fn handle_schedule_command(command: ScheduleCommand, system: &DataPipeline
                         let next_executions = system.get_next_executions(next_count).await?;
                         println!("\nNext {} executions:", next_count);
                         for (i, execution_time) in next_executions.iter().enumerate() {
-                            println!("{}. {}", i + 1, execution_time.1.format("%Y-%m-%d %H:%M:%S"));
+                            println!(
+                                "{}. {}",
+                                i + 1,
+                                execution_time.1.format("%Y-%m-%d %H:%M:%S")
+                            );
                         }
                     }
-                },
+                }
             }
-        },
+        }
 
-        ScheduleCommand::Update { pipeline, cron, interval, enabled, timezone } => {
+        ScheduleCommand::Update {
+            pipeline,
+            cron,
+            interval,
+            enabled,
+            timezone,
+        } => {
             println!("Updating schedule for pipeline: {}", pipeline);
 
             let mut updates = HashMap::new();
@@ -2182,7 +2522,10 @@ async fn handle_schedule_command(command: ScheduleCommand, system: &DataPipeline
             }
 
             if let Some(interval_secs) = interval {
-                updates.insert("interval_seconds".to_string(), Value::Number(interval_secs.into()));
+                updates.insert(
+                    "interval_seconds".to_string(),
+                    Value::Number(interval_secs.into()),
+                );
             }
 
             if let Some(enabled_flag) = enabled {
@@ -2195,9 +2538,13 @@ async fn handle_schedule_command(command: ScheduleCommand, system: &DataPipeline
 
             system.update_pipeline_schedule(&pipeline, updates).await?;
             println!("✓ Schedule updated successfully");
-        },
+        }
 
-        ScheduleCommand::Trigger { pipeline, params, skip_if_running } => {
+        ScheduleCommand::Trigger {
+            pipeline,
+            params,
+            skip_if_running,
+        } => {
             println!("Triggering scheduled execution for pipeline: {}", pipeline);
 
             let execution_params = if let Some(params_str) = params {
@@ -2207,16 +2554,23 @@ async fn handle_schedule_command(command: ScheduleCommand, system: &DataPipeline
                 None
             };
 
-            let execution_id = system.trigger_scheduled_execution(&pipeline, execution_params, skip_if_running).await?;
+            let execution_id = system
+                .trigger_scheduled_execution(&pipeline, execution_params, skip_if_running)
+                .await?;
             println!("✓ Execution triggered with ID: {}", execution_id);
-        },
+        }
 
-        ScheduleCommand::List { show_disabled, show_next, format } => {
+        ScheduleCommand::List {
+            show_disabled,
+            show_next,
+            format,
+        } => {
             let scheduled_pipelines = system.list_scheduled_pipelines(show_disabled).await?;
 
             match format.as_deref().unwrap_or("table") {
                 "json" => {
-                    let output: Value = scheduled_pipelines.into_iter()
+                    let output: Value = scheduled_pipelines
+                        .into_iter()
                         .map(|(pipeline_id, schedule)| {
                             let mut schedule_json = json!({
                                 "pipeline_id": pipeline_id,
@@ -2235,9 +2589,10 @@ async fn handle_schedule_command(command: ScheduleCommand, system: &DataPipeline
                         })
                         .collect();
                     println!("{}", serde_json::to_string_pretty(&output)?);
-                },
+                }
                 "yaml" => {
-                    let output: Value = scheduled_pipelines.into_iter()
+                    let output: Value = scheduled_pipelines
+                        .into_iter()
                         .map(|(pipeline_id, schedule)| {
                             let mut schedule_json = json!({
                                 "pipeline_id": pipeline_id,
@@ -2255,13 +2610,19 @@ async fn handle_schedule_command(command: ScheduleCommand, system: &DataPipeline
                         })
                         .collect();
                     println!("{}", serde_yaml::to_string(&output)?);
-                },
+                }
                 "table" | _ => {
                     if show_next {
-                        println!("{:<36} {:<10} {:<30} {:<20} {:<20}", "PIPELINE_ID", "ENABLED", "SCHEDULE", "TIMEZONE", "NEXT_EXECUTION");
+                        println!(
+                            "{:<36} {:<10} {:<30} {:<20} {:<20}",
+                            "PIPELINE_ID", "ENABLED", "SCHEDULE", "TIMEZONE", "NEXT_EXECUTION"
+                        );
                         println!("{}", "-".repeat(116));
                     } else {
-                        println!("{:<36} {:<10} {:<30} {:<20}", "PIPELINE_ID", "ENABLED", "SCHEDULE", "TIMEZONE");
+                        println!(
+                            "{:<36} {:<10} {:<30} {:<20}",
+                            "PIPELINE_ID", "ENABLED", "SCHEDULE", "TIMEZONE"
+                        );
                         println!("{}", "-".repeat(96));
                     }
 
@@ -2277,67 +2638,89 @@ async fn handle_schedule_command(command: ScheduleCommand, system: &DataPipeline
                         let timezone = &schedule.timezone;
 
                         if show_next {
-                            println!("{:<36} {:<10} {:<30} {:<20} {:<20}",
-                                    pipeline_id,
-                                    schedule.enabled,
-                                    truncate_string(&schedule_str, 30),
-                                    truncate_string(&timezone, 20),
-                                    "TBD");
+                            println!(
+                                "{:<36} {:<10} {:<30} {:<20} {:<20}",
+                                pipeline_id,
+                                schedule.enabled,
+                                truncate_string(&schedule_str, 30),
+                                truncate_string(&timezone, 20),
+                                "TBD"
+                            );
                         } else {
-                            println!("{:<36} {:<10} {:<30} {:<20}",
-                                    pipeline_id,
-                                    schedule.enabled,
-                                    truncate_string(&schedule_str, 30),
-                                    truncate_string(&timezone, 20));
+                            println!(
+                                "{:<36} {:<10} {:<30} {:<20}",
+                                pipeline_id,
+                                schedule.enabled,
+                                truncate_string(&schedule_str, 30),
+                                truncate_string(&timezone, 20)
+                            );
                         }
                     }
-                },
+                }
             }
-        },
+        }
     }
 
     Ok(())
 }
 
-async fn handle_template_command(command: TemplateCommand, system: &DataPipelineSystem) -> Result<()> {
+async fn handle_template_command(
+    command: TemplateCommand,
+    system: &DataPipelineSystem,
+) -> Result<()> {
     match command {
-        TemplateCommand::List { category, detailed, format } => {
+        TemplateCommand::List {
+            category,
+            detailed,
+            format,
+        } => {
             let templates = system.list_templates(category.as_deref()).await?;
 
             match format.as_deref().unwrap_or("table") {
                 "json" => {
                     println!("{}", serde_json::to_string_pretty(&templates)?);
-                },
+                }
                 "yaml" => {
                     println!("{}", serde_yaml::to_string(&templates)?);
-                },
+                }
                 "table" | _ => {
                     if detailed {
-                        println!("{:<30} {:<15} {:<50} {:<20}", "NAME", "CATEGORY", "DESCRIPTION", "TAGS");
+                        println!(
+                            "{:<30} {:<15} {:<50} {:<20}",
+                            "NAME", "CATEGORY", "DESCRIPTION", "TAGS"
+                        );
                         println!("{}", "-".repeat(115));
                         for template in templates {
                             let tags = template.tags.join(", ");
-                            println!("{:<30} {:<15} {:<50} {:<20}",
-                                    truncate_string(&template.name, 30),
-                                    truncate_string(&template.category.unwrap_or_default(), 15),
-                                    truncate_string(&template.description.unwrap_or_default(), 50),
-                                    truncate_string(&tags, 20));
+                            println!(
+                                "{:<30} {:<15} {:<50} {:<20}",
+                                truncate_string(&template.name, 30),
+                                truncate_string(&template.category.unwrap_or_default(), 15),
+                                truncate_string(&template.description.unwrap_or_default(), 50),
+                                truncate_string(&tags, 20)
+                            );
                         }
                     } else {
                         println!("{:<30} {:<15} {:<50}", "NAME", "CATEGORY", "DESCRIPTION");
                         println!("{}", "-".repeat(95));
                         for template in templates {
-                            println!("{:<30} {:<15} {:<50}",
-                                    truncate_string(&template.name, 30),
-                                    truncate_string(&template.category.unwrap_or_default(), 15),
-                                    truncate_string(&template.description.unwrap_or_default(), 50));
+                            println!(
+                                "{:<30} {:<15} {:<50}",
+                                truncate_string(&template.name, 30),
+                                truncate_string(&template.category.unwrap_or_default(), 15),
+                                truncate_string(&template.description.unwrap_or_default(), 50)
+                            );
                         }
                     }
-                },
+                }
             }
-        },
+        }
 
-        TemplateCommand::Show { template, config, format } => {
+        TemplateCommand::Show {
+            template,
+            config,
+            format,
+        } => {
             let template_data = system.get_template(&template).await?;
 
             match format.as_deref().unwrap_or("table") {
@@ -2350,7 +2733,7 @@ async fn handle_template_command(command: TemplateCommand, system: &DataPipeline
                     }
 
                     println!("{}", serde_json::to_string_pretty(&output)?);
-                },
+                }
                 "yaml" => {
                     let mut output = serde_json::to_value(&template_data)?;
 
@@ -2360,7 +2743,7 @@ async fn handle_template_command(command: TemplateCommand, system: &DataPipeline
                     }
 
                     println!("{}", serde_yaml::to_string(&output)?);
-                },
+                }
                 "table" | _ => {
                     println!("Template Details");
                     println!("================");
@@ -2382,18 +2765,37 @@ async fn handle_template_command(command: TemplateCommand, system: &DataPipeline
                         println!("=============");
                         println!("{}", serde_yaml::to_string(&template_config)?);
                     }
-                },
+                }
             }
-        },
+        }
 
-        TemplateCommand::Create { pipeline, name, description, category, tags } => {
+        TemplateCommand::Create {
+            pipeline,
+            name,
+            description,
+            category,
+            tags,
+        } => {
             println!("Creating template '{}' from pipeline '{}'", name, pipeline);
 
-            let template_id = system.create_template(&pipeline, &name, description.as_deref(), category.as_deref(), tags).await?;
+            let template_id = system
+                .create_template(
+                    &pipeline,
+                    &name,
+                    description.as_deref(),
+                    category.as_deref(),
+                    tags,
+                )
+                .await?;
             println!("✓ Template created with ID: {}", template_id);
-        },
+        }
 
-        TemplateCommand::Update { template, config, description, tags } => {
+        TemplateCommand::Update {
+            template,
+            config,
+            description,
+            tags,
+        } => {
             println!("Updating template: {}", template);
 
             let mut updates = HashMap::new();
@@ -2414,21 +2816,32 @@ async fn handle_template_command(command: TemplateCommand, system: &DataPipeline
 
             system.update_template(&template, updates).await?;
             println!("✓ Template updated successfully");
-        },
+        }
 
         TemplateCommand::Delete { template, confirm } => {
             if !confirm {
-                println!("This will delete the template '{}'. Use --confirm to proceed.", template);
+                println!(
+                    "This will delete the template '{}'. Use --confirm to proceed.",
+                    template
+                );
                 return Ok(());
             }
 
             println!("Deleting template: {}", template);
             system.delete_template(&template).await?;
             println!("✓ Template deleted successfully");
-        },
+        }
 
-        TemplateCommand::Apply { template, name, params, config } => {
-            println!("Applying template '{}' to create pipeline '{}'", template, name);
+        TemplateCommand::Apply {
+            template,
+            name,
+            params,
+            config,
+        } => {
+            println!(
+                "Applying template '{}' to create pipeline '{}'",
+                template, name
+            );
 
             let template_params = if let Some(params_str) = params {
                 let params_map: HashMap<String, Value> = serde_json::from_str(&params_str)?;
@@ -2445,9 +2858,11 @@ async fn handle_template_command(command: TemplateCommand, system: &DataPipeline
                 None
             };
 
-            let pipeline_id = system.apply_template(&template, &name, template_params, config_overrides).await?;
+            let pipeline_id = system
+                .apply_template(&template, &name, template_params, config_overrides)
+                .await?;
             println!("✓ Pipeline created from template with ID: {}", pipeline_id);
-        },
+        }
     }
 
     Ok(())
@@ -2503,7 +2918,10 @@ fn parse_validation_rule_type(rule_type: &str) -> Result<ValidationRuleType> {
         "completeness" => Ok(ValidationRuleType::Completeness),
         "consistency" => Ok(ValidationRuleType::Consistency),
         "custom" => Ok(ValidationRuleType::Custom),
-        _ => Err(anyhow::anyhow!("Invalid validation rule type: {}", rule_type)),
+        _ => Err(anyhow::anyhow!(
+            "Invalid validation rule type: {}",
+            rule_type
+        )),
     }
 }
 
@@ -2522,24 +2940,416 @@ fn create_default_pipeline_config(pipeline_type: PipelineType) -> Result<DataPip
     Ok(config)
 }
 
-fn create_default_stage_config(_stage_type: &str) -> Result<Option<HashMap<String, Value>>> {
-    // TODO: Implement proper stage configuration
-    Ok(Some(HashMap::new()))
+fn create_default_stage_config(stage_type: &str) -> Result<Option<HashMap<String, Value>>> {
+    let mut config = HashMap::new();
+
+    match stage_type.to_lowercase().as_str() {
+        "extract" => {
+            config.insert("type".to_string(), Value::String("extract".to_string()));
+            config.insert("source_type".to_string(), Value::String("file".to_string()));
+            config.insert("source_path".to_string(), Value::String("/data/input".to_string()));
+            config.insert("format".to_string(), Value::String("json".to_string()));
+            config.insert("batch_size".to_string(), Value::Number(serde_json::Number::from(1000)));
+            config.insert("parallel_workers".to_string(), Value::Number(serde_json::Number::from(4)));
+            config.insert("retry_attempts".to_string(), Value::Number(serde_json::Number::from(3)));
+            config.insert("timeout_seconds".to_string(), Value::Number(serde_json::Number::from(300)));
+        },
+        "transform" => {
+            config.insert("type".to_string(), Value::String("transform".to_string()));
+            config.insert("transformation_type".to_string(), Value::String("map".to_string()));
+            config.insert("operations".to_string(), Value::Array(vec![
+                Value::Object({
+                    let mut op = serde_json::Map::new();
+                    op.insert("name".to_string(), Value::String("normalize".to_string()));
+                    op.insert("enabled".to_string(), Value::Bool(true));
+                    op
+                })
+            ]));
+            config.insert("error_handling".to_string(), Value::String("skip".to_string()));
+            config.insert("validation_enabled".to_string(), Value::Bool(true));
+            config.insert("memory_limit_mb".to_string(), Value::Number(serde_json::Number::from(512)));
+        },
+        "load" => {
+            config.insert("type".to_string(), Value::String("load".to_string()));
+            config.insert("destination_type".to_string(), Value::String("database".to_string()));
+            config.insert("destination_path".to_string(), Value::String("/data/output".to_string()));
+            config.insert("table_name".to_string(), Value::String("processed_data".to_string()));
+            config.insert("write_mode".to_string(), Value::String("append".to_string()));
+            config.insert("batch_commit_size".to_string(), Value::Number(serde_json::Number::from(1000)));
+            config.insert("create_indexes".to_string(), Value::Bool(true));
+            config.insert("backup_enabled".to_string(), Value::Bool(true));
+        },
+        "validate" => {
+            config.insert("type".to_string(), Value::String("validate".to_string()));
+            config.insert("validation_rules".to_string(), Value::Array(vec![
+                Value::Object({
+                    let mut rule = serde_json::Map::new();
+                    rule.insert("field".to_string(), Value::String("id".to_string()));
+                    rule.insert("rule_type".to_string(), Value::String("required".to_string()));
+                    rule.insert("enabled".to_string(), Value::Bool(true));
+                    rule
+                })
+            ]));
+            config.insert("strict_mode".to_string(), Value::Bool(false));
+            config.insert("error_threshold_percent".to_string(), Value::Number(serde_json::Number::from(5)));
+            config.insert("report_validation_errors".to_string(), Value::Bool(true));
+        },
+        "filter" => {
+            config.insert("type".to_string(), Value::String("filter".to_string()));
+            config.insert("filter_conditions".to_string(), Value::Array(vec![
+                Value::Object({
+                    let mut condition = serde_json::Map::new();
+                    condition.insert("field".to_string(), Value::String("status".to_string()));
+                    condition.insert("operator".to_string(), Value::String("equals".to_string()));
+                    condition.insert("value".to_string(), Value::String("active".to_string()));
+                    condition
+                })
+            ]));
+            config.insert("filter_mode".to_string(), Value::String("include".to_string()));
+            config.insert("case_sensitive".to_string(), Value::Bool(false));
+        },
+        "aggregate" => {
+            config.insert("type".to_string(), Value::String("aggregate".to_string()));
+            config.insert("group_by_fields".to_string(), Value::Array(vec![
+                Value::String("category".to_string())
+            ]));
+            config.insert("aggregations".to_string(), Value::Array(vec![
+                Value::Object({
+                    let mut agg = serde_json::Map::new();
+                    agg.insert("field".to_string(), Value::String("amount".to_string()));
+                    agg.insert("function".to_string(), Value::String("sum".to_string()));
+                    agg.insert("alias".to_string(), Value::String("total_amount".to_string()));
+                    agg
+                })
+            ]));
+            config.insert("window_size".to_string(), Value::Number(serde_json::Number::from(3600)));
+            config.insert("emit_partial_results".to_string(), Value::Bool(false));
+        },
+        "enrich" => {
+            config.insert("type".to_string(), Value::String("enrich".to_string()));
+            config.insert("enrichment_source".to_string(), Value::String("lookup_table".to_string()));
+            config.insert("lookup_key".to_string(), Value::String("id".to_string()));
+            config.insert("enrichment_fields".to_string(), Value::Array(vec![
+                Value::String("description".to_string()),
+                Value::String("metadata".to_string())
+            ]));
+            config.insert("cache_enabled".to_string(), Value::Bool(true));
+            config.insert("cache_ttl_seconds".to_string(), Value::Number(serde_json::Number::from(3600)));
+            config.insert("missing_value_strategy".to_string(), Value::String("null".to_string()));
+        },
+        "split" => {
+            config.insert("type".to_string(), Value::String("split".to_string()));
+            config.insert("split_strategy".to_string(), Value::String("round_robin".to_string()));
+            config.insert("output_branches".to_string(), Value::Number(serde_json::Number::from(2)));
+            config.insert("split_condition".to_string(), Value::String("${record.type}".to_string()));
+            config.insert("preserve_order".to_string(), Value::Bool(true));
+        },
+        "deduplicate" => {
+            config.insert("type".to_string(), Value::String("deduplicate".to_string()));
+            config.insert("dedup_keys".to_string(), Value::Array(vec![
+                Value::String("id".to_string())
+            ]));
+            config.insert("dedup_strategy".to_string(), Value::String("first".to_string()));
+            config.insert("window_size".to_string(), Value::Number(serde_json::Number::from(10000)));
+            config.insert("memory_efficient".to_string(), Value::Bool(true));
+        },
+        _ => {
+            // Default generic stage configuration
+            config.insert("type".to_string(), Value::String(stage_type.to_string()));
+            config.insert("enabled".to_string(), Value::Bool(true));
+            config.insert("description".to_string(), Value::String(format!("Default {} stage", stage_type)));
+            config.insert("timeout_seconds".to_string(), Value::Number(serde_json::Number::from(300)));
+            config.insert("retry_attempts".to_string(), Value::Number(serde_json::Number::from(3)));
+            config.insert("parallel_processing".to_string(), Value::Bool(false));
+        }
+    }
+
+    // Add common configuration for all stages
+    config.insert("stage_name".to_string(), Value::String(stage_type.to_string()));
+    config.insert("created_at".to_string(), Value::String(Utc::now().to_rfc3339()));
+    config.insert("version".to_string(), Value::String("1.0".to_string()));
+    config.insert("metadata".to_string(), Value::Object({
+        let mut meta = serde_json::Map::new();
+        meta.insert("generated".to_string(), Value::Bool(true));
+        meta.insert("stage_type".to_string(), Value::String(stage_type.to_string()));
+        meta
+    }));
+
+    Ok(Some(config))
 }
 
-fn validate_pipeline_config(_config: &DataPipelineConfig) -> Result<()> {
-    // TODO: Implement proper validation
+fn validate_pipeline_config(config: &DataPipelineConfig) -> Result<()> {
+    // Validate pipeline name
+    if config.name.trim().is_empty() {
+        return Err(anyhow::anyhow!("Pipeline name cannot be empty"));
+    }
+
+    // Validate pipeline name format (alphanumeric, hyphens, underscores only)
+    if !config.name.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_') {
+        return Err(anyhow::anyhow!(
+            "Pipeline name '{}' contains invalid characters. Only alphanumeric, hyphens, and underscores are allowed",
+            config.name
+        ));
+    }
+
+    // Validate pipeline name length
+    if config.name.len() > 64 {
+        return Err(anyhow::anyhow!(
+            "Pipeline name '{}' is too long. Maximum length is 64 characters",
+            config.name
+        ));
+    }
+
+    // Validate description length if provided
+    if let Some(ref description) = config.description {
+        if description.len() > 500 {
+            return Err(anyhow::anyhow!(
+                "Pipeline description is too long. Maximum length is 500 characters"
+            ));
+        }
+    }
+
+    // Validate pipeline type
+    match config.pipeline_type {
+        PipelineType::Batch | PipelineType::Streaming | PipelineType::Hybrid => {},
+        _ => {
+            return Err(anyhow::anyhow!(
+                "Invalid pipeline type: {:?}. Must be Batch, Streaming, or Hybrid",
+                config.pipeline_type
+            ));
+        }
+    }
+
+    // Validate tags
+    for tag in &config.tags {
+        if tag.trim().is_empty() {
+            return Err(anyhow::anyhow!("Tags cannot be empty"));
+        }
+        if tag.len() > 32 {
+            return Err(anyhow::anyhow!(
+                "Tag '{}' is too long. Maximum length is 32 characters",
+                tag
+            ));
+        }
+    }
+
+    // Validate stages if present
+    if let Some(ref stages) = config.stages {
+        if stages.is_empty() {
+            return Err(anyhow::anyhow!("Pipeline must have at least one stage"));
+        }
+
+        // Check for duplicate stage names
+        let mut stage_names = std::collections::HashSet::new();
+        for stage in stages {
+            if !stage_names.insert(&stage.name) {
+                return Err(anyhow::anyhow!(
+                    "Duplicate stage name: '{}'",
+                    stage.name
+                ));
+            }
+
+            // Validate individual stage
+            validate_stage_config(stage)?;
+        }
+
+        // Validate stage dependencies
+        for stage in stages {
+            if let Some(ref depends_on) = stage.depends_on {
+                for dependency in depends_on {
+                    if !stage_names.contains(dependency) {
+                        return Err(anyhow::anyhow!(
+                            "Stage '{}' depends on non-existent stage '{}'",
+                            stage.name,
+                            dependency
+                        ));
+                    }
+                }
+            }
+        }
+
+        // Check for circular dependencies
+        validate_no_circular_dependencies(stages)?;
+    }
+
+    // Validate schedule if it's a batch pipeline with schedule
+    if config.pipeline_type == PipelineType::Batch {
+        if let Some(ref schedule) = config.schedule {
+            validate_cron_expression(schedule)?;
+        }
+    }
+
+    // Validate resource constraints
+    if let Some(ref resources) = config.resource_constraints {
+        if let Some(memory_mb) = resources.memory_mb {
+            if memory_mb == 0 {
+                return Err(anyhow::anyhow!("Memory constraint must be greater than 0"));
+            }
+            if memory_mb > 32768 { // 32GB limit
+                return Err(anyhow::anyhow!("Memory constraint too high. Maximum is 32GB"));
+            }
+        }
+
+        if let Some(cpu_cores) = resources.cpu_cores {
+            if cpu_cores == 0.0 {
+                return Err(anyhow::anyhow!("CPU constraint must be greater than 0"));
+            }
+            if cpu_cores > 64.0 {
+                return Err(anyhow::anyhow!("CPU constraint too high. Maximum is 64 cores"));
+            }
+        }
+
+        if let Some(timeout_seconds) = resources.timeout_seconds {
+            if timeout_seconds == 0 {
+                return Err(anyhow::anyhow!("Timeout must be greater than 0"));
+            }
+            if timeout_seconds > 86400 { // 24 hours
+                return Err(anyhow::anyhow!("Timeout too high. Maximum is 24 hours"));
+            }
+        }
+    }
+
     Ok(())
 }
 
-fn validate_pipeline_config_detailed(config: &DataPipelineConfig, _level: &str, warnings: bool) -> Result<ValidationResult> {
+fn validate_stage_config(stage: &crate::data_pipeline::Stage) -> Result<()> {
+    // Validate stage name
+    if stage.name.trim().is_empty() {
+        return Err(anyhow::anyhow!("Stage name cannot be empty"));
+    }
+
+    if !stage.name.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_') {
+        return Err(anyhow::anyhow!(
+            "Stage name '{}' contains invalid characters. Only alphanumeric, hyphens, and underscores are allowed",
+            stage.name
+        ));
+    }
+
+    if stage.name.len() > 64 {
+        return Err(anyhow::anyhow!(
+            "Stage name '{}' is too long. Maximum length is 64 characters",
+            stage.name
+        ));
+    }
+
+    // Validate stage type
+    if stage.stage_type.trim().is_empty() {
+        return Err(anyhow::anyhow!("Stage type cannot be empty"));
+    }
+
+    // Validate known stage types
+    let valid_types = ["extract", "transform", "load", "validate", "filter", "aggregate", "enrich", "split", "deduplicate"];
+    let stage_type_lower = stage.stage_type.to_lowercase();
+    if !valid_types.contains(&stage_type_lower.as_str()) && !stage_type_lower.starts_with("custom_") {
+        println!("Warning: Unknown stage type '{}'. Consider using one of: {}",
+            stage.stage_type,
+            valid_types.join(", ")
+        );
+    }
+
+    Ok(())
+}
+
+fn validate_no_circular_dependencies(stages: &[crate::data_pipeline::Stage]) -> Result<()> {
+    use std::collections::{HashMap, HashSet};
+
+    let mut graph: HashMap<&String, Vec<&String>> = HashMap::new();
+
+    // Build dependency graph
+    for stage in stages {
+        let deps = stage.depends_on.as_ref().map(|d| d.iter().collect()).unwrap_or_else(Vec::new);
+        graph.insert(&stage.name, deps);
+    }
+
+    // Check for cycles using DFS
+    fn has_cycle(
+        node: &String,
+        graph: &HashMap<&String, Vec<&String>>,
+        visited: &mut HashSet<String>,
+        rec_stack: &mut HashSet<String>,
+    ) -> bool {
+        visited.insert(node.clone());
+        rec_stack.insert(node.clone());
+
+        if let Some(neighbors) = graph.get(node) {
+            for neighbor in neighbors {
+                if !visited.contains(*neighbor) {
+                    if has_cycle(neighbor, graph, visited, rec_stack) {
+                        return true;
+                    }
+                } else if rec_stack.contains(*neighbor) {
+                    return true;
+                }
+            }
+        }
+
+        rec_stack.remove(node);
+        false
+    }
+
+    let mut visited = HashSet::new();
+    for stage in stages {
+        if !visited.contains(&stage.name) {
+            let mut rec_stack = HashSet::new();
+            if has_cycle(&stage.name, &graph, &mut visited, &mut rec_stack) {
+                return Err(anyhow::anyhow!(
+                    "Circular dependency detected in pipeline stages"
+                ));
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn validate_cron_expression(cron_expr: &str) -> Result<()> {
+    // Basic cron validation - split into parts and check format
+    let parts: Vec<&str> = cron_expr.trim().split_whitespace().collect();
+
+    if parts.len() != 5 && parts.len() != 6 {
+        return Err(anyhow::anyhow!(
+            "Invalid cron expression '{}'. Must have 5 or 6 fields",
+            cron_expr
+        ));
+    }
+
+    // Basic field validation
+    for (i, part) in parts.iter().enumerate() {
+        if part.is_empty() {
+            return Err(anyhow::anyhow!(
+                "Invalid cron expression '{}'. Field {} is empty",
+                cron_expr, i + 1
+            ));
+        }
+
+        // Check for valid characters (numbers, *, -, /, ,)
+        if !part.chars().all(|c| c.is_ascii_digit() || "*/,-".contains(c)) {
+            return Err(anyhow::anyhow!(
+                "Invalid cron expression '{}'. Field {} contains invalid characters",
+                cron_expr, i + 1
+            ));
+        }
+    }
+
+    Ok(())
+}
+
+fn validate_pipeline_config_detailed(
+    config: &DataPipelineConfig,
+    _level: &str,
+    warnings: bool,
+) -> Result<ValidationResult> {
     // This would perform detailed validation and return a comprehensive result
     validate_pipeline_config(config)?;
 
     Ok(ValidationResult {
         valid: true,
         errors: vec![],
-        warnings: if warnings { vec!["Example warning".to_string()] } else { vec![] },
+        warnings: if warnings {
+            vec!["Example warning".to_string()]
+        } else {
+            vec![]
+        },
         info: vec!["Configuration is valid".to_string()],
     })
 }
@@ -2548,10 +3358,10 @@ fn display_validation_result(result: &ValidationResult, format: Option<&str>) ->
     match format.unwrap_or("table") {
         "json" => {
             println!("{}", serde_json::to_string_pretty(result)?);
-        },
+        }
         "yaml" => {
             println!("{}", serde_yaml::to_string(result)?);
-        },
+        }
         "table" | _ => {
             if result.valid {
                 println!("✓ Validation successful");
@@ -2579,7 +3389,7 @@ fn display_validation_result(result: &ValidationResult, format: Option<&str>) ->
                     println!("  ℹ {}", info);
                 }
             }
-        },
+        }
     }
 
     Ok(())
@@ -2592,12 +3402,18 @@ fn display_pipeline_status(status: &DataPipeline, _metrics: bool, _alerts: bool)
     Ok(())
 }
 
-fn convert_execution_metrics_to_pipeline_metrics(exec_metrics: &[crate::data_pipeline::ExecutionMetrics]) -> PipelineMetrics {
+fn convert_execution_metrics_to_pipeline_metrics(
+    exec_metrics: &[crate::data_pipeline::ExecutionMetrics],
+) -> PipelineMetrics {
     let total_executions = exec_metrics.len() as u64;
     let total_records_processed: u64 = exec_metrics.iter().map(|m| m.records_processed).sum();
     let total_data_volume_bytes: u64 = exec_metrics.iter().map(|m| m.data_size_bytes).sum();
     let average_duration_secs = if !exec_metrics.is_empty() {
-        exec_metrics.iter().map(|m| m.duration_seconds as f64).sum::<f64>() / total_executions as f64
+        exec_metrics
+            .iter()
+            .map(|m| m.duration_seconds as f64)
+            .sum::<f64>()
+            / total_executions as f64
     } else {
         0.0
     };
@@ -2627,7 +3443,10 @@ fn display_pipeline_metrics(metrics: &PipelineMetrics) -> Result<()> {
     println!("Average Duration: {:.2}s", metrics.average_duration_secs);
     println!("Records Processed: {}", metrics.total_records_processed);
     println!("Data Volume: {} bytes", metrics.total_data_volume_bytes);
-    println!("Average Throughput: {:.2} records/sec", metrics.average_throughput_per_sec);
+    println!(
+        "Average Throughput: {:.2} records/sec",
+        metrics.average_throughput_per_sec
+    );
 
     Ok(())
 }
@@ -2653,8 +3472,12 @@ fn display_quality_report(report: &crate::data_pipeline::DataQualityReport) -> R
     Ok(())
 }
 
-fn create_default_alert_config(name: &str, condition: &str, severity: &str, channels: &[String]) -> Result<crate::monitoring::AlertingConfig> {
-    use crate::data_pipeline::ChannelType;
+fn create_default_alert_config(
+    name: &str,
+    condition: &str,
+    severity: &str,
+    channels: &[String],
+) -> Result<crate::monitoring::AlertingConfig> {
     // This would create a default alert configuration
     Ok(crate::monitoring::AlertingConfig {
         enabled: true,
@@ -2665,7 +3488,12 @@ fn create_default_alert_config(name: &str, condition: &str, severity: &str, chan
     })
 }
 
-fn create_default_validation_rule(name: &str, rule_type: &str, expression: &str, severity: Option<&str>) -> Result<ValidationRule> {
+fn create_default_validation_rule(
+    name: &str,
+    rule_type: &str,
+    expression: &str,
+    severity: Option<&str>,
+) -> Result<ValidationRule> {
     let rule_type_enum = parse_validation_rule_type(rule_type)?;
 
     Ok(ValidationRule {
@@ -2704,7 +3532,7 @@ struct PipelineStatusInfo {
 struct ValidationSeverity;
 
 impl ValidationSeverity {
-    const High: Self = Self;
-    const Medium: Self = Self;
-    const Low: Self = Self;
+    const HIGH: Self = Self;
+    const MEDIUM: Self = Self;
+    const LOW: Self = Self;
 }

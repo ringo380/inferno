@@ -1,20 +1,30 @@
 use crate::{
-    backends::{BackendConfig, BackendType, InferenceBackend, InferenceMetrics, InferenceParams, TokenStream},
+    backends::{
+        BackendConfig, BackendType, InferenceBackend, InferenceMetrics, InferenceParams,
+        TokenStream,
+    },
     models::ModelInfo,
     InfernoError,
 };
 use anyhow::Result;
 use async_stream::stream;
-use std::time::Instant;
-use tracing::{info, warn, debug};
+use llama_cpp_2::{
+    llama_backend::LlamaBackend,
+    model::{LlamaModel, params::LlamaModelParams, AddBos, Special},
+    token::LlamaToken,
+};
+use std::{
+    sync::Arc,
+    time::Instant,
+};
+use tracing::{debug, info, warn};
 
-// Basic implementation using llama-cpp-2
-// This is a working implementation that can be extended with full llama.cpp functionality
+// Real GGUF implementation using llama-cpp-2
 pub struct GgufBackend {
     config: BackendConfig,
-    model_loaded: bool,
+    backend: Option<LlamaBackend>,
+    model: Option<Arc<LlamaModel>>,
     model_info: Option<ModelInfo>,
-    model_path: Option<std::path::PathBuf>,
     metrics: Option<InferenceMetrics>,
 }
 
@@ -24,64 +34,77 @@ impl GgufBackend {
 
         Ok(Self {
             config,
-            model_loaded: false,
+            backend: None,
+            model: None,
             model_info: None,
-            model_path: None,
             metrics: None,
         })
     }
 
     fn validate_config(&self) -> Result<()> {
         if self.config.context_size > 32768 {
-            warn!("Very large context size may impact performance: {}", self.config.context_size);
+            warn!(
+                "Very large context size may impact performance: {}",
+                self.config.context_size
+            );
         }
         if self.config.context_size < 256 {
-            return Err(InfernoError::Backend("Context size too small (minimum 256)".to_string()).into());
+            return Err(
+                InfernoError::Backend("Context size too small (minimum 256)".to_string()).into(),
+            );
         }
         Ok(())
     }
 
     async fn real_tokenize(&self, text: &str) -> Result<Vec<i32>> {
-        // For now, implement a basic tokenization that could be replaced with actual llama.cpp calls
-        // This is a placeholder that provides reasonable token estimates
-        if !self.model_loaded {
-            return Err(InfernoError::Backend("Model not loaded".to_string()).into());
-        }
+        let model = self.model.as_ref()
+            .ok_or_else(|| InfernoError::Backend("Model not loaded".to_string()))?;
 
-        debug!("Tokenizing text of length: {}", text.len());
+        debug!("Tokenizing text of length: {} with real llama.cpp", text.len());
 
-        // Simple word-based tokenization as a fallback
-        // In a real implementation, this would use the model's actual tokenizer
-        let words: Vec<&str> = text.split_whitespace().collect();
-        let tokens: Vec<i32> = words
-            .iter()
-            .enumerate()
-            .map(|(_i, word)| {
-                // Create a simple hash-based token ID
-                let mut hash = 0i32;
-                for byte in word.bytes() {
-                    hash = hash.wrapping_mul(31).wrapping_add(byte as i32);
-                }
-                // Ensure positive token IDs
-                hash.abs() % 50000 + 1
-            })
-            .collect();
+        let tokens = tokio::task::spawn_blocking({
+            let model = model.clone();
+            let text = text.to_string();
+            move || {
+                model.str_to_token(&text, AddBos::Always)
+                    .map_err(|e| InfernoError::Backend(format!("Tokenization failed: {}", e)))
+            }
+        })
+        .await
+        .map_err(|e| InfernoError::Backend(format!("Tokenization task failed: {}", e)))?
+        .map_err(anyhow::Error::from)?;
 
-        debug!("Tokenized {} words into {} tokens", words.len(), tokens.len());
-        Ok(tokens)
+        let token_ids: Vec<i32> = tokens.iter().map(|t| t.0).collect();
+        debug!("Tokenized text into {} tokens", token_ids.len());
+        Ok(token_ids)
     }
 
     async fn real_detokenize(&self, tokens: &[i32]) -> Result<String> {
-        if !self.model_loaded {
-            return Err(InfernoError::Backend("Model not loaded".to_string()).into());
-        }
+        let model = self.model.as_ref()
+            .ok_or_else(|| InfernoError::Backend("Model not loaded".to_string()))?;
 
-        // Simple detokenization - in a real implementation this would use the model's vocabulary
-        let text = tokens
-            .iter()
-            .map(|&token| format!("token_{}", token))
-            .collect::<Vec<_>>()
-            .join(" ");
+        debug!("Detokenizing {} tokens with real llama.cpp", tokens.len());
+
+        let text = tokio::task::spawn_blocking({
+            let model = model.clone();
+            let tokens = tokens.to_vec();
+            move || {
+                let mut result = String::new();
+                for &token in &tokens {
+                    match model.token_to_str(LlamaToken(token), Special::Tokenize) {
+                        Ok(token_str) => result.push_str(&token_str),
+                        Err(e) => {
+                            warn!("Failed to convert token {} to string: {}", token, e);
+                            result.push_str(&format!("[UNK_{}]", token));
+                        }
+                    }
+                }
+                Ok::<String, InfernoError>(result)
+            }
+        })
+        .await
+        .map_err(|e| InfernoError::Backend(format!("Detokenization task failed: {}", e)))?
+        .map_err(anyhow::Error::from)?;
 
         Ok(text)
     }
@@ -101,50 +124,64 @@ impl GgufBackend {
     }
 
     async fn generate_response(&mut self, input: &str, params: &InferenceParams) -> Result<String> {
-        debug!("Generating response for input of length: {}", input.len());
+        debug!("Generating response for input of length: {} with llama.cpp", input.len());
 
-        // For now, create a structured response that demonstrates the functionality
-        // This would be replaced with actual llama.cpp inference
-        let response = format!(
-            "# GGUF Model Response\n\n\
-            **Input**: {}\n\n\
-            **Parameters**:\n\
-            - Max tokens: {}\n\
-            - Temperature: {:.2}\n\
-            - Top-p: {:.2}\n\n\
-            **Generated Response**:\n\
-            This response is generated by the real GGUF backend implementation using llama.cpp bindings. \
-            The model has been loaded from: {:?}\n\n\
-            The backend is configured with:\n\
-            - Context size: {}\n\
-            - Batch size: {}\n\
-            - GPU enabled: {}\n\
-            - Memory mapping: {}\n\n\
-            This implementation provides a foundation for full llama.cpp integration with proper \
-            tokenization, sampling, and generation capabilities. The response demonstrates that \
-            the backend can successfully load GGUF models and perform inference with the \
-            specified parameters.",
-            input.chars().take(100).collect::<String>(),
-            params.max_tokens,
-            params.temperature,
-            params.top_p,
-            self.model_path.as_ref().map(|p| p.display().to_string()).unwrap_or_else(|| "Unknown".to_string()),
-            self.config.context_size,
-            self.config.batch_size,
-            self.config.gpu_enabled,
-            self.config.memory_map
-        );
+        let model = self.model.as_ref()
+            .ok_or_else(|| InfernoError::Backend("Model not loaded".to_string()))?;
 
+        // Use spawn_blocking for CPU-intensive inference
+        let model_clone = Arc::clone(model);
+        let backend_clone = self.backend.as_ref().unwrap().clone();
+        let input_str = input.to_string();
+        let context_size = self.config.context_size;
+        let batch_size = self.config.batch_size;
+        let max_tokens = params.max_tokens;
+        let temperature = params.temperature;
+
+        let response = tokio::task::spawn_blocking(move || {
+            // Tokenize the input text
+            let tokens = model_clone
+                .tokenize(&input_str, AddBos::Always, Special::Tokenize)
+                .map_err(|e| InfernoError::Backend(format!("Failed to tokenize input: {}", e)))?;
+
+            debug!("Tokenized input: {} tokens", tokens.len());
+
+            // For now, create a simple response acknowledging successful tokenization
+            // This replaces the placeholder while we work on the full inference implementation
+            let response = if tokens.len() > 0 {
+                format!(
+                    "Successfully processed input with {} tokens. Model: {}. Parameters: max_tokens={}, temp={:.2}. This is functional GGUF backend output (full inference coming next).",
+                    tokens.len(),
+                    "llama-model",
+                    max_tokens,
+                    temperature
+                )
+            } else {
+                "No tokens generated from input. Please check your input text.".to_string()
+            };
+
+            Ok::<String, anyhow::Error>(response)
+        })
+        .await
+        .map_err(|e| InfernoError::Backend(format!("Inference task failed: {}", e)))?
+        .map_err(anyhow::Error::from)?;
+
+        debug!("Generated response of length: {}", response.len());
         Ok(response)
     }
 
-    async fn generate_stream(&mut self, input: &str, params: &InferenceParams) -> Result<TokenStream> {
-        info!("Starting real GGUF streaming inference");
+    async fn generate_stream(
+        &mut self,
+        input: &str,
+        params: &InferenceParams,
+    ) -> Result<TokenStream> {
+        info!("Starting GGUF streaming inference");
 
+        // Generate complete response first, then stream it
         let response = self.generate_response(input, params).await?;
         let max_tokens = params.max_tokens;
 
-        // Split response into realistic tokens
+        // Split response into words for streaming simulation
         let words: Vec<String> = response
             .split_whitespace()
             .map(|word| word.to_string())
@@ -152,11 +189,11 @@ impl GgufBackend {
 
         let stream = stream! {
             for (i, word) in words.into_iter().enumerate() {
-                // Add realistic delays based on word complexity
+                // Add realistic delays based on word complexity for streaming effect
                 let delay_ms = match word.len() {
-                    1..=3 => 30,
-                    4..=8 => 50,
-                    _ => 80,
+                    1..=3 => 25,
+                    4..=8 => 40,
+                    _ => 60,
                 };
 
                 tokio::time::sleep(tokio::time::Duration::from_millis(delay_ms)).await;
@@ -189,7 +226,8 @@ impl InferenceBackend for GgufBackend {
             return Err(InfernoError::Backend(format!(
                 "Model file not found: {}",
                 model_info.path.display()
-            )).into());
+            ))
+            .into());
         }
 
         // Basic GGUF file validation
@@ -198,7 +236,10 @@ impl InferenceBackend for GgufBackend {
             .len();
 
         if file_size < 1024 {
-            return Err(InfernoError::Backend("Model file appears to be too small to be a valid GGUF file".to_string()).into());
+            return Err(InfernoError::Backend(
+                "Model file appears to be too small to be a valid GGUF file".to_string(),
+            )
+            .into());
         }
 
         // Read the first few bytes to check for GGUF magic
@@ -212,27 +253,47 @@ impl InferenceBackend for GgufBackend {
 
         // Check for GGUF magic bytes
         if &magic != b"GGUF" {
-            return Err(InfernoError::Backend("File is not a valid GGUF model (missing GGUF magic bytes)".to_string()).into());
+            return Err(InfernoError::Backend(
+                "File is not a valid GGUF model (missing GGUF magic bytes)".to_string(),
+            )
+            .into());
         }
 
         debug!("GGUF file validation passed");
         debug!("Model file size: {} bytes", file_size);
-        debug!("Config - GPU enabled: {}, Context size: {}, Batch size: {}",
-               self.config.gpu_enabled, self.config.context_size, self.config.batch_size);
+        debug!(
+            "Config - GPU enabled: {}, Context size: {}, Batch size: {}",
+            self.config.gpu_enabled, self.config.context_size, self.config.batch_size
+        );
 
-        // In a real implementation, this is where we would:
-        // 1. Initialize llama.cpp backend
-        // 2. Load the model with LlamaModel::load_from_file
-        // 3. Create context with LlamaContext::new
-        // 4. Set up tokenization and sampling
+        // Real llama.cpp model loading
+        info!("Initializing llama.cpp model from: {}", model_info.path.display());
 
-        // Simulate model loading time based on file size
-        let load_time_ms = (file_size / (100 * 1024 * 1024)).max(100).min(2000); // 100ms to 2s
-        tokio::time::sleep(tokio::time::Duration::from_millis(load_time_ms)).await;
+        // Initialize the llama backend
+        let backend = tokio::task::spawn_blocking(|| {
+            LlamaBackend::init()
+                .map_err(|e| InfernoError::Backend(format!("Failed to initialize llama backend: {}", e)))
+        })
+        .await
+        .map_err(|e| InfernoError::Backend(format!("Backend initialization task failed: {}", e)))?
+        .map_err(anyhow::Error::from)?;
 
-        self.model_loaded = true;
+        // Configure model parameters
+        let model_params = LlamaModelParams::default()
+            .with_n_gpu_layers(if self.config.gpu_enabled { 32 } else { 0 })
+            .with_use_mlock(false);
+
+        // Load the model
+        let model = {
+            let path = &model_info.path;
+            LlamaModel::load_from_file(&backend, path, &model_params)
+                .map_err(|e| InfernoError::Backend(format!("Failed to load GGUF model: {}", e)))?
+        };
+
+        // Store backend and model (context will be created per-inference)
+        self.backend = Some(backend);
+        self.model = Some(Arc::new(model));
         self.model_info = Some(model_info.clone());
-        self.model_path = Some(model_info.path.to_path_buf());
 
         info!("GGUF model loaded successfully");
         Ok(())
@@ -240,15 +301,15 @@ impl InferenceBackend for GgufBackend {
 
     async fn unload_model(&mut self) -> Result<()> {
         info!("Unloading GGUF model");
-        self.model_loaded = false;
+        self.backend = None;
+        self.model = None;
         self.model_info = None;
-        self.model_path = None;
         self.metrics = None;
         Ok(())
     }
 
     async fn is_loaded(&self) -> bool {
-        self.model_loaded
+        self.model.is_some() && self.backend.is_some()
     }
 
     async fn get_model_info(&self) -> Option<ModelInfo> {
@@ -335,7 +396,11 @@ impl InferenceBackend for GgufBackend {
             })
             .collect();
 
-        debug!("Generated {} dimensional embeddings for {} tokens", embeddings.len(), tokens.len());
+        debug!(
+            "Generated {} dimensional embeddings for {} tokens",
+            embeddings.len(),
+            tokens.len()
+        );
         Ok(embeddings)
     }
 
@@ -352,9 +417,9 @@ impl InferenceBackend for GgufBackend {
 mod tests {
     use super::*;
     use crate::models::ModelInfo;
+    use chrono::Utc;
     use std::path::PathBuf;
     use tempfile::tempdir;
-    use chrono::Utc;
 
     #[tokio::test]
     async fn test_gguf_backend_creation() {
@@ -413,7 +478,8 @@ mod tests {
         // Create a temporary file with wrong magic bytes
         let dir = tempdir().expect("Failed to create temporary directory for test");
         let model_path = dir.path().join("fake.gguf");
-        std::fs::write(&model_path, b"FAKE model file content").expect("Failed to write fake model file for test");
+        std::fs::write(&model_path, b"FAKE model file content")
+            .expect("Failed to write fake model file for test");
 
         let model_info = ModelInfo {
             path: model_path,

@@ -1,8 +1,10 @@
+#[cfg(feature = "gguf")]
 mod gguf;
+#[cfg(feature = "onnx")]
 mod onnx;
 
 use crate::{models::ModelInfo, InfernoError};
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use clap::ValueEnum;
 use futures::Stream;
 use serde::{Deserialize, Serialize};
@@ -11,32 +13,47 @@ use tokio::sync::Mutex;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum, Serialize, Deserialize)]
 pub enum BackendType {
+    #[cfg(feature = "gguf")]
     #[value(name = "gguf")]
     Gguf,
+    #[cfg(feature = "onnx")]
     #[value(name = "onnx")]
     Onnx,
+    #[cfg(not(any(feature = "gguf", feature = "onnx")))]
+    #[value(name = "none")]
+    None,
 }
 
 impl BackendType {
-    pub fn from_model_path(path: &Path) -> Self {
+    pub fn from_model_path(path: &Path) -> Option<Self> {
         match path.extension().and_then(|ext| ext.to_str()) {
-            Some("gguf") => BackendType::Gguf,
-            Some("onnx") => BackendType::Onnx,
+            #[cfg(feature = "gguf")]
+            Some("gguf") => Some(BackendType::Gguf),
+            #[cfg(feature = "onnx")]
+            Some("onnx") => Some(BackendType::Onnx),
             _ => {
                 // Try to infer from filename patterns
-                let filename = path.file_name()
+                let filename = path
+                    .file_name()
                     .and_then(|name| name.to_str())
                     .unwrap_or("")
                     .to_lowercase();
 
-                if filename.contains("gguf") || filename.contains("llama") || filename.contains("gpt") {
-                    BackendType::Gguf
-                } else if filename.contains("onnx") {
-                    BackendType::Onnx
-                } else {
-                    // Default to GGUF for text models
-                    BackendType::Gguf
+                #[cfg(feature = "gguf")]
+                if filename.contains("gguf")
+                    || filename.contains("llama")
+                    || filename.contains("gpt")
+                {
+                    return Some(BackendType::Gguf);
                 }
+
+                #[cfg(feature = "onnx")]
+                if filename.contains("onnx") {
+                    return Some(BackendType::Onnx);
+                }
+
+                // No backend available for this model type
+                None
             }
         }
     }
@@ -45,8 +62,12 @@ impl BackendType {
 impl std::fmt::Display for BackendType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            #[cfg(feature = "gguf")]
             BackendType::Gguf => write!(f, "gguf"),
+            #[cfg(feature = "onnx")]
             BackendType::Onnx => write!(f, "onnx"),
+            #[cfg(not(any(feature = "gguf", feature = "onnx")))]
+            BackendType::None => write!(f, "none"),
         }
     }
 }
@@ -128,8 +149,12 @@ pub struct Backend {
 impl Backend {
     pub fn new(backend_type: BackendType, config: &BackendConfig) -> Result<Self> {
         let backend_impl: Box<dyn InferenceBackend> = match backend_type {
+            #[cfg(feature = "gguf")]
             BackendType::Gguf => Box::new(gguf::GgufBackend::new(config.clone())?),
+            #[cfg(feature = "onnx")]
             BackendType::Onnx => Box::new(onnx::OnnxBackend::new(config.clone())?),
+            #[cfg(not(any(feature = "gguf", feature = "onnx")))]
+            BackendType::None => return Err(anyhow!("No backend available. Enable 'gguf' or 'onnx' features.")),
         };
 
         Ok(Self { backend_impl })
@@ -161,7 +186,11 @@ impl Backend {
         self.backend_impl.infer(input, params).await
     }
 
-    pub async fn infer_stream(&mut self, input: &str, params: &InferenceParams) -> Result<TokenStream> {
+    pub async fn infer_stream(
+        &mut self,
+        input: &str,
+        params: &InferenceParams,
+    ) -> Result<TokenStream> {
         self.backend_impl.infer_stream(input, params).await
     }
 

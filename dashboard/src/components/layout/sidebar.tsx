@@ -22,80 +22,82 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { useModels, useLoadedModels, useSystemInfo, useActiveProcesses } from '@/hooks/use-tauri-api';
+import { Skeleton } from '@/components/ui/skeleton';
 
-const navigationItems = [
+const baseNavigationItems = [
   {
     title: 'Overview',
     href: '/',
     icon: Home,
-    badge: null,
+    badgeKey: null,
   },
   {
     title: 'Models',
     href: '/models',
     icon: Brain,
-    badge: '12',
+    badgeKey: 'models',
   },
   {
     title: 'Inference',
     href: '/inference',
     icon: Play,
-    badge: null,
+    badgeKey: null,
   },
   {
     title: 'Monitoring',
     href: '/monitoring',
     icon: BarChart3,
-    badge: null,
+    badgeKey: null,
   },
   {
     title: 'Batch Jobs',
-    href: '/batch-jobs',
+    href: '/batch',
     icon: Clock,
-    badge: '3',
+    badgeKey: 'batchJobs',
   },
   {
     title: 'Performance',
     href: '/performance',
     icon: Zap,
-    badge: null,
+    badgeKey: null,
   },
   {
     title: 'Security',
     href: '/security',
     icon: Shield,
-    badge: '!',
+    badgeKey: 'security',
     badgeVariant: 'warning' as const,
   },
   {
     title: 'Multi-Tenancy',
     href: '/tenants',
     icon: Users,
-    badge: '5',
+    badgeKey: 'tenants',
   },
   {
     title: 'Data Pipeline',
     href: '/pipeline',
     icon: Database,
-    badge: null,
+    badgeKey: null,
   },
   {
     title: 'Observability',
     href: '/observability',
     icon: Activity,
-    badge: null,
+    badgeKey: null,
   },
   {
     title: 'Versioning',
     href: '/versioning',
     icon: GitBranch,
-    badge: null,
+    badgeKey: null,
   },
   {
     title: 'Settings',
     href: '/settings',
     icon: Settings,
-    badge: null,
+    badgeKey: null,
   },
 ];
 
@@ -106,6 +108,32 @@ interface SidebarProps {
 export function Sidebar({ className }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
   const pathname = usePathname();
+
+  // Fetch real data
+  const { data: models, isLoading: modelsLoading } = useModels();
+  const { data: loadedModels, isLoading: loadedModelsLoading } = useLoadedModels();
+  const { data: systemInfo, isLoading: systemLoading } = useSystemInfo();
+  const { data: activeProcesses, isLoading: activeProcessesLoading } = useActiveProcesses();
+
+  // Calculate badge values based on real data
+  const badgeValues = {
+    models: models?.length ?? 0,
+    batchJobs: activeProcesses?.batch_jobs ?? 0,
+    security: 0, // Will be implemented later
+    tenants: 1, // Default single tenant for now
+  };
+
+  // Create navigation items with real badge values
+  const navigationItems = baseNavigationItems.map(item => ({
+    ...item,
+    badge: item.badgeKey && badgeValues[item.badgeKey as keyof typeof badgeValues]
+      ? String(badgeValues[item.badgeKey as keyof typeof badgeValues])
+      : item.badgeKey === 'security' && badgeValues.security === 0
+        ? null
+        : item.badgeKey === 'security'
+          ? '!'
+          : null,
+  }));
 
   return (
     <div className={cn(
@@ -171,28 +199,72 @@ export function Sidebar({ className }: SidebarProps) {
             <div className="text-xs font-medium text-muted-foreground">
               System Status
             </div>
-            <div className="space-y-2">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">CPU Usage</span>
-                <span className="font-medium">45%</span>
+            {systemLoading ? (
+              <div className="space-y-3">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Skeleton className="h-3 w-16" />
+                    <Skeleton className="h-3 w-8" />
+                  </div>
+                  <Skeleton className="h-2 w-full rounded-full" />
+                </div>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Skeleton className="h-3 w-12" />
+                    <Skeleton className="h-3 w-12" />
+                  </div>
+                  <Skeleton className="h-2 w-full rounded-full" />
+                </div>
+                <div className="flex items-center justify-between">
+                  <Skeleton className="h-3 w-20" />
+                  <Skeleton className="h-3 w-4" />
+                </div>
               </div>
-              <div className="w-full bg-secondary rounded-full h-2">
-                <div className="bg-green-500 h-2 rounded-full w-[45%]"></div>
-              </div>
+            ) : (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">CPU Usage</span>
+                  <span className="font-medium">
+                    {systemInfo?.cpu_usage ? `${systemInfo.cpu_usage.toFixed(1)}%` : '0%'}
+                  </span>
+                </div>
+                <div className="w-full bg-secondary rounded-full h-2">
+                  <div
+                    className="bg-green-500 h-2 rounded-full transition-all duration-500"
+                    style={{ width: `${systemInfo?.cpu_usage || 0}%` }}
+                  ></div>
+                </div>
 
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">Memory</span>
-                <span className="font-medium">2.1GB</span>
-              </div>
-              <div className="w-full bg-secondary rounded-full h-2">
-                <div className="bg-blue-500 h-2 rounded-full w-[60%]"></div>
-              </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Memory</span>
+                  <span className="font-medium">
+                    {systemInfo ?
+                      `${(systemInfo.used_memory / (1024 * 1024 * 1024)).toFixed(1)}GB` :
+                      '0GB'
+                    }
+                  </span>
+                </div>
+                <div className="w-full bg-secondary rounded-full h-2">
+                  <div
+                    className="bg-blue-500 h-2 rounded-full transition-all duration-500"
+                    style={{
+                      width: `${systemInfo ? (systemInfo.used_memory / systemInfo.total_memory) * 100 : 0}%`
+                    }}
+                  ></div>
+                </div>
 
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">Active Models</span>
-                <span className="font-medium text-green-600">3</span>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Active Models</span>
+                  <span className="font-medium text-green-600">
+                    {loadedModelsLoading ? (
+                      <Skeleton className="h-3 w-4 inline-block" />
+                    ) : (
+                      loadedModels?.length || 0
+                    )}
+                  </span>
+                </div>
               </div>
-            </div>
+            )}
           </div>
         </div>
       )}

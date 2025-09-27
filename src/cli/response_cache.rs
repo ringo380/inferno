@@ -1,7 +1,7 @@
 use crate::{
     config::Config,
-    response_cache::{ResponseCache, CacheKey, ResponseMetadata, HashAlgorithm},
     metrics::MetricsCollector,
+    response_cache::{CacheKey, HashAlgorithm, ResponseCache, ResponseMetadata},
 };
 use anyhow::Result;
 use clap::{Args, Subcommand, ValueEnum};
@@ -69,7 +69,12 @@ pub enum ResponseCacheCommand {
 
     #[command(about = "Benchmark cache performance")]
     Benchmark {
-        #[arg(short, long, help = "Number of benchmark iterations", default_value = "1000")]
+        #[arg(
+            short,
+            long,
+            help = "Number of benchmark iterations",
+            default_value = "1000"
+        )]
         iterations: usize,
 
         #[arg(long, help = "Response data size in bytes", default_value = "1024")]
@@ -150,7 +155,8 @@ pub async fn execute(args: ResponseCacheArgs, config: &Config) -> Result<()> {
                 deduplication,
                 compression,
                 hash_algorithm,
-            ).await
+            )
+            .await
         }
         ResponseCacheCommand::Benchmark {
             iterations,
@@ -185,7 +191,10 @@ async fn show_cache_stats(config: &Config) -> Result<()> {
     println!("Hit Rate: {:.2}%", stats.hit_rate * 100.0);
     println!("Total Entries: {}", stats.total_entries);
     println!("Memory Usage: {:.2} MB", stats.memory_usage_mb);
-    println!("Deduplication Savings: {} bytes", stats.deduplication_savings);
+    println!(
+        "Deduplication Savings: {} bytes",
+        stats.deduplication_savings
+    );
     println!("Compression Ratio: {:.2}x", stats.compression_ratio);
     println!("Evictions: {}", stats.evictions);
     println!("Expired Entries: {}", stats.expired_entries);
@@ -195,11 +204,17 @@ async fn show_cache_stats(config: &Config) -> Result<()> {
     println!("Max Entries: {}", config.response_cache.max_entries);
     println!("Max Memory: {} MB", config.response_cache.max_memory_mb);
     println!("TTL: {} seconds", config.response_cache.ttl_seconds);
-    println!("Deduplication: {}", config.response_cache.deduplication_enabled);
+    println!(
+        "Deduplication: {}",
+        config.response_cache.deduplication_enabled
+    );
     println!("Compression: {}", config.response_cache.compression_enabled);
     println!("Hash Algorithm: {:?}", config.response_cache.hash_algorithm);
     println!("Cache Strategy: {:?}", config.response_cache.cache_strategy);
-    println!("Eviction Policy: {:?}", config.response_cache.eviction_policy);
+    println!(
+        "Eviction Policy: {:?}",
+        config.response_cache.eviction_policy
+    );
 
     Ok(())
 }
@@ -241,7 +256,9 @@ async fn test_cache(
             content_type: "text/plain".to_string(),
         };
 
-        cache.put(&key, response_data.into_bytes(), metadata).await?;
+        cache
+            .put(&key, response_data.into_bytes(), metadata)
+            .await?;
     }
 
     // Phase 2: Test cache hits with existing requests
@@ -281,7 +298,9 @@ async fn test_cache(
                 content_type: "text/plain".to_string(),
             };
 
-            cache.put(&key, duplicate_data.clone().into_bytes(), metadata).await?;
+            cache
+                .put(&key, duplicate_data.clone().into_bytes(), metadata)
+                .await?;
         }
     }
 
@@ -291,13 +310,21 @@ async fn test_cache(
     println!("\n=== Test Results ===");
     println!("Test Duration: {:?}", duration);
     println!("Total Operations: {}", requests);
-    println!("Cache Hits: {}/{} ({:.2}%)", hits, unique_requests, hits as f32 / unique_requests as f32 * 100.0);
+    println!(
+        "Cache Hits: {}/{} ({:.2}%)",
+        hits,
+        unique_requests,
+        hits as f32 / unique_requests as f32 * 100.0
+    );
     println!("Final Stats:");
     println!("  Total Entries: {}", stats.total_entries);
     println!("  Memory Usage: {:.2} MB", stats.memory_usage_mb);
 
     if test_dedup {
-        println!("  Deduplication Savings: {} bytes", stats.deduplication_savings);
+        println!(
+            "  Deduplication Savings: {} bytes",
+            stats.deduplication_savings
+        );
     }
 
     if test_compression {
@@ -328,7 +355,10 @@ async fn invalidate_cache(config: &Config, pattern: String) -> Result<()> {
     let cache = ResponseCache::new(config.response_cache.clone(), None).await?;
     let removed = cache.invalidate(&pattern).await?;
 
-    println!("Invalidated {} cache entries matching pattern: {}", removed, pattern);
+    println!(
+        "Invalidated {} cache entries matching pattern: {}",
+        removed, pattern
+    );
 
     Ok(())
 }
@@ -414,7 +444,9 @@ async fn benchmark_cache(
             content_type: "text/plain".to_string(),
         };
 
-        cache.put(&key, test_data.clone().into_bytes(), metadata).await?;
+        cache
+            .put(&key, test_data.clone().into_bytes(), metadata)
+            .await?;
     }
 
     println!("Running benchmark...");
@@ -452,7 +484,9 @@ async fn benchmark_cache(
                 content_type: "text/plain".to_string(),
             };
 
-            cache.put(&key, test_data.clone().into_bytes(), metadata).await?;
+            cache
+                .put(&key, test_data.clone().into_bytes(), metadata)
+                .await?;
         }
     }
 
@@ -463,7 +497,10 @@ async fn benchmark_cache(
     println!("Total operations: {}", iterations);
     println!("Cache hits: {}", hits);
     println!("Cache misses: {}", misses);
-    println!("Actual hit rate: {:.2}%", hits as f32 / iterations as f32 * 100.0);
+    println!(
+        "Actual hit rate: {:.2}%",
+        hits as f32 / iterations as f32 * 100.0
+    );
     println!("Total time: {:?}", duration);
     println!("Operations per second: {:.2}", ops_per_second);
     println!("Average operation time: {:?}", duration / iterations as u32);
@@ -489,11 +526,15 @@ async fn monitor_cache(config: &Config, interval: u64, detailed: bool) -> Result
         if counter % 20 == 0 {
             // Print header every 20 iterations
             if detailed {
-                println!("\n{:<8} {:<8} {:<8} {:<8} {:<10} {:<8} {:<8}",
-                    "Time", "Entries", "Hits", "Misses", "Memory(MB)", "Hit%", "Evict");
+                println!(
+                    "\n{:<8} {:<8} {:<8} {:<8} {:<10} {:<8} {:<8}",
+                    "Time", "Entries", "Hits", "Misses", "Memory(MB)", "Hit%", "Evict"
+                );
             } else {
-                println!("\n{:<8} {:<8} {:<8} {:<10} {:<8}",
-                    "Time", "Entries", "Hits", "Memory(MB)", "Hit%");
+                println!(
+                    "\n{:<8} {:<8} {:<8} {:<10} {:<8}",
+                    "Time", "Entries", "Hits", "Memory(MB)", "Hit%"
+                );
             }
         }
 
@@ -501,7 +542,8 @@ async fn monitor_cache(config: &Config, interval: u64, detailed: bool) -> Result
         let now = chrono::Utc::now().format("%H:%M:%S");
 
         if detailed {
-            println!("{:<8} {:<8} {:<8} {:<8} {:<10.2} {:<8.1} {:<8}",
+            println!(
+                "{:<8} {:<8} {:<8} {:<8} {:<10.2} {:<8.1} {:<8}",
                 now,
                 stats.total_entries,
                 stats.cache_hits,
@@ -511,7 +553,8 @@ async fn monitor_cache(config: &Config, interval: u64, detailed: bool) -> Result
                 stats.evictions
             );
         } else {
-            println!("{:<8} {:<8} {:<8} {:<10.2} {:<8.1}",
+            println!(
+                "{:<8} {:<8} {:<8} {:<10.2} {:<8.1}",
                 now,
                 stats.total_entries,
                 stats.cache_hits,

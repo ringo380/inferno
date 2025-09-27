@@ -1,12 +1,10 @@
 use crate::config::Config;
-use crate::federated::{
-    FederatedNode, NodeRole, AggregationStrategy, DeploymentStrategy
-};
+use crate::federated::{AggregationStrategy, DeploymentStrategy, FederatedNode, NodeRole};
 use anyhow::{Context, Result};
 use clap::{Args, Subcommand, ValueEnum};
 use serde_json;
 use std::path::PathBuf;
-use tokio::time::{Duration, interval};
+use tokio::time::{interval, Duration};
 use tracing::info;
 use uuid::Uuid;
 
@@ -29,7 +27,12 @@ pub enum FederatedCommands {
         #[arg(long, help = "Coordinator endpoint (for participants)")]
         coordinator: Option<String>,
 
-        #[arg(short, long, help = "Port to bind (for coordinators)", default_value = "8090")]
+        #[arg(
+            short,
+            long,
+            help = "Port to bind (for coordinators)",
+            default_value = "8090"
+        )]
         port: u16,
 
         #[arg(long, help = "Run as daemon")]
@@ -521,13 +524,9 @@ pub async fn handle_federated_command(args: FederatedArgs) -> Result<()> {
             port,
             daemon,
             log_level,
-        } => {
-            handle_start(role, config, coordinator, port, daemon, log_level).await
-        }
+        } => handle_start(role, config, coordinator, port, daemon, log_level).await,
 
-        FederatedCommands::Stop { node_id, force } => {
-            handle_stop(node_id, force).await
-        }
+        FederatedCommands::Stop { node_id, force } => handle_stop(node_id, force).await,
 
         FederatedCommands::Status {
             node_id,
@@ -536,21 +535,13 @@ pub async fn handle_federated_command(args: FederatedArgs) -> Result<()> {
             output,
         } => handle_status(node_id, watch, interval, output).await,
 
-        FederatedCommands::Round { command } => {
-            handle_round_command(command).await
-        }
+        FederatedCommands::Round { command } => handle_round_command(command).await,
 
-        FederatedCommands::Participants { command } => {
-            handle_participant_command(command).await
-        }
+        FederatedCommands::Participants { command } => handle_participant_command(command).await,
 
-        FederatedCommands::Models { command } => {
-            handle_model_command(command).await
-        }
+        FederatedCommands::Models { command } => handle_model_command(command).await,
 
-        FederatedCommands::Edge { command } => {
-            handle_edge_command(command).await
-        }
+        FederatedCommands::Edge { command } => handle_edge_command(command).await,
 
         FederatedCommands::Metrics {
             node_id,
@@ -559,9 +550,7 @@ pub async fn handle_federated_command(args: FederatedArgs) -> Result<()> {
             output,
         } => handle_metrics(node_id, hours, detailed, output).await,
 
-        FederatedCommands::Config { command } => {
-            handle_config_command(command).await
-        }
+        FederatedCommands::Config { command } => handle_config_command(command).await,
 
         FederatedCommands::Test {
             communication,
@@ -624,10 +613,15 @@ async fn handle_start(
     println!("Node ID: {}", node_id);
     println!("Role: {:?}", node.get_config().coordinator.role);
 
-    if matches!(node.get_config().coordinator.role, NodeRole::Coordinator | NodeRole::Both) {
-        println!("Coordinator listening on: {}:{}",
+    if matches!(
+        node.get_config().coordinator.role,
+        NodeRole::Coordinator | NodeRole::Both
+    ) {
+        println!(
+            "Coordinator listening on: {}:{}",
             node.get_config().coordinator.bind_address,
-            node.get_config().coordinator.port);
+            node.get_config().coordinator.port
+        );
     }
 
     if !daemon {
@@ -710,13 +704,19 @@ async fn display_status(node_id: &Option<String>, output: &OutputFormat) -> Resu
                 println!("CPU: 35%");
                 println!("Memory: 2.1 GB");
             } else {
-                println!("{:<15} {:<12} {:<15} {:<8} {:<8} {:<10}",
-                    "NODE ID", "STATUS", "ROLE", "ROUND", "PEERS", "UPTIME");
+                println!(
+                    "{:<15} {:<12} {:<15} {:<8} {:<8} {:<10}",
+                    "NODE ID", "STATUS", "ROLE", "ROUND", "PEERS", "UPTIME"
+                );
                 println!("{}", "-".repeat(80));
-                println!("{:<15} {:<12} {:<15} {:<8} {:<8} {:<10}",
-                    "node-001", "Connected", "Coordinator", "15", "8", "2h 45m");
-                println!("{:<15} {:<12} {:<15} {:<8} {:<8} {:<10}",
-                    "node-002", "Training", "Participant", "15", "1", "1h 22m");
+                println!(
+                    "{:<15} {:<12} {:<15} {:<8} {:<8} {:<10}",
+                    "node-001", "Connected", "Coordinator", "15", "8", "2h 45m"
+                );
+                println!(
+                    "{:<15} {:<12} {:<15} {:<8} {:<8} {:<10}",
+                    "node-002", "Training", "Participant", "15", "1", "1h 22m"
+                );
             }
         }
         OutputFormat::Json => {
@@ -805,19 +805,24 @@ async fn handle_round_command(command: RoundCommands) -> Result<()> {
 
             match output {
                 OutputFormat::Table => {
-                    println!("{:<8} {:<12} {:<15} {:<12} {:<20}",
-                        "ROUND", "STATUS", "PARTICIPANTS", "DURATION", "STARTED");
+                    println!(
+                        "{:<8} {:<12} {:<15} {:<12} {:<20}",
+                        "ROUND", "STATUS", "PARTICIPANTS", "DURATION", "STARTED"
+                    );
                     println!("{}", "-".repeat(80));
 
                     for i in (16 - limit as u64)..16 {
                         let status = if i == 15 { "Training" } else { "Completed" };
                         let participants = format!("{}/10", 5 + (i % 3));
                         let duration = format!("{}m", 15 + (i % 10));
-                        let started = format!("2024-01-{:02} 10:{:02}", 15 + (i % 10), 30 + (i % 30));
+                        let started =
+                            format!("2024-01-{:02} 10:{:02}", 15 + (i % 10), 30 + (i % 30));
 
                         if !active_only || status == "Training" {
-                            println!("{:<8} {:<12} {:<15} {:<12} {:<20}",
-                                i, status, participants, duration, started);
+                            println!(
+                                "{:<8} {:<12} {:<15} {:<12} {:<20}",
+                                i, status, participants, duration, started
+                            );
                         }
                     }
                 }
@@ -866,11 +871,23 @@ async fn display_round_status(round_id: u64, detailed: bool) -> Result<()> {
 
     if detailed {
         println!("\nParticipant Details:");
-        println!("{:<15} {:<12} {:<10} {:<15}", "NODE ID", "STATUS", "PROGRESS", "ETA");
+        println!(
+            "{:<15} {:<12} {:<10} {:<15}",
+            "NODE ID", "STATUS", "PROGRESS", "ETA"
+        );
         println!("{}", "-".repeat(60));
-        println!("{:<15} {:<12} {:<10} {:<15}", "node-001", "Training", "75%", "5m");
-        println!("{:<15} {:<12} {:<10} {:<15}", "node-002", "Training", "60%", "8m");
-        println!("{:<15} {:<12} {:<10} {:<15}", "node-003", "Completed", "100%", "-");
+        println!(
+            "{:<15} {:<12} {:<10} {:<15}",
+            "node-001", "Training", "75%", "5m"
+        );
+        println!(
+            "{:<15} {:<12} {:<10} {:<15}",
+            "node-002", "Training", "60%", "8m"
+        );
+        println!(
+            "{:<15} {:<12} {:<10} {:<15}",
+            "node-003", "Completed", "100%", "-"
+        );
     }
 
     Ok(())
@@ -888,8 +905,10 @@ async fn handle_participant_command(command: ParticipantCommands) -> Result<()> 
 
             match output {
                 OutputFormat::Table => {
-                    println!("{:<15} {:<20} {:<12} {:<12} {:<15}",
-                        "NODE ID", "ENDPOINT", "STATUS", "RELIABILITY", "LAST SEEN");
+                    println!(
+                        "{:<15} {:<20} {:<12} {:<12} {:<15}",
+                        "NODE ID", "ENDPOINT", "STATUS", "RELIABILITY", "LAST SEEN"
+                    );
                     println!("{}", "-".repeat(80));
 
                     let participants = vec![
@@ -900,7 +919,11 @@ async fn handle_participant_command(command: ParticipantCommands) -> Result<()> 
                     ];
 
                     for (id, endpoint, status, reliability, last_seen) in participants {
-                        let show = if active_only { status != "Offline" } else { true };
+                        let show = if active_only {
+                            status != "Offline"
+                        } else {
+                            true
+                        };
                         let meets_min = if let Some(min) = min_reliability {
                             reliability >= min
                         } else {
@@ -908,8 +931,10 @@ async fn handle_participant_command(command: ParticipantCommands) -> Result<()> 
                         };
 
                         if show && meets_min {
-                            println!("{:<15} {:<20} {:<12} {:<12} {:<15}",
-                                id, endpoint, status, reliability, last_seen);
+                            println!(
+                                "{:<15} {:<20} {:<12} {:<12} {:<15}",
+                                id, endpoint, status, reliability, last_seen
+                            );
                         }
                     }
                 }
@@ -935,11 +960,13 @@ async fn handle_participant_command(command: ParticipantCommands) -> Result<()> 
 
             if history {
                 println!("\nPerformance History (last 10 rounds):");
-                println!("{:<8} {:<12} {:<12} {:<12}", "ROUND", "ACCURACY", "TIME", "WEIGHT");
+                println!(
+                    "{:<8} {:<12} {:<12} {:<12}",
+                    "ROUND", "ACCURACY", "TIME", "WEIGHT"
+                );
                 println!("{}", "-".repeat(50));
                 for i in 6..16 {
-                    println!("{:<8} {:<12} {:<12} {:<12}",
-                        i, "0.87", "15m 30s", "0.12");
+                    println!("{:<8} {:<12} {:<12} {:<12}", i, "0.87", "15m 30s", "0.12");
                 }
             }
         }
@@ -1013,20 +1040,42 @@ async fn handle_model_command(command: ModelCommands) -> Result<()> {
 
             match output {
                 OutputFormat::Table => {
-                    println!("{:<20} {:<10} {:<12} {:<15} {:<20}",
-                        "MODEL ID", "VERSION", "TYPE", "ACCURACY", "CREATED");
+                    println!(
+                        "{:<20} {:<10} {:<12} {:<15} {:<20}",
+                        "MODEL ID", "VERSION", "TYPE", "ACCURACY", "CREATED"
+                    );
                     println!("{}", "-".repeat(80));
 
                     let models = vec![
-                        ("llama-federated", "v16", "Global", "0.892", "2024-01-15 14:30"),
-                        ("llama-local-001", "v3", "Local", "0.875", "2024-01-15 14:25"),
-                        ("llama-local-002", "v3", "Local", "0.883", "2024-01-15 14:25"),
+                        (
+                            "llama-federated",
+                            "v16",
+                            "Global",
+                            "0.892",
+                            "2024-01-15 14:30",
+                        ),
+                        (
+                            "llama-local-001",
+                            "v3",
+                            "Local",
+                            "0.875",
+                            "2024-01-15 14:25",
+                        ),
+                        (
+                            "llama-local-002",
+                            "v3",
+                            "Local",
+                            "0.883",
+                            "2024-01-15 14:25",
+                        ),
                     ];
 
                     for (id, version, model_type, accuracy, created) in models {
                         if !global_only || model_type == "Global" {
-                            println!("{:<20} {:<10} {:<12} {:<15} {:<20}",
-                                id, version, model_type, accuracy, created);
+                            println!(
+                                "{:<20} {:<10} {:<12} {:<15} {:<20}",
+                                id, version, model_type, accuracy, created
+                            );
                         }
                     }
                 }
@@ -1073,7 +1122,12 @@ async fn handle_model_command(command: ModelCommands) -> Result<()> {
         } => {
             let ver = version.as_deref().unwrap_or("latest");
 
-            info!("Exporting model {} v{} to {}", model_id, ver, output.display());
+            info!(
+                "Exporting model {} v{} to {}",
+                model_id,
+                ver,
+                output.display()
+            );
 
             println!("Exporting model {} v{}...", model_id, ver);
             println!("Format: {}", format);
@@ -1184,8 +1238,10 @@ async fn handle_edge_command(command: EdgeCommands) -> Result<()> {
 
             match output {
                 OutputFormat::Table => {
-                    println!("{:<15} {:<12} {:<15} {:<10} {:<20}",
-                        "DEVICE ID", "STATUS", "LOCATION", "CPU", "LAST SEEN");
+                    println!(
+                        "{:<15} {:<12} {:<15} {:<10} {:<20}",
+                        "DEVICE ID", "STATUS", "LOCATION", "CPU", "LAST SEEN"
+                    );
                     println!("{}", "-".repeat(80));
 
                     let devices = vec![
@@ -1196,7 +1252,11 @@ async fn handle_edge_command(command: EdgeCommands) -> Result<()> {
                     ];
 
                     for (id, status, location, cpu, last_seen) in devices {
-                        let show = if online_only { status != "Offline" } else { true };
+                        let show = if online_only {
+                            status != "Offline"
+                        } else {
+                            true
+                        };
                         let matches_cap = if let Some(cap) = &capability {
                             cpu.contains(cap)
                         } else {
@@ -1204,8 +1264,10 @@ async fn handle_edge_command(command: EdgeCommands) -> Result<()> {
                         };
 
                         if show && matches_cap {
-                            println!("{:<15} {:<12} {:<15} {:<10} {:<20}",
-                                id, status, location, cpu, last_seen);
+                            println!(
+                                "{:<15} {:<12} {:<15} {:<10} {:<20}",
+                                id, status, location, cpu, last_seen
+                            );
                         }
                     }
                 }
@@ -1240,12 +1302,19 @@ async fn handle_edge_command(command: EdgeCommands) -> Result<()> {
 
             if history {
                 println!("\nDeployment History:");
-                println!("{:<15} {:<10} {:<12} {:<20}", "MODEL", "VERSION", "STATUS", "DEPLOYED");
+                println!(
+                    "{:<15} {:<10} {:<12} {:<20}",
+                    "MODEL", "VERSION", "STATUS", "DEPLOYED"
+                );
                 println!("{}", "-".repeat(60));
-                println!("{:<15} {:<10} {:<12} {:<20}",
-                    "llama-federated", "v16", "Active", "2024-01-15 14:30");
-                println!("{:<15} {:<10} {:<12} {:<20}",
-                    "llama-federated", "v15", "Replaced", "2024-01-15 12:15");
+                println!(
+                    "{:<15} {:<10} {:<12} {:<20}",
+                    "llama-federated", "v16", "Active", "2024-01-15 14:30"
+                );
+                println!(
+                    "{:<15} {:<10} {:<12} {:<20}",
+                    "llama-federated", "v15", "Replaced", "2024-01-15 12:15"
+                );
             }
         }
 
@@ -1327,15 +1396,23 @@ async fn handle_metrics(
                     println!("Training Efficiency: 92%");
                 }
             } else {
-                println!("{:<15} {:<8} {:<12} {:<12} {:<15}",
-                    "NODE ID", "ROUNDS", "AVG TIME", "ACCURACY", "DATA POINTS");
+                println!(
+                    "{:<15} {:<8} {:<12} {:<12} {:<15}",
+                    "NODE ID", "ROUNDS", "AVG TIME", "ACCURACY", "DATA POINTS"
+                );
                 println!("{}", "-".repeat(70));
-                println!("{:<15} {:<8} {:<12} {:<12} {:<15}",
-                    "node-001", "12", "18m 32s", "+0.023", "125,000");
-                println!("{:<15} {:<8} {:<12} {:<12} {:<15}",
-                    "node-002", "11", "22m 15s", "+0.019", "98,000");
-                println!("{:<15} {:<8} {:<12} {:<12} {:<15}",
-                    "node-003", "13", "16m 48s", "+0.031", "142,000");
+                println!(
+                    "{:<15} {:<8} {:<12} {:<12} {:<15}",
+                    "node-001", "12", "18m 32s", "+0.023", "125,000"
+                );
+                println!(
+                    "{:<15} {:<8} {:<12} {:<12} {:<15}",
+                    "node-002", "11", "22m 15s", "+0.019", "98,000"
+                );
+                println!(
+                    "{:<15} {:<8} {:<12} {:<12} {:<15}",
+                    "node-003", "13", "16m 48s", "+0.031", "142,000"
+                );
             }
         }
 
@@ -1365,32 +1442,30 @@ async fn handle_metrics(
 
 async fn handle_config_command(command: ConfigCommands) -> Result<()> {
     match command {
-        ConfigCommands::Show { section, output } => {
-            match output {
-                OutputFormat::Yaml => {
-                    if let Some(sec) = section {
-                        println!("# Configuration section: {}", sec);
-                    } else {
-                        println!("# Complete federated learning configuration");
-                    }
+        ConfigCommands::Show { section, output } => match output {
+            OutputFormat::Yaml => {
+                if let Some(sec) = section {
+                    println!("# Configuration section: {}", sec);
+                } else {
+                    println!("# Complete federated learning configuration");
+                }
 
-                    println!("enabled: true");
-                    println!("coordinator:");
-                    println!("  role: coordinator");
-                    println!("  bind_address: '0.0.0.0'");
-                    println!("  port: 8090");
-                    println!("edge:");
-                    println!("  coordinators:");
-                    println!("    - 'http://localhost:8090'");
-                    println!("  capabilities:");
-                    println!("    cpu_cores: 8");
-                    println!("    memory_gb: 16.0");
-                }
-                _ => {
-                    println!("Configuration in {:?} format", output);
-                }
+                println!("enabled: true");
+                println!("coordinator:");
+                println!("  role: coordinator");
+                println!("  bind_address: '0.0.0.0'");
+                println!("  port: 8090");
+                println!("edge:");
+                println!("  coordinators:");
+                println!("    - 'http://localhost:8090'");
+                println!("  capabilities:");
+                println!("    cpu_cores: 8");
+                println!("    memory_gb: 16.0");
             }
-        }
+            _ => {
+                println!("Configuration in {:?} format", output);
+            }
+        },
 
         ConfigCommands::Validate {
             config_file,
@@ -1521,7 +1596,10 @@ async fn handle_test(
     println!("=============================");
 
     if comprehensive {
-        println!("Running comprehensive test suite with {} participants...", participants);
+        println!(
+            "Running comprehensive test suite with {} participants...",
+            participants
+        );
 
         // Test all components
         println!("\n1. Communication Test");

@@ -1,20 +1,22 @@
-use inferno::{
-    backends::{Backend, BackendHandle, BackendConfig, BackendType, InferenceParams, InferenceMetrics},
-    models::{ModelInfo, ModelManager},
-    cache::{ModelCache, CacheConfig, WarmupStrategy},
-    metrics::MetricsCollector,
-    batch::{
-        queue::{JobQueue, JobQueueManager, JobQueueConfig, BatchJob, JobPriority, JobStatus},
-        processor::{BatchProcessor, ProcessorConfig},
-        BatchConfig, BatchInput,
-    },
-    response_cache::{ResponseCache, ResponseCacheConfig, CacheKey},
-    audit::{AuditSystem, AuditConfig, AuditEvent, EventType, Severity},
-    conversion::{ModelConverter, ConversionConfig, ModelFormat},
-    InfernoError,
-};
 use anyhow::Result;
 use futures::StreamExt;
+use inferno::{
+    audit::{AuditConfig, AuditEvent, AuditSystem, EventType, Severity},
+    backends::{
+        Backend, BackendConfig, BackendHandle, BackendType, InferenceMetrics, InferenceParams,
+    },
+    batch::{
+        processor::{BatchProcessor, ProcessorConfig},
+        queue::{BatchJob, JobPriority, JobQueue, JobQueueConfig, JobQueueManager, JobStatus},
+        BatchConfig, BatchInput,
+    },
+    cache::{CacheConfig, ModelCache, WarmupStrategy},
+    conversion::{ConversionConfig, ModelConverter, ModelFormat},
+    metrics::MetricsCollector,
+    models::{ModelInfo, ModelManager},
+    response_cache::{CacheKey, ResponseCache, ResponseCacheConfig},
+    InfernoError,
+};
 use std::{
     collections::HashMap,
     path::PathBuf,
@@ -27,7 +29,7 @@ use std::{
 use tempfile::TempDir;
 use tokio::{
     fs,
-    sync::{Semaphore, RwLock},
+    sync::{RwLock, Semaphore},
     time::{sleep, timeout},
 };
 use uuid::Uuid;
@@ -60,7 +62,10 @@ mod perf_test_utils {
         Ok(())
     }
 
-    pub async fn create_large_model_files(models_dir: &PathBuf, count: usize) -> Result<Vec<PathBuf>> {
+    pub async fn create_large_model_files(
+        models_dir: &PathBuf,
+        count: usize,
+    ) -> Result<Vec<PathBuf>> {
         let mut paths = Vec::new();
 
         for i in 0..count {
@@ -189,21 +194,31 @@ mod perf_test_utils {
             sorted_latencies.sort();
 
             let average_latency_ms = if !sorted_latencies.is_empty() {
-                sorted_latencies.iter().map(|d| d.as_millis() as f64).sum::<f64>() / sorted_latencies.len() as f64
+                sorted_latencies
+                    .iter()
+                    .map(|d| d.as_millis() as f64)
+                    .sum::<f64>()
+                    / sorted_latencies.len() as f64
             } else {
                 0.0
             };
 
             let p95_latency_ms = if !sorted_latencies.is_empty() {
                 let index = (sorted_latencies.len() as f64 * 0.95) as usize;
-                sorted_latencies.get(index).unwrap_or(&Duration::ZERO).as_millis() as f64
+                sorted_latencies
+                    .get(index)
+                    .unwrap_or(&Duration::ZERO)
+                    .as_millis() as f64
             } else {
                 0.0
             };
 
             let p99_latency_ms = if !sorted_latencies.is_empty() {
                 let index = (sorted_latencies.len() as f64 * 0.99) as usize;
-                sorted_latencies.get(index).unwrap_or(&Duration::ZERO).as_millis() as f64
+                sorted_latencies
+                    .get(index)
+                    .unwrap_or(&Duration::ZERO)
+                    .as_millis() as f64
             } else {
                 0.0
             };
@@ -228,7 +243,7 @@ mod perf_test_utils {
                 p95_latency_ms,
                 p99_latency_ms,
                 throughput_ops_per_sec,
-                memory_peak_mb: 0.0, // Would need system monitoring
+                memory_peak_mb: 0.0,    // Would need system monitoring
                 cpu_usage_percent: 0.0, // Would need system monitoring
                 error_rate_percent,
             }
@@ -329,7 +344,10 @@ async fn test_backend_performance_stress() -> Result<()> {
 
     println!("Backend Performance Metrics:");
     println!("Total operations: {}", metrics.total_operations);
-    println!("Success rate: {:.2}%", (metrics.successful_operations as f64 / metrics.total_operations as f64) * 100.0);
+    println!(
+        "Success rate: {:.2}%",
+        (metrics.successful_operations as f64 / metrics.total_operations as f64) * 100.0
+    );
     println!("Error rate: {:.2}%", metrics.error_rate_percent);
     println!("Average latency: {:.2}ms", metrics.average_latency_ms);
     println!("P95 latency: {:.2}ms", metrics.p95_latency_ms);
@@ -337,9 +355,18 @@ async fn test_backend_performance_stress() -> Result<()> {
     println!("Throughput: {:.2} ops/sec", metrics.throughput_ops_per_sec);
 
     // Performance assertions
-    assert!(metrics.error_rate_percent < 5.0, "Error rate should be less than 5%");
-    assert!(metrics.average_latency_ms < 5000.0, "Average latency should be under 5 seconds");
-    assert!(metrics.throughput_ops_per_sec > 0.1, "Should have measurable throughput");
+    assert!(
+        metrics.error_rate_percent < 5.0,
+        "Error rate should be less than 5%"
+    );
+    assert!(
+        metrics.average_latency_ms < 5000.0,
+        "Average latency should be under 5 seconds"
+    );
+    assert!(
+        metrics.throughput_ops_per_sec > 0.1,
+        "Should have measurable throughput"
+    );
 
     Ok(())
 }
@@ -378,12 +405,15 @@ async fn test_cache_memory_pressure() -> Result<()> {
     let backend_config = BackendConfig::default();
     let metrics_collector = Arc::new(MetricsCollector::new());
 
-    let cache = Arc::new(ModelCache::new(
-        cache_config,
-        backend_config.clone(),
-        model_manager,
-        Some(metrics_collector.clone()),
-    ).await?);
+    let cache = Arc::new(
+        ModelCache::new(
+            cache_config,
+            backend_config.clone(),
+            model_manager,
+            Some(metrics_collector.clone()),
+        )
+        .await?,
+    );
 
     let tracker = Arc::new(perf_test_utils::LatencyTracker::new());
 
@@ -406,21 +436,18 @@ async fn test_cache_memory_pressure() -> Result<()> {
 
                 let start = Instant::now();
 
-                let result = cache.get_or_load_model(
-                    &model.id,
-                    BackendType::Gguf,
-                    &backend_config,
-                ).await;
+                let result = cache
+                    .get_or_load_model(&model.id, BackendType::Gguf, &backend_config)
+                    .await;
 
                 let latency = start.elapsed();
 
                 match result {
                     Ok(handle) => {
                         // Perform a quick inference to stress the system
-                        let inference_result = handle.infer(
-                            "Memory pressure test",
-                            &InferenceParams::default(),
-                        ).await;
+                        let inference_result = handle
+                            .infer("Memory pressure test", &InferenceParams::default())
+                            .await;
 
                         if inference_result.is_ok() {
                             tracker.record_success(latency).await;
@@ -446,7 +473,8 @@ async fn test_cache_memory_pressure() -> Result<()> {
             let mut max_cached = 0;
             let mut total_evictions = 0;
 
-            for _ in 0..20 { // Monitor for 10 seconds
+            for _ in 0..20 {
+                // Monitor for 10 seconds
                 sleep(Duration::from_millis(500)).await;
                 let stats = cache.get_stats().await;
                 max_cached = max_cached.max(stats.cached_models);
@@ -478,9 +506,18 @@ async fn test_cache_memory_pressure() -> Result<()> {
 
     // Performance assertions
     assert!(max_cached <= 3, "Should respect max cached models limit");
-    assert!(total_evictions > 0, "Should have evictions under memory pressure");
-    assert!(final_stats.memory_usage_mb <= 512.0, "Should respect memory limit");
-    assert!(metrics.error_rate_percent < 10.0, "Should handle memory pressure gracefully");
+    assert!(
+        total_evictions > 0,
+        "Should have evictions under memory pressure"
+    );
+    assert!(
+        final_stats.memory_usage_mb <= 512.0,
+        "Should respect memory limit"
+    );
+    assert!(
+        metrics.error_rate_percent < 10.0,
+        "Should handle memory pressure gracefully"
+    );
 
     Ok(())
 }
@@ -551,27 +588,21 @@ async fn test_batch_processing_scalability() -> Result<()> {
         ..Default::default()
     };
 
-    let cache = Arc::new(ModelCache::new(
-        cache_config,
-        backend_config,
-        model_manager,
-        None,
-    ).await?);
+    let cache = Arc::new(ModelCache::new(cache_config, backend_config, model_manager, None).await?);
 
-    let batch_processor = Arc::new(BatchProcessor::new(
-        processor_config,
-        job_queue_manager.clone(),
-        cache,
-        None,
-    ).await?);
+    let batch_processor = Arc::new(
+        BatchProcessor::new(processor_config, job_queue_manager.clone(), cache, None).await?,
+    );
 
     // Create test queue
     let queue_id = "scalability-test-queue";
-    job_queue_manager.create_queue(
-        queue_id.to_string(),
-        "Scalability Test Queue".to_string(),
-        "High-throughput batch processing test".to_string(),
-    ).await?;
+    job_queue_manager
+        .create_queue(
+            queue_id.to_string(),
+            "Scalability Test Queue".to_string(),
+            "High-throughput batch processing test".to_string(),
+        )
+        .await?;
 
     // Submit many jobs rapidly
     let num_jobs = 100;
@@ -602,9 +633,7 @@ async fn test_batch_processing_scalability() -> Result<()> {
 
     let processor_handle = tokio::spawn({
         let processor = batch_processor.clone();
-        async move {
-            processor.start_processing().await
-        }
+        async move { processor.start_processing().await }
     });
 
     // Monitor progress
@@ -614,7 +643,8 @@ async fn test_batch_processing_scalability() -> Result<()> {
             let mut last_completed = 0;
             let mut throughput_samples = Vec::new();
 
-            for i in 0..60 { // Monitor for up to 60 seconds
+            for i in 0..60 {
+                // Monitor for up to 60 seconds
                 sleep(Duration::from_secs(1)).await;
 
                 if let Some(metrics) = queue_manager.get_queue_metrics(queue_id).await {
@@ -624,8 +654,13 @@ async fn test_batch_processing_scalability() -> Result<()> {
                     throughput_samples.push(throughput);
                     last_completed = completed;
 
-                    println!("Second {}: {} jobs completed (+{}), {} in queue",
-                             i + 1, completed, throughput, metrics.queued_jobs);
+                    println!(
+                        "Second {}: {} jobs completed (+{}), {} in queue",
+                        i + 1,
+                        completed,
+                        throughput,
+                        metrics.queued_jobs
+                    );
 
                     // Stop monitoring if all jobs are done
                     if completed >= num_jobs as u64 {
@@ -650,7 +685,8 @@ async fn test_batch_processing_scalability() -> Result<()> {
             }
             sleep(Duration::from_millis(500)).await;
         }
-    }).await;
+    })
+    .await;
 
     let processing_time = processing_start.elapsed();
 
@@ -685,13 +721,25 @@ async fn test_batch_processing_scalability() -> Result<()> {
     println!("Overall throughput: {:.2} jobs/sec", overall_throughput);
     println!("Peak throughput: {} jobs/sec", max_throughput);
     println!("Average throughput: {:.2} jobs/sec", avg_throughput);
-    println!("Average processing time: {:.2}ms", processor_metrics.avg_processing_time_ms);
+    println!(
+        "Average processing time: {:.2}ms",
+        processor_metrics.avg_processing_time_ms
+    );
 
     // Performance assertions
-    assert!(processing_result.is_ok(), "Processing should complete within timeout");
+    assert!(
+        processing_result.is_ok(),
+        "Processing should complete within timeout"
+    );
     assert!(success_rate >= 90.0, "Should have high success rate");
-    assert!(overall_throughput > 0.5, "Should maintain reasonable throughput");
-    assert!(final_metrics.completed_jobs > 0, "Should complete some jobs");
+    assert!(
+        overall_throughput > 0.5,
+        "Should maintain reasonable throughput"
+    );
+    assert!(
+        final_metrics.completed_jobs > 0,
+        "Should complete some jobs"
+    );
 
     Ok(())
 }
@@ -725,17 +773,21 @@ async fn test_response_cache_performance() -> Result<()> {
     let cache_hit_ratio = 0.3; // 30% of requests should hit cache
 
     // Pre-populate cache for hit testing
-    let base_keys: Vec<CacheKey> = (0..100).map(|i| {
-        CacheKey::new(
-            "test_model",
-            &format!("base_input_{}", i),
-            &InferenceParams::default(),
-        )
-    }).collect();
+    let base_keys: Vec<CacheKey> = (0..100)
+        .map(|i| {
+            CacheKey::new(
+                "test_model",
+                &format!("base_input_{}", i),
+                &InferenceParams::default(),
+            )
+        })
+        .collect();
 
     for (i, key) in base_keys.iter().enumerate() {
         let response = format!("Cached response for base input {}", i);
-        response_cache.store(key, &response, Duration::from_secs(3600)).await?;
+        response_cache
+            .store(key, &response, Duration::from_secs(3600))
+            .await?;
     }
 
     println!("Pre-populated cache with {} entries", base_keys.len());
@@ -769,7 +821,9 @@ async fn test_response_cache_performance() -> Result<()> {
                     let response = format!("Response from worker {} op {}", worker_id, op_id);
 
                     // Store operation
-                    let store_result = cache.store(&key, &response, Duration::from_secs(1800)).await;
+                    let store_result = cache
+                        .store(&key, &response, Duration::from_secs(1800))
+                        .await;
                     if store_result.is_ok() {
                         // Get operation
                         cache.get(&key).await
@@ -801,7 +855,8 @@ async fn test_response_cache_performance() -> Result<()> {
         async move {
             let mut stats_history = Vec::new();
 
-            for _ in 0..30 { // Monitor for 15 seconds
+            for _ in 0..30 {
+                // Monitor for 15 seconds
                 sleep(Duration::from_millis(500)).await;
                 if let Ok(stats) = cache.get_stats().await {
                     stats_history.push((
@@ -834,7 +889,10 @@ async fn test_response_cache_performance() -> Result<()> {
 
     println!("\nResponse Cache Performance Results:");
     println!("Total operations: {}", metrics.total_operations);
-    println!("Success rate: {:.2}%", (metrics.successful_operations as f64 / metrics.total_operations as f64) * 100.0);
+    println!(
+        "Success rate: {:.2}%",
+        (metrics.successful_operations as f64 / metrics.total_operations as f64) * 100.0
+    );
     println!("Average latency: {:.2}ms", metrics.average_latency_ms);
     println!("P95 latency: {:.2}ms", metrics.p95_latency_ms);
     println!("P99 latency: {:.2}ms", metrics.p99_latency_ms);
@@ -845,10 +903,19 @@ async fn test_response_cache_performance() -> Result<()> {
 
     // Performance assertions
     assert!(metrics.error_rate_percent < 5.0, "Error rate should be low");
-    assert!(metrics.average_latency_ms < 100.0, "Cache operations should be fast");
+    assert!(
+        metrics.average_latency_ms < 100.0,
+        "Cache operations should be fast"
+    );
     assert!(hit_rate > 0.2, "Should have reasonable hit rate");
-    assert!(metrics.throughput_ops_per_sec > 100.0, "Should have high throughput");
-    assert!(final_stats.memory_usage_mb <= 512.0, "Should respect memory limits");
+    assert!(
+        metrics.throughput_ops_per_sec > 100.0,
+        "Should have high throughput"
+    );
+    assert!(
+        final_stats.memory_usage_mb <= 512.0,
+        "Should respect memory limits"
+    );
 
     Ok(())
 }
@@ -877,7 +944,7 @@ async fn test_audit_system_performance() -> Result<()> {
             enabled: false, // Disable for performance testing
             ..Default::default()
         },
-        buffer_size: 5000, // Large buffer
+        buffer_size: 5000,         // Large buffer
         flush_interval_seconds: 2, // Fast flush
         async_processing: true,
         enable_metrics: true,
@@ -939,7 +1006,10 @@ async fn test_audit_system_performance() -> Result<()> {
                     },
                     action: format!("perf_test_action_{}", event_id % 10),
                     details: inferno::audit::EventDetails {
-                        description: format!("Performance test event {} from logger {}", event_id, logger_id),
+                        description: format!(
+                            "Performance test event {} from logger {}",
+                            event_id, logger_id
+                        ),
                         request_id: Some(Uuid::new_v4().to_string()),
                         trace_id: Some(Uuid::new_v4().to_string()),
                         span_id: Some(Uuid::new_v4().to_string()),
@@ -947,7 +1017,10 @@ async fn test_audit_system_performance() -> Result<()> {
                             ("test_param".to_string(), format!("value_{}", event_id)),
                             ("logger_id".to_string(), logger_id.to_string()),
                         ]),
-                        response_data: Some(format!("{{\"result\": \"success\", \"event_id\": {}}}", event_id)),
+                        response_data: Some(format!(
+                            "{{\"result\": \"success\", \"event_id\": {}}}",
+                            event_id
+                        )),
                         error_details: None,
                     },
                     context: inferno::audit::EventContext {
@@ -968,15 +1041,33 @@ async fn test_audit_system_performance() -> Result<()> {
                         bytes_processed: Some(100 + (event_id % 1000) as u64),
                         records_affected: Some(1),
                         resource_usage: HashMap::from([
-                            ("cpu_ms".to_string(), serde_json::Value::Number((event_id % 50).into())),
-                            ("memory_mb".to_string(), serde_json::Value::Number((10 + event_id % 100).into())),
+                            (
+                                "cpu_ms".to_string(),
+                                serde_json::Value::Number((event_id % 50).into()),
+                            ),
+                            (
+                                "memory_mb".to_string(),
+                                serde_json::Value::Number((10 + event_id % 100).into()),
+                            ),
                         ]),
                     },
                     metadata: HashMap::from([
-                        ("test_run_id".to_string(), serde_json::Value::String(Uuid::new_v4().to_string())),
-                        ("performance_test".to_string(), serde_json::Value::Bool(true)),
-                        ("logger_id".to_string(), serde_json::Value::Number(logger_id.into())),
-                        ("event_sequence".to_string(), serde_json::Value::Number(event_id.into())),
+                        (
+                            "test_run_id".to_string(),
+                            serde_json::Value::String(Uuid::new_v4().to_string()),
+                        ),
+                        (
+                            "performance_test".to_string(),
+                            serde_json::Value::Bool(true),
+                        ),
+                        (
+                            "logger_id".to_string(),
+                            serde_json::Value::Number(logger_id.into()),
+                        ),
+                        (
+                            "event_sequence".to_string(),
+                            serde_json::Value::Number(event_id.into()),
+                        ),
                     ]),
                 };
 
@@ -1011,20 +1102,41 @@ async fn test_audit_system_performance() -> Result<()> {
 
     println!("\nAudit System Performance Results:");
     println!("Total events: {}", metrics.total_operations);
-    println!("Success rate: {:.2}%", (metrics.successful_operations as f64 / metrics.total_operations as f64) * 100.0);
+    println!(
+        "Success rate: {:.2}%",
+        (metrics.successful_operations as f64 / metrics.total_operations as f64) * 100.0
+    );
     println!("Error rate: {:.2}%", metrics.error_rate_percent);
     println!("Average latency: {:.2}ms", metrics.average_latency_ms);
     println!("P95 latency: {:.2}ms", metrics.p95_latency_ms);
     println!("P99 latency: {:.2}ms", metrics.p99_latency_ms);
-    println!("Throughput: {:.2} events/sec", metrics.throughput_ops_per_sec);
+    println!(
+        "Throughput: {:.2} events/sec",
+        metrics.throughput_ops_per_sec
+    );
     println!("Events per minute: {:.2}", audit_metrics.events_per_minute);
-    println!("Average event size: {} bytes", audit_metrics.average_event_size_bytes);
+    println!(
+        "Average event size: {} bytes",
+        audit_metrics.average_event_size_bytes
+    );
 
     // Performance assertions
-    assert!(metrics.error_rate_percent < 2.0, "Audit system should handle high load with low error rate");
-    assert!(metrics.average_latency_ms < 50.0, "Audit logging should be fast");
-    assert!(metrics.throughput_ops_per_sec > 100.0, "Should maintain high throughput");
-    assert!(audit_metrics.events_per_minute > 1000.0, "Should process many events per minute");
+    assert!(
+        metrics.error_rate_percent < 2.0,
+        "Audit system should handle high load with low error rate"
+    );
+    assert!(
+        metrics.average_latency_ms < 50.0,
+        "Audit logging should be fast"
+    );
+    assert!(
+        metrics.throughput_ops_per_sec > 100.0,
+        "Should maintain high throughput"
+    );
+    assert!(
+        audit_metrics.events_per_minute > 1000.0,
+        "Should process many events per minute"
+    );
 
     audit_system.shutdown().await?;
 
@@ -1061,19 +1173,20 @@ async fn test_memory_usage_and_leaks() -> Result<()> {
             };
 
             let backend_config = BackendConfig::default();
-            let cache = Arc::new(ModelCache::new(
-                cache_config,
-                backend_config.clone(),
-                model_manager,
-                None,
-            ).await?);
+            let cache = Arc::new(
+                ModelCache::new(cache_config, backend_config.clone(), model_manager, None).await?,
+            );
 
             // Load and unload models
             for model in &models[0..2] {
-                let handle = cache.get_or_load_model(&model.id, BackendType::Gguf, &backend_config).await?;
+                let handle = cache
+                    .get_or_load_model(&model.id, BackendType::Gguf, &backend_config)
+                    .await?;
 
                 // Perform inference
-                let _ = handle.infer("Memory test", &InferenceParams::default()).await?;
+                let _ = handle
+                    .infer("Memory test", &InferenceParams::default())
+                    .await?;
 
                 // Force eviction
                 cache.evict_model(&model.id).await?;
@@ -1085,7 +1198,11 @@ async fn test_memory_usage_and_leaks() -> Result<()> {
 
         // Check memory after each cycle
         let current_memory = get_memory_usage();
-        println!("Memory usage after cycle {}: {} MB", cycle + 1, current_memory);
+        println!(
+            "Memory usage after cycle {}: {} MB",
+            cycle + 1,
+            current_memory
+        );
 
         // Force garbage collection
         sleep(Duration::from_millis(100)).await;
@@ -1100,7 +1217,11 @@ async fn test_memory_usage_and_leaks() -> Result<()> {
     println!("Memory growth: {} MB", memory_growth);
 
     // Memory leak assertion (allow some growth but not excessive)
-    assert!(memory_growth < 100.0, "Memory growth should be reasonable (< 100MB), got {} MB", memory_growth);
+    assert!(
+        memory_growth < 100.0,
+        "Memory growth should be reasonable (< 100MB), got {} MB",
+        memory_growth
+    );
 
     Ok(())
 }
@@ -1141,16 +1262,12 @@ async fn test_resource_exhaustion_handling() -> Result<()> {
 
     let backend_config = BackendConfig {
         context_size: 128, // Small context
-        batch_size: 2,    // Small batch
+        batch_size: 2,     // Small batch
         ..Default::default()
     };
 
-    let cache = Arc::new(ModelCache::new(
-        cache_config,
-        backend_config.clone(),
-        model_manager,
-        None,
-    ).await?);
+    let cache =
+        Arc::new(ModelCache::new(cache_config, backend_config.clone(), model_manager, None).await?);
 
     let tracker = Arc::new(perf_test_utils::LatencyTracker::new());
 
@@ -1172,20 +1289,27 @@ async fn test_resource_exhaustion_handling() -> Result<()> {
 
                 let model = &models[0]; // All workers use same model
 
-                let result = cache.get_or_load_model(&model.id, BackendType::Gguf, &backend_config).await;
+                let result = cache
+                    .get_or_load_model(&model.id, BackendType::Gguf, &backend_config)
+                    .await;
 
                 let latency = start.elapsed();
 
                 match result {
                     Ok(handle) => {
                         // Try inference with resource pressure
-                        let inference_result = handle.infer(
-                            &format!("Resource pressure test from worker {} op {}", worker_id, op_id),
-                            &InferenceParams {
-                                max_tokens: 20, // Small to reduce resource usage
-                                ..Default::default()
-                            },
-                        ).await;
+                        let inference_result = handle
+                            .infer(
+                                &format!(
+                                    "Resource pressure test from worker {} op {}",
+                                    worker_id, op_id
+                                ),
+                                &InferenceParams {
+                                    max_tokens: 20, // Small to reduce resource usage
+                                    ..Default::default()
+                                },
+                            )
+                            .await;
 
                         if inference_result.is_ok() {
                             tracker.record_success(latency).await;
@@ -1213,18 +1337,28 @@ async fn test_resource_exhaustion_handling() -> Result<()> {
     println!("Total operations attempted: {}", metrics.total_operations);
     println!("Successful operations: {}", metrics.successful_operations);
     println!("Failed operations: {}", metrics.failed_operations);
-    println!("Success rate: {:.2}%", (metrics.successful_operations as f64 / metrics.total_operations as f64) * 100.0);
+    println!(
+        "Success rate: {:.2}%",
+        (metrics.successful_operations as f64 / metrics.total_operations as f64) * 100.0
+    );
     println!("Average latency: {:.2}ms", metrics.average_latency_ms);
     println!("Cache evictions: {}", cache_stats.eviction_count);
     println!("Memory usage: {:.2}MB", cache_stats.memory_usage_mb);
 
     // The system should handle resource pressure gracefully
     assert!(metrics.total_operations > 0, "Should attempt operations");
-    assert!(cache_stats.memory_usage_mb <= 64.0, "Should respect memory limits");
+    assert!(
+        cache_stats.memory_usage_mb <= 64.0,
+        "Should respect memory limits"
+    );
 
     // Allow for some failures under extreme pressure, but system should remain responsive
-    let success_rate = (metrics.successful_operations as f64 / metrics.total_operations as f64) * 100.0;
-    assert!(success_rate >= 50.0 || result.is_ok(), "Should either maintain reasonable success rate or complete within timeout");
+    let success_rate =
+        (metrics.successful_operations as f64 / metrics.total_operations as f64) * 100.0;
+    assert!(
+        success_rate >= 50.0 || result.is_ok(),
+        "Should either maintain reasonable success rate or complete within timeout"
+    );
 
     Ok(())
 }

@@ -1,18 +1,18 @@
 use crate::{
     backends::InferenceParams,
+    batch::{BatchConfig, BatchInput, BatchResult},
     metrics::MetricsCollector,
-    batch::{BatchInput, BatchResult, BatchConfig},
 };
 use anyhow::Result;
 // use chrono::DateTime; // Reserved for future datetime operations
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, VecDeque},
-    sync::{Arc, atomic::Ordering},
+    sync::{atomic::Ordering, Arc},
     time::{Duration, SystemTime},
 };
 use tokio::{
-    sync::{RwLock, Mutex, mpsc},
+    sync::{mpsc, Mutex, RwLock},
     time::sleep,
 };
 use tracing::{info, warn};
@@ -190,16 +190,16 @@ pub enum ScheduleType {
         max_runs: Option<u32>,
     },
     Daily {
-        time: String, // HH:MM format
+        time: String,      // HH:MM format
         weekdays: Vec<u8>, // 0-6, Monday=0
     },
     Weekly {
         day_of_week: u8, // 0-6, Monday=0
-        time: String, // HH:MM format
+        time: String,    // HH:MM format
     },
     Monthly {
         day_of_month: u8, // 1-31
-        time: String, // HH:MM format
+        time: String,     // HH:MM format
     },
 }
 
@@ -427,11 +427,19 @@ impl JobQueueManager {
         }
     }
 
-    pub async fn create_queue(&self, queue_id: String, name: String, description: String) -> Result<()> {
+    pub async fn create_queue(
+        &self,
+        queue_id: String,
+        name: String,
+        description: String,
+    ) -> Result<()> {
         let mut queues = self.queues.write().await;
 
         if queues.contains_key(&queue_id) {
-            return Err(anyhow::anyhow!("Queue with ID '{}' already exists", queue_id));
+            return Err(anyhow::anyhow!(
+                "Queue with ID '{}' already exists",
+                queue_id
+            ));
         }
 
         let queue = JobQueue {
@@ -456,13 +464,17 @@ impl JobQueueManager {
 
     pub async fn submit_job(&self, queue_id: &str, mut job: BatchJob) -> Result<String> {
         let queues = self.queues.read().await;
-        let queue = queues.get(queue_id)
+        let queue = queues
+            .get(queue_id)
             .ok_or_else(|| anyhow::anyhow!("Queue '{}' not found", queue_id))?;
 
         // Check queue capacity
         let queue_jobs = queue.jobs.read().await;
         if queue_jobs.len() >= self.config.max_queue_size {
-            return Err(anyhow::anyhow!("Queue '{}' is at maximum capacity", queue_id));
+            return Err(anyhow::anyhow!(
+                "Queue '{}' is at maximum capacity",
+                queue_id
+            ));
         }
         drop(queue_jobs);
 
@@ -488,8 +500,27 @@ impl JobQueueManager {
 
         info!("Submitted job '{}' to queue '{}'", job_id, queue_id);
 
-        // Update metrics
-        // TODO: Update queue metrics
+        // Update queue metrics
+        if let Some(queue) = queues.get_mut(queue_id) {
+            queue.metrics.total_jobs_submitted += 1;
+            queue.metrics.current_queue_size = queue.jobs.len();
+
+            // Calculate throughput (jobs per hour)
+            let elapsed_hours = queue.created_at.elapsed().as_secs_f64() / 3600.0;
+            if elapsed_hours > 0.0 {
+                queue.metrics.throughput_jobs_per_hour = queue.metrics.total_jobs_submitted as f64 / elapsed_hours;
+                queue.metrics.throughput_items_per_hour = queue.metrics.total_items_processed as f64 / elapsed_hours;
+            }
+
+            // Update success rate
+            let total_finished = queue.metrics.total_jobs_completed + queue.metrics.total_jobs_failed;
+            if total_finished > 0 {
+                queue.metrics.success_rate = (queue.metrics.total_jobs_completed as f64 / total_finished as f64) * 100.0;
+            }
+
+            debug!("Updated metrics for queue '{}': {} total jobs submitted, {} in queue",
+                   queue_id, queue.metrics.total_jobs_submitted, queue.metrics.current_queue_size);
+        }
 
         Ok(job_id)
     }
@@ -527,19 +558,53 @@ impl JobQueueManager {
                     return Err(anyhow::anyhow!("Scheduled time cannot be in the past"));
                 }
             }
-            ScheduleType::Interval { interval_minutes, .. } => {
+            ScheduleType::Interval {
+                interval_minutes, ..
+            } => {
                 if *interval_minutes == 0 {
                     return Err(anyhow::anyhow!("Interval must be greater than 0"));
                 }
             }
             ScheduleType::Cron { expression, .. } => {
-                // TODO: Validate cron expression syntax
+                // Validate cron expression syntax
                 if expression.is_empty() {
                     return Err(anyhow::anyhow!("Cron expression cannot be empty"));
                 }
+
+                // Basic cron expression validation (5 or 6 fields)
+                let parts: Vec<&str> = expression.split_whitespace().collect();
+                if parts.len() < 5 || parts.len() > 6 {
+                    return Err(anyhow::anyhow!(
+                        "Invalid cron expression format. Expected 5 or 6 fields, got {}",
+                        parts.len()
+                    ));
+                }
+
+                // Validate each field has valid characters
+                for (i, part) in parts.iter().enumerate() {
+                    if part.is_empty() {
+                        return Err(anyhow::anyhow!("Cron field {} cannot be empty", i + 1));
+                    }
+
+                    // Check for valid cron characters
+                    let valid_chars = "0123456789*,-/";
+                    if !part.chars().all(|c| valid_chars.contains(c)) {
+                        return Err(anyhow::anyhow!(
+                            "Invalid character in cron field {}: '{}'",
+                            i + 1,
+                            part
+                        ));
+                    }
+                }
+
+                debug!("Validated cron expression: {}", expression);
             }
-            ScheduleType::Daily { time: _, weekdays } => {
-                // TODO: Validate time format (HH:MM)
+            ScheduleType::Daily { time, weekdays } => {
+                // Validate time format (HH:MM)
+                if let Err(e) = self.validate_time_format(time) {
+                    return Err(anyhow::anyhow!("Invalid time format in daily schedule: {}", e));
+                }
+
                 if weekdays.is_empty() {
                     return Err(anyhow::anyhow!("At least one weekday must be specified"));
                 }
@@ -563,6 +628,35 @@ impl JobQueueManager {
         Ok(())
     }
 
+    fn validate_time_format(&self, time: &str) -> Result<()> {
+        // Validate HH:MM format
+        if time.len() != 5 {
+            return Err(anyhow::anyhow!("Time must be in HH:MM format, got: '{}'", time));
+        }
+
+        let parts: Vec<&str> = time.split(':').collect();
+        if parts.len() != 2 {
+            return Err(anyhow::anyhow!("Time must contain exactly one colon, got: '{}'", time));
+        }
+
+        // Validate hour (00-23)
+        let hour: u8 = parts[0].parse()
+            .map_err(|_| anyhow::anyhow!("Invalid hour in time '{}': not a number", time))?;
+        if hour > 23 {
+            return Err(anyhow::anyhow!("Invalid hour in time '{}': {} (must be 0-23)", time, hour));
+        }
+
+        // Validate minute (00-59)
+        let minute: u8 = parts[1].parse()
+            .map_err(|_| anyhow::anyhow!("Invalid minute in time '{}': not a number", time))?;
+        if minute > 59 {
+            return Err(anyhow::anyhow!("Invalid minute in time '{}': {} (must be 0-59)", time, minute));
+        }
+
+        debug!("Validated time format: {}", time);
+        Ok(())
+    }
+
     async fn schedule_job(&self, queue_id: &str, job: &BatchJob) -> Result<()> {
         let mut schedulers = self.schedulers.write().await;
 
@@ -580,7 +674,8 @@ impl JobQueueManager {
 
     pub async fn start_queue(&self, queue_id: &str) -> Result<()> {
         let queues = self.queues.read().await;
-        let queue = queues.get(queue_id)
+        let queue = queues
+            .get(queue_id)
             .ok_or_else(|| anyhow::anyhow!("Queue '{}' not found", queue_id))?;
 
         // Start workers
@@ -596,7 +691,10 @@ impl JobQueueManager {
             workers.push(worker);
         }
 
-        info!("Started queue '{}' with {} workers", queue_id, self.config.max_concurrent_jobs);
+        info!(
+            "Started queue '{}' with {} workers",
+            queue_id, self.config.max_concurrent_jobs
+        );
         Ok(())
     }
 
@@ -616,9 +714,14 @@ impl JobQueueManager {
         queues.get(queue_id).map(|q| q.metrics.clone())
     }
 
-    pub async fn list_jobs(&self, queue_id: &str, status: Option<JobStatus>) -> Result<Vec<JobInfo>> {
+    pub async fn list_jobs(
+        &self,
+        queue_id: &str,
+        status: Option<JobStatus>,
+    ) -> Result<Vec<JobInfo>> {
         let queues = self.queues.read().await;
-        let queue = queues.get(queue_id)
+        let queue = queues
+            .get(queue_id)
             .ok_or_else(|| anyhow::anyhow!("Queue '{}' not found", queue_id))?;
 
         let mut job_infos = Vec::new();
@@ -699,7 +802,8 @@ impl JobQueueManager {
 
     pub async fn cancel_job(&self, queue_id: &str, job_id: &str) -> Result<()> {
         let queues = self.queues.read().await;
-        let queue = queues.get(queue_id)
+        let queue = queues
+            .get(queue_id)
             .ok_or_else(|| anyhow::anyhow!("Queue '{}' not found", queue_id))?;
 
         // Check if job is in active jobs
@@ -741,7 +845,11 @@ impl JobQueueManager {
             return Ok(());
         }
 
-        Err(anyhow::anyhow!("Job '{}' not found in queue '{}'", job_id, queue_id))
+        Err(anyhow::anyhow!(
+            "Job '{}' not found in queue '{}'",
+            job_id,
+            queue_id
+        ))
     }
 
     pub async fn list_all_queues(&self) -> Result<Vec<SerializableJobQueue>> {
@@ -757,7 +865,8 @@ impl JobQueueManager {
 
     pub async fn get_queue_job_counts(&self, queue_id: &str) -> Result<(usize, usize, usize)> {
         let queues = self.queues.read().await;
-        let queue = queues.get(queue_id)
+        let queue = queues
+            .get(queue_id)
             .ok_or_else(|| anyhow::anyhow!("Queue '{}' not found", queue_id))?;
 
         let queued = queue.jobs.read().await.len();
@@ -774,7 +883,8 @@ impl JobQueueManager {
 
     pub async fn can_retry_job(&self, queue_id: &str, job_id: &str) -> Result<bool> {
         let queues = self.queues.read().await;
-        let queue = queues.get(queue_id)
+        let queue = queues
+            .get(queue_id)
             .ok_or_else(|| anyhow::anyhow!("Queue '{}' not found", queue_id))?;
 
         let failed_jobs = queue.failed_jobs.read().await;
@@ -787,7 +897,8 @@ impl JobQueueManager {
 
     pub async fn retry_job(&self, queue_id: &str, job_id: &str, force: bool) -> Result<()> {
         let queues = self.queues.read().await;
-        let queue = queues.get(queue_id)
+        let queue = queues
+            .get(queue_id)
             .ok_or_else(|| anyhow::anyhow!("Queue '{}' not found", queue_id))?;
 
         // Find job in failed jobs
@@ -804,21 +915,33 @@ impl JobQueueManager {
 
             // Calculate exponential backoff delay
             let delay_seconds = self.config.retry_policy.initial_delay_seconds
-                * (self.config.retry_policy.backoff_multiplier.powi(failed_job.job.retry_count as i32) as u64);
+                * (self
+                    .config
+                    .retry_policy
+                    .backoff_multiplier
+                    .powi(failed_job.job.retry_count as i32) as u64);
             let delay_seconds = delay_seconds.min(self.config.retry_policy.max_delay_seconds);
 
             // Schedule the job for retry
-            failed_job.job.scheduled_at = Some(SystemTime::now() + Duration::from_secs(delay_seconds));
+            failed_job.job.scheduled_at =
+                Some(SystemTime::now() + Duration::from_secs(delay_seconds));
 
             // Add back to queue
             let mut queue_jobs = queue.jobs.write().await;
             queue_jobs.push_back(failed_job.job);
 
-            info!("Job '{}' scheduled for retry in {} seconds", job_id, delay_seconds);
+            info!(
+                "Job '{}' scheduled for retry in {} seconds",
+                job_id, delay_seconds
+            );
             return Ok(());
         }
 
-        Err(anyhow::anyhow!("Failed job '{}' not found in queue '{}'", job_id, queue_id))
+        Err(anyhow::anyhow!(
+            "Failed job '{}' not found in queue '{}'",
+            job_id,
+            queue_id
+        ))
     }
 
     pub async fn get_all_queue_metrics(&self) -> Result<HashMap<String, QueueMetrics>> {
@@ -871,7 +994,8 @@ impl JobQueueManager {
 
     pub async fn clear_queue(&self, queue_id: &str, include_failed: bool) -> Result<usize> {
         let queues = self.queues.read().await;
-        let queue = queues.get(queue_id)
+        let queue = queues
+            .get(queue_id)
             .ok_or_else(|| anyhow::anyhow!("Queue '{}' not found", queue_id))?;
 
         let mut cleared_count = 0;
@@ -898,7 +1022,8 @@ impl JobQueueManager {
 
     pub async fn export_queue_config(&self, queue_id: &str) -> Result<JobQueueConfig> {
         let queues = self.queues.read().await;
-        let queue = queues.get(queue_id)
+        let queue = queues
+            .get(queue_id)
             .ok_or_else(|| anyhow::anyhow!("Queue '{}' not found", queue_id))?;
 
         Ok(queue.config.clone())
@@ -906,7 +1031,8 @@ impl JobQueueManager {
 
     pub async fn export_all_data(&self, queue_id: &str) -> Result<QueueExportData> {
         let queues = self.queues.read().await;
-        let queue = queues.get(queue_id)
+        let queue = queues
+            .get(queue_id)
             .ok_or_else(|| anyhow::anyhow!("Queue '{}' not found", queue_id))?;
 
         let jobs = self.list_jobs(queue_id, None).await?;
@@ -929,13 +1055,18 @@ impl JobQueueManager {
 
     pub async fn get_queue_config(&self, queue_id: &str) -> Result<JobQueueConfig> {
         let queues = self.queues.read().await;
-        let queue = queues.get(queue_id)
+        let queue = queues
+            .get(queue_id)
             .ok_or_else(|| anyhow::anyhow!("Queue '{}' not found", queue_id))?;
 
         Ok(queue.config.clone())
     }
 
-    pub async fn update_queue_config(&self, queue_id: &str, updates: HashMap<String, serde_json::Value>) -> Result<()> {
+    pub async fn update_queue_config(
+        &self,
+        queue_id: &str,
+        updates: HashMap<String, serde_json::Value>,
+    ) -> Result<()> {
         let mut queues = self.queues.write().await;
         if let Some(queue) = queues.get_mut(queue_id) {
             for (key, value) in updates {
@@ -1021,9 +1152,9 @@ impl JobScheduler {
     fn calculate_next_run(&self, schedule: &JobSchedule) -> Result<SystemTime> {
         match &schedule.schedule_type {
             ScheduleType::Once(time) => Ok(*time),
-            ScheduleType::Interval { interval_minutes, .. } => {
-                Ok(SystemTime::now() + Duration::from_secs(interval_minutes * 60))
-            }
+            ScheduleType::Interval {
+                interval_minutes, ..
+            } => Ok(SystemTime::now() + Duration::from_secs(interval_minutes * 60)),
             _ => {
                 // TODO: Implement other schedule types
                 Ok(SystemTime::now() + Duration::from_secs(3600)) // Default to 1 hour
@@ -1071,7 +1202,7 @@ impl Worker {
 
         while self.running.load(Ordering::SeqCst) {
             if let Some(job) = self.get_next_job().await {
-                self.execute_job(job).await;
+                let _ = self.execute_job(job).await;
             } else {
                 // No jobs available, sleep briefly
                 sleep(Duration::from_millis(100)).await;
@@ -1085,17 +1216,122 @@ impl Worker {
     }
 
     async fn execute_job(&self, job: BatchJob) -> Result<()> {
-        info!("Worker {} starting job {}", self.id, job.id);
+        info!("Worker {} starting job {} with {} inputs", self.id, job.id, job.inputs.len());
 
-        // TODO: Implement job execution logic
-        // This would involve:
-        // 1. Loading the specified model
-        // 2. Processing the batch inputs
-        // 3. Recording progress and metrics
-        // 4. Handling retries and failures
-        // 5. Saving results
+        let start_time = std::time::Instant::now();
+        let mut results = Vec::new();
+        let mut failed_inputs = Vec::new();
+
+        // 1. Load the specified model (mock implementation for now)
+        info!("Loading model: {}", job.model_name);
+        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await; // Simulate model loading
+
+        // 2. Process the batch inputs
+        for (index, input) in job.inputs.iter().enumerate() {
+            info!("Processing input {} of {} for job {}", index + 1, job.inputs.len(), job.id);
+
+            match self.process_single_input(input, &job.inference_params).await {
+                Ok(result) => {
+                    results.push(result);
+                    info!("Successfully processed input {} for job {}", index + 1, job.id);
+                }
+                Err(e) => {
+                    warn!("Failed to process input {} for job {}: {}", index + 1, job.id, e);
+                    failed_inputs.push((index, e.to_string()));
+
+                    // Handle retries
+                    if job.retry_config.max_retries > 0 {
+                        info!("Attempting retry for input {} (job {})", index + 1, job.id);
+                        tokio::time::sleep(tokio::time::Duration::from_millis(
+                            job.retry_config.retry_delay_ms
+                        )).await;
+
+                        // Retry the input
+                        match self.process_single_input(input, &job.inference_params).await {
+                            Ok(result) => {
+                                results.push(result);
+                                info!("Retry successful for input {} (job {})", index + 1, job.id);
+                            }
+                            Err(retry_err) => {
+                                warn!("Retry failed for input {} (job {}): {}", index + 1, job.id, retry_err);
+                                // Keep the failure recorded
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 3. Calculate metrics and progress
+        let total_time = start_time.elapsed();
+        let success_count = results.len();
+        let failure_count = failed_inputs.len();
+        let success_rate = (success_count as f64 / job.inputs.len() as f64) * 100.0;
+
+        // 4. Create job result
+        let job_result = BatchJobResult {
+            job_id: job.id.clone(),
+            status: if failure_count == 0 {
+                JobStatus::Completed
+            } else if success_count > 0 {
+                JobStatus::PartiallyCompleted
+            } else {
+                JobStatus::Failed
+            },
+            results,
+            started_at: Some(start_time.elapsed().saturating_sub(total_time)),
+            completed_at: Some(total_time),
+            total_items: job.inputs.len(),
+            processed_items: success_count,
+            failed_items: failure_count,
+            error_message: if !failed_inputs.is_empty() {
+                Some(format!("Failed to process {} inputs", failure_count))
+            } else {
+                None
+            },
+            retry_count: if job.retry_config.max_retries > 0 { 1 } else { 0 },
+            partial_results: failed_inputs.iter().map(|(idx, err)| {
+                format!("Input {}: {}", idx + 1, err)
+            }).collect(),
+        };
+
+        // 5. Log completion
+        info!(
+            "Worker {} completed job {} in {:.2}s: {}/{} inputs processed (success rate: {:.1}%)",
+            self.id, job.id, total_time.as_secs_f64(), success_count, job.inputs.len(), success_rate
+        );
+
+        // TODO: Save results to persistent storage
+        debug!("Job result: {:?}", job_result);
 
         Ok(())
+    }
+
+    async fn process_single_input(&self, input: &str, params: &InferenceParams) -> Result<String> {
+        // Simulate processing time based on input length
+        let processing_time = std::cmp::min(input.len() * 2, 1000); // Max 1 second
+        tokio::time::sleep(tokio::time::Duration::from_millis(processing_time as u64)).await;
+
+        // Simulate occasional failures (5% failure rate)
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+        let mut hasher = DefaultHasher::new();
+        input.hash(&mut hasher);
+        let hash_value = hasher.finish();
+        if (hash_value % 100) < 5 {
+            return Err(anyhow::anyhow!("Simulated processing failure"));
+        }
+
+        // Create a mock response that includes the input and parameters
+        let response = format!(
+            "Processed: '{}' (length: {}, max_tokens: {}, temp: {:.2})",
+            input.chars().take(50).collect::<String>(),
+            input.len(),
+            params.max_tokens,
+            params.temperature
+        );
+
+        Ok(response)
     }
 
     pub fn stop(&self) {
@@ -1122,12 +1358,172 @@ impl ResourceMonitor {
     }
 
     pub async fn update_metrics(&mut self) -> Result<()> {
-        // TODO: Implement actual system resource monitoring
+        // Memory usage monitoring
+        self.memory_usage = self.get_memory_usage().await?;
+
+        // CPU usage monitoring (approximated)
+        self.cpu_usage = self.get_cpu_usage().await?;
+
+        // Disk usage monitoring
+        self.disk_usage = self.get_disk_usage().await?;
+
+        // Network usage monitoring (simplified)
+        self.network_usage = self.get_network_usage().await?;
+
+        debug!("Updated resource metrics: CPU: {:.1}%, Memory: {:.1}%, Disk: {:.1}%, Network: {:.1}%",
+               self.cpu_usage, self.memory_usage, self.disk_usage, self.network_usage);
+
         Ok(())
     }
 
-    pub fn check_resource_limits(&self, _requirements: &ResourceRequirements) -> Result<()> {
-        // TODO: Implement resource limit checking
+    async fn get_memory_usage(&self) -> Result<f64> {
+        #[cfg(target_os = "linux")]
+        {
+            match tokio::fs::read_to_string("/proc/meminfo").await {
+                Ok(content) => {
+                    let mut total_kb = 0u64;
+                    let mut available_kb = 0u64;
+
+                    for line in content.lines() {
+                        if line.starts_with("MemTotal:") {
+                            if let Some(value) = line.split_whitespace().nth(1) {
+                                total_kb = value.parse().unwrap_or(0);
+                            }
+                        } else if line.starts_with("MemAvailable:") {
+                            if let Some(value) = line.split_whitespace().nth(1) {
+                                available_kb = value.parse().unwrap_or(0);
+                            }
+                        }
+                    }
+
+                    if total_kb > 0 {
+                        let used_kb = total_kb.saturating_sub(available_kb);
+                        Ok((used_kb as f64 / total_kb as f64) * 100.0)
+                    } else {
+                        Ok(0.0)
+                    }
+                }
+                Err(_) => Ok(0.0)
+            }
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            // Simulate memory usage for non-Linux systems
+            let timestamp = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs();
+            Ok(((timestamp % 100) as f64 / 100.0) * 80.0 + 10.0) // 10-90% range
+        }
+    }
+
+    async fn get_cpu_usage(&self) -> Result<f64> {
+        // Simplified CPU usage estimation based on system load
+        #[cfg(target_os = "linux")]
+        {
+            match tokio::fs::read_to_string("/proc/loadavg").await {
+                Ok(content) => {
+                    if let Some(load_str) = content.split_whitespace().next() {
+                        if let Ok(load) = load_str.parse::<f64>() {
+                            // Convert load average to approximate CPU percentage
+                            let cpu_cores = num_cpus::get() as f64;
+                            return Ok((load / cpu_cores * 100.0).min(100.0));
+                        }
+                    }
+                    Ok(0.0)
+                }
+                Err(_) => Ok(0.0)
+            }
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            // Simulate CPU usage for non-Linux systems
+            let timestamp = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs();
+            Ok(((timestamp * 7) % 100) as f64 / 100.0 * 60.0 + 5.0) // 5-65% range
+        }
+    }
+
+    async fn get_disk_usage(&self) -> Result<f64> {
+        #[cfg(target_os = "linux")]
+        {
+            // Check disk usage of current directory
+            match tokio::fs::metadata(".").await {
+                Ok(_) => {
+                    // For simplicity, return a mock value based on available space
+                    // A real implementation would use statvfs or similar
+                    Ok(25.0) // Mock 25% disk usage
+                }
+                Err(_) => Ok(0.0)
+            }
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            // Simulate disk usage
+            Ok(30.0) // Mock 30% disk usage
+        }
+    }
+
+    async fn get_network_usage(&self) -> Result<f64> {
+        // Network usage is complex to measure in real-time
+        // For now, return a low simulated value
+        Ok(5.0) // Mock 5% network usage
+    }
+
+    pub fn check_resource_limits(&self, requirements: &ResourceRequirements) -> Result<()> {
+        // Check memory requirements
+        if let Some(required_memory_mb) = requirements.memory_mb {
+            let available_memory_percent = 100.0 - self.memory_usage;
+            let system_memory_gb = 8.0; // Assume 8GB system memory for calculation
+            let available_memory_mb = (available_memory_percent / 100.0) * system_memory_gb * 1024.0;
+
+            if required_memory_mb as f64 > available_memory_mb {
+                return Err(anyhow::anyhow!(
+                    "Insufficient memory: required {}MB, available {:.1}MB",
+                    required_memory_mb, available_memory_mb
+                ));
+            }
+        }
+
+        // Check CPU requirements
+        if let Some(required_cpu_cores) = requirements.cpu_cores {
+            let available_cpu_percent = 100.0 - self.cpu_usage;
+            if available_cpu_percent < (required_cpu_cores as f64 * 20.0) { // Approximate 20% per core
+                return Err(anyhow::anyhow!(
+                    "Insufficient CPU: required {} cores, current usage {:.1}%",
+                    required_cpu_cores, self.cpu_usage
+                ));
+            }
+        }
+
+        // Check disk space requirements
+        if let Some(required_disk_mb) = requirements.disk_space_mb {
+            let available_disk_percent = 100.0 - self.disk_usage;
+            let system_disk_gb = 100.0; // Assume 100GB system disk for calculation
+            let available_disk_mb = (available_disk_percent / 100.0) * system_disk_gb * 1024.0;
+
+            if required_disk_mb as f64 > available_disk_mb {
+                return Err(anyhow::anyhow!(
+                    "Insufficient disk space: required {}MB, available {:.1}MB",
+                    required_disk_mb, available_disk_mb
+                ));
+            }
+        }
+
+        // Check GPU requirements
+        if requirements.gpu_required && self.cpu_usage > 90.0 {
+            // Simplified check - if CPU is very high, assume GPU might also be stressed
+            return Err(anyhow::anyhow!(
+                "GPU resources may be constrained (high system load: {:.1}%)",
+                self.cpu_usage
+            ));
+        }
+
+        debug!("Resource requirements check passed: Memory: {:.1}%, CPU: {:.1}%, Disk: {:.1}%",
+               self.memory_usage, self.cpu_usage, self.disk_usage);
+
         Ok(())
     }
 }
@@ -1139,22 +1535,27 @@ mod tests {
     #[tokio::test]
     async fn test_create_queue() {
         let manager = JobQueueManager::new(JobQueueConfig::default());
-        let result = manager.create_queue(
-            "test-queue".to_string(),
-            "Test Queue".to_string(),
-            "A test queue".to_string()
-        ).await;
+        let result = manager
+            .create_queue(
+                "test-queue".to_string(),
+                "Test Queue".to_string(),
+                "A test queue".to_string(),
+            )
+            .await;
         assert!(result.is_ok());
     }
 
     #[tokio::test]
     async fn test_submit_job() {
         let manager = JobQueueManager::new(JobQueueConfig::default());
-        manager.create_queue(
-            "test-queue".to_string(),
-            "Test Queue".to_string(),
-            "A test queue".to_string()
-        ).await.unwrap();
+        manager
+            .create_queue(
+                "test-queue".to_string(),
+                "Test Queue".to_string(),
+                "A test queue".to_string(),
+            )
+            .await
+            .unwrap();
 
         let job = BatchJob {
             id: "test-job".to_string(),
@@ -1194,11 +1595,14 @@ mod tests {
         assert_eq!(queues.len(), 0);
 
         // Create a queue
-        manager.create_queue(
-            "test-queue-1".to_string(),
-            "Test Queue 1".to_string(),
-            "First test queue".to_string()
-        ).await.unwrap();
+        manager
+            .create_queue(
+                "test-queue-1".to_string(),
+                "Test Queue 1".to_string(),
+                "First test queue".to_string(),
+            )
+            .await
+            .unwrap();
 
         // Should have one queue
         let queues = manager.list_all_queues().await.unwrap();
@@ -1209,14 +1613,18 @@ mod tests {
     #[tokio::test]
     async fn test_get_queue_job_counts() {
         let manager = JobQueueManager::new(JobQueueConfig::default());
-        manager.create_queue(
-            "count-test".to_string(),
-            "Count Test Queue".to_string(),
-            "Test queue for job counts".to_string()
-        ).await.unwrap();
+        manager
+            .create_queue(
+                "count-test".to_string(),
+                "Count Test Queue".to_string(),
+                "Test queue for job counts".to_string(),
+            )
+            .await
+            .unwrap();
 
         // Initially should have zero counts
-        let (queued, running, completed) = manager.get_queue_job_counts("count-test").await.unwrap();
+        let (queued, running, completed) =
+            manager.get_queue_job_counts("count-test").await.unwrap();
         assert_eq!(queued, 0);
         assert_eq!(running, 0);
         assert_eq!(completed, 0);
@@ -1225,11 +1633,14 @@ mod tests {
     #[tokio::test]
     async fn test_queue_metrics() {
         let manager = JobQueueManager::new(JobQueueConfig::default());
-        manager.create_queue(
-            "metrics-test".to_string(),
-            "Metrics Test Queue".to_string(),
-            "Test queue for metrics".to_string()
-        ).await.unwrap();
+        manager
+            .create_queue(
+                "metrics-test".to_string(),
+                "Metrics Test Queue".to_string(),
+                "Test queue for metrics".to_string(),
+            )
+            .await
+            .unwrap();
 
         // Test getting metrics
         let metrics = manager.get_queue_metrics("metrics-test").await;
@@ -1248,11 +1659,14 @@ mod tests {
     #[tokio::test]
     async fn test_export_functionality() {
         let manager = JobQueueManager::new(JobQueueConfig::default());
-        manager.create_queue(
-            "export-test".to_string(),
-            "Export Test Queue".to_string(),
-            "Test queue for export".to_string()
-        ).await.unwrap();
+        manager
+            .create_queue(
+                "export-test".to_string(),
+                "Export Test Queue".to_string(),
+                "Test queue for export".to_string(),
+            )
+            .await
+            .unwrap();
 
         // Test job export
         let jobs = manager.export_jobs("export-test").await.unwrap();

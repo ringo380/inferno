@@ -38,7 +38,7 @@ impl Default for StreamingConfig {
             max_concurrent_streams: 10,
             buffer_size: 100,
             enable_backpressure: true,
-            token_timeout_ms: 30000, // 30 seconds
+            token_timeout_ms: 30000,        // 30 seconds
             max_response_time_seconds: 300, // 5 minutes
             enable_metrics: true,
             heartbeat_interval_ms: 30000, // 30 seconds
@@ -142,12 +142,15 @@ impl StreamingManager {
 
         // Check stream limits
         {
-            let active_streams = self.active_streams.lock()
+            let active_streams = self
+                .active_streams
+                .lock()
                 .map_err(|e| anyhow::anyhow!("Active streams mutex poisoned: {}", e))?;
             if active_streams.len() >= self.config.max_concurrent_streams {
                 return Err(InfernoError::StreamingLimit(
-                    "Maximum concurrent streams reached".to_string()
-                ).into());
+                    "Maximum concurrent streams reached".to_string(),
+                )
+                .into());
             }
         }
 
@@ -165,14 +168,18 @@ impl StreamingManager {
 
         // Add to active streams
         {
-            let mut active_streams = self.active_streams.lock()
+            let mut active_streams = self
+                .active_streams
+                .lock()
                 .expect("Active streams mutex poisoned in create_enhanced_stream");
             active_streams.push(stream_state);
         }
 
         // Update metrics
         {
-            let mut metrics = self.metrics.lock()
+            let mut metrics = self
+                .metrics
+                .lock()
                 .expect("Metrics mutex poisoned in create_enhanced_stream");
             metrics.active_streams += 1;
             metrics.total_streams_created += 1;
@@ -182,10 +189,9 @@ impl StreamingManager {
         let base_stream = backend.infer_stream(input, params).await?;
 
         // Create enhanced stream with monitoring and buffering
-        let enhanced_stream = self.create_monitored_stream(
-            stream_id.clone(),
-            base_stream,
-        ).await;
+        let enhanced_stream = self
+            .create_monitored_stream(stream_id.clone(), base_stream)
+            .await;
 
         Ok(Box::pin(enhanced_stream))
     }
@@ -385,9 +391,11 @@ impl StreamingManager {
 
                 // Update and broadcast metrics
                 {
-                    let active_streams_guard = active_streams.lock()
+                    let active_streams_guard = active_streams
+                        .lock()
                         .expect("Active streams mutex poisoned during metrics update");
-                    let mut metrics_guard = metrics.lock()
+                    let mut metrics_guard = metrics
+                        .lock()
                         .expect("Metrics mutex poisoned during metrics update");
 
                     metrics_guard.active_streams = active_streams_guard.len();
@@ -415,7 +423,8 @@ impl StreamingManager {
 
                 // Check for stale streams
                 {
-                    let mut streams = active_streams.lock()
+                    let mut streams = active_streams
+                        .lock()
                         .expect("Active streams mutex poisoned during cleanup");
                     let now = Instant::now();
 
@@ -441,7 +450,8 @@ impl StreamingManager {
 
     /// Get current streaming metrics
     pub fn get_metrics(&self) -> StreamingMetrics {
-        self.metrics.lock()
+        self.metrics
+            .lock()
             .expect("Metrics mutex poisoned in get_metrics")
             .clone()
     }
@@ -453,7 +463,8 @@ impl StreamingManager {
 
     /// Get active stream states
     pub fn get_active_streams(&self) -> Vec<StreamState> {
-        self.active_streams.lock()
+        self.active_streams
+            .lock()
             .expect("Active streams mutex poisoned in get_active_streams")
             .clone()
     }
@@ -464,7 +475,8 @@ impl StreamingManager {
         stream_id: &str,
         status: StreamStatus,
     ) {
-        let mut streams = active_streams.lock()
+        let mut streams = active_streams
+            .lock()
             .expect("Active streams mutex poisoned in update_stream_status");
         if let Some(stream) = streams.iter_mut().find(|s| s.stream_id == stream_id) {
             stream.status = status;
@@ -476,7 +488,8 @@ impl StreamingManager {
         stream_id: &str,
         tokens_generated: u64,
     ) {
-        let mut streams = active_streams.lock()
+        let mut streams = active_streams
+            .lock()
             .expect("Active streams mutex poisoned in update_stream_status");
         if let Some(stream) = streams.iter_mut().find(|s| s.stream_id == stream_id) {
             stream.last_token_at = Some(Instant::now());
@@ -484,11 +497,9 @@ impl StreamingManager {
         }
     }
 
-    fn update_stream_error(
-        active_streams: &Arc<Mutex<Vec<StreamState>>>,
-        stream_id: &str,
-    ) {
-        let mut streams = active_streams.lock()
+    fn update_stream_error(active_streams: &Arc<Mutex<Vec<StreamState>>>, stream_id: &str) {
+        let mut streams = active_streams
+            .lock()
             .expect("Active streams mutex poisoned in update_stream_status");
         if let Some(stream) = streams.iter_mut().find(|s| s.stream_id == stream_id) {
             stream.errors += 1;

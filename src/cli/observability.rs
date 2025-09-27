@@ -1,8 +1,6 @@
 use crate::{
     config::Config,
-    observability::{
-        GrafanaDashboard, ObservabilityConfig, ObservabilityManager,
-    },
+    observability::{GrafanaDashboard, ObservabilityConfig, ObservabilityManager},
 };
 use anyhow::Result;
 use clap::{Parser, Subcommand};
@@ -220,27 +218,24 @@ pub enum ExportFormat {
 
 pub async fn execute(args: ObservabilityArgs, config: &Config) -> Result<()> {
     match args.command {
-        ObservabilityCommand::Init { prometheus, otel, grafana } => {
-            init_observability(prometheus, otel, grafana, config).await
-        }
-        ObservabilityCommand::Metrics { command } => {
-            handle_metrics_command(command, config).await
-        }
-        ObservabilityCommand::Tracing { command } => {
-            handle_tracing_command(command, config).await
-        }
+        ObservabilityCommand::Init {
+            prometheus,
+            otel,
+            grafana,
+        } => init_observability(prometheus, otel, grafana, config).await,
+        ObservabilityCommand::Metrics { command } => handle_metrics_command(command, config).await,
+        ObservabilityCommand::Tracing { command } => handle_tracing_command(command, config).await,
         ObservabilityCommand::Dashboard { command } => {
             handle_dashboard_command(command, config).await
         }
-        ObservabilityCommand::Export { metrics, traces, dashboards, format } => {
-            export_observability_data(metrics, traces, dashboards, format, config).await
-        }
-        ObservabilityCommand::Status => {
-            show_observability_status(config).await
-        }
-        ObservabilityCommand::Health => {
-            check_observability_health(config).await
-        }
+        ObservabilityCommand::Export {
+            metrics,
+            traces,
+            dashboards,
+            format,
+        } => export_observability_data(metrics, traces, dashboards, format, config).await,
+        ObservabilityCommand::Status => show_observability_status(config).await,
+        ObservabilityCommand::Health => check_observability_health(config).await,
         ObservabilityCommand::Config { show, save, load } => {
             handle_config_command(show, save, load, config).await
         }
@@ -302,7 +297,10 @@ async fn handle_metrics_command(command: MetricsCommand, _config: &Config) -> Re
             // For now, just simulate it
             tokio::time::sleep(tokio::time::Duration::from_secs(3600)).await;
         }
-        MetricsCommand::Show { filter, format: _format } => {
+        MetricsCommand::Show {
+            filter,
+            format: _format,
+        } => {
             let obs_config = ObservabilityConfig::default();
             let manager = ObservabilityManager::new(obs_config);
             manager.initialize().await?;
@@ -328,7 +326,12 @@ async fn handle_metrics_command(command: MetricsCommand, _config: &Config) -> Re
             info!("Resetting all metrics");
             println!("All metrics have been reset");
         }
-        MetricsCommand::Record { name, value, metric_type, labels } => {
+        MetricsCommand::Record {
+            name,
+            value,
+            metric_type,
+            labels,
+        } => {
             let obs_config = ObservabilityConfig::default();
             let manager = ObservabilityManager::new(obs_config);
             manager.initialize().await?;
@@ -364,7 +367,11 @@ async fn handle_tracing_command(command: TracingCommand, _config: &Config) -> Re
             println!("  OTEL_EXPORTER_OTLP_ENDPOINT={}", endpoint);
             println!("  OTEL_SERVICE_NAME=inferno");
         }
-        TracingCommand::Show { trace_id, operation, errors_only } => {
+        TracingCommand::Show {
+            trace_id,
+            operation,
+            errors_only,
+        } => {
             let obs_config = ObservabilityConfig::default();
             let manager = ObservabilityManager::new(obs_config);
 
@@ -394,7 +401,10 @@ async fn handle_tracing_command(command: TracingCommand, _config: &Config) -> Re
                 println!("  Status: {:?}", trace.status);
             }
         }
-        TracingCommand::Export { output, format: _format } => {
+        TracingCommand::Export {
+            output,
+            format: _format,
+        } => {
             let obs_config = ObservabilityConfig::default();
             let manager = ObservabilityManager::new(obs_config);
 
@@ -419,7 +429,11 @@ async fn handle_tracing_command(command: TracingCommand, _config: &Config) -> Re
 
 async fn handle_dashboard_command(command: DashboardCommand, _config: &Config) -> Result<()> {
     match command {
-        DashboardCommand::Create { name, title, template } => {
+        DashboardCommand::Create {
+            name,
+            title,
+            template,
+        } => {
             let dashboard = GrafanaDashboard {
                 id: name.clone(),
                 title: title.unwrap_or_else(|| format!("{} Dashboard", name)),
@@ -473,7 +487,11 @@ async fn handle_dashboard_command(command: DashboardCommand, _config: &Config) -
                 println!("  Time range: {}", dashboard.time_range);
             }
         }
-        DashboardCommand::Export { id, output, format: _format } => {
+        DashboardCommand::Export {
+            id,
+            output,
+            format: _format,
+        } => {
             let obs_config = ObservabilityConfig::default();
             let manager = ObservabilityManager::new(obs_config);
             manager.initialize().await?;
@@ -497,13 +515,20 @@ async fn handle_dashboard_command(command: DashboardCommand, _config: &Config) -
         }
         DashboardCommand::Delete { id, yes } => {
             if !yes {
-                println!("Are you sure you want to delete dashboard '{}'? Use --yes to confirm.", id);
+                println!(
+                    "Are you sure you want to delete dashboard '{}'? Use --yes to confirm.",
+                    id
+                );
                 return Ok(());
             }
 
             println!("Dashboard '{}' deleted", id);
         }
-        DashboardCommand::Deploy { id, grafana_url, api_key } => {
+        DashboardCommand::Deploy {
+            id,
+            grafana_url,
+            api_key,
+        } => {
             let url = grafana_url.unwrap_or_else(|| "http://localhost:3000".to_string());
 
             println!("Deploying dashboard '{}' to Grafana", id);

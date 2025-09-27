@@ -36,9 +36,10 @@ pub async fn execute(args: BenchArgs, config: &Config) -> Result<()> {
     let model_manager = ModelManager::new(&config.models_dir);
     let model_info = model_manager.resolve_model(&args.model).await?;
 
-    let backend_type = args.backend.unwrap_or_else(|| {
-        BackendType::from_model_path(&model_info.path)
-    });
+    let backend_type = args
+        .backend
+        .or_else(|| BackendType::from_model_path(&model_info.path))
+        .ok_or_else(|| anyhow::anyhow!("No suitable backend found for model: {}", model_info.path.display()))?;
 
     let mut backend = Backend::new(backend_type, &config.backend_config)?;
 
@@ -50,9 +51,9 @@ pub async fn execute(args: BenchArgs, config: &Config) -> Result<()> {
     println!("Model loaded in: {:?}", load_time);
     println!();
 
-    let prompt = args.prompt.unwrap_or_else(|| {
-        "The quick brown fox jumps over the lazy dog.".to_string()
-    });
+    let prompt = args
+        .prompt
+        .unwrap_or_else(|| "The quick brown fox jumps over the lazy dog.".to_string());
 
     let inference_params = InferenceParams {
         max_tokens: args.tokens,
@@ -67,11 +68,14 @@ pub async fn execute(args: BenchArgs, config: &Config) -> Result<()> {
     println!("  Iterations: {}", args.iterations);
     println!("  Warmup: {}", args.warmup);
     println!("  Max tokens: {}", args.tokens);
-    println!("  Prompt: {}", if prompt.len() > 50 {
-        format!("{}...", &prompt[..50])
-    } else {
-        prompt.clone()
-    });
+    println!(
+        "  Prompt: {}",
+        if prompt.len() > 50 {
+            format!("{}...", &prompt[..50])
+        } else {
+            prompt.clone()
+        }
+    );
     println!();
 
     // Warmup
@@ -123,7 +127,7 @@ pub async fn execute(args: BenchArgs, config: &Config) -> Result<()> {
     let max = durations[durations.len() - 1];
     let median = durations[durations.len() / 2];
     let mean: Duration = Duration::from_nanos(
-        durations.iter().map(|d| d.as_nanos()).sum::<u128>() as u64 / durations.len() as u64
+        durations.iter().map(|d| d.as_nanos()).sum::<u128>() as u64 / durations.len() as u64,
     );
 
     let total_tokens_per_sec = total_tokens as f64 / total_time.as_secs_f64();
@@ -136,10 +140,22 @@ pub async fn execute(args: BenchArgs, config: &Config) -> Result<()> {
     println!("Throughput: {:.1} tokens/sec", total_tokens_per_sec);
     println!();
     println!("Per-iteration statistics:");
-    println!("  Min:    {:?} ({:.1} tok/s)", min, args.tokens as f64 / min.as_secs_f64());
-    println!("  Max:    {:?} ({:.1} tok/s)", max, args.tokens as f64 / max.as_secs_f64());
+    println!(
+        "  Min:    {:?} ({:.1} tok/s)",
+        min,
+        args.tokens as f64 / min.as_secs_f64()
+    );
+    println!(
+        "  Max:    {:?} ({:.1} tok/s)",
+        max,
+        args.tokens as f64 / max.as_secs_f64()
+    );
     println!("  Mean:   {:?} ({:.1} tok/s)", mean, mean_tokens_per_sec);
-    println!("  Median: {:?} ({:.1} tok/s)", median, args.tokens as f64 / median.as_secs_f64());
+    println!(
+        "  Median: {:?} ({:.1} tok/s)",
+        median,
+        args.tokens as f64 / median.as_secs_f64()
+    );
     println!();
 
     // Performance classification

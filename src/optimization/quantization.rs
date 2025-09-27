@@ -11,10 +11,10 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 /// Quantization precision types
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 pub enum QuantizationType {
-    FP32,   // Full precision
-    FP16,   // Half precision
-    INT8,   // 8-bit integers
-    INT4,   // 4-bit integers
+    FP32, // Full precision
+    FP16, // Half precision
+    INT8, // 8-bit integers
+    INT4, // 4-bit integers
 }
 
 impl std::fmt::Display for QuantizationType {
@@ -84,10 +84,18 @@ impl ModelQuantizer {
     }
 
     /// Quantize a model to specified precision
-    pub async fn quantize_model(&mut self, model_path: &str, target_format: &str) -> Result<String> {
+    pub async fn quantize_model(
+        &mut self,
+        model_path: &str,
+        target_format: &str,
+    ) -> Result<String> {
         let start_time = std::time::Instant::now();
 
-        tracing::info!("Starting quantization of model: {} to {}", model_path, self.config.default_precision);
+        tracing::info!(
+            "Starting quantization of model: {} to {}",
+            model_path,
+            self.config.default_precision
+        );
 
         let model_path = Path::new(model_path);
         let output_path = self.generate_output_path(model_path, target_format)?;
@@ -96,17 +104,27 @@ impl ModelQuantizer {
         match model_path.extension().and_then(|s| s.to_str()) {
             Some("gguf") => self.quantize_gguf_model(model_path, &output_path).await?,
             Some("onnx") => self.quantize_onnx_model(model_path, &output_path).await?,
-            Some("pt") | Some("pth") => self.quantize_pytorch_model(model_path, &output_path).await?,
-            Some("safetensors") => self.quantize_safetensors_model(model_path, &output_path).await?,
+            Some("pt") | Some("pth") => {
+                self.quantize_pytorch_model(model_path, &output_path)
+                    .await?
+            }
+            Some("safetensors") => {
+                self.quantize_safetensors_model(model_path, &output_path)
+                    .await?
+            }
             _ => return Err(anyhow::anyhow!("Unsupported model format for quantization")),
         }
 
         // Update metrics
         self.metrics.quantization_time = start_time.elapsed().as_secs_f64();
-        self.calculate_compression_metrics(model_path, &output_path).await?;
+        self.calculate_compression_metrics(model_path, &output_path)
+            .await?;
 
-        tracing::info!("Quantization completed in {:.2}s, compression ratio: {:.2}x",
-                      self.metrics.quantization_time, self.metrics.compression_ratio);
+        tracing::info!(
+            "Quantization completed in {:.2}s, compression ratio: {:.2}x",
+            self.metrics.quantization_time,
+            self.metrics.compression_ratio
+        );
 
         Ok(output_path.to_string_lossy().to_string())
     }
@@ -132,21 +150,33 @@ impl ModelQuantizer {
 
         // Read and process tensors
         let tensor_count = u64::from_le_bytes([
-            header_buffer[8], header_buffer[9], header_buffer[10], header_buffer[11],
-            0, 0, 0, 0
+            header_buffer[8],
+            header_buffer[9],
+            header_buffer[10],
+            header_buffer[11],
+            0,
+            0,
+            0,
+            0,
         ]);
 
         tracing::debug!("Processing {} tensors for quantization", tensor_count);
 
         for i in 0..tensor_count {
-            self.quantize_gguf_tensor(&mut input_file, &mut output_file, i).await?;
+            self.quantize_gguf_tensor(&mut input_file, &mut output_file, i)
+                .await?;
         }
 
         Ok(())
     }
 
     /// Quantize individual GGUF tensor
-    async fn quantize_gguf_tensor(&self, input: &mut fs::File, output: &mut fs::File, tensor_idx: u64) -> Result<()> {
+    async fn quantize_gguf_tensor(
+        &self,
+        input: &mut fs::File,
+        output: &mut fs::File,
+        tensor_idx: u64,
+    ) -> Result<()> {
         // Read tensor metadata
         let mut name_len_bytes = [0u8; 8];
         input.read_exact(&mut name_len_bytes).await?;
@@ -177,18 +207,27 @@ impl ModelQuantizer {
         let element_size = self.get_element_size_from_type(tensor_type);
         let tensor_size = element_count * element_size as u64;
 
-        tracing::debug!("Quantizing tensor '{}' ({}x{} elements, type: {})",
-                       tensor_name, element_count, element_size, tensor_type);
+        tracing::debug!(
+            "Quantizing tensor '{}' ({}x{} elements, type: {})",
+            tensor_name,
+            element_count,
+            element_size,
+            tensor_type
+        );
 
         // Read tensor data
         let mut tensor_data = vec![0u8; tensor_size as usize];
         input.read_exact(&mut tensor_data).await?;
 
         // Apply quantization based on layer type and config
-        let quantized_data = self.apply_quantization(&tensor_data, &tensor_name, tensor_type).await?;
+        let quantized_data = self
+            .apply_quantization(&tensor_data, &tensor_name, tensor_type)
+            .await?;
 
         // Write quantized tensor to output
-        output.write_all(&u64::to_le_bytes(tensor_name.len() as u64)).await?;
+        output
+            .write_all(&u64::to_le_bytes(tensor_name.len() as u64))
+            .await?;
         output.write_all(tensor_name.as_bytes()).await?;
         output.write_all(&u32::to_le_bytes(dims_count)).await?;
 
@@ -221,7 +260,11 @@ impl ModelQuantizer {
     }
 
     /// Quantize PyTorch model
-    async fn quantize_pytorch_model(&mut self, input_path: &Path, output_path: &Path) -> Result<()> {
+    async fn quantize_pytorch_model(
+        &mut self,
+        input_path: &Path,
+        output_path: &Path,
+    ) -> Result<()> {
         tracing::debug!("Quantizing PyTorch model: {:?}", input_path);
 
         // Read PyTorch model (simplified implementation)
@@ -233,7 +276,11 @@ impl ModelQuantizer {
     }
 
     /// Quantize SafeTensors model
-    async fn quantize_safetensors_model(&mut self, input_path: &Path, output_path: &Path) -> Result<()> {
+    async fn quantize_safetensors_model(
+        &mut self,
+        input_path: &Path,
+        output_path: &Path,
+    ) -> Result<()> {
         tracing::debug!("Quantizing SafeTensors model: {:?}", input_path);
 
         let model_data = fs::read(input_path).await?;
@@ -244,9 +291,16 @@ impl ModelQuantizer {
     }
 
     /// Apply quantization to tensor data
-    async fn apply_quantization(&self, data: &[u8], tensor_name: &str, tensor_type: u32) -> Result<Vec<u8>> {
+    async fn apply_quantization(
+        &self,
+        data: &[u8],
+        tensor_name: &str,
+        tensor_type: u32,
+    ) -> Result<Vec<u8>> {
         // Get quantization precision for this layer
-        let precision = self.config.per_layer_precision
+        let precision = self
+            .config
+            .per_layer_precision
             .get(tensor_name)
             .copied()
             .unwrap_or(self.config.default_precision);
@@ -261,7 +315,8 @@ impl ModelQuantizer {
 
     /// Quantize tensor data to FP16
     async fn quantize_to_fp16(&self, data: &[u8], tensor_type: u32) -> Result<Vec<u8>> {
-        if tensor_type != 0 { // Assuming 0 is FP32
+        if tensor_type != 0 {
+            // Assuming 0 is FP32
             return Ok(data.to_vec()); // Already quantized or not float
         }
 
@@ -282,7 +337,8 @@ impl ModelQuantizer {
 
     /// Quantize tensor data to INT8
     async fn quantize_to_int8(&self, data: &[u8], tensor_type: u32) -> Result<Vec<u8>> {
-        if tensor_type != 0 { // Not FP32
+        if tensor_type != 0 {
+            // Not FP32
             return Ok(data.to_vec());
         }
 
@@ -304,7 +360,8 @@ impl ModelQuantizer {
 
     /// Quantize tensor data to INT4
     async fn quantize_to_int4(&self, data: &[u8], tensor_type: u32) -> Result<Vec<u8>> {
-        if tensor_type != 0 { // Not FP32
+        if tensor_type != 0 {
+            // Not FP32
             return Ok(data.to_vec());
         }
 
@@ -313,9 +370,12 @@ impl ModelQuantizer {
         // Convert FP32 to INT4 with calibration
         let (scale, zero_point) = self.calculate_quantization_params(data).await?;
 
-        for chunk in data.chunks_exact(8) { // Process 2 FP32 values at once
-            let fp32_1 = f32::from_bits(u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]));
-            let fp32_2 = f32::from_bits(u32::from_le_bytes([chunk[4], chunk[5], chunk[6], chunk[7]]));
+        for chunk in data.chunks_exact(8) {
+            // Process 2 FP32 values at once
+            let fp32_1 =
+                f32::from_bits(u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]));
+            let fp32_2 =
+                f32::from_bits(u32::from_le_bytes([chunk[4], chunk[5], chunk[6], chunk[7]]));
 
             let q1 = self.quantize_fp32_to_int4(fp32_1, scale, zero_point);
             let q2 = self.quantize_fp32_to_int4(fp32_2, scale, zero_point);
@@ -403,20 +463,24 @@ impl ModelQuantizer {
 
     /// Generate output path for quantized model
     fn generate_output_path(&self, input_path: &Path, target_format: &str) -> Result<PathBuf> {
-        let stem = input_path.file_stem()
+        let stem = input_path
+            .file_stem()
             .ok_or_else(|| anyhow::anyhow!("Invalid input path"))?;
 
         let extension = if target_format.is_empty() {
-            input_path.extension()
+            input_path
+                .extension()
                 .ok_or_else(|| anyhow::anyhow!("No file extension"))?
         } else {
             std::ffi::OsStr::new(target_format)
         };
 
-        let quantized_name = format!("{}_{}_{}",
-                                   stem.to_string_lossy(),
-                                   self.config.default_precision,
-                                   "quantized");
+        let quantized_name = format!(
+            "{}_{}_{}",
+            stem.to_string_lossy(),
+            self.config.default_precision,
+            "quantized"
+        );
 
         let mut output_path = input_path.with_file_name(quantized_name);
         output_path.set_extension(extension);
@@ -427,11 +491,11 @@ impl ModelQuantizer {
     /// Get element size from GGUF tensor type
     fn get_element_size_from_type(&self, tensor_type: u32) -> usize {
         match tensor_type {
-            0 => 4,  // FP32
-            1 => 2,  // FP16
-            2 => 1,  // INT8
-            3 => 1,  // INT4 (packed)
-            _ => 4,  // Default to FP32
+            0 => 4, // FP32
+            1 => 2, // FP16
+            2 => 1, // INT8
+            3 => 1, // INT4 (packed)
+            _ => 4, // Default to FP32
         }
     }
 
@@ -467,7 +531,11 @@ impl ModelQuantizer {
     }
 
     /// Calculate compression metrics
-    async fn calculate_compression_metrics(&mut self, input_path: &Path, output_path: &Path) -> Result<()> {
+    async fn calculate_compression_metrics(
+        &mut self,
+        input_path: &Path,
+        output_path: &Path,
+    ) -> Result<()> {
         let input_size = fs::metadata(input_path).await?.len();
         let output_size = fs::metadata(output_path).await?.len();
 
@@ -545,7 +613,10 @@ mod tests {
             0x00, 0x00, 0x80, 0x40, // 4.0
         ];
 
-        let (scale, zero_point) = quantizer.calculate_quantization_params(&test_data).await.unwrap();
+        let (scale, zero_point) = quantizer
+            .calculate_quantization_params(&test_data)
+            .await
+            .unwrap();
         assert!(scale > 0.0);
         assert!(zero_point >= -128 && zero_point <= 127);
     }

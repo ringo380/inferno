@@ -58,15 +58,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 icon_emoji: ":warning:".to_string(),
             },
             custom_templates: HashMap::new(),
-            alert_conditions: vec![
-                AlertCondition {
-                    name: "Critical Events".to_string(),
-                    severity_threshold: Severity::Critical,
-                    event_types: vec![],
-                    rate_threshold: None,
-                    enabled: true,
-                },
-            ],
+            alert_conditions: vec![AlertCondition {
+                name: "Critical Events".to_string(),
+                severity_threshold: Severity::Critical,
+                event_types: vec![],
+                rate_threshold: None,
+                enabled: true,
+            }],
         },
         export_format: ExportFormat::JsonLines,
     };
@@ -105,8 +103,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             description: "Successful model inference request".to_string(),
             parameters: {
                 let mut params = HashMap::new();
-                params.insert("temperature".to_string(), serde_json::Value::Number(serde_json::Number::from_f64(0.7).unwrap()));
-                params.insert("max_tokens".to_string(), serde_json::Value::Number(serde_json::Number::from(1000)));
+                params.insert(
+                    "temperature".to_string(),
+                    serde_json::Value::Number(serde_json::Number::from_f64(0.7).unwrap()),
+                );
+                params.insert(
+                    "max_tokens".to_string(),
+                    serde_json::Value::Number(serde_json::Number::from(1000)),
+                );
                 params
             },
             request_id: Some("req-xyz789".to_string()),
@@ -141,8 +145,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         },
         metadata: {
             let mut meta = HashMap::new();
-            meta.insert("gpu_used".to_string(), serde_json::Value::String("NVIDIA-A100".to_string()));
-            meta.insert("model_size_gb".to_string(), serde_json::Value::Number(serde_json::Number::from(7)));
+            meta.insert(
+                "gpu_used".to_string(),
+                serde_json::Value::String("NVIDIA-A100".to_string()),
+            );
+            meta.insert(
+                "model_size_gb".to_string(),
+                serde_json::Value::Number(serde_json::Number::from(7)),
+            );
             meta
         },
     };
@@ -171,7 +181,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         },
         action: "unauthorized_access_attempt".to_string(),
         details: EventDetails {
-            description: "Unauthorized access attempt to admin API without valid credentials".to_string(),
+            description: "Unauthorized access attempt to admin API without valid credentials"
+                .to_string(),
             parameters: HashMap::new(),
             request_id: Some("req-security-001".to_string()),
             correlation_id: None,
@@ -200,7 +211,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         },
         metadata: {
             let mut meta = HashMap::new();
-            meta.insert("attack_type".to_string(), serde_json::Value::String("credential_stuffing".to_string()));
+            meta.insert(
+                "attack_type".to_string(),
+                serde_json::Value::String("credential_stuffing".to_string()),
+            );
             meta.insert("blocked".to_string(), serde_json::Value::Bool(true));
             meta
         },
@@ -235,8 +249,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("📋 Found {} events", events.len());
 
     for event in &events {
-        println!("  - {} [{:?}] {} by {}",
-                 event.id, event.severity, event.action, event.actor.name);
+        println!(
+            "  - {} [{:?}] {} by {}",
+            event.id, event.severity, event.action, event.actor.name
+        );
     }
 
     // 7. Get statistics
@@ -255,35 +271,48 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let compressed_zstd = AuditLogger::compress_data(&test_data, &CompressionMethod::Zstd, 3)?;
 
     println!("  Original size: {} bytes", test_data.len());
-    println!("  Gzip compressed: {} bytes ({:.1}% reduction)",
-             compressed_gzip.len(),
-             (1.0 - compressed_gzip.len() as f64 / test_data.len() as f64) * 100.0);
-    println!("  Zstd compressed: {} bytes ({:.1}% reduction)",
-             compressed_zstd.len(),
-             (1.0 - compressed_zstd.len() as f64 / test_data.len() as f64) * 100.0);
+    println!(
+        "  Gzip compressed: {} bytes ({:.1}% reduction)",
+        compressed_gzip.len(),
+        (1.0 - compressed_gzip.len() as f64 / test_data.len() as f64) * 100.0
+    );
+    println!(
+        "  Zstd compressed: {} bytes ({:.1}% reduction)",
+        compressed_zstd.len(),
+        (1.0 - compressed_zstd.len() as f64 / test_data.len() as f64) * 100.0
+    );
 
     // 9. Test encryption key generation
     println!("🔐 Testing encryption key generation...");
     let encryption_key = AuditLogger::generate_encryption_key().await?;
-    println!("  Generated 256-bit encryption key: {}...{}",
-             &encryption_key[..16], &encryption_key[encryption_key.len()-8..]);
+    println!(
+        "  Generated 256-bit encryption key: {}...{}",
+        &encryption_key[..16],
+        &encryption_key[encryption_key.len() - 8..]
+    );
 
     // 10. Export events
     println!("💾 Exporting audit events...");
     let export_path = std::path::PathBuf::from("./demo_audit_export.json");
-    logger.export_events(AuditQuery {
-        event_types: None,
-        severities: None,
-        actors: None,
-        resources: None,
-        start_time: None,
-        end_time: None,
-        limit: None,
-        offset: None,
-        sort_by: None,
-        sort_order: None,
-        search_text: None,
-    }, &export_path, ExportFormat::Json).await?;
+    logger
+        .export_events(
+            AuditQuery {
+                event_types: None,
+                severities: None,
+                actors: None,
+                resources: None,
+                start_time: None,
+                end_time: None,
+                limit: None,
+                offset: None,
+                sort_by: None,
+                sort_order: None,
+                search_text: None,
+            },
+            &export_path,
+            ExportFormat::Json,
+        )
+        .await?;
     println!("  Events exported to: {:?}", export_path);
 
     // 11. Cleanup

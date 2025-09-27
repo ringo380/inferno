@@ -2,54 +2,48 @@
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Brain, ChevronDown } from 'lucide-react';
+import { Brain, ChevronDown, Loader2 } from 'lucide-react';
 import { useState } from 'react';
+import { useModels, useLoadedModels } from '@/hooks/use-tauri-api';
 
 interface ModelSelectorProps {
   selectedModel: string;
   onModelChange: (modelId: string) => void;
 }
 
-const availableModels = [
-  {
-    id: 'llama-7b-q4',
-    name: 'Llama 2 7B Q4_0',
-    status: 'loaded',
-    parameters: '7B',
-    size: '3.8GB',
-    description: 'Fast and efficient for most tasks',
-  },
-  {
-    id: 'gpt-3.5-turbo',
-    name: 'GPT-3.5 Turbo',
-    status: 'available',
-    parameters: '175B',
-    size: '6.4GB',
-    description: 'Excellent for general purpose tasks',
-  },
-  {
-    id: 'mistral-7b',
-    name: 'Mistral 7B Instruct',
-    status: 'error',
-    parameters: '7B',
-    size: '4.2GB',
-    description: 'Optimized for instruction following',
-  },
-  {
-    id: 'claude-instant',
-    name: 'Claude Instant',
-    status: 'loading',
-    parameters: '52B',
-    size: '8.5GB',
-    description: 'Fast, helpful, and harmless AI assistant',
-  },
-];
-
 export function ModelSelector({ selectedModel, onModelChange }: ModelSelectorProps) {
   const [isOpen, setIsOpen] = useState(false);
 
+  const { data: allModels, isLoading: modelsLoading } = useModels();
+  const { data: loadedModelIds, isLoading: loadedLoading } = useLoadedModels();
+
+  // Create enhanced model list with status
+  const availableModels = allModels?.map(model => ({
+    id: model.id,
+    name: model.name,
+    status: loadedModelIds?.includes(model.id) ? 'loaded' : 'available',
+    parameters: `${(model.size / (1024 * 1024 * 1024)).toFixed(1)}GB`,
+    size: `${(model.size / (1024 * 1024)).toFixed(0)}MB`,
+    description: `${model.format.toUpperCase()} format model`,
+    format: model.format,
+  })) || [];
+
   const selected = availableModels.find(m => m.id === selectedModel);
   const loadedModels = availableModels.filter(m => m.status === 'loaded');
+
+  if (modelsLoading || loadedLoading) {
+    return (
+      <div className="space-y-3">
+        <label className="text-sm font-medium">Select Model</label>
+        <Button variant="outline" disabled className="w-full justify-between h-auto p-3">
+          <div className="flex items-center space-x-3">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            <span>Loading models...</span>
+          </div>
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-3">
@@ -66,9 +60,11 @@ export function ModelSelector({ selectedModel, onModelChange }: ModelSelectorPro
               <Brain className="h-4 w-4 text-primary" />
             </div>
             <div className="text-left">
-              <div className="font-medium">{selected?.name}</div>
+              <div className="font-medium">
+                {selected?.name || "No model selected"}
+              </div>
               <div className="text-xs text-muted-foreground">
-                {selected?.parameters} • {selected?.size}
+                {selected ? `${selected.parameters} • ${selected.size}` : "Select a model to start inference"}
               </div>
             </div>
           </div>

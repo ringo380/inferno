@@ -1,4 +1,14 @@
-use crate::{backends::BackendConfig, distributed::DistributedConfig, cache::CacheConfig, response_cache::ResponseCacheConfig, monitoring::MonitoringConfig, /* ab_testing_config::ABTestingConfig, */ observability::ObservabilityConfig, marketplace::MarketplaceConfig, deployment::DeploymentConfig, federated::FederatedConfig, dashboard::DashboardConfig, advanced_monitoring::AdvancedMonitoringConfig, api_gateway::ApiGatewayConfig, model_versioning::ModelVersioningConfig, data_pipeline::DataPipelineConfig, backup_recovery::BackupRecoveryConfig, logging_audit::LoggingAuditConfig, performance_optimization::PerformanceOptimizationConfig, multi_tenancy::MultiTenancyConfig, advanced_cache::AdvancedCacheConfig};
+use crate::{
+    advanced_cache::AdvancedCacheConfig, advanced_monitoring::AdvancedMonitoringConfig,
+    api_gateway::ApiGatewayConfig, backends::BackendConfig, backup_recovery::BackupRecoveryConfig,
+    cache::CacheConfig, dashboard::DashboardConfig, data_pipeline::DataPipelineConfig,
+    deployment::DeploymentConfig, distributed::DistributedConfig, federated::FederatedConfig,
+    logging_audit::LoggingAuditConfig, marketplace::MarketplaceConfig,
+    model_versioning::ModelVersioningConfig, monitoring::MonitoringConfig,
+    multi_tenancy::MultiTenancyConfig,
+    /* ab_testing_config::ABTestingConfig, */ observability::ObservabilityConfig,
+    performance_optimization::PerformanceOptimizationConfig, response_cache::ResponseCacheConfig,
+};
 use anyhow::Result;
 use figment::{
     providers::{Env, Format, Toml},
@@ -237,7 +247,8 @@ impl Config {
 
     pub fn is_model_extension_allowed(&self, extension: &str) -> bool {
         if let Some(ref sec_config) = self.model_security {
-            sec_config.allowed_model_extensions
+            sec_config
+                .allowed_model_extensions
                 .iter()
                 .any(|ext| ext.eq_ignore_ascii_case(extension))
         } else {
@@ -302,7 +313,9 @@ impl Config {
         }
 
         if self.server.max_concurrent_requests == 0 {
-            return Err(anyhow::anyhow!("Max concurrent requests must be greater than 0"));
+            return Err(anyhow::anyhow!(
+                "Max concurrent requests must be greater than 0"
+            ));
         }
 
         // Validate model security config if present
@@ -339,8 +352,10 @@ mod tests {
         let mut config = Config::default();
         config.models_dir = temp_dir.path().join("models");
         config.cache_dir = temp_dir.path().join("cache");
-        std::fs::create_dir_all(&config.models_dir).expect("Failed to create models directory for test");
-        std::fs::create_dir_all(&config.cache_dir).expect("Failed to create cache directory for test");
+        std::fs::create_dir_all(&config.models_dir)
+            .expect("Failed to create models directory for test");
+        std::fs::create_dir_all(&config.cache_dir)
+            .expect("Failed to create cache directory for test");
 
         assert!(config.validate().is_ok());
     }

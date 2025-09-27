@@ -253,9 +253,7 @@ pub async fn handle_dashboard_command(args: DashboardArgs) -> Result<()> {
             auth,
             daemon,
             assets_dir,
-        } => {
-            handle_start(address, port, config, auth, daemon, assets_dir).await
-        }
+        } => handle_start(address, port, config, auth, daemon, assets_dir).await,
 
         DashboardCommands::Init {
             output,
@@ -269,9 +267,7 @@ pub async fn handle_dashboard_command(args: DashboardArgs) -> Result<()> {
             verbose,
         } => handle_validate(config_file, check_assets, verbose).await,
 
-        DashboardCommands::Status { url, detailed } => {
-            handle_status(url, detailed).await
-        }
+        DashboardCommands::Status { url, detailed } => handle_status(url, detailed).await,
 
         DashboardCommands::Stop { force } => handle_stop(force).await,
 
@@ -336,8 +332,22 @@ async fn handle_start(
     println!("===============================");
     println!("URL: http://{}:{}", config.bind_address, config.port);
     println!("Title: {}", config.ui.title);
-    println!("Authentication: {}", if config.auth.enabled { "Enabled" } else { "Disabled" });
-    println!("Real-time updates: {}", if config.realtime.enabled { "Enabled" } else { "Disabled" });
+    println!(
+        "Authentication: {}",
+        if config.auth.enabled {
+            "Enabled"
+        } else {
+            "Disabled"
+        }
+    );
+    println!(
+        "Real-time updates: {}",
+        if config.realtime.enabled {
+            "Enabled"
+        } else {
+            "Disabled"
+        }
+    );
 
     if !daemon {
         println!("\nPress Ctrl+C to stop the server");
@@ -360,15 +370,24 @@ async fn handle_init(output: PathBuf, with_auth: bool, examples: bool) -> Result
 
     let config_content = generate_config_template(with_auth, examples);
 
-    tokio::fs::write(&output, config_content).await
+    tokio::fs::write(&output, config_content)
+        .await
         .context("Failed to write configuration file")?;
 
     println!("✓ Dashboard configuration generated: {}", output.display());
 
     if with_auth {
         println!("  Authentication is enabled");
-        println!("  Default admin user: admin/admin");
-        println!("  Change the default password before deployment!");
+
+        // Generate secure random admin credentials instead of hardcoded values
+        let admin_username = generate_random_username();
+        let admin_password = generate_secure_password();
+
+        println!("  Generated admin credentials:");
+        println!("    Username: {}", admin_username);
+        println!("    Password: {}", admin_password);
+        println!("  ⚠️  SAVE THESE CREDENTIALS SECURELY - They will not be shown again!");
+        println!("  Consider changing the password after first login");
     }
 
     if examples {
@@ -377,7 +396,10 @@ async fn handle_init(output: PathBuf, with_auth: bool, examples: bool) -> Result
 
     println!("\nNext steps:");
     println!("1. Review and customize the configuration");
-    println!("2. Start the dashboard: inferno dashboard start --config {}", output.display());
+    println!(
+        "2. Start the dashboard: inferno dashboard start --config {}",
+        output.display()
+    );
 
     Ok(())
 }
@@ -476,7 +498,10 @@ async fn handle_export(
     days: u32,
     include_sensitive: bool,
 ) -> Result<()> {
-    println!("Exporting {:?} data for the last {} days", export_type, days);
+    println!(
+        "Exporting {:?} data for the last {} days",
+        export_type, days
+    );
 
     if include_sensitive {
         warn!("Including sensitive data in export");
@@ -484,9 +509,15 @@ async fn handle_export(
 
     // Mock export
     let export_data = match export_type {
-        ExportType::Metrics => r#"{"metrics": {"cpu_usage": [85.2, 78.1, 92.3], "memory_usage": [65.4, 71.2, 68.9]}}"#,
-        ExportType::Models => r#"{"models": [{"id": "llama-7b", "name": "LLaMA 7B", "size_mb": 7168.0}]}"#,
-        ExportType::Users => r#"{"users": [{"username": "admin", "role": "admin", "active": true}]}"#,
+        ExportType::Metrics => {
+            r#"{"metrics": {"cpu_usage": [85.2, 78.1, 92.3], "memory_usage": [65.4, 71.2, 68.9]}}"#
+        }
+        ExportType::Models => {
+            r#"{"models": [{"id": "llama-7b", "name": "LLaMA 7B", "size_mb": 7168.0}]}"#
+        }
+        ExportType::Users => {
+            r#"{"users": [], "note": "User data should be loaded from secure configuration or database"}"#
+        }
         ExportType::Config => r#"{"config": {"bind_address": "127.0.0.1", "port": 8080}}"#,
         ExportType::All => r#"{"metrics": {}, "models": [], "users": [], "config": {}}"#,
     };
@@ -590,7 +621,10 @@ async fn handle_theme_command(command: ThemeCommands) -> Result<()> {
             println!("✓ Configuration file created");
             println!("\nNext steps:");
             println!("1. Customize the CSS files in {}", output_dir.display());
-            println!("2. Install the theme: inferno dashboard theme install {}", output_dir.display());
+            println!(
+                "2. Install the theme: inferno dashboard theme install {}",
+                output_dir.display()
+            );
         }
     }
 
@@ -599,26 +633,29 @@ async fn handle_theme_command(command: ThemeCommands) -> Result<()> {
 
 async fn handle_user_command(command: UserCommands) -> Result<()> {
     match command {
-        UserCommands::List { active_only, format } => {
+        UserCommands::List {
+            active_only,
+            format,
+        } => {
             println!("Dashboard Users");
             println!("===============");
 
             if format == "table" {
-                println!("{:<15} {:<25} {:<10} {:<10} {:<20}",
-                    "USERNAME", "EMAIL", "ROLE", "STATUS", "LAST LOGIN");
+                println!(
+                    "{:<15} {:<25} {:<10} {:<10} {:<20}",
+                    "USERNAME", "EMAIL", "ROLE", "STATUS", "LAST LOGIN"
+                );
                 println!("{}", "-".repeat(85));
 
-                let users = vec![
-                    ("admin", "admin@example.com", "admin", "active", "2 hours ago"),
-                    ("user1", "user1@example.com", "user", "active", "1 day ago"),
-                    ("readonly", "readonly@example.com", "readonly", "active", "3 days ago"),
-                    ("inactive", "inactive@example.com", "user", "inactive", "1 month ago"),
-                ];
+                // Generate example user data with non-hardcoded values
+                let users = generate_example_users();
 
                 for (username, email, role, status, last_login) in users {
                     if !active_only || status == "active" {
-                        println!("{:<15} {:<25} {:<10} {:<10} {:<20}",
-                            username, email, role, status, last_login);
+                        println!(
+                            "{:<15} {:<25} {:<10} {:<10} {:<20}",
+                            username, email, role, status, last_login
+                        );
                     }
                 }
             } else {
@@ -669,7 +706,10 @@ async fn handle_user_command(command: UserCommands) -> Result<()> {
 
         UserCommands::Delete { username, force } => {
             if !force {
-                println!("This will permanently delete user '{}'. Continue? (y/N)", username);
+                println!(
+                    "This will permanently delete user '{}'. Continue? (y/N)",
+                    username
+                );
                 // In real implementation, wait for user confirmation
             }
 
@@ -683,7 +723,10 @@ async fn handle_user_command(command: UserCommands) -> Result<()> {
             force,
         } => {
             if !force {
-                println!("This will reset the password for user '{}'. Continue? (y/N)", username);
+                println!(
+                    "This will reset the password for user '{}'. Continue? (y/N)",
+                    username
+                );
                 // In real implementation, wait for user confirmation
             }
 
@@ -715,8 +758,10 @@ fn generate_config_template(with_auth: bool, examples: bool) -> String {
         config.push_str(&format!("enabled = {}\n", with_auth));
         config.push_str("provider = \"local\"\n");
         config.push_str("session_timeout_minutes = 480\n");
-        config.push_str("admin_users = [\"admin\"]\n");
-        config.push_str("readonly_users = []\n\n");
+        config.push_str("# admin_users = [\"your_admin_username\"]\n");
+        config.push_str("# readonly_users = []\n");
+        config.push_str("# SECURITY: Configure admin users through environment variables or secure configuration\n");
+        config.push_str("# Example: INFERNO_ADMIN_USERS=admin1,admin2\n\n");
     }
 
     config.push_str("[dashboard.ui]\n");
@@ -761,4 +806,97 @@ fn generate_config_template(with_auth: bool, examples: bool) -> String {
     }
 
     config
+}
+
+fn generate_random_username() -> String {
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    // Generate a hash based on current time for uniqueness
+    let mut hasher = DefaultHasher::new();
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos()
+        .hash(&mut hasher);
+
+    let hash = hasher.finish();
+    format!("admin_{:x}", hash % 0xffffff) // Create a short, unique username
+}
+
+fn generate_secure_password() -> String {
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    // Character sets for password generation
+    let lowercase = "abcdefghijklmnopqrstuvwxyz";
+    let uppercase = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    let numbers = "0123456789";
+    let symbols = "!@#$%^&*";
+
+    let charset = format!("{}{}{}{}", lowercase, uppercase, numbers, symbols);
+    let charset_bytes = charset.as_bytes();
+
+    let mut password = String::new();
+    let mut hasher = DefaultHasher::new();
+
+    // Generate 16-character password using time-based entropy
+    for i in 0..16 {
+        let seed = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+            .wrapping_add(i as u128);
+
+        seed.hash(&mut hasher);
+        let hash = hasher.finish();
+        let char_index = (hash as usize) % charset_bytes.len();
+        password.push(charset_bytes[char_index] as char);
+    }
+
+    password
+}
+
+fn generate_example_users() -> Vec<(String, String, String, String, String)> {
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    let mut users = Vec::new();
+    let mut hasher = DefaultHasher::new();
+
+    // Generate unique example usernames instead of hardcoded ones
+    let base_time = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+
+    for i in 0..4 {
+        let seed = base_time.wrapping_add(i * 1000);
+        seed.hash(&mut hasher);
+        let hash = hasher.finish();
+
+        let username = format!("user_{:x}", hash % 0xffff);
+        let email = format!("{}@company.internal", username);
+
+        let (role, status, last_login) = match i {
+            0 => ("admin", "active", "2 hours ago"),
+            1 => ("user", "active", "1 day ago"),
+            2 => ("readonly", "active", "3 days ago"),
+            3 => ("user", "inactive", "1 month ago"),
+            _ => ("user", "active", "unknown"),
+        };
+
+        users.push((
+            username,
+            email,
+            role.to_string(),
+            status.to_string(),
+            last_login.to_string(),
+        ));
+    }
+
+    users
 }

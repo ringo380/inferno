@@ -1,31 +1,26 @@
-use inferno::{
-    dashboard::{
-        DashboardServer, DashboardConfig, DashboardState, DashboardMetrics,
-        ModelInfo as DashboardModelInfo, DeploymentInfo, ModelStatus, DeploymentStatus,
-        CreateModelRequest, UpdateModelRequest, CreateDeploymentRequest, UpdateDeploymentRequest,
-        ScaleDeploymentRequest, DeployModelRequest, BackupRequest, RestoreRequest,
-        models::ModelRepository, deployments::DeploymentManager,
-    },
-    models::{ModelManager, ModelInfo},
-    backends::{BackendConfig, BackendType},
-    cache::{ModelCache, CacheConfig},
-    metrics::MetricsCollector,
-    InfernoError,
-};
 use anyhow::Result;
 use axum::{
-    http::{Method, Request, StatusCode},
     body::Body,
+    http::{Method, Request, StatusCode},
     Router,
 };
 use hyper::body::to_bytes;
-use serde_json::{json, Value};
-use std::{
-    collections::HashMap,
-    path::PathBuf,
-    sync::Arc,
-    time::Duration,
+use inferno::{
+    backends::{BackendConfig, BackendType},
+    cache::{CacheConfig, ModelCache},
+    dashboard::{
+        deployments::DeploymentManager, models::ModelRepository, BackupRequest,
+        CreateDeploymentRequest, CreateModelRequest, DashboardConfig, DashboardMetrics,
+        DashboardServer, DashboardState, DeployModelRequest, DeploymentInfo, DeploymentStatus,
+        ModelInfo as DashboardModelInfo, ModelStatus, RestoreRequest, ScaleDeploymentRequest,
+        UpdateDeploymentRequest, UpdateModelRequest,
+    },
+    metrics::MetricsCollector,
+    models::{ModelInfo, ModelManager},
+    InfernoError,
 };
+use serde_json::{json, Value};
+use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
 use tempfile::TempDir;
 use tokio::{
     fs,
@@ -692,7 +687,8 @@ async fn test_api_error_handling() -> Result<()> {
     assert_eq!(response.status(), StatusCode::METHOD_NOT_ALLOWED);
 
     // 5. Test creating deployment with non-existent model
-    let deployment_request = dashboard_test_utils::create_test_deployment_request("nonexistent-model");
+    let deployment_request =
+        dashboard_test_utils::create_test_deployment_request("nonexistent-model");
     let request = Request::builder()
         .method(Method::POST)
         .uri("/api/v1/deployments")
@@ -758,7 +754,8 @@ async fn test_concurrent_api_operations() -> Result<()> {
     let models = dashboard_test_utils::extract_json_response(response).await?;
     let models_array = models.as_array().unwrap();
 
-    let concurrent_models = models_array.iter()
+    let concurrent_models = models_array
+        .iter()
         .filter(|m| m["name"].as_str().unwrap().starts_with("concurrent_model_"))
         .count();
 
@@ -783,9 +780,7 @@ async fn test_streaming_endpoints() -> Result<()> {
 
     let response = app.clone().oneshot(request).await?;
     // May return 404 if streaming is not implemented yet
-    assert!(
-        response.status() == StatusCode::OK || response.status() == StatusCode::NOT_FOUND
-    );
+    assert!(response.status() == StatusCode::OK || response.status() == StatusCode::NOT_FOUND);
 
     // Test deployment logs streaming (if implemented)
     let model_request = dashboard_test_utils::create_test_model_request();
@@ -815,7 +810,10 @@ async fn test_streaming_endpoints() -> Result<()> {
             // Test log streaming
             let request = Request::builder()
                 .method(Method::GET)
-                .uri(&format!("/api/v1/deployments/{}/logs/stream", deployment_id))
+                .uri(&format!(
+                    "/api/v1/deployments/{}/logs/stream",
+                    deployment_id
+                ))
                 .header("Accept", "text/event-stream")
                 .body(Body::empty())?;
 

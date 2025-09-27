@@ -1,0 +1,118 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Inferno AI Runner",
+  "version": "0.1.0",
+  "identifier": "com.inferno.ai.runner",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build",
+    "devUrl": "http://localhost:3457"
+  },
+  "app": {
+    "windows": [
+      {
+        "fullscreen": false,
+        "resizable": true,
+        "title": "Inferno AI Runner",
+        "width": 1200,
+        "height": 800,
+        "minWidth": 800,
+        "minHeight": 600,
+        "maximized": false,
+        "visible": true,
+        "decorations": true,
+        "alwaysOnTop": false,
+        "center": true,
+        "titleBarStyle": "Transparent",
+        "transparent": false,
+        "label": "main"
+      }
+    ],
+    "security": {
+      "csp": null
+    },
+    "macOSPrivateApi": true,
+    "trayIcon": {
+      "iconPath": "icons/icon.png",
+      "iconAsTemplate": true,
+      "menuOnLeftClick": false,
+      "tooltip": "Inferno AI Runner"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/16x16.png",
+      "icons/32x32.png",
+      "icons/64x64.png",
+      "icons/128x128.png",
+      "icons/256x256.png",
+      "icons/512x512.png",
+      "icons/icon.icns",
+      "icons/icon.ico",
+      "icons/icon.png"
+    ],
+    "resources": [],
+    "externalBin": [],
+    "copyright": "© 2024 Inferno Developers. All rights reserved.",
+    "category": "DeveloperTool",
+    "shortDescription": "Offline AI/ML model runner for GGUF and ONNX models",
+    "longDescription": "An enterprise-grade offline AI/ML model runner with support for GGUF and ONNX models, featuring performance optimization, distributed inference, and comprehensive monitoring.",
+    "fileAssociations": [
+      {
+        "ext": ["gguf"],
+        "name": "GGUF Model File",
+        "description": "Llama.cpp GGUF model file",
+        "role": "Editor"
+      },
+      {
+        "ext": ["onnx"],
+        "name": "ONNX Model File",
+        "description": "Open Neural Network Exchange model file",
+        "role": "Editor"
+      }
+    ],
+    "macOS": {
+      "frameworks": [],
+      "minimumSystemVersion": "11.0",
+      "exceptionDomain": "",
+      "signingIdentity": null,
+      "providerShortName": null,
+      "entitlements": "entitlements.plist"
+    },
+    "windows": {
+      "certificateThumbprint": null,
+      "digestAlgorithm": "sha256",
+      "timestampUrl": "",
+      "wix": {
+        "language": "en-US",
+        "template": null,
+        "fragmentPaths": [],
+        "componentGroupRefs": [],
+        "componentRefs": [],
+        "featureGroupRefs": [],
+        "featureRefs": [],
+        "mergeRefs": []
+      }
+    },
+    "linux": {
+      "deb": {
+        "depends": [
+          "libwebkit2gtk-4.0-37",
+          "libgtk-3-0",
+          "libayatana-appindicator3-1"
+        ],
+        "section": "science",
+        "priority": "optional"
+      }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "active": false,
+      "endpoints": [],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDQxOEFBRThBQjQzQjNDQjAKUldUQVdHMXE2MlJqMVE4VEdUNldOOWMzM0lhVUJtaWJzUWdVVXNORlJLSGk5RWhTMTRiSE5pK0hOclEK"
+    }
+  }
+}

@@ -1,7 +1,6 @@
 use crate::cli::{fuzzy::FuzzyMatcher, help::HelpSystem};
 use clap::Parser;
 use std::env;
-use tracing::warn;
 
 /// Enhanced CLI parser with fuzzy matching and helpful suggestions
 pub struct EnhancedCliParser {

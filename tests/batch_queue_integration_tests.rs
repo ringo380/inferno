@@ -1,15 +1,11 @@
 use inferno::{
+    backends::InferenceParams,
     batch::queue::{
-        JobQueue, JobQueueManager, JobQueueConfig, BatchJob, JobPriority,
-        JobStatus, QueueStatus
+        BatchJob, JobPriority, JobQueue, JobQueueConfig, JobQueueManager, JobStatus, QueueStatus,
     },
     batch::{BatchConfig, BatchInput},
-    backends::InferenceParams,
 };
-use std::{
-    collections::HashMap,
-    time::SystemTime,
-};
+use std::{collections::HashMap, time::SystemTime};
 
 #[tokio::test]
 async fn test_batch_queue_basic_operations() {
@@ -17,11 +13,13 @@ async fn test_batch_queue_basic_operations() {
     let manager = JobQueueManager::new(config);
 
     // Test queue creation
-    let result = manager.create_queue(
-        "test-queue".to_string(),
-        "Test Queue".to_string(),
-        "A test queue for integration testing".to_string()
-    ).await;
+    let result = manager
+        .create_queue(
+            "test-queue".to_string(),
+            "Test Queue".to_string(),
+            "A test queue for integration testing".to_string(),
+        )
+        .await;
     assert!(result.is_ok(), "Failed to create queue: {:?}", result);
 
     // Test queue listing
@@ -67,7 +65,10 @@ async fn test_batch_queue_basic_operations() {
     assert!(matches!(jobs[0].status, JobStatus::Queued));
 
     // Test job status
-    let job_status = manager.get_job_status("test-queue", "test-job").await.unwrap();
+    let job_status = manager
+        .get_job_status("test-queue", "test-job")
+        .await
+        .unwrap();
     assert!(job_status.is_some());
     let job_info = job_status.unwrap();
     assert_eq!(job_info.id, "test-job");
@@ -78,7 +79,10 @@ async fn test_batch_queue_basic_operations() {
     assert!(cancel_result.is_ok());
 
     // Verify job is no longer in queue
-    let jobs_after_cancel = manager.list_jobs("test-queue", Some(JobStatus::Queued)).await.unwrap();
+    let jobs_after_cancel = manager
+        .list_jobs("test-queue", Some(JobStatus::Queued))
+        .await
+        .unwrap();
     assert_eq!(jobs_after_cancel.len(), 0);
 }
 
@@ -88,11 +92,14 @@ async fn test_queue_metrics_and_configuration() {
     let manager = JobQueueManager::new(config);
 
     // Create test queue
-    manager.create_queue(
-        "metrics-test".to_string(),
-        "Metrics Test Queue".to_string(),
-        "Queue for testing metrics".to_string()
-    ).await.unwrap();
+    manager
+        .create_queue(
+            "metrics-test".to_string(),
+            "Metrics Test Queue".to_string(),
+            "Queue for testing metrics".to_string(),
+        )
+        .await
+        .unwrap();
 
     // Test metrics retrieval
     let metrics = manager.get_queue_metrics("metrics-test").await;
@@ -113,8 +120,14 @@ async fn test_queue_metrics_and_configuration() {
 
     // Test configuration updates
     let mut updates = HashMap::new();
-    updates.insert("max_concurrent_jobs".to_string(), serde_json::Value::Number(8.into()));
-    updates.insert("max_queue_size".to_string(), serde_json::Value::Number(2000.into()));
+    updates.insert(
+        "max_concurrent_jobs".to_string(),
+        serde_json::Value::Number(8.into()),
+    );
+    updates.insert(
+        "max_queue_size".to_string(),
+        serde_json::Value::Number(2000.into()),
+    );
 
     let update_result = manager.update_queue_config("metrics-test", updates).await;
     assert!(update_result.is_ok());
@@ -131,11 +144,14 @@ async fn test_queue_pause_resume_operations() {
     let manager = JobQueueManager::new(config);
 
     // Create test queue
-    manager.create_queue(
-        "pause-test".to_string(),
-        "Pause Test Queue".to_string(),
-        "Queue for testing pause/resume".to_string()
-    ).await.unwrap();
+    manager
+        .create_queue(
+            "pause-test".to_string(),
+            "Pause Test Queue".to_string(),
+            "Queue for testing pause/resume".to_string(),
+        )
+        .await
+        .unwrap();
 
     // Test queue pause
     let pause_result = manager.pause_queue("pause-test").await;
@@ -155,11 +171,14 @@ async fn test_job_retry_functionality() {
     let manager = JobQueueManager::new(config);
 
     // Create test queue
-    manager.create_queue(
-        "retry-test".to_string(),
-        "Retry Test Queue".to_string(),
-        "Queue for testing job retry".to_string()
-    ).await.unwrap();
+    manager
+        .create_queue(
+            "retry-test".to_string(),
+            "Retry Test Queue".to_string(),
+            "Queue for testing job retry".to_string(),
+        )
+        .await
+        .unwrap();
 
     // Create and submit a job
     let job = BatchJob {
@@ -190,7 +209,10 @@ async fn test_job_retry_functionality() {
     manager.submit_job("retry-test", job).await.unwrap();
 
     // Test retry capability check
-    let can_retry = manager.can_retry_job("retry-test", "retry-job").await.unwrap();
+    let can_retry = manager
+        .can_retry_job("retry-test", "retry-job")
+        .await
+        .unwrap();
     assert!(can_retry); // Should be true for non-failed jobs
 
     // Test retry of non-failed job (should fail in current implementation)
@@ -204,11 +226,14 @@ async fn test_queue_export_functionality() {
     let manager = JobQueueManager::new(config);
 
     // Create test queue
-    manager.create_queue(
-        "export-test".to_string(),
-        "Export Test Queue".to_string(),
-        "Queue for testing export functionality".to_string()
-    ).await.unwrap();
+    manager
+        .create_queue(
+            "export-test".to_string(),
+            "Export Test Queue".to_string(),
+            "Queue for testing export functionality".to_string(),
+        )
+        .await
+        .unwrap();
 
     // Test job export
     let jobs = manager.export_jobs("export-test").await.unwrap();
@@ -232,11 +257,14 @@ async fn test_queue_clearing_operations() {
     let manager = JobQueueManager::new(config);
 
     // Create test queue
-    manager.create_queue(
-        "clear-test".to_string(),
-        "Clear Test Queue".to_string(),
-        "Queue for testing clear operations".to_string()
-    ).await.unwrap();
+    manager
+        .create_queue(
+            "clear-test".to_string(),
+            "Clear Test Queue".to_string(),
+            "Queue for testing clear operations".to_string(),
+        )
+        .await
+        .unwrap();
 
     // Test clearing empty queue
     let cleared_count = manager.clear_queue("clear-test", false).await.unwrap();

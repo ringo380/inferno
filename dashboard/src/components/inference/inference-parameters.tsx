@@ -252,10 +252,10 @@ export function InferenceParameters({ params, onChange }: InferenceParametersPro
         <div className="flex items-center space-x-4">
           <div className="flex items-center space-x-1">
             <Zap className="h-3 w-3" />
-            <span>Speed: {params.temperature < 0.5 ? 'Fast' : params.temperature > 1.0 ? 'Slow' : 'Medium'}</span>
+            <span>Speed: {(params.temperature || 0.7) < 0.5 ? 'Fast' : (params.temperature || 0.7) > 1.0 ? 'Slow' : 'Medium'}</span>
           </div>
           <div>
-            Quality: {params.temperature < 0.3 ? 'Deterministic' : params.temperature > 0.8 ? 'Creative' : 'Balanced'}
+            Quality: {(params.temperature || 0.7) < 0.3 ? 'Deterministic' : (params.temperature || 0.7) > 0.8 ? 'Creative' : 'Balanced'}
           </div>
         </div>
         <Badge variant="secondary" className="text-xs">

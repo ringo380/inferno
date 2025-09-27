@@ -1,5 +1,7 @@
 use crate::{
-    api::openai::{ChatCompletionRequest, ChatMessage, ChatDelta, ChatCompletionChunk, ChatChunkChoice},
+    api::openai::{
+        ChatChunkChoice, ChatCompletionChunk, ChatCompletionRequest, ChatDelta, ChatMessage,
+    },
     backends::{Backend, InferenceParams},
     cli::serve::ServerState,
     streaming::{StreamingConfig, StreamingManager},
@@ -125,8 +127,17 @@ async fn handle_websocket(socket: WebSocket, state: Arc<ServerState>) {
             };
 
             if let Ok(msg) = serde_json::to_string(&heartbeat) {
-                if heartbeat_sender.lock().await.send(Message::Text(msg)).await.is_err() {
-                    debug!("Heartbeat failed for connection: {}", heartbeat_connection_id);
+                if heartbeat_sender
+                    .lock()
+                    .await
+                    .send(Message::Text(msg))
+                    .await
+                    .is_err()
+                {
+                    debug!(
+                        "Heartbeat failed for connection: {}",
+                        heartbeat_connection_id
+                    );
                     break;
                 }
             }
@@ -136,36 +147,23 @@ async fn handle_websocket(socket: WebSocket, state: Arc<ServerState>) {
     // Handle incoming messages
     while let Some(msg) = receiver.next().await {
         match msg {
-            Ok(Message::Text(text)) => {
-                match serde_json::from_str::<WSMessage>(&text) {
-                    Ok(ws_message) => {
-                        if let Err(e) = handle_ws_message(
-                            ws_message,
-                            &state,
-                            &streaming_manager,
-                            &sender,
-                            &connection_id,
-                        ).await {
-                            error!("Error handling WebSocket message: {}", e);
-
-                            let error_msg = WSMessage::Error {
-                                id: None,
-                                message: format!("Message handling failed: {}", e),
-                                code: "INTERNAL_ERROR".to_string(),
-                            };
-
-                            if let Ok(error_json) = serde_json::to_string(&error_msg) {
-                                let _ = sender.lock().await.send(Message::Text(error_json)).await;
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        warn!("Invalid WebSocket message format: {}", e);
+            Ok(Message::Text(text)) => match serde_json::from_str::<WSMessage>(&text) {
+                Ok(ws_message) => {
+                    if let Err(e) = handle_ws_message(
+                        ws_message,
+                        &state,
+                        &streaming_manager,
+                        &sender,
+                        &connection_id,
+                    )
+                    .await
+                    {
+                        error!("Error handling WebSocket message: {}", e);
 
                         let error_msg = WSMessage::Error {
                             id: None,
-                            message: format!("Invalid message format: {}", e),
-                            code: "INVALID_FORMAT".to_string(),
+                            message: format!("Message handling failed: {}", e),
+                            code: "INTERNAL_ERROR".to_string(),
                         };
 
                         if let Ok(error_json) = serde_json::to_string(&error_msg) {
@@ -173,7 +171,20 @@ async fn handle_websocket(socket: WebSocket, state: Arc<ServerState>) {
                         }
                     }
                 }
-            }
+                Err(e) => {
+                    warn!("Invalid WebSocket message format: {}", e);
+
+                    let error_msg = WSMessage::Error {
+                        id: None,
+                        message: format!("Invalid message format: {}", e),
+                        code: "INVALID_FORMAT".to_string(),
+                    };
+
+                    if let Ok(error_json) = serde_json::to_string(&error_msg) {
+                        let _ = sender.lock().await.send(Message::Text(error_json)).await;
+                    }
+                }
+            },
             Ok(Message::Binary(_)) => {
                 warn!("Binary messages not supported in streaming WebSocket");
             }
@@ -210,7 +221,10 @@ async fn handle_ws_message(
 ) -> Result<(), InfernoError> {
     match message {
         WSMessage::ChatRequest { id, data } => {
-            info!("Processing chat request {} for connection {}", id, connection_id);
+            info!(
+                "Processing chat request {} for connection {}",
+                id, connection_id
+            );
 
             // Get or load backend
             let backend = get_or_load_backend_for_ws(state, &data.model).await?;
@@ -226,11 +240,10 @@ async fn handle_ws_message(
             };
 
             // Create streaming session
-            let mut stream = streaming_manager.create_enhanced_stream(
-                &mut *backend.lock().await,
-                &prompt,
-                &inference_params,
-            ).await.map_err(|e| InfernoError::WebSocket(format!("Stream creation failed: {}", e)))?;
+            let mut stream = streaming_manager
+                .create_enhanced_stream(&mut *backend.lock().await, &prompt, &inference_params)
+                .await
+                .map_err(|e| InfernoError::WebSocket(format!("Stream creation failed: {}", e)))?;
 
             let sender_clone = sender.clone();
             let request_id = id.clone();
@@ -260,7 +273,11 @@ async fn handle_ws_message(
                 };
 
                 if let Ok(msg_json) = serde_json::to_string(&initial_ws_msg) {
-                    let _ = sender_clone.lock().await.send(Message::Text(msg_json)).await;
+                    let _ = sender_clone
+                        .lock()
+                        .await
+                        .send(Message::Text(msg_json))
+                        .await;
                 }
 
                 // Stream tokens
@@ -289,7 +306,13 @@ async fn handle_ws_message(
                                 };
 
                                 if let Ok(msg_json) = serde_json::to_string(&ws_msg) {
-                                    if sender_clone.lock().await.send(Message::Text(msg_json)).await.is_err() {
+                                    if sender_clone
+                                        .lock()
+                                        .await
+                                        .send(Message::Text(msg_json))
+                                        .await
+                                        .is_err()
+                                    {
                                         break;
                                     }
                                 }
@@ -305,7 +328,11 @@ async fn handle_ws_message(
                             };
 
                             if let Ok(error_json) = serde_json::to_string(&error_msg) {
-                                let _ = sender_clone.lock().await.send(Message::Text(error_json)).await;
+                                let _ = sender_clone
+                                    .lock()
+                                    .await
+                                    .send(Message::Text(error_json))
+                                    .await;
                             }
                             break;
                         }
@@ -334,7 +361,11 @@ async fn handle_ws_message(
                 };
 
                 if let Ok(msg_json) = serde_json::to_string(&final_ws_msg) {
-                    let _ = sender_clone.lock().await.send(Message::Text(msg_json)).await;
+                    let _ = sender_clone
+                        .lock()
+                        .await
+                        .send(Message::Text(msg_json))
+                        .await;
                 }
             });
 
@@ -342,7 +373,9 @@ async fn handle_ws_message(
         }
         _ => {
             warn!("Unsupported WebSocket message type");
-            Err(InfernoError::WebSocket("Unsupported message type".to_string()))
+            Err(InfernoError::WebSocket(
+                "Unsupported message type".to_string(),
+            ))
         }
     }
 }
@@ -355,7 +388,7 @@ async fn get_or_load_backend_for_ws(
     // Similar to the HTTP API version but optimized for WebSocket
     if let Some(ref _distributed) = state.distributed {
         return Err(InfernoError::WebSocket(
-            "WebSocket streaming not supported with distributed inference yet".to_string()
+            "WebSocket streaming not supported with distributed inference yet".to_string(),
         ));
     }
 
@@ -369,14 +402,20 @@ async fn get_or_load_backend_for_ws(
     }
 
     // Load new backend for this model
-    let model_info = state.model_manager.resolve_model(model_name).await
+    let model_info = state
+        .model_manager
+        .resolve_model(model_name)
+        .await
         .map_err(|e| InfernoError::WebSocket(format!("Model resolution failed: {}", e)))?;
 
-    let backend_type = crate::backends::BackendType::from_model_path(&model_info.path);
+    let backend_type = crate::backends::BackendType::from_model_path(&model_info.path)
+        .ok_or_else(|| InfernoError::WebSocket(format!("No suitable backend found for model: {}", model_info.path.display())))?;
     let mut backend = Backend::new(backend_type, &state.config.backend_config)
         .map_err(|e| InfernoError::WebSocket(format!("Backend creation failed: {}", e)))?;
 
-    backend.load_model(&model_info).await
+    backend
+        .load_model(&model_info)
+        .await
         .map_err(|e| InfernoError::WebSocket(format!("Model loading failed: {}", e)))?;
 
     Ok(Arc::new(tokio::sync::Mutex::new(backend)))

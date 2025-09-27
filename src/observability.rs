@@ -1,19 +1,13 @@
-use crate::{config::Config, InfernoError};
+use crate::InfernoError;
 use anyhow::Result;
-use axum::{
-    extract::State,
-    http::StatusCode,
-    response::IntoResponse,
-    routing::get,
-    Router,
-};
+use axum::{extract::State, http::StatusCode, response::IntoResponse, routing::get, Router};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use tokio::sync::{Mutex, RwLock};
-use tracing::{debug, error, info, instrument, warn};
+use tracing::{info, instrument};
 
 /// Observability configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -70,7 +64,9 @@ impl Default for ObservabilityConfig {
             custom_metrics_enabled: true,
             metrics_retention_hours: 24,
             histogram_enabled: true,
-            histogram_buckets: vec![0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0],
+            histogram_buckets: vec![
+                0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0,
+            ],
         }
     }
 }
@@ -216,7 +212,8 @@ impl PrometheusCollector {
             let labels_str = if metric.labels.is_empty() {
                 String::new()
             } else {
-                let labels: Vec<String> = metric.labels
+                let labels: Vec<String> = metric
+                    .labels
                     .iter()
                     .map(|(k, v)| format!("{}=\"{}\"", k, v))
                     .collect();
@@ -239,29 +236,50 @@ impl PrometheusCollector {
                                 "{}_bucket{{le=\"{}\"{}}} {}\n",
                                 metric.name,
                                 bucket,
-                                if labels_str.is_empty() { String::new() } else { format!(",{}", &labels_str[1..labels_str.len()-1]) },
+                                if labels_str.is_empty() {
+                                    String::new()
+                                } else {
+                                    format!(",{}", &labels_str[1..labels_str.len() - 1])
+                                },
                                 count
                             ));
                         }
                         output.push_str(&format!(
                             "{}_bucket{{le=\"+Inf\"{}}} {}\n",
                             metric.name,
-                            if labels_str.is_empty() { String::new() } else { format!(",{}", &labels_str[1..labels_str.len()-1]) },
+                            if labels_str.is_empty() {
+                                String::new()
+                            } else {
+                                format!(",{}", &labels_str[1..labels_str.len() - 1])
+                            },
                             values.len()
                         ));
 
                         let sum: f64 = values.iter().sum();
                         output.push_str(&format!("{}_sum{} {}\n", metric.name, labels_str, sum));
-                        output.push_str(&format!("{}_count{} {}\n", metric.name, labels_str, values.len()));
+                        output.push_str(&format!(
+                            "{}_count{} {}\n",
+                            metric.name,
+                            labels_str,
+                            values.len()
+                        ));
                     }
                 }
-                MetricValue::Summary { sum, count, quantiles } => {
+                MetricValue::Summary {
+                    sum,
+                    count,
+                    quantiles,
+                } => {
                     for (quantile, value) in quantiles {
                         output.push_str(&format!(
                             "{}{{quantile=\"{}\"{}}} {}\n",
                             metric.name,
                             quantile,
-                            if labels_str.is_empty() { String::new() } else { format!(",{}", &labels_str[1..labels_str.len()-1]) },
+                            if labels_str.is_empty() {
+                                String::new()
+                            } else {
+                                format!(",{}", &labels_str[1..labels_str.len() - 1])
+                            },
                             value
                         ));
                     }
@@ -351,7 +369,8 @@ impl OpenTelemetryTracer {
         if let Some(span) = spans.iter_mut().find(|s| s.span_id == span_id) {
             span.end_time = Some(Utc::now());
             span.duration_ms = Some(
-                (span.end_time.expect("End time should be set just above") - span.start_time).num_milliseconds() as f64
+                (span.end_time.expect("End time should be set just above") - span.start_time)
+                    .num_milliseconds() as f64,
             );
             span.status = status;
         }
@@ -452,50 +471,62 @@ impl ObservabilityManager {
         // Register default Prometheus metrics
         if self.config.prometheus_enabled {
             // System metrics
-            self.prometheus.register_metric(
-                "inferno_up".to_string(),
-                "Whether the Inferno service is up".to_string(),
-                MetricType::Gauge,
-                HashMap::new(),
-            ).await?;
+            self.prometheus
+                .register_metric(
+                    "inferno_up".to_string(),
+                    "Whether the Inferno service is up".to_string(),
+                    MetricType::Gauge,
+                    HashMap::new(),
+                )
+                .await?;
 
             // Inference metrics
-            self.prometheus.register_metric(
-                "inferno_inference_requests_total".to_string(),
-                "Total number of inference requests".to_string(),
-                MetricType::Counter,
-                HashMap::from([("model".to_string(), "all".to_string())]),
-            ).await?;
+            self.prometheus
+                .register_metric(
+                    "inferno_inference_requests_total".to_string(),
+                    "Total number of inference requests".to_string(),
+                    MetricType::Counter,
+                    HashMap::from([("model".to_string(), "all".to_string())]),
+                )
+                .await?;
 
-            self.prometheus.register_metric(
-                "inferno_inference_duration_seconds".to_string(),
-                "Inference request duration in seconds".to_string(),
-                MetricType::Histogram,
-                HashMap::new(),
-            ).await?;
+            self.prometheus
+                .register_metric(
+                    "inferno_inference_duration_seconds".to_string(),
+                    "Inference request duration in seconds".to_string(),
+                    MetricType::Histogram,
+                    HashMap::new(),
+                )
+                .await?;
 
             // Model metrics
-            self.prometheus.register_metric(
-                "inferno_models_loaded".to_string(),
-                "Number of models currently loaded".to_string(),
-                MetricType::Gauge,
-                HashMap::new(),
-            ).await?;
+            self.prometheus
+                .register_metric(
+                    "inferno_models_loaded".to_string(),
+                    "Number of models currently loaded".to_string(),
+                    MetricType::Gauge,
+                    HashMap::new(),
+                )
+                .await?;
 
-            self.prometheus.register_metric(
-                "inferno_model_memory_bytes".to_string(),
-                "Memory usage per model in bytes".to_string(),
-                MetricType::Gauge,
-                HashMap::new(),
-            ).await?;
+            self.prometheus
+                .register_metric(
+                    "inferno_model_memory_bytes".to_string(),
+                    "Memory usage per model in bytes".to_string(),
+                    MetricType::Gauge,
+                    HashMap::new(),
+                )
+                .await?;
 
             // Error metrics
-            self.prometheus.register_metric(
-                "inferno_errors_total".to_string(),
-                "Total number of errors".to_string(),
-                MetricType::Counter,
-                HashMap::from([("type".to_string(), "all".to_string())]),
-            ).await?;
+            self.prometheus
+                .register_metric(
+                    "inferno_errors_total".to_string(),
+                    "Total number of errors".to_string(),
+                    MetricType::Counter,
+                    HashMap::from([("type".to_string(), "all".to_string())]),
+                )
+                .await?;
 
             // Set service up
             self.prometheus.set_gauge("inferno_up", 1.0).await?;
@@ -584,17 +615,20 @@ impl ObservabilityManager {
     ) -> Result<()> {
         if self.config.prometheus_enabled {
             // Increment request counter
-            self.prometheus.increment_counter("inferno_inference_requests_total", 1).await?;
+            self.prometheus
+                .increment_counter("inferno_inference_requests_total", 1)
+                .await?;
 
             // Record duration histogram
-            self.prometheus.observe_histogram(
-                "inferno_inference_duration_seconds",
-                duration.as_secs_f64(),
-            ).await?;
+            self.prometheus
+                .observe_histogram("inferno_inference_duration_seconds", duration.as_secs_f64())
+                .await?;
 
             // Record error if failed
             if !success {
-                self.prometheus.increment_counter("inferno_errors_total", 1).await?;
+                self.prometheus
+                    .increment_counter("inferno_errors_total", 1)
+                    .await?;
             }
         }
 
@@ -608,7 +642,9 @@ impl ObservabilityManager {
             attributes.insert("duration_ms".to_string(), duration.as_millis().to_string());
             attributes.insert("success".to_string(), success.to_string());
 
-            self.tracer.add_span_attributes(&span_id, attributes).await?;
+            self.tracer
+                .add_span_attributes(&span_id, attributes)
+                .await?;
 
             // End span
             let status = if success {
@@ -669,19 +705,21 @@ async fn prometheus_metrics_handler(
 }
 
 /// OpenTelemetry traces endpoint handler
-async fn traces_handler(
-    State(manager): State<Arc<ObservabilityManager>>,
-) -> impl IntoResponse {
+async fn traces_handler(State(manager): State<Arc<ObservabilityManager>>) -> impl IntoResponse {
     let traces = manager.get_traces().await;
-    (StatusCode::OK, serde_json::to_string(&traces).unwrap_or_default())
+    (
+        StatusCode::OK,
+        serde_json::to_string(&traces).unwrap_or_default(),
+    )
 }
 
 /// Grafana dashboards list handler
-async fn dashboards_handler(
-    State(manager): State<Arc<ObservabilityManager>>,
-) -> impl IntoResponse {
+async fn dashboards_handler(State(manager): State<Arc<ObservabilityManager>>) -> impl IntoResponse {
     let dashboards = manager.get_dashboards().await;
-    (StatusCode::OK, serde_json::to_string(&dashboards).unwrap_or_default())
+    (
+        StatusCode::OK,
+        serde_json::to_string(&dashboards).unwrap_or_default(),
+    )
 }
 
 /// Individual dashboard handler
@@ -705,23 +743,35 @@ mod tests {
         let collector = PrometheusCollector::new(config);
 
         // Register metrics
-        collector.register_metric(
-            "test_counter".to_string(),
-            "Test counter metric".to_string(),
-            MetricType::Counter,
-            HashMap::new(),
-        ).await.expect("Failed to register metric in test");
+        collector
+            .register_metric(
+                "test_counter".to_string(),
+                "Test counter metric".to_string(),
+                MetricType::Counter,
+                HashMap::new(),
+            )
+            .await
+            .expect("Failed to register metric in test");
 
-        collector.register_metric(
-            "test_gauge".to_string(),
-            "Test gauge metric".to_string(),
-            MetricType::Gauge,
-            HashMap::new(),
-        ).await.expect("Failed to register metric in test");
+        collector
+            .register_metric(
+                "test_gauge".to_string(),
+                "Test gauge metric".to_string(),
+                MetricType::Gauge,
+                HashMap::new(),
+            )
+            .await
+            .expect("Failed to register metric in test");
 
         // Update metrics
-        collector.increment_counter("test_counter", 5).await.expect("Failed to increment counter in test");
-        collector.set_gauge("test_gauge", 42.5).await.expect("Failed to set gauge in test");
+        collector
+            .increment_counter("test_counter", 5)
+            .await
+            .expect("Failed to increment counter in test");
+        collector
+            .set_gauge("test_gauge", 42.5)
+            .await
+            .expect("Failed to set gauge in test");
 
         // Export
         let output = collector.export_prometheus_format().await;
@@ -740,17 +790,22 @@ mod tests {
         // Add attributes
         let mut attributes = HashMap::new();
         attributes.insert("test_key".to_string(), "test_value".to_string());
-        tracer.add_span_attributes(&span_id, attributes).await.expect("Failed to add span attributes in test");
+        tracer
+            .add_span_attributes(&span_id, attributes)
+            .await
+            .expect("Failed to add span attributes in test");
 
         // Add event
-        tracer.add_span_event(
-            &span_id,
-            "test_event".to_string(),
-            HashMap::new(),
-        ).await.expect("Failed to register metric in test");
+        tracer
+            .add_span_event(&span_id, "test_event".to_string(), HashMap::new())
+            .await
+            .expect("Failed to register metric in test");
 
         // End span
-        tracer.end_span(&span_id, SpanStatus::Ok).await.expect("Failed to end span in test");
+        tracer
+            .end_span(&span_id, SpanStatus::Ok)
+            .await
+            .expect("Failed to end span in test");
 
         // Export
         let spans = tracer.export_otlp_format().await;
@@ -764,14 +819,16 @@ mod tests {
         let manager = ObservabilityManager::new(config);
 
         // Initialize
-        manager.initialize().await.expect("Failed to initialize observability manager in test");
+        manager
+            .initialize()
+            .await
+            .expect("Failed to initialize observability manager in test");
 
         // Record inference
-        manager.record_inference(
-            "test_model",
-            Duration::from_millis(100),
-            true,
-        ).await.expect("Failed to register metric in test");
+        manager
+            .record_inference("test_model", Duration::from_millis(100), true)
+            .await
+            .expect("Failed to register metric in test");
 
         // Get metrics
         let metrics = manager.get_prometheus_metrics().await;

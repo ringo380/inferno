@@ -16,10 +16,12 @@ import {
   HardDrive,
 } from 'lucide-react';
 import { formatBytes, validateModelFormat, getModelFormatFromFilename } from '@/lib/utils';
+import { tauriApi } from '@/lib/tauri-api';
 
 interface ModelUploadProps {
   onClose: () => void;
-  onUpload: (file: File) => void;
+  onUpload?: (modelPath: string) => void;
+  onRefresh?: () => void;
 }
 
 interface UploadFile {
@@ -28,12 +30,14 @@ interface UploadFile {
   progress: number;
   status: 'pending' | 'uploading' | 'processing' | 'completed' | 'error';
   error?: string;
+  selectedPath?: string;
 }
 
-export function ModelUpload({ onClose, onUpload }: ModelUploadProps) {
+export function ModelUpload({ onClose, onUpload, onRefresh }: ModelUploadProps) {
   const [files, setFiles] = useState<UploadFile[]>([]);
   const [uploadMethod, setUploadMethod] = useState<'local' | 'url'>('local');
   const [modelUrl, setModelUrl] = useState('');
+  const [isUploading, setIsUploading] = useState(false);
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     const newFiles = acceptedFiles.map((file) => ({
@@ -57,40 +61,92 @@ export function ModelUpload({ onClose, onUpload }: ModelUploadProps) {
     setFiles((prev) => prev.filter((f) => f.id !== id));
   };
 
-  const startUpload = () => {
-    files.forEach((file) => {
-      if (file.status === 'pending') {
-        // Simulate upload process
-        setFiles((prev) =>
-          prev.map((f) =>
-            f.id === file.id ? { ...f, status: 'uploading' } : f
-          )
-        );
-
-        // Simulate progress
-        let progress = 0;
-        const interval = setInterval(() => {
-          progress += Math.random() * 20;
-          if (progress >= 100) {
-            progress = 100;
-            clearInterval(interval);
-            setFiles((prev) =>
-              prev.map((f) =>
-                f.id === file.id
-                  ? { ...f, progress: 100, status: 'completed' }
-                  : f
-              )
-            );
-          } else {
-            setFiles((prev) =>
-              prev.map((f) =>
-                f.id === file.id ? { ...f, progress } : f
-              )
-            );
-          }
-        }, 200);
+  const openFileDialog = async () => {
+    try {
+      const selectedPath = await tauriApi.openFileDialog();
+      if (selectedPath) {
+        // Create a virtual file object for display purposes
+        const fileName = selectedPath.split('/').pop() || 'unknown';
+        const virtualFile = {
+          file: { name: fileName, size: 0 } as File,
+          id: Math.random().toString(36).substr(2, 9),
+          progress: 0,
+          status: 'pending' as const,
+          selectedPath
+        };
+        setFiles((prev) => [...prev, virtualFile]);
       }
-    });
+    } catch (error) {
+      console.error('Failed to open file dialog:', error);
+    }
+  };
+
+  const startUpload = async () => {
+    if (isUploading) return;
+    setIsUploading(true);
+
+    for (const fileItem of files) {
+      if (fileItem.status === 'pending') {
+        try {
+          // Update status to uploading
+          setFiles((prev) =>
+            prev.map((f) =>
+              f.id === fileItem.id ? { ...f, status: 'uploading', progress: 0 } : f
+            )
+          );
+
+          // Simulate progress for UI feedback
+          const progressInterval = setInterval(() => {
+            setFiles((prev) =>
+              prev.map((f) => {
+                if (f.id === fileItem.id && f.progress < 90) {
+                  return { ...f, progress: Math.min(f.progress + 10, 90) };
+                }
+                return f;
+              })
+            );
+          }, 100);
+
+          // Upload the file using Tauri
+          const targetPath = await tauriApi.uploadModel(
+            (fileItem as any).selectedPath || fileItem.file.name,
+            fileItem.file.name
+          );
+
+          clearInterval(progressInterval);
+
+          // Mark as completed
+          setFiles((prev) =>
+            prev.map((f) =>
+              f.id === fileItem.id
+                ? { ...f, progress: 100, status: 'completed' }
+                : f
+            )
+          );
+
+          // Notify parent of successful upload
+          if (onUpload) {
+            onUpload(targetPath);
+          }
+        } catch (error) {
+          console.error('Upload failed:', error);
+          setFiles((prev) =>
+            prev.map((f) =>
+              f.id === fileItem.id
+                ? { ...f, status: 'error', error: String(error) }
+                : f
+            )
+          );
+        }
+      }
+    }
+
+    setIsUploading(false);
+
+    // Refresh the models list after upload
+    if (onRefresh) {
+      onRefresh();
+    }
   };
 
   const canUpload = files.length > 0 && files.some(f => f.status === 'pending');
@@ -137,28 +193,37 @@ export function ModelUpload({ onClose, onUpload }: ModelUploadProps) {
 
           {uploadMethod === 'local' ? (
             <>
-              {/* Dropzone */}
-              <div
-                {...getRootProps()}
-                className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
-                  isDragActive
-                    ? 'border-primary bg-primary/5'
-                    : 'border-muted-foreground/25 hover:border-primary/50 hover:bg-accent/50'
-                }`}
-              >
-                <input {...getInputProps()} />
-                <Upload className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-                <h3 className="text-lg font-medium mb-2">
-                  {isDragActive ? 'Drop files here' : 'Upload model files'}
-                </h3>
-                <p className="text-muted-foreground mb-4">
-                  Drag and drop your model files here, or click to browse
-                </p>
-                <div className="flex flex-wrap justify-center gap-2">
-                  <Badge variant="secondary">.gguf</Badge>
-                  <Badge variant="secondary">.onnx</Badge>
-                  <Badge variant="secondary">.pt</Badge>
-                  <Badge variant="secondary">.safetensors</Badge>
+              {/* File Selection */}
+              <div className="space-y-4">
+                <div
+                  {...getRootProps()}
+                  className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
+                    isDragActive
+                      ? 'border-primary bg-primary/5'
+                      : 'border-muted-foreground/25 hover:border-primary/50 hover:bg-accent/50'
+                  }`}
+                >
+                  <input {...getInputProps()} />
+                  <Upload className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+                  <h3 className="text-lg font-medium mb-2">
+                    {isDragActive ? 'Drop files here' : 'Upload model files'}
+                  </h3>
+                  <p className="text-muted-foreground mb-4">
+                    Drag and drop your model files here, or use the file picker below
+                  </p>
+                  <div className="flex flex-wrap justify-center gap-2 mb-4">
+                    <Badge variant="secondary">.gguf</Badge>
+                    <Badge variant="secondary">.onnx</Badge>
+                    <Badge variant="secondary">.pt</Badge>
+                    <Badge variant="secondary">.safetensors</Badge>
+                  </div>
+                </div>
+
+                <div className="flex justify-center">
+                  <Button onClick={openFileDialog} variant="outline">
+                    <File className="h-4 w-4 mr-2" />
+                    Choose Files
+                  </Button>
                 </div>
               </div>
 
@@ -266,10 +331,10 @@ export function ModelUpload({ onClose, onUpload }: ModelUploadProps) {
               </Button>
               <Button
                 onClick={startUpload}
-                disabled={uploadMethod === 'local' ? !canUpload : !modelUrl.trim()}
+                disabled={uploadMethod === 'local' ? !canUpload || isUploading : !modelUrl.trim()}
               >
                 <Upload className="h-4 w-4 mr-2" />
-                {uploadMethod === 'local' ? 'Upload Files' : 'Download Model'}
+                {isUploading ? 'Uploading...' : uploadMethod === 'local' ? 'Upload Files' : 'Download Model'}
               </Button>
             </div>
           </div>

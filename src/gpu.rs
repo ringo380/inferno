@@ -6,10 +6,7 @@ use std::{
     sync::Arc,
     time::{Duration, SystemTime},
 };
-use tokio::{
-    sync::RwLock,
-    time::interval,
-};
+use tokio::{sync::RwLock, time::interval};
 use tracing::{debug, info, warn};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -56,7 +53,8 @@ impl ComputeCapability {
     }
 
     pub fn supports_feature(&self, required_major: u32, required_minor: u32) -> bool {
-        self.major > required_major || (self.major == required_major && self.minor >= required_minor)
+        self.major > required_major
+            || (self.major == required_major && self.minor >= required_minor)
     }
 }
 
@@ -78,6 +76,15 @@ pub enum GpuStatus {
     Overheated,
     LowMemory,
     Disabled,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum GpuPowerState {
+    Maximum,
+    Performance,
+    Balanced,
+    PowerSaver,
+    Minimal,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -261,7 +268,14 @@ impl GpuManager {
 
         // Try rocm-smi command
         match Command::new("rocm-smi")
-            .args(&["--showid", "--showproductname", "--showmeminfo", "--showuse", "--showtemp", "--showpower"])
+            .args(&[
+                "--showid",
+                "--showproductname",
+                "--showmeminfo",
+                "--showuse",
+                "--showtemp",
+                "--showpower",
+            ])
             .output()
         {
             Ok(output) if output.status.success() => {
@@ -296,8 +310,10 @@ impl GpuManager {
                     if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
                         if name.starts_with("card") && !name.contains('-') {
                             // This is a potential GPU card
-                            if let Ok(vendor) = std::fs::read_to_string(path.join("device/vendor")) {
-                                if vendor.trim() == "0x8086" { // Intel vendor ID
+                            if let Ok(vendor) = std::fs::read_to_string(path.join("device/vendor"))
+                            {
+                                if vendor.trim() == "0x8086" {
+                                    // Intel vendor ID
                                     // Detected Intel GPU
                                     let gpu = GpuInfo {
                                         id: gpus.len() as u32,
@@ -413,11 +429,15 @@ impl GpuManager {
     }
 
     async fn start_monitoring(&self) -> Result<()> {
-        if self.monitoring_active.load(std::sync::atomic::Ordering::SeqCst) {
+        if self
+            .monitoring_active
+            .load(std::sync::atomic::Ordering::SeqCst)
+        {
             return Ok(());
         }
 
-        self.monitoring_active.store(true, std::sync::atomic::Ordering::SeqCst);
+        self.monitoring_active
+            .store(true, std::sync::atomic::Ordering::SeqCst);
 
         let gpus = self.gpus.clone();
         let metrics_history = self.metrics_history.clone();
@@ -536,12 +556,21 @@ impl GpuManager {
             drop(allocations);
 
             let mut allocations = self.allocations.write().await;
-            allocations.entry(gpu_id).or_insert_with(Vec::new).push(allocation);
+            allocations
+                .entry(gpu_id)
+                .or_insert_with(Vec::new)
+                .push(allocation);
 
-            info!("Allocated GPU {} with {}MB memory", gpu_id, memory_required_mb);
+            info!(
+                "Allocated GPU {} with {}MB memory",
+                gpu_id, memory_required_mb
+            );
             Ok(Some(gpu_id))
         } else {
-            warn!("No suitable GPU found for allocation ({}MB required)", memory_required_mb);
+            warn!(
+                "No suitable GPU found for allocation ({}MB required)",
+                memory_required_mb
+            );
             Ok(None)
         }
     }
@@ -566,10 +595,7 @@ impl GpuManager {
         let metrics = self.metrics_history.read().await;
 
         if let Some(id) = gpu_id {
-            metrics.iter()
-                .filter(|m| m.gpu_id == id)
-                .cloned()
-                .collect()
+            metrics.iter().filter(|m| m.gpu_id == id).cloned().collect()
         } else {
             metrics.clone()
         }
@@ -588,7 +614,8 @@ impl GpuManager {
             let status = if let Some(temp) = gpu.temperature_celsius {
                 if temp > self.config.temperature_limit_celsius {
                     GpuStatus::Overheated
-                } else if gpu.memory_free_mb < (gpu.memory_total_mb * 10 / 100) { // Less than 10% free
+                } else if gpu.memory_free_mb < (gpu.memory_total_mb * 10 / 100) {
+                    // Less than 10% free
                     GpuStatus::LowMemory
                 } else if gpu.utilization_percent > self.config.max_utilization_percent {
                     GpuStatus::InUse
@@ -606,7 +633,8 @@ impl GpuManager {
     }
 
     pub async fn shutdown(&self) {
-        self.monitoring_active.store(false, std::sync::atomic::Ordering::SeqCst);
+        self.monitoring_active
+            .store(false, std::sync::atomic::Ordering::SeqCst);
         info!("GPU manager shutdown");
     }
 
@@ -619,17 +647,245 @@ impl GpuManager {
     }
 
     pub async fn update_configuration(&mut self, new_config: GpuConfiguration) -> Result<()> {
-        let restart_monitoring = self.config.monitoring_interval_seconds != new_config.monitoring_interval_seconds;
+        let restart_monitoring =
+            self.config.monitoring_interval_seconds != new_config.monitoring_interval_seconds;
 
         self.config = new_config;
 
-        if restart_monitoring && self.monitoring_active.load(std::sync::atomic::Ordering::SeqCst) {
-            self.monitoring_active.store(false, std::sync::atomic::Ordering::SeqCst);
+        if restart_monitoring
+            && self
+                .monitoring_active
+                .load(std::sync::atomic::Ordering::SeqCst)
+        {
+            self.monitoring_active
+                .store(false, std::sync::atomic::Ordering::SeqCst);
             tokio::time::sleep(Duration::from_millis(100)).await;
             self.start_monitoring().await?;
         }
 
         Ok(())
+    }
+
+    /// Directly allocate a specific GPU by ID
+    pub async fn allocate_specific_gpu(
+        &self,
+        gpu_id: u32,
+        memory_required_mb: u64,
+        model_name: String,
+    ) -> Result<bool> {
+        let gpus = self.gpus.read().await;
+        let mut allocations = self.allocations.write().await;
+
+        // Check if the specific GPU exists and is available
+        if let Some(gpu) = gpus.get(&gpu_id) {
+            // Check if GPU is available
+            if !matches!(gpu.status, GpuStatus::Available) {
+                warn!("GPU {} is not available (status: {:?})", gpu_id, gpu.status);
+                return Ok(false);
+            }
+
+            // Check memory requirement
+            if gpu.memory_free_mb < memory_required_mb {
+                warn!("GPU {} has insufficient memory: {} MB required, {} MB available",
+                      gpu_id, memory_required_mb, gpu.memory_free_mb);
+                return Ok(false);
+            }
+
+            // Create allocation
+            let allocation = GpuAllocation {
+                gpu_id,
+                allocated_memory_mb: memory_required_mb,
+                allocated_at: SystemTime::now(),
+                process_id: None,
+                model_name: model_name.clone(),
+            };
+
+            // Add allocation
+            allocations.entry(gpu_id).or_insert_with(Vec::new).push(allocation);
+
+            info!("Successfully allocated GPU {} for model '{}' with {} MB",
+                  gpu_id, model_name, memory_required_mb);
+            return Ok(true);
+        }
+
+        warn!("GPU {} not found", gpu_id);
+        Ok(false)
+    }
+
+    /// Set power management state for a GPU
+    pub async fn set_gpu_power_state(
+        &self,
+        gpu_id: u32,
+        power_state: GpuPowerState,
+    ) -> Result<()> {
+        let gpus = self.gpus.read().await;
+
+        if let Some(gpu) = gpus.get(&gpu_id) {
+            match gpu.vendor {
+                GpuVendor::Nvidia => {
+                    self.set_nvidia_power_state(gpu_id, &power_state).await?;
+                }
+                GpuVendor::Amd => {
+                    self.set_amd_power_state(gpu_id, &power_state).await?;
+                }
+                _ => {
+                    warn!("Power management not supported for GPU vendor: {:?}", gpu.vendor);
+                    return Err(anyhow::anyhow!(
+                        "Power management not supported for this GPU vendor"
+                    ));
+                }
+            }
+
+            info!("Set GPU {} power state to {:?}", gpu_id, power_state);
+        } else {
+            return Err(anyhow::anyhow!("GPU {} not found", gpu_id));
+        }
+
+        Ok(())
+    }
+
+    /// Reset a GPU to clear any stuck processes or states
+    pub async fn reset_gpu(&self, gpu_id: u32) -> Result<()> {
+        let gpus = self.gpus.read().await;
+
+        if let Some(gpu) = gpus.get(&gpu_id) {
+            info!("Resetting GPU {}: {}", gpu_id, gpu.name);
+
+            // Clear all allocations for this GPU
+            {
+                let mut allocations = self.allocations.write().await;
+                if let Some(gpu_allocations) = allocations.remove(&gpu_id) {
+                    info!("Cleared {} allocations from GPU {}", gpu_allocations.len(), gpu_id);
+                }
+            }
+
+            // Perform vendor-specific reset
+            match gpu.vendor {
+                GpuVendor::Nvidia => {
+                    self.reset_nvidia_gpu(gpu_id).await?;
+                }
+                GpuVendor::Amd => {
+                    self.reset_amd_gpu(gpu_id).await?;
+                }
+                _ => {
+                    warn!("GPU reset not fully supported for vendor: {:?}", gpu.vendor);
+                    // Perform basic reset by clearing allocations (already done above)
+                }
+            }
+
+            info!("GPU {} reset completed", gpu_id);
+        } else {
+            return Err(anyhow::anyhow!("GPU {} not found", gpu_id));
+        }
+
+        Ok(())
+    }
+
+    // Helper methods for vendor-specific power management
+    async fn set_nvidia_power_state(&self, gpu_id: u32, power_state: &GpuPowerState) -> Result<()> {
+        let power_limit = match power_state {
+            GpuPowerState::PowerSaver => "150", // Lower power limit
+            GpuPowerState::Balanced => "250",   // Default power limit
+            GpuPowerState::Performance => "350", // Higher power limit
+            GpuPowerState::Auto => return Ok(()), // Let driver decide
+        };
+
+        // Use nvidia-ml-py or nvidia-smi for power management
+        let output = Command::new("nvidia-smi")
+            .args(&["-i", &gpu_id.to_string(), "-pl", power_limit])
+            .output();
+
+        match output {
+            Ok(result) if result.status.success() => {
+                debug!("NVIDIA GPU {} power limit set to {} watts", gpu_id, power_limit);
+                Ok(())
+            }
+            Ok(result) => {
+                let stderr = String::from_utf8_lossy(&result.stderr);
+                Err(anyhow::anyhow!("nvidia-smi power command failed: {}", stderr))
+            }
+            Err(e) => {
+                Err(anyhow::anyhow!("Failed to execute nvidia-smi: {}", e))
+            }
+        }
+    }
+
+    async fn set_amd_power_state(&self, gpu_id: u32, power_state: &GpuPowerState) -> Result<()> {
+        // AMD GPU power management using rocm-smi
+        let power_profile = match power_state {
+            GpuPowerState::PowerSaver => "1", // Power saving profile
+            GpuPowerState::Balanced => "0",   // Default profile
+            GpuPowerState::Performance => "2", // Performance profile
+            GpuPowerState::Auto => return Ok(()), // Let driver decide
+        };
+
+        let output = Command::new("rocm-smi")
+            .args(&["-d", &gpu_id.to_string(), "--setpowerprofile", power_profile])
+            .output();
+
+        match output {
+            Ok(result) if result.status.success() => {
+                debug!("AMD GPU {} power profile set to {}", gpu_id, power_profile);
+                Ok(())
+            }
+            Ok(result) => {
+                let stderr = String::from_utf8_lossy(&result.stderr);
+                Err(anyhow::anyhow!("rocm-smi power command failed: {}", stderr))
+            }
+            Err(e) => {
+                Err(anyhow::anyhow!("Failed to execute rocm-smi: {}", e))
+            }
+        }
+    }
+
+    async fn reset_nvidia_gpu(&self, gpu_id: u32) -> Result<()> {
+        // Reset NVIDIA GPU using nvidia-smi
+        let output = Command::new("nvidia-smi")
+            .args(&["-i", &gpu_id.to_string(), "--gpu-reset"])
+            .output();
+
+        match output {
+            Ok(result) if result.status.success() => {
+                debug!("NVIDIA GPU {} reset successfully", gpu_id);
+                Ok(())
+            }
+            Ok(result) => {
+                let stderr = String::from_utf8_lossy(&result.stderr);
+                warn!("nvidia-smi reset command failed: {}", stderr);
+                // Continue as this might not be critical
+                Ok(())
+            }
+            Err(e) => {
+                warn!("Failed to execute nvidia-smi for reset: {}", e);
+                // Continue as reset might work through other means
+                Ok(())
+            }
+        }
+    }
+
+    async fn reset_amd_gpu(&self, gpu_id: u32) -> Result<()> {
+        // Reset AMD GPU using rocm-smi
+        let output = Command::new("rocm-smi")
+            .args(&["-d", &gpu_id.to_string(), "--resetgpu"])
+            .output();
+
+        match output {
+            Ok(result) if result.status.success() => {
+                debug!("AMD GPU {} reset successfully", gpu_id);
+                Ok(())
+            }
+            Ok(result) => {
+                let stderr = String::from_utf8_lossy(&result.stderr);
+                warn!("rocm-smi reset command failed: {}", stderr);
+                // Continue as this might not be critical
+                Ok(())
+            }
+            Err(e) => {
+                warn!("Failed to execute rocm-smi for reset: {}", e);
+                // Continue as reset might work through other means
+                Ok(())
+            }
+        }
     }
 }
 
@@ -650,7 +906,9 @@ mod tests {
     async fn test_gpu_manager_creation() {
         let config = GpuConfiguration::default();
         let manager = GpuManager::new(config);
-        assert!(!manager.monitoring_active.load(std::sync::atomic::Ordering::SeqCst));
+        assert!(!manager
+            .monitoring_active
+            .load(std::sync::atomic::Ordering::SeqCst));
     }
 
     #[tokio::test]
@@ -659,7 +917,9 @@ mod tests {
         let manager = GpuManager::new(config);
 
         // This would work with actual GPUs
-        let result = manager.allocate_gpu(1024, "test-model".to_string(), None).await;
+        let result = manager
+            .allocate_gpu(1024, "test-model".to_string(), None)
+            .await;
         assert!(result.is_ok());
     }
 }

@@ -1,25 +1,22 @@
+use crate::logging_audit::{
+    ComplianceReport, ComplianceStandard, IntegrityReport, IntegrityStatus,
+};
 use aes_gcm::{
     aead::{Aead, AeadCore, KeyInit, OsRng},
     Aes256Gcm, Key, Nonce,
 };
 use anyhow::Result;
 use base64::{engine::general_purpose, Engine as _};
-use chrono::{DateTime, Utc, Datelike, Timelike};
+use chrono::{DateTime, Datelike, Timelike, Utc};
 use flate2::{write::GzEncoder, Compression as GzCompression};
 use lettre::{
     message::{header::ContentType, Mailbox, Message},
-    transport::smtp::{authentication::Credentials},
+    transport::smtp::authentication::Credentials,
     AsyncSmtpTransport, AsyncTransport, Tokio1Executor,
 };
 use ring::rand::{SecureRandom, SystemRandom};
 use serde::{Deserialize, Serialize};
-use std::{
-    collections::HashMap,
-    io::Write,
-    path::PathBuf,
-    sync::Arc,
-    time::SystemTime,
-};
+use std::{collections::HashMap, io::Write, path::PathBuf, sync::Arc, time::SystemTime};
 use tokio::{
     fs,
     sync::{mpsc, RwLock},
@@ -28,7 +25,6 @@ use tokio::{
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 use zstd::stream::write::Encoder as ZstdEncoder;
-use crate::logging_audit::{IntegrityReport, IntegrityStatus, ComplianceReport, ComplianceStandard};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuditEvent {
@@ -364,10 +360,7 @@ impl Default for AuditConfiguration {
             flush_interval_seconds: 60,
             include_request_body: false,
             include_response_body: false,
-            exclude_patterns: vec![
-                "health-check".to_string(),
-                "ping".to_string(),
-            ],
+            exclude_patterns: vec!["health-check".to_string(), "ping".to_string()],
             alert_on_critical: true,
             alerting: AlertConfiguration::default(),
             export_format: ExportFormat::JsonLines,
@@ -479,22 +472,31 @@ impl AuditLogger {
         let encryption_key = if config.encryption_enabled {
             match std::env::var(&config.encryption_key_env) {
                 Ok(key_base64) => {
-                    let key_bytes = general_purpose::STANDARD.decode(&key_base64)
+                    let key_bytes = general_purpose::STANDARD
+                        .decode(&key_base64)
                         .map_err(|e| anyhow::anyhow!("Invalid encryption key format: {}", e))?;
                     if key_bytes.len() != 32 {
-                        return Err(anyhow::anyhow!("Encryption key must be 32 bytes (256 bits)"));
+                        return Err(anyhow::anyhow!(
+                            "Encryption key must be 32 bytes (256 bits)"
+                        ));
                     }
                     let mut key_array = [0u8; 32];
                     key_array.copy_from_slice(&key_bytes);
                     Some(Arc::new(key_array))
                 }
                 Err(_) => {
-                    warn!("Encryption enabled but key not found in environment variable: {}", config.encryption_key_env);
-                    warn!("Generating new encryption key - this should only be used for development!");
+                    warn!(
+                        "Encryption enabled but key not found in environment variable: {}",
+                        config.encryption_key_env
+                    );
+                    warn!(
+                        "Generating new encryption key - this should only be used for development!"
+                    );
                     let rng = SystemRandom::new();
                     let mut key_bytes = [0u8; 32];
-                    rng.fill(&mut key_bytes)
-                        .map_err(|e| anyhow::anyhow!("Failed to generate encryption key: {:?}", e))?;
+                    rng.fill(&mut key_bytes).map_err(|e| {
+                        anyhow::anyhow!("Failed to generate encryption key: {:?}", e)
+                    })?;
                     Some(Arc::new(key_bytes))
                 }
             }
@@ -515,12 +517,17 @@ impl AuditLogger {
         // Start background processor
         logger.start_background_processor(event_receiver).await?;
 
-        info!("Audit logger initialized with compression: {:?}, encryption: {}",
-              config.compression_method, config.encryption_enabled);
+        info!(
+            "Audit logger initialized with compression: {:?}, encryption: {}",
+            config.compression_method, config.encryption_enabled
+        );
         Ok(logger)
     }
 
-    async fn start_background_processor(&self, mut event_receiver: mpsc::Receiver<AuditEvent>) -> Result<()> {
+    async fn start_background_processor(
+        &self,
+        mut event_receiver: mpsc::Receiver<AuditEvent>,
+    ) -> Result<()> {
         let config = self.config.clone();
         let _event_buffer = self.event_buffer.clone();
         let is_running = self.is_running.clone();
@@ -528,7 +535,9 @@ impl AuditLogger {
         is_running.store(true, std::sync::atomic::Ordering::SeqCst);
 
         tokio::spawn(async move {
-            let mut flush_timer = interval(std::time::Duration::from_secs(config.flush_interval_seconds));
+            let mut flush_timer = interval(std::time::Duration::from_secs(
+                config.flush_interval_seconds,
+            ));
             let mut events_batch = Vec::new();
 
             while is_running.load(std::sync::atomic::Ordering::SeqCst) {
@@ -588,14 +597,18 @@ impl AuditLogger {
 
         let content = match config.export_format {
             ExportFormat::Json => serde_json::to_string_pretty(events)?,
-            ExportFormat::JsonLines => {
-                events.iter()
-                    .map(|e| serde_json::to_string(e))
-                    .collect::<Result<Vec<_>, _>>()?
-                    .join("\n")
-            }
+            ExportFormat::JsonLines => events
+                .iter()
+                .map(|e| serde_json::to_string(e))
+                .collect::<Result<Vec<_>, _>>()?
+                .join("\n"),
             ExportFormat::Csv => Self::events_to_csv(events)?,
-            _ => return Err(anyhow::anyhow!("Unsupported export format: {:?}", config.export_format)),
+            _ => {
+                return Err(anyhow::anyhow!(
+                    "Unsupported export format: {:?}",
+                    config.export_format
+                ))
+            }
         };
 
         fs::write(&filepath, &content).await?;
@@ -604,7 +617,11 @@ impl AuditLogger {
 
         // Apply compression if enabled
         if config.compression_enabled {
-            final_content = Self::compress_data(&final_content, &config.compression_method, config.compression_level)?;
+            final_content = Self::compress_data(
+                &final_content,
+                &config.compression_method,
+                config.compression_level,
+            )?;
         }
 
         // Apply encryption if enabled
@@ -627,7 +644,10 @@ impl AuditLogger {
         for event in events {
             csv.push_str(&format!(
                 "{},{:?},{:?},{},{},{},{},{}\n",
-                event.timestamp.duration_since(SystemTime::UNIX_EPOCH)?.as_secs(),
+                event
+                    .timestamp
+                    .duration_since(SystemTime::UNIX_EPOCH)?
+                    .as_secs(),
                 event.event_type,
                 event.severity,
                 event.actor.name,
@@ -659,7 +679,8 @@ impl AuditLogger {
         files.sort_by_key(|(_, modified)| *modified);
 
         // Remove files older than retention period
-        let cutoff = SystemTime::now() - std::time::Duration::from_secs(config.retention_days as u64 * 24 * 3600);
+        let cutoff = SystemTime::now()
+            - std::time::Duration::from_secs(config.retention_days as u64 * 24 * 3600);
 
         for (path, modified) in &files {
             if *modified < cutoff {
@@ -736,20 +757,32 @@ impl AuditLogger {
             LogLevel::All => true,
             LogLevel::CriticalOnly => matches!(severity, Severity::Critical),
             LogLevel::HighAndAbove => matches!(severity, Severity::Critical | Severity::High),
-            LogLevel::MediumAndAbove => matches!(severity, Severity::Critical | Severity::High | Severity::Medium),
-            LogLevel::LowAndAbove => matches!(severity, Severity::Critical | Severity::High | Severity::Medium | Severity::Low),
+            LogLevel::MediumAndAbove => matches!(
+                severity,
+                Severity::Critical | Severity::High | Severity::Medium
+            ),
+            LogLevel::LowAndAbove => matches!(
+                severity,
+                Severity::Critical | Severity::High | Severity::Medium | Severity::Low
+            ),
             LogLevel::InfoOnly => matches!(severity, Severity::Info),
         }
     }
 
     async fn send_critical_alert(&self, event: &AuditEvent) {
         if !self.config.alerting.enabled {
-            warn!("CRITICAL AUDIT EVENT: {} - {}", event.action, event.details.description);
+            warn!(
+                "CRITICAL AUDIT EVENT: {} - {}",
+                event.action, event.details.description
+            );
             return;
         }
 
         // Check rate limiting
-        if !self.should_send_alert(&event.event_type, &event.severity).await {
+        if !self
+            .should_send_alert(&event.event_type, &event.severity)
+            .await
+        {
             debug!("Alert rate limited for event: {}", event.id);
             return;
         }
@@ -782,7 +815,10 @@ impl AuditLogger {
             }
         }
 
-        warn!("CRITICAL AUDIT EVENT ALERTED: {} - {}", event.action, event.details.description);
+        warn!(
+            "CRITICAL AUDIT EVENT ALERTED: {} - {}",
+            event.action, event.details.description
+        );
     }
 
     pub async fn query_events(&self, query: AuditQuery) -> Result<Vec<AuditEvent>> {
@@ -797,7 +833,11 @@ impl AuditLogger {
             if event_types.len() > 50 {
                 return Err(anyhow::anyhow!("Too many event types specified (max 50)"));
             }
-            results.retain(|e| event_types.iter().any(|et| std::mem::discriminant(&e.event_type) == std::mem::discriminant(et)));
+            results.retain(|e| {
+                event_types
+                    .iter()
+                    .any(|et| std::mem::discriminant(&e.event_type) == std::mem::discriminant(et))
+            });
         }
 
         // Apply severity filters with validation
@@ -805,7 +845,11 @@ impl AuditLogger {
             if severities.len() > 10 {
                 return Err(anyhow::anyhow!("Too many severities specified (max 10)"));
             }
-            results.retain(|e| severities.iter().any(|s| std::mem::discriminant(&e.severity) == std::mem::discriminant(s)));
+            results.retain(|e| {
+                severities
+                    .iter()
+                    .any(|s| std::mem::discriminant(&e.severity) == std::mem::discriminant(s))
+            });
         }
 
         // Apply actor filters with validation
@@ -821,7 +865,9 @@ impl AuditLogger {
             if resources.len() > 100 {
                 return Err(anyhow::anyhow!("Too many resources specified (max 100)"));
             }
-            results.retain(|e| resources.contains(&e.resource.id) || resources.contains(&e.resource.name));
+            results.retain(|e| {
+                resources.contains(&e.resource.id) || resources.contains(&e.resource.name)
+            });
         }
 
         // Apply time range filters
@@ -836,17 +882,20 @@ impl AuditLogger {
         // Apply text search with improved performance
         if let Some(ref search_text) = query.search_text {
             if search_text.len() > 1000 {
-                return Err(anyhow::anyhow!("Search text too long (max 1000 characters)"));
+                return Err(anyhow::anyhow!(
+                    "Search text too long (max 1000 characters)"
+                ));
             }
             let search_lower = search_text.to_lowercase();
             results.retain(|e| {
-                e.action.to_lowercase().contains(&search_lower) ||
-                e.details.description.to_lowercase().contains(&search_lower) ||
-                e.actor.name.to_lowercase().contains(&search_lower) ||
-                e.resource.name.to_lowercase().contains(&search_lower) ||
-                e.details.parameters.values().any(|v| {
-                    v.as_str().map_or(false, |s| s.to_lowercase().contains(&search_lower))
-                })
+                e.action.to_lowercase().contains(&search_lower)
+                    || e.details.description.to_lowercase().contains(&search_lower)
+                    || e.actor.name.to_lowercase().contains(&search_lower)
+                    || e.resource.name.to_lowercase().contains(&search_lower)
+                    || e.details.parameters.values().any(|v| {
+                        v.as_str()
+                            .map_or(false, |s| s.to_lowercase().contains(&search_lower))
+                    })
             });
         }
 
@@ -854,27 +903,37 @@ impl AuditLogger {
         if let Some(ref actor_filter) = query.actor_filter {
             let filter_lower = actor_filter.to_lowercase();
             results.retain(|e| {
-                e.actor.name.to_lowercase().contains(&filter_lower) ||
-                format!("{:?}", e.actor.actor_type).to_lowercase().contains(&filter_lower)
+                e.actor.name.to_lowercase().contains(&filter_lower)
+                    || format!("{:?}", e.actor.actor_type)
+                        .to_lowercase()
+                        .contains(&filter_lower)
             });
         }
 
         if let Some(ref resource_filter) = query.resource_filter {
             let filter_lower = resource_filter.to_lowercase();
             results.retain(|e| {
-                e.resource.name.to_lowercase().contains(&filter_lower) ||
-                format!("{:?}", e.resource.resource_type).to_lowercase().contains(&filter_lower)
+                e.resource.name.to_lowercase().contains(&filter_lower)
+                    || format!("{:?}", e.resource.resource_type)
+                        .to_lowercase()
+                        .contains(&filter_lower)
             });
         }
 
         if let Some(ref severity_filter) = query.severity_filter {
             let filter_lower = severity_filter.to_lowercase();
-            results.retain(|e| format!("{:?}", e.severity).to_lowercase().contains(&filter_lower));
+            results.retain(|e| {
+                format!("{:?}", e.severity)
+                    .to_lowercase()
+                    .contains(&filter_lower)
+            });
         }
 
         if let Some(ref outcome_filter) = query.outcome_filter {
-            let filter_success = outcome_filter.to_lowercase() == "success" || outcome_filter.to_lowercase() == "true";
-            let filter_failure = outcome_filter.to_lowercase() == "failure" || outcome_filter.to_lowercase() == "false";
+            let filter_success = outcome_filter.to_lowercase() == "success"
+                || outcome_filter.to_lowercase() == "true";
+            let filter_failure = outcome_filter.to_lowercase() == "failure"
+                || outcome_filter.to_lowercase() == "false";
             if filter_success {
                 results.retain(|e| e.outcome.success);
             } else if filter_failure {
@@ -887,8 +946,12 @@ impl AuditLogger {
             results.sort_by(|a, b| {
                 let ordering = match sort_field {
                     SortField::Timestamp => a.timestamp.cmp(&b.timestamp),
-                    SortField::Severity => (a.severity.clone() as u8).cmp(&(b.severity.clone() as u8)),
-                    SortField::EventType => format!("{:?}", a.event_type).cmp(&format!("{:?}", b.event_type)),
+                    SortField::Severity => {
+                        (a.severity.clone() as u8).cmp(&(b.severity.clone() as u8))
+                    }
+                    SortField::EventType => {
+                        format!("{:?}", a.event_type).cmp(&format!("{:?}", b.event_type))
+                    }
                     SortField::Actor => a.actor.name.cmp(&b.actor.name),
                     SortField::Resource => a.resource.name.cmp(&b.resource.name),
                 };
@@ -953,30 +1016,40 @@ impl AuditLogger {
                 return Err(anyhow::anyhow!("Search text cannot be empty"));
             }
             if search_text.len() > 1000 {
-                return Err(anyhow::anyhow!("Search text too long (max 1000 characters)"));
+                return Err(anyhow::anyhow!(
+                    "Search text too long (max 1000 characters)"
+                ));
             }
         }
 
         Ok(())
     }
 
-    pub async fn export_events(&self, query: AuditQuery, output_path: &PathBuf, format: ExportFormat) -> Result<()> {
+    pub async fn export_events(
+        &self,
+        query: AuditQuery,
+        output_path: &PathBuf,
+        format: ExportFormat,
+    ) -> Result<()> {
         let events = self.query_events(query).await?;
 
         let content = match format {
             ExportFormat::Json => serde_json::to_string_pretty(&events)?,
-            ExportFormat::JsonLines => {
-                events.iter()
-                    .map(|e| serde_json::to_string(e))
-                    .collect::<Result<Vec<_>, _>>()?
-                    .join("\n")
-            }
+            ExportFormat::JsonLines => events
+                .iter()
+                .map(|e| serde_json::to_string(e))
+                .collect::<Result<Vec<_>, _>>()?
+                .join("\n"),
             ExportFormat::Csv => Self::events_to_csv(&events)?,
             _ => return Err(anyhow::anyhow!("Export format {:?} not supported", format)),
         };
 
         fs::write(output_path, content).await?;
-        info!("Exported {} audit events to {:?}", events.len(), output_path);
+        info!(
+            "Exported {} audit events to {:?}",
+            events.len(),
+            output_path
+        );
         Ok(())
     }
 
@@ -1001,16 +1074,28 @@ impl AuditLogger {
 
         for event in buffer.iter() {
             // Count by type
-            *stats.events_by_type.entry(format!("{:?}", event.event_type)).or_insert(0) += 1;
+            *stats
+                .events_by_type
+                .entry(format!("{:?}", event.event_type))
+                .or_insert(0) += 1;
 
             // Count by severity
-            *stats.events_by_severity.entry(format!("{:?}", event.severity)).or_insert(0) += 1;
+            *stats
+                .events_by_severity
+                .entry(format!("{:?}", event.severity))
+                .or_insert(0) += 1;
 
             // Count by actor
-            *stats.events_by_actor.entry(event.actor.name.clone()).or_insert(0) += 1;
+            *stats
+                .events_by_actor
+                .entry(event.actor.name.clone())
+                .or_insert(0) += 1;
 
             // Count by resource type
-            *stats.events_by_resource_type.entry(format!("{:?}", event.resource.resource_type)).or_insert(0) += 1;
+            *stats
+                .events_by_resource_type
+                .entry(format!("{:?}", event.resource.resource_type))
+                .or_insert(0) += 1;
 
             // Calculate metrics
             if event.outcome.success {
@@ -1047,7 +1132,8 @@ impl AuditLogger {
     }
 
     pub async fn shutdown(&self) {
-        self.is_running.store(false, std::sync::atomic::Ordering::SeqCst);
+        self.is_running
+            .store(false, std::sync::atomic::Ordering::SeqCst);
         info!("Audit logger shutdown");
     }
 
@@ -1079,9 +1165,7 @@ impl AuditLogger {
                 decoder.read_to_end(&mut decompressed)?;
                 Ok(decompressed)
             }
-            CompressionMethod::Zstd => {
-                zstd::decode_all(data).map_err(Into::into)
-            }
+            CompressionMethod::Zstd => zstd::decode_all(data).map_err(Into::into),
         }
     }
 
@@ -1089,10 +1173,13 @@ impl AuditLogger {
     fn get_encryption_key(key_env: &str) -> Result<Option<Arc<[u8; 32]>>> {
         match std::env::var(key_env) {
             Ok(key_base64) => {
-                let key_bytes = general_purpose::STANDARD.decode(&key_base64)
+                let key_bytes = general_purpose::STANDARD
+                    .decode(&key_base64)
                     .map_err(|e| anyhow::anyhow!("Invalid encryption key format: {}", e))?;
                 if key_bytes.len() != 32 {
-                    return Err(anyhow::anyhow!("Encryption key must be 32 bytes (256 bits)"));
+                    return Err(anyhow::anyhow!(
+                        "Encryption key must be 32 bytes (256 bits)"
+                    ));
                 }
                 let mut key_array = [0u8; 32];
                 key_array.copy_from_slice(&key_bytes);
@@ -1106,7 +1193,8 @@ impl AuditLogger {
         let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(key));
         let nonce = Aes256Gcm::generate_nonce(&mut OsRng);
 
-        let ciphertext = cipher.encrypt(&nonce, data)
+        let ciphertext = cipher
+            .encrypt(&nonce, data)
             .map_err(|e| anyhow::anyhow!("Encryption failed: {}", e))?;
 
         // Prepend nonce to ciphertext for decryption
@@ -1126,7 +1214,8 @@ impl AuditLogger {
         let (nonce_bytes, ciphertext) = encrypted_data.split_at(12);
         let nonce = Nonce::from_slice(nonce_bytes);
 
-        cipher.decrypt(nonce, ciphertext)
+        cipher
+            .decrypt(nonce, ciphertext)
             .map_err(|e| anyhow::anyhow!("Decryption failed: {}", e))
     }
 
@@ -1187,15 +1276,17 @@ impl AuditLogger {
 
         let mut last_error = None;
         for attempt in 0..=config.retry_count {
-            let cloned_request = request.try_clone()
-                .ok_or_else(|| anyhow::anyhow!("Failed to clone request for retry attempt {}", attempt + 1))?;
+            let cloned_request = request.try_clone().ok_or_else(|| {
+                anyhow::anyhow!("Failed to clone request for retry attempt {}", attempt + 1)
+            })?;
             match cloned_request.send().await {
                 Ok(response) => {
                     if response.status().is_success() {
                         debug!("Webhook alert sent successfully on attempt {}", attempt + 1);
                         return Ok(());
                     } else {
-                        last_error = Some(anyhow::anyhow!("HTTP {}: {}",
+                        last_error = Some(anyhow::anyhow!(
+                            "HTTP {}: {}",
                             response.status(),
                             response.text().await.unwrap_or_default()
                         ));
@@ -1216,20 +1307,24 @@ impl AuditLogger {
 
     #[cfg(not(feature = "reqwest"))]
     async fn send_webhook_alert(&self, _context: &AlertContext) -> Result<()> {
-        Err(anyhow::anyhow!("Webhook alerts require the 'reqwest' feature to be enabled"))
+        Err(anyhow::anyhow!(
+            "Webhook alerts require the 'reqwest' feature to be enabled"
+        ))
     }
 
     async fn send_email_alert(&self, context: &AlertContext) -> Result<()> {
         let config = &self.config.alerting.email;
 
-        let password = std::env::var(&config.password_env)
-            .map_err(|_| anyhow::anyhow!("SMTP password not found in environment: {}", config.password_env))?;
+        let password = std::env::var(&config.password_env).map_err(|_| {
+            anyhow::anyhow!(
+                "SMTP password not found in environment: {}",
+                config.password_env
+            )
+        })?;
 
         let subject = format!(
             "[{:?}] Audit Alert: {} on {}",
-            context.event.severity,
-            context.event.action,
-            context.hostname
+            context.event.severity, context.event.action, context.hostname
         );
 
         let body = format!(
@@ -1268,7 +1363,10 @@ Context:
             context.event.resource.resource_type,
             context.event.action,
             context.event.outcome.success,
-            context.event.outcome.error_message
+            context
+                .event
+                .outcome
+                .error_message
                 .as_ref()
                 .map(|e| format!("Error: {}", e))
                 .unwrap_or_default(),
@@ -1276,12 +1374,17 @@ Context:
             context.event.context.application,
             context.event.context.version,
             context.event.context.process_id,
-            context.event.outcome.duration_ms
+            context
+                .event
+                .outcome
+                .duration_ms
                 .map(|d| format!("Duration: {}ms", d))
                 .unwrap_or_default()
         );
 
-        let from_mailbox: Mailbox = config.from_address.parse()
+        let from_mailbox: Mailbox = config
+            .from_address
+            .parse()
             .map_err(|e| anyhow::anyhow!("Invalid from address: {}", e))?;
 
         let mut message_builder = Message::builder()
@@ -1290,12 +1393,14 @@ Context:
             .header(ContentType::TEXT_PLAIN);
 
         for to_addr in &config.to_addresses {
-            let to_mailbox: Mailbox = to_addr.parse()
+            let to_mailbox: Mailbox = to_addr
+                .parse()
                 .map_err(|e| anyhow::anyhow!("Invalid to address '{}': {}", to_addr, e))?;
             message_builder = message_builder.to(to_mailbox);
         }
 
-        let message = message_builder.body(body)
+        let message = message_builder
+            .body(body)
             .map_err(|e| anyhow::anyhow!("Failed to build email message: {}", e))?;
 
         let creds = Credentials::new(config.username.clone(), password);
@@ -1306,10 +1411,14 @@ Context:
         let mailer = if config.use_tls {
             mailer.build()
         } else {
-            mailer.tls(lettre::transport::smtp::client::Tls::None).build()
+            mailer
+                .tls(lettre::transport::smtp::client::Tls::None)
+                .build()
         };
 
-        mailer.send(message).await
+        mailer
+            .send(message)
+            .await
             .map_err(|e| anyhow::anyhow!("Failed to send email: {}", e))?;
 
         debug!("Email alert sent successfully");
@@ -1394,7 +1503,9 @@ Context:
 
     #[cfg(not(feature = "reqwest"))]
     async fn send_slack_alert(&self, _context: &AlertContext) -> Result<()> {
-        Err(anyhow::anyhow!("Slack alerts require the 'reqwest' feature to be enabled"))
+        Err(anyhow::anyhow!(
+            "Slack alerts require the 'reqwest' feature to be enabled"
+        ))
     }
 
     pub async fn generate_encryption_key() -> Result<String> {
@@ -1426,7 +1537,7 @@ Context:
                 self.config.compression_enabled = false;
                 self.config.encryption_enabled = false;
                 info!("Audit configured for development stage");
-            },
+            }
             AuditStage::Testing => {
                 self.config.log_level = LogLevel::MediumAndAbove;
                 self.config.retention_days = 30;
@@ -1434,7 +1545,7 @@ Context:
                 self.config.compression_enabled = true;
                 self.config.encryption_enabled = false;
                 info!("Audit configured for testing stage");
-            },
+            }
             AuditStage::Staging => {
                 self.config.log_level = LogLevel::HighAndAbove;
                 self.config.retention_days = 60;
@@ -1442,7 +1553,7 @@ Context:
                 self.config.compression_enabled = true;
                 self.config.encryption_enabled = true;
                 info!("Audit configured for staging stage");
-            },
+            }
             AuditStage::Production => {
                 self.config.log_level = LogLevel::HighAndAbove;
                 self.config.retention_days = 365;
@@ -1451,13 +1562,16 @@ Context:
                 self.config.encryption_enabled = true;
                 self.config.alert_on_critical = true;
                 info!("Audit configured for production stage");
-            },
+            }
         }
         Ok(())
     }
 
     /// Perform advanced audit event analysis with statistical insights
-    pub async fn analyze_audit_patterns(&self, analysis_config: AuditAnalysisConfig) -> Result<AuditPatternReport> {
+    pub async fn analyze_audit_patterns(
+        &self,
+        analysis_config: AuditAnalysisConfig,
+    ) -> Result<AuditPatternReport> {
         let query = AuditQuery {
             start_time: Some(analysis_config.start_time),
             end_time: Some(analysis_config.end_time),
@@ -1513,10 +1627,14 @@ Context:
         }
 
         // Find peak hours
-        if let Some((peak_hour, peak_count)) = hourly_counts.iter().max_by_key(|(_, count)| *count) {
+        if let Some((peak_hour, peak_count)) = hourly_counts.iter().max_by_key(|(_, count)| *count)
+        {
             patterns.push(AuditPattern {
                 pattern_type: "temporal_peak_hour".to_string(),
-                description: format!("Peak activity at hour {} with {} events", peak_hour, peak_count),
+                description: format!(
+                    "Peak activity at hour {} with {} events",
+                    peak_hour, peak_count
+                ),
                 confidence: 0.9,
                 frequency: *peak_count as f64,
                 metadata: HashMap::from([("hour".to_string(), peak_hour.to_string())]),
@@ -1524,10 +1642,15 @@ Context:
         }
 
         // Find quiet periods
-        if let Some((quiet_hour, quiet_count)) = hourly_counts.iter().min_by_key(|(_, count)| *count) {
+        if let Some((quiet_hour, quiet_count)) =
+            hourly_counts.iter().min_by_key(|(_, count)| *count)
+        {
             patterns.push(AuditPattern {
                 pattern_type: "temporal_quiet_hour".to_string(),
-                description: format!("Quiet period at hour {} with {} events", quiet_hour, quiet_count),
+                description: format!(
+                    "Quiet period at hour {} with {} events",
+                    quiet_hour, quiet_count
+                ),
                 confidence: 0.8,
                 frequency: *quiet_count as f64,
                 metadata: HashMap::from([("hour".to_string(), quiet_hour.to_string())]),
@@ -1559,7 +1682,10 @@ Context:
             if activity_percentage > 10.0 {
                 patterns.push(AuditPattern {
                     pattern_type: "high_activity_actor".to_string(),
-                    description: format!("Actor {} accounts for {:.1}% of all activity", actor, activity_percentage),
+                    description: format!(
+                        "Actor {} accounts for {:.1}% of all activity",
+                        actor, activity_percentage
+                    ),
                     confidence: 0.9,
                     frequency: *count as f64,
                     metadata: HashMap::from([("actor".to_string(), actor.clone())]),
@@ -1574,12 +1700,15 @@ Context:
                 if failure_rate > 20.0 {
                     patterns.push(AuditPattern {
                         pattern_type: "high_failure_actor".to_string(),
-                        description: format!("Actor {} has {:.1}% failure rate", actor, failure_rate),
+                        description: format!(
+                            "Actor {} has {:.1}% failure rate",
+                            actor, failure_rate
+                        ),
                         confidence: 0.85,
                         frequency: *failure_count as f64,
                         metadata: HashMap::from([
                             ("actor".to_string(), actor.clone()),
-                            ("failure_rate".to_string(), failure_rate.to_string())
+                            ("failure_rate".to_string(), failure_rate.to_string()),
                         ]),
                     });
                 }
@@ -1596,16 +1725,22 @@ Context:
         // Detect unusual event types
         let mut event_type_counts = HashMap::new();
         for event in events {
-            *event_type_counts.entry(format!("{:?}", event.event_type)).or_insert(0) += 1;
+            *event_type_counts
+                .entry(format!("{:?}", event.event_type))
+                .or_insert(0) += 1;
         }
 
         let total_events = events.len() as f64;
         for (event_type, count) in event_type_counts {
             let percentage = (count as f64 / total_events) * 100.0;
-            if percentage < 0.1 && count > 5 { // Rare but not too rare
+            if percentage < 0.1 && count > 5 {
+                // Rare but not too rare
                 anomalies.push(AuditAnomaly {
                     anomaly_type: "rare_event_type".to_string(),
-                    description: format!("Unusual event type {} detected {} times", event_type, count),
+                    description: format!(
+                        "Unusual event type {} detected {} times",
+                        event_type, count
+                    ),
                     severity: "medium".to_string(),
                     detected_at: chrono::Utc::now(),
                     confidence: 0.7,
@@ -1617,22 +1752,30 @@ Context:
 
         // Detect burst patterns
         if events.len() > 100 {
-            let time_windows = self.analyze_time_windows(events, std::time::Duration::from_secs(300))?; // 5-minute windows
-            let avg_events_per_window = time_windows.iter().map(|w| w.event_count).sum::<usize>() as f64 / time_windows.len() as f64;
+            let time_windows =
+                self.analyze_time_windows(events, std::time::Duration::from_secs(300))?; // 5-minute windows
+            let avg_events_per_window = time_windows.iter().map(|w| w.event_count).sum::<usize>()
+                as f64
+                / time_windows.len() as f64;
 
             for window in time_windows {
                 if window.event_count as f64 > avg_events_per_window * 3.0 {
                     anomalies.push(AuditAnomaly {
                         anomaly_type: "event_burst".to_string(),
-                        description: format!("Event burst detected: {} events in 5 minutes (avg: {:.1})",
-                                           window.event_count, avg_events_per_window),
+                        description: format!(
+                            "Event burst detected: {} events in 5 minutes (avg: {:.1})",
+                            window.event_count, avg_events_per_window
+                        ),
                         severity: "high".to_string(),
                         detected_at: chrono::Utc::now(),
                         confidence: 0.9,
                         affected_events: window.event_count,
                         metadata: HashMap::from([
-                            ("window_start".to_string(), format!("{:?}", window.start_time)),
-                            ("window_end".to_string(), format!("{:?}", window.end_time))
+                            (
+                                "window_start".to_string(),
+                                format!("{:?}", window.start_time),
+                            ),
+                            ("window_end".to_string(), format!("{:?}", window.end_time)),
                         ]),
                     });
                 }
@@ -1643,7 +1786,11 @@ Context:
     }
 
     /// Analyze events in time windows
-    fn analyze_time_windows(&self, events: &[AuditEvent], window_size: std::time::Duration) -> Result<Vec<TimeWindow>> {
+    fn analyze_time_windows(
+        &self,
+        events: &[AuditEvent],
+        window_size: std::time::Duration,
+    ) -> Result<Vec<TimeWindow>> {
         if events.is_empty() {
             return Ok(Vec::new());
         }
@@ -1655,7 +1802,8 @@ Context:
         let mut current_start = first_event_time;
         while current_start < last_event_time {
             let current_end = current_start + window_size;
-            let events_in_window = events.iter()
+            let events_in_window = events
+                .iter()
                 .filter(|e| e.timestamp >= current_start && e.timestamp < current_end)
                 .count();
 
@@ -1685,9 +1833,14 @@ Context:
         trends.insert("success_rate".to_string(), success_rate);
 
         // Calculate average event frequency (events per hour)
-        let time_span = events.last().unwrap().timestamp
+        let time_span = events
+            .last()
+            .unwrap()
+            .timestamp
             .duration_since(events.first().unwrap().timestamp)
-            .unwrap_or_default().as_secs() as f64 / 3600.0; // Convert to hours
+            .unwrap_or_default()
+            .as_secs() as f64
+            / 3600.0; // Convert to hours
 
         if time_span > 0.0 {
             let events_per_hour = events.len() as f64 / time_span;
@@ -1695,7 +1848,10 @@ Context:
         }
 
         // Calculate critical event trend
-        let critical_count = events.iter().filter(|e| matches!(e.severity, Severity::Critical)).count();
+        let critical_count = events
+            .iter()
+            .filter(|e| matches!(e.severity, Severity::Critical))
+            .count();
         let critical_rate = (critical_count as f64 / events.len() as f64) * 100.0;
         trends.insert("critical_event_rate".to_string(), critical_rate);
 
@@ -1727,7 +1883,9 @@ Context:
         }
 
         // Analyze anomalies
-        let high_severity_anomalies = report.anomalies.iter()
+        let high_severity_anomalies = report
+            .anomalies
+            .iter()
             .filter(|a| a.severity == "high" || a.severity == "critical")
             .count();
 
@@ -1739,7 +1897,9 @@ Context:
         }
 
         // Analyze patterns
-        let high_activity_patterns = report.patterns.iter()
+        let high_activity_patterns = report
+            .patterns
+            .iter()
             .filter(|p| p.pattern_type == "high_activity_actor")
             .count();
 
@@ -1751,14 +1911,18 @@ Context:
 
         // General recommendations if no specific issues found
         if recommendations.is_empty() {
-            recommendations.push("Audit patterns appear normal. Continue regular monitoring.".to_string());
+            recommendations
+                .push("Audit patterns appear normal. Continue regular monitoring.".to_string());
         }
 
         Ok(recommendations)
     }
 
     /// Get detailed audit statistics for a date range
-    pub async fn get_audit_statistics(&self, date_range: Option<(SystemTime, SystemTime)>) -> Result<AuditStatistics> {
+    pub async fn get_audit_statistics(
+        &self,
+        date_range: Option<(SystemTime, SystemTime)>,
+    ) -> Result<AuditStatistics> {
         let query = AuditQuery {
             start_time: date_range.map(|(start, _)| start),
             end_time: date_range.map(|(_, end)| end),
@@ -1847,8 +2011,8 @@ Context:
 
     /// Validate audit log integrity and detect tampering
     pub async fn validate_audit_integrity(&self) -> Result<IntegrityReport> {
-        use uuid::Uuid;
         use chrono::Utc;
+        use uuid::Uuid;
 
         // Basic integrity validation - check file accessibility and format
         let audit_files = fs::read_dir(&self.config.storage_path).await?;
@@ -1858,13 +2022,19 @@ Context:
 
         let mut entries = audit_files;
         while let Some(entry) = entries.next_entry().await? {
-            if entry.path().extension().map_or(false, |ext| ext == "json" || ext == "gz" || ext == "zst") {
+            if entry
+                .path()
+                .extension()
+                .map_or(false, |ext| ext == "json" || ext == "gz" || ext == "zst")
+            {
                 files_checked += 1;
 
                 // Try to read and parse the file
                 match fs::read(&entry.path()).await {
                     Ok(_) => files_valid += 1,
-                    Err(e) => errors.push(format!("Failed to read {}: {}", entry.path().display(), e)),
+                    Err(e) => {
+                        errors.push(format!("Failed to read {}: {}", entry.path().display(), e))
+                    }
                 }
             }
         }
@@ -1877,7 +2047,11 @@ Context:
 
         Ok(IntegrityReport {
             id: Uuid::new_v4().to_string(),
-            status: if files_checked == files_valid { IntegrityStatus::Valid } else { IntegrityStatus::Compromised },
+            status: if files_checked == files_valid {
+                IntegrityStatus::Valid
+            } else {
+                IntegrityStatus::Compromised
+            },
             files_checked,
             files_valid,
             hash_mismatches: Vec::new(),
@@ -1892,7 +2066,7 @@ Context:
     pub async fn generate_compliance_report(
         &self,
         compliance_standard: String,
-        date_range: Option<(SystemTime, SystemTime)>
+        date_range: Option<(SystemTime, SystemTime)>,
     ) -> Result<ComplianceReport> {
         let stats = self.get_audit_statistics(date_range).await?;
 
@@ -1921,7 +2095,9 @@ Context:
             standard: standard_struct,
             compliance_score,
             findings: Vec::new(), // Could populate with actual findings
-            recommendations: self.generate_compliance_recommendations(&compliance_standard, compliance_score).await?,
+            recommendations: self
+                .generate_compliance_recommendations(&compliance_standard, compliance_score)
+                .await?,
             generated_at: chrono::Utc::now(),
             period_start,
             period_end,
@@ -1933,25 +2109,38 @@ Context:
         let export_id = Uuid::new_v4().to_string();
 
         // Extract export parameters from request
-        let format = export_request.get("format")
+        let format = export_request
+            .get("format")
             .and_then(|f| f.as_str())
             .unwrap_or("json");
 
         let query = AuditQuery {
-            start_time: export_request.get("start_time")
+            start_time: export_request
+                .get("start_time")
                 .and_then(|t| t.as_str())
                 .and_then(|t| chrono::DateTime::parse_from_rfc3339(t).ok())
-                .map(|dt| SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(dt.timestamp() as u64)),
-            end_time: export_request.get("end_time")
+                .map(|dt| {
+                    SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(dt.timestamp() as u64)
+                }),
+            end_time: export_request
+                .get("end_time")
                 .and_then(|t| t.as_str())
                 .and_then(|t| chrono::DateTime::parse_from_rfc3339(t).ok())
-                .map(|dt| SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(dt.timestamp() as u64)),
-            limit: export_request.get("limit").and_then(|l| l.as_u64()).map(|l| l as usize),
+                .map(|dt| {
+                    SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(dt.timestamp() as u64)
+                }),
+            limit: export_request
+                .get("limit")
+                .and_then(|l| l.as_u64())
+                .map(|l| l as usize),
             offset: Some(0),
             ..Default::default()
         };
 
-        let output_path = self.config.storage_path.join(format!("export_{}.{}", export_id, format));
+        let output_path = self
+            .config
+            .storage_path
+            .join(format!("export_{}.{}", export_id, format));
 
         // Use existing export_events method
         let export_format = match format {
@@ -1961,7 +2150,8 @@ Context:
             _ => ExportFormat::Json,
         };
 
-        self.export_events(query, &output_path, export_format).await?;
+        self.export_events(query, &output_path, export_format)
+            .await?;
 
         info!("Audit data exported with ID: {}", export_id);
         Ok(export_id)
@@ -1993,7 +2183,11 @@ Context:
     }
 
     /// Generate compliance recommendations
-    async fn generate_compliance_recommendations(&self, standard: &str, score: f64) -> Result<Vec<String>> {
+    async fn generate_compliance_recommendations(
+        &self,
+        standard: &str,
+        score: f64,
+    ) -> Result<Vec<String>> {
         let mut recommendations = Vec::new();
 
         if score < 90.0 {
@@ -2013,10 +2207,12 @@ Context:
             }
             "GDPR" => {
                 recommendations.push("Document data processing activities".to_string());
-                recommendations.push("Implement data subject access request procedures".to_string());
+                recommendations
+                    .push("Implement data subject access request procedures".to_string());
             }
             "HIPAA" => {
-                recommendations.push("Encrypt all healthcare data at rest and in transit".to_string());
+                recommendations
+                    .push("Encrypt all healthcare data at rest and in transit".to_string());
                 recommendations.push("Implement minimum necessary access policies".to_string());
             }
             "PCI_DSS" => {
@@ -2112,88 +2308,92 @@ pub struct TimeWindow {
 #[macro_export]
 macro_rules! audit_info {
     ($logger:expr, $actor:expr, $resource:expr, $action:expr, $description:expr) => {
-        $logger.log_event(AuditEvent {
-            id: String::new(),
-            timestamp: SystemTime::now(),
-            event_type: EventType::UserAction,
-            severity: Severity::Info,
-            actor: $actor,
-            resource: $resource,
-            action: $action.to_string(),
-            details: EventDetails {
-                description: $description.to_string(),
-                parameters: HashMap::new(),
-                request_id: None,
-                correlation_id: None,
-                trace_id: None,
-                parent_event_id: None,
-            },
-            context: EventContext {
-                environment: "".to_string(),
-                application: "".to_string(),
-                version: "".to_string(),
-                hostname: "".to_string(),
-                process_id: 0,
-                thread_id: None,
-                request_path: None,
-                request_method: None,
-                client_info: None,
-            },
-            outcome: EventOutcome {
-                success: true,
-                status_code: None,
-                error_code: None,
-                error_message: None,
-                duration_ms: None,
-                bytes_processed: None,
-                records_affected: None,
-            },
-            metadata: HashMap::new(),
-        }).await
+        $logger
+            .log_event(AuditEvent {
+                id: String::new(),
+                timestamp: SystemTime::now(),
+                event_type: EventType::UserAction,
+                severity: Severity::Info,
+                actor: $actor,
+                resource: $resource,
+                action: $action.to_string(),
+                details: EventDetails {
+                    description: $description.to_string(),
+                    parameters: HashMap::new(),
+                    request_id: None,
+                    correlation_id: None,
+                    trace_id: None,
+                    parent_event_id: None,
+                },
+                context: EventContext {
+                    environment: "".to_string(),
+                    application: "".to_string(),
+                    version: "".to_string(),
+                    hostname: "".to_string(),
+                    process_id: 0,
+                    thread_id: None,
+                    request_path: None,
+                    request_method: None,
+                    client_info: None,
+                },
+                outcome: EventOutcome {
+                    success: true,
+                    status_code: None,
+                    error_code: None,
+                    error_message: None,
+                    duration_ms: None,
+                    bytes_processed: None,
+                    records_affected: None,
+                },
+                metadata: HashMap::new(),
+            })
+            .await
     };
 }
 
 #[macro_export]
 macro_rules! audit_error {
     ($logger:expr, $actor:expr, $resource:expr, $action:expr, $error:expr) => {
-        $logger.log_event(AuditEvent {
-            id: String::new(),
-            timestamp: SystemTime::now(),
-            event_type: EventType::ErrorEvent,
-            severity: Severity::High,
-            actor: $actor,
-            resource: $resource,
-            action: $action.to_string(),
-            details: EventDetails {
-                description: format!("Error: {}", $error),
-                parameters: HashMap::new(),
-                request_id: None,
-                correlation_id: None,
-                trace_id: None,
-                parent_event_id: None,
-            },
-            context: EventContext {
-                environment: "".to_string(),
-                application: "".to_string(),
-                version: "".to_string(),
-                hostname: "".to_string(),
-                process_id: 0,
-                thread_id: None,
-                request_path: None,
-                request_method: None,
-                client_info: None,
-            },
-            outcome: EventOutcome {
-                success: false,
-                status_code: None,
-                error_code: None,
-                error_message: Some($error.to_string()),
-                duration_ms: None,
-                bytes_processed: None,
-                records_affected: None,
-            },
-            metadata: HashMap::new(),
-        }).await
+        $logger
+            .log_event(AuditEvent {
+                id: String::new(),
+                timestamp: SystemTime::now(),
+                event_type: EventType::ErrorEvent,
+                severity: Severity::High,
+                actor: $actor,
+                resource: $resource,
+                action: $action.to_string(),
+                details: EventDetails {
+                    description: format!("Error: {}", $error),
+                    parameters: HashMap::new(),
+                    request_id: None,
+                    correlation_id: None,
+                    trace_id: None,
+                    parent_event_id: None,
+                },
+                context: EventContext {
+                    environment: "".to_string(),
+                    application: "".to_string(),
+                    version: "".to_string(),
+                    hostname: "".to_string(),
+                    process_id: 0,
+                    thread_id: None,
+                    request_path: None,
+                    request_method: None,
+                    client_info: None,
+                },
+                outcome: EventOutcome {
+                    success: false,
+                    status_code: None,
+                    error_code: None,
+                    error_message: Some($error.to_string()),
+                    duration_ms: None,
+                    bytes_processed: None,
+                    records_affected: None,
+                },
+                metadata: HashMap::new(),
+            })
+            .await
     };
 }
 
@@ -2210,7 +2410,9 @@ mod tests {
             ..Default::default()
         };
 
-        let logger = AuditLogger::new(config).await.expect("Failed to create AuditLogger for test");
+        let logger = AuditLogger::new(config)
+            .await
+            .expect("Failed to create AuditLogger for test");
         assert!(logger.is_running.load(std::sync::atomic::Ordering::SeqCst));
     }
 
@@ -2223,7 +2425,9 @@ mod tests {
             ..Default::default()
         };
 
-        let logger = AuditLogger::new(config).await.expect("Failed to create AuditLogger for test");
+        let logger = AuditLogger::new(config)
+            .await
+            .expect("Failed to create AuditLogger for test");
 
         let event = AuditEvent {
             id: "test-event".to_string(),
@@ -2278,7 +2482,10 @@ mod tests {
             metadata: HashMap::new(),
         };
 
-        logger.log_event(event).await.expect("Failed to log event in test");
+        logger
+            .log_event(event)
+            .await
+            .expect("Failed to log event in test");
 
         // Wait a bit for async processing
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
@@ -2295,17 +2502,28 @@ mod tests {
             sort_by: None,
             sort_order: None,
             search_text: None,
+            date_range: None,
+            actor_filter: None,
+            resource_filter: None,
+            severity_filter: None,
+            outcome_filter: None,
+            text_search: None,
         };
 
-        let results = logger.query_events(query).await.expect("Failed to query events in test");
+        let results = logger
+            .query_events(query)
+            .await
+            .expect("Failed to query events in test");
         assert!(!results.is_empty());
     }
 
     #[tokio::test]
     async fn test_compression_gzip() {
         let test_data = b"This is test audit data for compression testing";
-        let compressed = AuditLogger::compress_data(test_data, &CompressionMethod::Gzip, 6).expect("Failed to compress data with Gzip");
-        let decompressed = AuditLogger::decompress_data(&compressed, &CompressionMethod::Gzip).expect("Failed to decompress data with Gzip");
+        let compressed = AuditLogger::compress_data(test_data, &CompressionMethod::Gzip, 6)
+            .expect("Failed to compress data with Gzip");
+        let decompressed = AuditLogger::decompress_data(&compressed, &CompressionMethod::Gzip)
+            .expect("Failed to decompress data with Gzip");
 
         assert_ne!(compressed, test_data);
         assert_eq!(decompressed, test_data);
@@ -2314,9 +2532,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_compression_zstd() {
-        let test_data = b"This is test audit data for zstd compression testing with more data to compress";
-        let compressed = AuditLogger::compress_data(test_data, &CompressionMethod::Zstd, 3).expect("Failed to compress data with Zstd");
-        let decompressed = AuditLogger::decompress_data(&compressed, &CompressionMethod::Zstd).expect("Failed to decompress data with Zstd");
+        let test_data =
+            b"This is test audit data for zstd compression testing with more data to compress";
+        let compressed = AuditLogger::compress_data(test_data, &CompressionMethod::Zstd, 3)
+            .expect("Failed to compress data with Zstd");
+        let decompressed = AuditLogger::decompress_data(&compressed, &CompressionMethod::Zstd)
+            .expect("Failed to decompress data with Zstd");
 
         assert_ne!(compressed, test_data);
         assert_eq!(decompressed, test_data);
@@ -2328,8 +2549,10 @@ mod tests {
         let test_data = b"Sensitive audit data that needs encryption";
         let key = [42u8; 32]; // Test key
 
-        let encrypted = AuditLogger::encrypt_data(test_data, &key).expect("Failed to encrypt data in test");
-        let decrypted = AuditLogger::decrypt_data(&encrypted, &key).expect("Failed to decrypt data in test");
+        let encrypted =
+            AuditLogger::encrypt_data(test_data, &key).expect("Failed to encrypt data in test");
+        let decrypted =
+            AuditLogger::decrypt_data(&encrypted, &key).expect("Failed to decrypt data in test");
 
         assert_ne!(encrypted, test_data);
         assert_eq!(decrypted, test_data);
@@ -2342,7 +2565,8 @@ mod tests {
         let key1 = [42u8; 32];
         let key2 = [24u8; 32];
 
-        let encrypted = AuditLogger::encrypt_data(test_data, &key1).expect("Failed to encrypt data with key1 in test");
+        let encrypted = AuditLogger::encrypt_data(test_data, &key1)
+            .expect("Failed to encrypt data with key1 in test");
         let result = AuditLogger::decrypt_data(&encrypted, &key2);
 
         assert!(result.is_err());
@@ -2350,12 +2574,28 @@ mod tests {
 
     #[tokio::test]
     async fn test_encryption_key_generation() {
-        let key1 = AuditLogger::generate_encryption_key().await.expect("Failed to generate encryption key1");
-        let key2 = AuditLogger::generate_encryption_key().await.expect("Failed to generate encryption key2");
+        let key1 = AuditLogger::generate_encryption_key()
+            .await
+            .expect("Failed to generate encryption key1");
+        let key2 = AuditLogger::generate_encryption_key()
+            .await
+            .expect("Failed to generate encryption key2");
 
         assert_ne!(key1, key2);
-        assert_eq!(general_purpose::STANDARD.decode(&key1).expect("Failed to decode key1").len(), 32);
-        assert_eq!(general_purpose::STANDARD.decode(&key2).expect("Failed to decode key2").len(), 32);
+        assert_eq!(
+            general_purpose::STANDARD
+                .decode(&key1)
+                .expect("Failed to decode key1")
+                .len(),
+            32
+        );
+        assert_eq!(
+            general_purpose::STANDARD
+                .decode(&key2)
+                .expect("Failed to decode key2")
+                .len(),
+            32
+        );
     }
 
     #[tokio::test]
@@ -2367,14 +2607,28 @@ mod tests {
         };
         config.alerting.rate_limit_per_hour = 2;
 
-        let logger = AuditLogger::new(config).await.expect("Failed to create AuditLogger for test");
+        let logger = AuditLogger::new(config)
+            .await
+            .expect("Failed to create AuditLogger for test");
 
         // First two alerts should be allowed
-        assert!(logger.should_send_alert(&EventType::SecurityEvent, &Severity::Critical).await);
-        assert!(logger.should_send_alert(&EventType::SecurityEvent, &Severity::Critical).await);
+        assert!(
+            logger
+                .should_send_alert(&EventType::SecurityEvent, &Severity::Critical)
+                .await
+        );
+        assert!(
+            logger
+                .should_send_alert(&EventType::SecurityEvent, &Severity::Critical)
+                .await
+        );
 
         // Third alert should be rate limited
-        assert!(!logger.should_send_alert(&EventType::SecurityEvent, &Severity::Critical).await);
+        assert!(
+            !logger
+                .should_send_alert(&EventType::SecurityEvent, &Severity::Critical)
+                .await
+        );
     }
 
     #[tokio::test]
@@ -2385,15 +2639,41 @@ mod tests {
             ..Default::default()
         };
 
-        let logger = AuditLogger::new(config).await.expect("Failed to create AuditLogger for test");
+        let logger = AuditLogger::new(config)
+            .await
+            .expect("Failed to create AuditLogger for test");
 
         // Create test events with different patterns
         let events = vec![
-            create_test_event("event1", EventType::UserAction, Severity::Info, true, Some(100)),
-            create_test_event("event2", EventType::UserAction, Severity::High, false, Some(200)),
-            create_test_event("event3", EventType::SecurityEvent, Severity::Critical, true, Some(150)),
+            create_test_event(
+                "event1",
+                EventType::UserAction,
+                Severity::Info,
+                true,
+                Some(100),
+            ),
+            create_test_event(
+                "event2",
+                EventType::UserAction,
+                Severity::High,
+                false,
+                Some(200),
+            ),
+            create_test_event(
+                "event3",
+                EventType::SecurityEvent,
+                Severity::Critical,
+                true,
+                Some(150),
+            ),
             create_test_event("event4", EventType::ErrorEvent, Severity::High, false, None),
-            create_test_event("event5", EventType::UserAction, Severity::Info, true, Some(300)),
+            create_test_event(
+                "event5",
+                EventType::UserAction,
+                Severity::Info,
+                true,
+                Some(300),
+            ),
         ];
 
         // Log all events
@@ -2405,7 +2685,10 @@ mod tests {
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
         // Get statistics
-        let stats = logger.get_audit_statistics(None).await.expect("Failed to get statistics");
+        let stats = logger
+            .get_audit_statistics(None)
+            .await
+            .expect("Failed to get statistics");
 
         // Verify calculations
         assert_eq!(stats.total_events, 5);
@@ -2435,7 +2718,9 @@ mod tests {
             ..Default::default()
         };
 
-        let logger = AuditLogger::new(config).await.expect("Failed to create AuditLogger for test");
+        let logger = AuditLogger::new(config)
+            .await
+            .expect("Failed to create AuditLogger for test");
 
         // Test invalid time range
         let invalid_query = AuditQuery {
@@ -2446,7 +2731,10 @@ mod tests {
 
         let result = logger.query_events(invalid_query).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Start time cannot be after end time"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Start time cannot be after end time"));
 
         // Test oversized limit
         let oversized_query = AuditQuery {
@@ -2476,7 +2764,9 @@ mod tests {
             ..Default::default()
         };
 
-        let logger = AuditLogger::new(config).await.expect("Failed to create AuditLogger for test");
+        let logger = AuditLogger::new(config)
+            .await
+            .expect("Failed to create AuditLogger for test");
 
         // Create a valid query
         let query = AuditQuery {
@@ -2497,14 +2787,28 @@ mod tests {
             ..Default::default()
         };
 
-        let mut logger = AuditLogger::new(config).await.expect("Failed to create AuditLogger for test");
+        let logger = AuditLogger::new(config)
+            .await
+            .expect("Failed to create AuditLogger for test");
 
         // Create events with patterns
         let now = SystemTime::now();
         let events = vec![
             create_test_event_with_time("event1", EventType::UserAction, Severity::Info, true, now),
-            create_test_event_with_time("event2", EventType::UserAction, Severity::Info, true, now + std::time::Duration::from_secs(60)),
-            create_test_event_with_time("event3", EventType::SecurityEvent, Severity::Critical, false, now + std::time::Duration::from_secs(120)),
+            create_test_event_with_time(
+                "event2",
+                EventType::UserAction,
+                Severity::Info,
+                true,
+                now + std::time::Duration::from_secs(60),
+            ),
+            create_test_event_with_time(
+                "event3",
+                EventType::SecurityEvent,
+                Severity::Critical,
+                false,
+                now + std::time::Duration::from_secs(120),
+            ),
         ];
 
         for event in events {
@@ -2522,7 +2826,10 @@ mod tests {
             confidence_threshold: 0.5,
         };
 
-        let report = logger.analyze_audit_patterns(analysis_config).await.expect("Failed to analyze patterns");
+        let report = logger
+            .analyze_audit_patterns(analysis_config)
+            .await
+            .expect("Failed to analyze patterns");
 
         assert_eq!(report.total_events_analyzed, 3);
         assert!(!report.recommendations.is_empty());
@@ -2537,21 +2844,35 @@ mod tests {
             ..Default::default()
         };
 
-        let mut logger = AuditLogger::new(config).await.expect("Failed to create AuditLogger for test");
+        let mut logger = AuditLogger::new(config)
+            .await
+            .expect("Failed to create AuditLogger for test");
 
         // Test development stage configuration
-        logger.configure_audit_stage(AuditStage::Development).await.expect("Failed to configure development stage");
+        logger
+            .configure_audit_stage(AuditStage::Development)
+            .await
+            .expect("Failed to configure development stage");
         assert_eq!(logger.config.retention_days, 7);
         assert!(!logger.config.encryption_enabled);
 
         // Test production stage configuration
-        logger.configure_audit_stage(AuditStage::Production).await.expect("Failed to configure production stage");
+        logger
+            .configure_audit_stage(AuditStage::Production)
+            .await
+            .expect("Failed to configure production stage");
         assert_eq!(logger.config.retention_days, 365);
         assert!(logger.config.encryption_enabled);
         assert!(logger.config.alert_on_critical);
     }
 
-    fn create_test_event(id: &str, event_type: EventType, severity: Severity, success: bool, duration_ms: Option<u64>) -> AuditEvent {
+    fn create_test_event(
+        id: &str,
+        event_type: EventType,
+        severity: Severity,
+        success: bool,
+        duration_ms: Option<u64>,
+    ) -> AuditEvent {
         AuditEvent {
             id: id.to_string(),
             timestamp: SystemTime::now(),
@@ -2597,7 +2918,11 @@ mod tests {
                 success,
                 status_code: Some(if success { 200 } else { 500 }),
                 error_code: None,
-                error_message: if success { None } else { Some("Test error".to_string()) },
+                error_message: if success {
+                    None
+                } else {
+                    Some("Test error".to_string())
+                },
                 duration_ms,
                 bytes_processed: None,
                 records_affected: None,
@@ -2606,7 +2931,13 @@ mod tests {
         }
     }
 
-    fn create_test_event_with_time(id: &str, event_type: EventType, severity: Severity, success: bool, timestamp: SystemTime) -> AuditEvent {
+    fn create_test_event_with_time(
+        id: &str,
+        event_type: EventType,
+        severity: Severity,
+        success: bool,
+        timestamp: SystemTime,
+    ) -> AuditEvent {
         let mut event = create_test_event(id, event_type, severity, success, Some(100));
         event.timestamp = timestamp;
         event
@@ -2625,7 +2956,9 @@ mod tests {
             ..Default::default()
         };
 
-        let logger = AuditLogger::new(config).await.expect("Failed to create AuditLogger for test");
+        let logger = AuditLogger::new(config)
+            .await
+            .expect("Failed to create AuditLogger for test");
 
         let event = AuditEvent {
             id: "test-compressed-event".to_string(),
@@ -2680,15 +3013,24 @@ mod tests {
             metadata: HashMap::new(),
         };
 
-        logger.log_event(event).await.expect("Failed to log event in test");
+        logger
+            .log_event(event)
+            .await
+            .expect("Failed to log event in test");
 
         // Wait for async processing
         tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
         // Check that file was created (compressed data should be present)
-        let mut entries = fs::read_dir(&temp_dir.path()).await.expect("Failed to read temp directory");
+        let mut entries = fs::read_dir(&temp_dir.path())
+            .await
+            .expect("Failed to read temp directory");
         let mut found_file = false;
-        while let Some(entry) = entries.next_entry().await.expect("Failed to read directory entry") {
+        while let Some(entry) = entries
+            .next_entry()
+            .await
+            .expect("Failed to read directory entry")
+        {
             if entry.path().extension().map_or(false, |ext| ext == "log") {
                 found_file = true;
                 break;

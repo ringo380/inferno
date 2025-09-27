@@ -2,47 +2,52 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>com.apple.security.app-sandbox</key>
-	<true/>
-	<key>com.apple.security.cs.allow-jit</key>
-	<true/>
-	<key>com.apple.security.cs.allow-unsigned-executable-memory</key>
-	<true/>
-	<key>com.apple.security.cs.disable-executable-page-protection</key>
-	<true/>
-	<key>com.apple.security.files.user-selected.read-write</key>
-	<true/>
-	<key>com.apple.security.files.downloads.read-write</key>
-	<true/>
-	<key>com.apple.security.network.client</key>
-	<true/>
-	<key>com.apple.security.network.server</key>
-	<true/>
-	<key>com.apple.security.personal-information.location</key>
-	<false/>
-	<key>com.apple.security.personal-information.addressbook</key>
-	<false/>
-	<key>com.apple.security.personal-information.calendars</key>
-	<false/>
-	<key>com.apple.security.device.audio-input</key>
-	<false/>
-	<key>com.apple.security.device.camera</key>
-	<false/>
-	<key>com.apple.security.automation.apple-events</key>
-	<true/>
-	<key>com.apple.security.temporary-exception.files.absolute-path.read-write</key>
-	<array>
-		<string>/tmp</string>
-		<string>/var/tmp</string>
-		<string>/private/tmp</string>
-		<string>/private/var/tmp</string>
-	</array>
-	<key>com.apple.security.temporary-exception.files.home-relative-path.read-write</key>
-	<array>
-		<string>.inferno/</string>
-		<string>Documents/</string>
-		<string>Downloads/</string>
-		<string>Desktop/</string>
-	</array>
+    <!-- Allow network access for downloading models -->
+    <key>com.apple.security.network.client</key>
+    <true/>
+
+    <!-- Allow file system access for model management -->
+    <key>com.apple.security.files.user-selected.read-write</key>
+    <true/>
+
+    <!-- Allow downloads folder access -->
+    <key>com.apple.security.files.downloads.read-write</key>
+    <true/>
+
+    <!-- Allow document folder access -->
+    <key>com.apple.security.files.user-selected.read-only</key>
+    <true/>
+
+    <!-- Hardware acceleration entitlements -->
+    <key>com.apple.security.cs.allow-jit</key>
+    <true/>
+
+    <!-- Metal for GPU acceleration -->
+    <key>com.apple.security.device.metal</key>
+    <true/>
+
+    <!-- Camera access if needed for multimodal AI -->
+    <key>com.apple.security.device.camera</key>
+    <false/>
+
+    <!-- Microphone access if needed for audio processing -->
+    <key>com.apple.security.device.microphone</key>
+    <false/>
+
+    <!-- Disable sandboxing for full system access -->
+    <key>com.apple.security.app-sandbox</key>
+    <false/>
+
+    <!-- Allow unsigned executable memory for ML frameworks -->
+    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+    <true/>
+
+    <!-- Allow dyld environment variables for ML frameworks -->
+    <key>com.apple.security.cs.allow-dyld-environment-variables</key>
+    <true/>
+
+    <!-- Debugging entitlement -->
+    <key>com.apple.security.get-task-allow</key>
+    <true/>
 </dict>
 </plist>

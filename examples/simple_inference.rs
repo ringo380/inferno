@@ -11,13 +11,13 @@ async fn main() -> anyhow::Result<()> {
 
     // Initialize backend configuration
     let config = BackendConfig::default();
-    let mut backend = Backend::new(BackendType::Gguf, &config)?;
+    let mut backend = Backend::new(BackendType::GGUF, &config)?;
 
-    // Create mock model info for demonstration
+    // Use real tinyllama model for testing
     let model_info = ModelInfo {
-        name: "example_model.gguf".to_string(),
-        path: PathBuf::from("models/example_model.gguf"),
-        size: 1024 * 1024,
+        name: "tinyllama.gguf".to_string(),
+        path: PathBuf::from("dashboard/test_models/tinyllama.gguf"),
+        size: 94 * 1024 * 1024, // 94MB
         modified: chrono::Utc::now(),
         backend_type: "gguf".to_string(),
         checksum: None,
@@ -40,9 +40,10 @@ async fn main() -> anyhow::Result<()> {
 
     // Set up inference parameters
     let params = InferenceParams {
-        max_tokens: 100,
-        temperature: 0.7,
-        top_p: 0.9,
+        max_tokens: Some(10), // Start with just 10 tokens for quick test
+        temperature: Some(0.7),
+        top_p: Some(0.9),
+        stop_sequences: None,
         stream: false,
     };
 

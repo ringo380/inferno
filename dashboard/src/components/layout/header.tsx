@@ -271,7 +271,7 @@ export function Header() {
                     <div className="px-3 py-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider border-b">
                       {searchResults.length} result{searchResults.length !== 1 ? 's' : ''}
                     </div>
-                    {searchResults.map((result, index) => {
+                    {searchResults.map((result: SearchResult, index: number) => {
                       const Icon = getResultIcon(result.type);
                       return (
                         <button

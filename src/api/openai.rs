@@ -1,5 +1,5 @@
 use crate::{
-    backends::{BackendHandle, InferenceParams, BackendType},
+    backends::{BackendHandle, BackendType, InferenceParams},
     cli::serve::ServerState,
 };
 use axum::{
@@ -237,7 +237,8 @@ pub async fn chat_completions(
                         "code": null
                     }
                 })),
-            ).into_response();
+            )
+                .into_response();
         }
     };
 
@@ -250,10 +251,14 @@ pub async fn chat_completions(
 
     if request.stream {
         // Handle streaming response
-        handle_streaming_chat(&request, backend, prompt, inference_params).await.into_response()
+        handle_streaming_chat(&request, backend, prompt, inference_params)
+            .await
+            .into_response()
     } else {
         // Handle non-streaming response
-        handle_non_streaming_chat(&request, backend, prompt, inference_params).await.into_response()
+        handle_non_streaming_chat(&request, backend, prompt, inference_params)
+            .await
+            .into_response()
     }
 }
 
@@ -281,7 +286,8 @@ pub async fn completions(
                         "code": null
                     }
                 })),
-            ).into_response();
+            )
+                .into_response();
         }
     };
 
@@ -294,10 +300,14 @@ pub async fn completions(
 
     if request.stream {
         // Handle streaming response
-        handle_streaming_completion(&request, backend, prompt, inference_params).await.into_response()
+        handle_streaming_completion(&request, backend, prompt, inference_params)
+            .await
+            .into_response()
     } else {
         // Handle non-streaming response
-        handle_non_streaming_completion(&request, backend, prompt, inference_params).await.into_response()
+        handle_non_streaming_completion(&request, backend, prompt, inference_params)
+            .await
+            .into_response()
     }
 }
 
@@ -325,7 +335,8 @@ pub async fn embeddings(
                         "code": null
                     }
                 })),
-            ).into_response();
+            )
+                .into_response();
         }
     };
 
@@ -354,7 +365,8 @@ pub async fn embeddings(
                             "code": null
                         }
                     })),
-                ).into_response();
+                )
+                    .into_response();
             }
         }
     }
@@ -372,9 +384,7 @@ pub async fn embeddings(
     Json(response).into_response()
 }
 
-pub async fn list_models(
-    State(state): State<Arc<ServerState>>,
-) -> impl IntoResponse {
+pub async fn list_models(State(state): State<Arc<ServerState>>) -> impl IntoResponse {
     match state.model_manager.list_models().await {
         Ok(models) => {
             let model_objects: Vec<ModelObject> = models
@@ -397,19 +407,18 @@ pub async fn list_models(
 
             Json(response).into_response()
         }
-        Err(e) => {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({
-                    "error": {
-                        "message": format!("Failed to list models: {}", e),
-                        "type": "internal_error",
-                        "param": null,
-                        "code": null
-                    }
-                })),
-            ).into_response()
-        }
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({
+                "error": {
+                    "message": format!("Failed to list models: {}", e),
+                    "type": "internal_error",
+                    "param": null,
+                    "code": null
+                }
+            })),
+        )
+            .into_response(),
     }
 }
 
@@ -422,7 +431,9 @@ async fn get_or_load_backend(
     // If distributed inference is available, we don't need a direct backend
     // This function should not be called when using distributed inference
     if state.distributed.is_some() {
-        return Err(anyhow::anyhow!("Cannot load direct backend when using distributed inference"));
+        return Err(anyhow::anyhow!(
+            "Cannot load direct backend when using distributed inference"
+        ));
     }
 
     // Check if we have a loaded backend and if it matches the requested model
@@ -437,7 +448,8 @@ async fn get_or_load_backend(
     // For now, if the model doesn't match, we load a new one
     // In a more sophisticated implementation, we'd cache multiple backends
     let model_info = state.model_manager.resolve_model(model_name).await?;
-    let backend_type = BackendType::from_model_path(&model_info.path);
+    let backend_type = BackendType::from_model_path(&model_info.path)
+        .ok_or_else(|| anyhow::anyhow!("No suitable backend found for model: {}", model_info.path.display()))?;
     let backend_handle = BackendHandle::new_shared(backend_type, &state.config.backend_config)?;
     backend_handle.load_model(&model_info).await?;
 
@@ -489,19 +501,18 @@ async fn handle_non_streaming_chat(
 
             Json(response).into_response()
         }
-        Err(e) => {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({
-                    "error": {
-                        "message": format!("Inference failed: {}", e),
-                        "type": "internal_error",
-                        "param": null,
-                        "code": null
-                    }
-                })),
-            ).into_response()
-        }
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({
+                "error": {
+                    "message": format!("Inference failed: {}", e),
+                    "type": "internal_error",
+                    "param": null,
+                    "code": null
+                }
+            })),
+        )
+            .into_response(),
     }
 }
 
@@ -634,19 +645,18 @@ async fn handle_non_streaming_completion(
 
             Json(response).into_response()
         }
-        Err(e) => {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({
-                    "error": {
-                        "message": format!("Inference failed: {}", e),
-                        "type": "internal_error",
-                        "param": null,
-                        "code": null
-                    }
-                })),
-            ).into_response()
-        }
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({
+                "error": {
+                    "message": format!("Inference failed: {}", e),
+                    "type": "internal_error",
+                    "param": null,
+                    "code": null
+                }
+            })),
+        )
+            .into_response(),
     }
 }
 

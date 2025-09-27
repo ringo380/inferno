@@ -1461,7 +1461,7 @@ impl Default for ExecutionConfig {
         Self {
             mode: ExecutionMode::Parallel,
             parallel_tasks: 4,
-            task_timeout: 3600, // 1 hour
+            task_timeout: 3600,     // 1 hour
             pipeline_timeout: 7200, // 2 hours
             resource_allocation: ResourceAllocation::default(),
         }
@@ -2461,7 +2461,8 @@ impl DataPipelineSystem {
     /// Execute a pipeline
     pub async fn execute_pipeline(&self, pipeline_id: &str) -> Result<String> {
         let pipelines = self.pipelines.read().await;
-        let pipeline = pipelines.get(pipeline_id)
+        let pipeline = pipelines
+            .get(pipeline_id)
             .ok_or_else(|| anyhow::anyhow!("Pipeline not found: {}", pipeline_id))?;
 
         let execution_id = self.executor.execute_pipeline(pipeline)?;
@@ -2469,14 +2470,18 @@ impl DataPipelineSystem {
         // Start monitoring
         self.monitor.start_monitoring(&execution_id)?;
 
-        info!("Started pipeline execution: {} ({})", pipeline_id, execution_id);
+        info!(
+            "Started pipeline execution: {} ({})",
+            pipeline_id, execution_id
+        );
         Ok(execution_id)
     }
 
     /// Get pipeline status
     pub async fn get_pipeline_status(&self, pipeline_id: &str) -> Result<DataPipeline> {
         let pipelines = self.pipelines.read().await;
-        pipelines.get(pipeline_id)
+        pipelines
+            .get(pipeline_id)
             .cloned()
             .ok_or_else(|| anyhow::anyhow!("Pipeline not found: {}", pipeline_id))
     }
@@ -2484,13 +2489,18 @@ impl DataPipelineSystem {
     /// Get a pipeline by ID
     pub async fn get_pipeline(&self, pipeline_id: &str) -> Result<DataPipeline> {
         let pipelines = self.pipelines.read().await;
-        pipelines.get(pipeline_id)
+        pipelines
+            .get(pipeline_id)
             .cloned()
             .ok_or_else(|| anyhow::anyhow!("Pipeline not found: {}", pipeline_id))
     }
 
     /// Start a pipeline
-    pub async fn start_pipeline(&self, pipeline_id: &str, _config: Option<serde_json::Value>) -> Result<String> {
+    pub async fn start_pipeline(
+        &self,
+        pipeline_id: &str,
+        _config: Option<serde_json::Value>,
+    ) -> Result<String> {
         let mut pipelines = self.pipelines.write().await;
         if let Some(pipeline) = pipelines.get_mut(pipeline_id) {
             pipeline.status = PipelineStatus::Running;
@@ -2542,7 +2552,10 @@ impl DataPipelineSystem {
     /// List all pipelines with IDs (for CLI)
     pub async fn list_pipelines_with_ids(&self) -> Result<Vec<(String, DataPipeline)>> {
         let pipelines = self.pipelines.read().await;
-        Ok(pipelines.iter().map(|(id, pipeline)| (id.clone(), pipeline.clone())).collect())
+        Ok(pipelines
+            .iter()
+            .map(|(id, pipeline)| (id.clone(), pipeline.clone()))
+            .collect())
     }
 
     /// Get execution status
@@ -2556,17 +2569,26 @@ impl DataPipelineSystem {
     }
 
     /// Cancel pipeline execution
-    pub async fn cancel_execution(&self, execution_id: &str, force: bool, reason: Option<&str>) -> Result<()> {
+    pub async fn cancel_execution(
+        &self,
+        execution_id: &str,
+        force: bool,
+        reason: Option<&str>,
+    ) -> Result<()> {
         self.executor.cancel_execution(execution_id)?;
         self.monitor.stop_monitoring(execution_id)?;
-        info!("Cancelled pipeline execution: {} (force: {}, reason: {:?})", execution_id, force, reason);
+        info!(
+            "Cancelled pipeline execution: {} (force: {}, reason: {:?})",
+            execution_id, force, reason
+        );
         Ok(())
     }
 
     /// Schedule pipeline
     pub async fn schedule_pipeline(&self, pipeline_id: &str) -> Result<()> {
         let pipelines = self.pipelines.read().await;
-        let pipeline = pipelines.get(pipeline_id)
+        let pipeline = pipelines
+            .get(pipeline_id)
             .ok_or_else(|| anyhow::anyhow!("Pipeline not found: {}", pipeline_id))?;
 
         self.scheduler.schedule_pipeline(pipeline)?;
@@ -2619,31 +2641,55 @@ impl DataPipelineSystem {
 
     /// Add validation rule to a pipeline
     pub async fn add_validation_rule(&self, pipeline_id: &str, rule: ValidationRule) -> Result<()> {
-        info!("Adding validation rule to pipeline {}: {}", pipeline_id, rule.name);
+        info!(
+            "Adding validation rule to pipeline {}: {}",
+            pipeline_id, rule.name
+        );
         Ok(())
     }
 
     /// Add expression field to ValidationRule for CLI compatibility
     pub fn add_validation_rule_expression(rule: &mut ValidationRule, expression: String) {
-        rule.config.as_object_mut().unwrap().insert("expression".to_string(), serde_json::Value::String(expression));
+        rule.config.as_object_mut().unwrap().insert(
+            "expression".to_string(),
+            serde_json::Value::String(expression),
+        );
     }
 
     /// Update validation rule
-    pub async fn update_validation_rule(&self, pipeline_id: &str, rule_name: &str, updates: HashMap<String, Value>) -> Result<()> {
-        info!("Updating validation rule {} in pipeline {}", rule_name, pipeline_id);
+    pub async fn update_validation_rule(
+        &self,
+        pipeline_id: &str,
+        rule_name: &str,
+        updates: HashMap<String, Value>,
+    ) -> Result<()> {
+        info!(
+            "Updating validation rule {} in pipeline {}",
+            rule_name, pipeline_id
+        );
         Ok(())
     }
 
     /// Remove validation rule
     pub async fn remove_validation_rule(&self, pipeline_id: &str, rule_name: &str) -> Result<()> {
-        info!("Removing validation rule {} from pipeline {}", rule_name, pipeline_id);
+        info!(
+            "Removing validation rule {} from pipeline {}",
+            rule_name, pipeline_id
+        );
         Ok(())
     }
 
     /// Validate pipeline execution
-    pub async fn validate_pipeline_execution(&self, pipeline_id: &str, params: Option<&str>) -> Result<ValidationResult> {
+    pub async fn validate_pipeline_execution(
+        &self,
+        pipeline_id: &str,
+        params: Option<&str>,
+    ) -> Result<ValidationResult> {
         // Mock validation - always returns success for CLI
-        info!("Validating pipeline execution: {} (params: {:?})", pipeline_id, params);
+        info!(
+            "Validating pipeline execution: {} (params: {:?})",
+            pipeline_id, params
+        );
         Ok(ValidationResult {
             is_valid: true,
             errors: Vec::new(),
@@ -2653,13 +2699,20 @@ impl DataPipelineSystem {
     }
 
     /// Force start pipeline
-    pub async fn force_start_pipeline(&self, pipeline_id: &str, config: Option<Value>) -> Result<String> {
+    pub async fn force_start_pipeline(
+        &self,
+        pipeline_id: &str,
+        config: Option<Value>,
+    ) -> Result<String> {
         // For CLI, just use the regular start method
         self.start_pipeline(pipeline_id, config).await
     }
 
     /// Wait for completion
-    pub async fn wait_for_completion(&self, execution_id: &str) -> Result<ExecutionCompletionResult> {
+    pub async fn wait_for_completion(
+        &self,
+        execution_id: &str,
+    ) -> Result<ExecutionCompletionResult> {
         // Mock implementation - return completed status
         info!("Waiting for completion: {}", execution_id);
         Ok(ExecutionCompletionResult {
@@ -2682,8 +2735,16 @@ impl DataPipelineSystem {
     }
 
     /// Stop pipeline
-    pub async fn stop_pipeline(&self, pipeline_id: &str, force: bool, grace_period: Option<u64>) -> Result<()> {
-        info!("Stopping pipeline: {} (force: {}, grace_period: {:?})", pipeline_id, force, grace_period);
+    pub async fn stop_pipeline(
+        &self,
+        pipeline_id: &str,
+        force: bool,
+        grace_period: Option<u64>,
+    ) -> Result<()> {
+        info!(
+            "Stopping pipeline: {} (force: {}, grace_period: {:?})",
+            pipeline_id, force, grace_period
+        );
         Ok(())
     }
 
@@ -2708,15 +2769,29 @@ impl DataPipelineSystem {
     }
 
     /// Resume pipeline execution
-    pub async fn resume_execution(&self, execution_id: &str, from_checkpoint: Option<&str>) -> Result<()> {
-        info!("Resuming execution: {} (from checkpoint: {:?})", execution_id, from_checkpoint);
+    pub async fn resume_execution(
+        &self,
+        execution_id: &str,
+        from_checkpoint: Option<&str>,
+    ) -> Result<()> {
+        info!(
+            "Resuming execution: {} (from checkpoint: {:?})",
+            execution_id, from_checkpoint
+        );
         // Mock implementation - in real system would resume from checkpoint
         Ok(())
     }
 
     /// Resume pipeline
-    pub async fn resume_pipeline(&self, pipeline_id: &str, from_checkpoint: Option<&str>) -> Result<()> {
-        info!("Resuming pipeline: {} (from checkpoint: {:?})", pipeline_id, from_checkpoint);
+    pub async fn resume_pipeline(
+        &self,
+        pipeline_id: &str,
+        from_checkpoint: Option<&str>,
+    ) -> Result<()> {
+        info!(
+            "Resuming pipeline: {} (from checkpoint: {:?})",
+            pipeline_id, from_checkpoint
+        );
         let mut pipelines = self.pipelines.write().await;
         if let Some(pipeline) = pipelines.get_mut(pipeline_id) {
             pipeline.status = PipelineStatus::Active;
@@ -2728,8 +2803,16 @@ impl DataPipelineSystem {
     // ===== MISSING METHODS - CRUD OPERATIONS =====
 
     /// Delete a pipeline
-    pub async fn delete_pipeline(&self, pipeline_id: &str, with_history: bool, with_data: bool) -> Result<()> {
-        info!("Deleting pipeline: {} (history: {}, data: {})", pipeline_id, with_history, with_data);
+    pub async fn delete_pipeline(
+        &self,
+        pipeline_id: &str,
+        with_history: bool,
+        with_data: bool,
+    ) -> Result<()> {
+        info!(
+            "Deleting pipeline: {} (history: {}, data: {})",
+            pipeline_id, with_history, with_data
+        );
         let mut pipelines = self.pipelines.write().await;
         pipelines.remove(pipeline_id);
 
@@ -2742,8 +2825,16 @@ impl DataPipelineSystem {
     }
 
     /// Update a pipeline
-    pub async fn update_pipeline(&self, pipeline_id: &str, updates: HashMap<String, Value>) -> Result<()> {
-        info!("Updating pipeline: {} with {} updates", pipeline_id, updates.len());
+    pub async fn update_pipeline(
+        &self,
+        pipeline_id: &str,
+        updates: HashMap<String, Value>,
+    ) -> Result<()> {
+        info!(
+            "Updating pipeline: {} with {} updates",
+            pipeline_id,
+            updates.len()
+        );
         let mut pipelines = self.pipelines.write().await;
         if let Some(pipeline) = pipelines.get_mut(pipeline_id) {
             pipeline.updated_at = Utc::now();
@@ -2756,18 +2847,31 @@ impl DataPipelineSystem {
                 pipeline.description = description.to_string();
             }
             if let Some(enabled) = updates.get("enabled").and_then(|v| v.as_bool()) {
-                pipeline.status = if enabled { PipelineStatus::Active } else { PipelineStatus::Disabled };
+                pipeline.status = if enabled {
+                    PipelineStatus::Active
+                } else {
+                    PipelineStatus::Disabled
+                };
             }
         }
         Ok(())
     }
 
     /// Validate a pipeline
-    pub async fn validate_pipeline(&self, pipeline_id: &str, validation_level: Option<&str>, warnings: bool) -> Result<bool> {
-        info!("Validating pipeline: {} (level: {:?}, warnings: {})", pipeline_id, validation_level, warnings);
+    pub async fn validate_pipeline(
+        &self,
+        pipeline_id: &str,
+        validation_level: Option<&str>,
+        warnings: bool,
+    ) -> Result<bool> {
+        info!(
+            "Validating pipeline: {} (level: {:?}, warnings: {})",
+            pipeline_id, validation_level, warnings
+        );
         // Mock validation - always returns true for CLI
         let pipelines = self.pipelines.read().await;
-        let _pipeline = pipelines.get(pipeline_id)
+        let _pipeline = pipelines
+            .get(pipeline_id)
             .ok_or_else(|| anyhow::anyhow!("Pipeline not found: {}", pipeline_id))?;
 
         // In real implementation, would validate pipeline configuration, dependencies, etc.
@@ -2777,17 +2881,41 @@ impl DataPipelineSystem {
     // ===== MISSING METHODS - IMPORT/EXPORT/CLONE =====
 
     /// Import pipelines from file
-    pub async fn import_pipelines(&self, file_path: &str, format: &str, overwrite: bool, validate: bool, dry_run: bool) -> Result<Vec<String>> {
-        info!("Importing pipelines from: {} (format: {}, overwrite: {}, validate: {}, dry_run: {})", file_path, format, overwrite, validate, dry_run);
+    pub async fn import_pipelines(
+        &self,
+        file_path: &str,
+        format: &str,
+        overwrite: bool,
+        validate: bool,
+        dry_run: bool,
+    ) -> Result<Vec<String>> {
+        info!(
+            "Importing pipelines from: {} (format: {}, overwrite: {}, validate: {}, dry_run: {})",
+            file_path, format, overwrite, validate, dry_run
+        );
         // Mock implementation - would read file and import pipelines
-        Ok(vec!["imported-pipeline-1".to_string(), "imported-pipeline-2".to_string()])
+        Ok(vec![
+            "imported-pipeline-1".to_string(),
+            "imported-pipeline-2".to_string(),
+        ])
     }
 
     /// Export pipeline to file
-    pub async fn export_pipeline(&self, pipeline_id: &str, file_path: &str, format: &str, include_history: bool, include_metrics: bool) -> Result<()> {
-        info!("Exporting pipeline: {} to {} (format: {}, history: {}, metrics: {})", pipeline_id, file_path, format, include_history, include_metrics);
+    pub async fn export_pipeline(
+        &self,
+        pipeline_id: &str,
+        file_path: &str,
+        format: &str,
+        include_history: bool,
+        include_metrics: bool,
+    ) -> Result<()> {
+        info!(
+            "Exporting pipeline: {} to {} (format: {}, history: {}, metrics: {})",
+            pipeline_id, file_path, format, include_history, include_metrics
+        );
         let pipelines = self.pipelines.read().await;
-        let _pipeline = pipelines.get(pipeline_id)
+        let _pipeline = pipelines
+            .get(pipeline_id)
             .ok_or_else(|| anyhow::anyhow!("Pipeline not found: {}", pipeline_id))?;
 
         // Mock implementation - would serialize pipeline to file
@@ -2795,12 +2923,24 @@ impl DataPipelineSystem {
     }
 
     /// Clone a pipeline
-    pub async fn clone_pipeline(&self, source_pipeline_id: &str, new_name: &str, config_only: bool, description: Option<&str>) -> Result<String> {
-        info!("Cloning pipeline: {} as '{}' (config_only: {}, description: {:?})", source_pipeline_id, new_name, config_only, description);
+    pub async fn clone_pipeline(
+        &self,
+        source_pipeline_id: &str,
+        new_name: &str,
+        config_only: bool,
+        description: Option<&str>,
+    ) -> Result<String> {
+        info!(
+            "Cloning pipeline: {} as '{}' (config_only: {}, description: {:?})",
+            source_pipeline_id, new_name, config_only, description
+        );
         let source_pipeline = {
             let pipelines = self.pipelines.read().await;
-            pipelines.get(source_pipeline_id)
-                .ok_or_else(|| anyhow::anyhow!("Source pipeline not found: {}", source_pipeline_id))?
+            pipelines
+                .get(source_pipeline_id)
+                .ok_or_else(|| {
+                    anyhow::anyhow!("Source pipeline not found: {}", source_pipeline_id)
+                })?
                 .clone()
         };
 
@@ -2835,7 +2975,8 @@ impl DataPipelineSystem {
     /// Get a specific execution
     pub async fn get_execution(&self, execution_id: &str) -> Result<PipelineExecution> {
         let executions = self.executions.read().await;
-        executions.get(execution_id)
+        executions
+            .get(execution_id)
             .cloned()
             .ok_or_else(|| anyhow::anyhow!("Execution not found: {}", execution_id))
     }
@@ -2847,13 +2988,22 @@ impl DataPipelineSystem {
     }
 
     /// Retry execution
-    pub async fn retry_execution(&self, execution_id: &str, from_stage: Option<&str>, retry_params: Option<serde_json::Value>) -> Result<String> {
-        info!("Retrying execution: {} (from_stage: {:?}, params: {:?})", execution_id, from_stage, retry_params);
+    pub async fn retry_execution(
+        &self,
+        execution_id: &str,
+        from_stage: Option<&str>,
+        retry_params: Option<serde_json::Value>,
+    ) -> Result<String> {
+        info!(
+            "Retrying execution: {} (from_stage: {:?}, params: {:?})",
+            execution_id, from_stage, retry_params
+        );
         let new_execution_id = Uuid::new_v4().to_string();
 
         // Get original execution to retry
         let executions = self.executions.read().await;
-        let original_execution = executions.get(execution_id)
+        let original_execution = executions
+            .get(execution_id)
             .ok_or_else(|| anyhow::anyhow!("Original execution not found: {}", execution_id))?;
 
         let pipeline_id = original_execution.pipeline_id.clone();
@@ -2864,8 +3014,16 @@ impl DataPipelineSystem {
     }
 
     /// Follow execution logs (streaming)
-    pub async fn follow_execution_logs(&self, execution_id: &str, stage: Option<&str>, level: Option<&str>) -> Result<()> {
-        info!("Following logs for execution: {} (stage: {:?}, level: {:?})", execution_id, stage, level);
+    pub async fn follow_execution_logs(
+        &self,
+        execution_id: &str,
+        stage: Option<&str>,
+        level: Option<&str>,
+    ) -> Result<()> {
+        info!(
+            "Following logs for execution: {} (stage: {:?}, level: {:?})",
+            execution_id, stage, level
+        );
         // Mock implementation - would stream logs in real system
         let logs = self.get_execution_logs(execution_id).await?;
         for log in logs {
@@ -2877,8 +3035,19 @@ impl DataPipelineSystem {
     // ===== MISSING METHODS - PIPELINE STAGE MANAGEMENT =====
 
     /// Add pipeline stage
-    pub async fn add_pipeline_stage(&self, pipeline_id: &str, name: &str, stage_type: &str, config: Option<HashMap<String, Value>>, position: Option<usize>, depends_on: Vec<String>) -> Result<()> {
-        info!("Adding stage '{}' of type '{}' to pipeline: {}", name, stage_type, pipeline_id);
+    pub async fn add_pipeline_stage(
+        &self,
+        pipeline_id: &str,
+        name: &str,
+        stage_type: &str,
+        config: Option<HashMap<String, Value>>,
+        position: Option<usize>,
+        depends_on: Vec<String>,
+    ) -> Result<()> {
+        info!(
+            "Adding stage '{}' of type '{}' to pipeline: {}",
+            name, stage_type, pipeline_id
+        );
         let mut pipelines = self.pipelines.write().await;
         if let Some(pipeline) = pipelines.get_mut(pipeline_id) {
             let task = PipelineTask {
@@ -2893,7 +3062,9 @@ impl DataPipelineSystem {
                     "evaluation" => TaskType::ModelEvaluation,
                     _ => TaskType::Custom,
                 },
-                config: config.map(|c| serde_json::to_value(c).unwrap()).unwrap_or(serde_json::json!({})),
+                config: config
+                    .map(|c| serde_json::to_value(c).unwrap())
+                    .unwrap_or(serde_json::json!({})),
                 dependencies: depends_on,
                 retry: TaskRetryConfig {
                     max_attempts: 3,
@@ -2920,7 +3091,10 @@ impl DataPipelineSystem {
 
     /// Remove pipeline stage
     pub async fn remove_pipeline_stage(&self, pipeline_id: &str, stage_name: &str) -> Result<()> {
-        info!("Removing stage '{}' from pipeline: {}", stage_name, pipeline_id);
+        info!(
+            "Removing stage '{}' from pipeline: {}",
+            stage_name, pipeline_id
+        );
         let mut pipelines = self.pipelines.write().await;
         if let Some(pipeline) = pipelines.get_mut(pipeline_id) {
             pipeline.tasks.retain(|task| task.name != stage_name);
@@ -2930,8 +3104,18 @@ impl DataPipelineSystem {
     }
 
     /// Update pipeline stage
-    pub async fn update_pipeline_stage(&self, pipeline_id: &str, stage_name: &str, updates: HashMap<String, Value>) -> Result<()> {
-        info!("Updating stage '{}' in pipeline: {} with {} updates", stage_name, pipeline_id, updates.len());
+    pub async fn update_pipeline_stage(
+        &self,
+        pipeline_id: &str,
+        stage_name: &str,
+        updates: HashMap<String, Value>,
+    ) -> Result<()> {
+        info!(
+            "Updating stage '{}' in pipeline: {} with {} updates",
+            stage_name,
+            pipeline_id,
+            updates.len()
+        );
         let mut pipelines = self.pipelines.write().await;
         if let Some(pipeline) = pipelines.get_mut(pipeline_id) {
             if let Some(task) = pipeline.tasks.iter_mut().find(|t| t.name == stage_name) {
@@ -2946,8 +3130,17 @@ impl DataPipelineSystem {
     }
 
     /// Test pipeline stage
-    pub async fn test_pipeline_stage(&self, pipeline_id: &str, stage_name: &str, test_data: Option<&std::path::Path>, dry_run: bool) -> Result<StageTestResult> {
-        info!("Testing stage '{}' in pipeline: {} (test_data: {:?}, dry_run: {})", stage_name, pipeline_id, test_data, dry_run);
+    pub async fn test_pipeline_stage(
+        &self,
+        pipeline_id: &str,
+        stage_name: &str,
+        test_data: Option<&std::path::Path>,
+        dry_run: bool,
+    ) -> Result<StageTestResult> {
+        info!(
+            "Testing stage '{}' in pipeline: {} (test_data: {:?}, dry_run: {})",
+            stage_name, pipeline_id, test_data, dry_run
+        );
         // Mock implementation - always returns success for CLI
         Ok(StageTestResult {
             status: ExecutionStatus::Success,
@@ -2959,7 +3152,14 @@ impl DataPipelineSystem {
     // ===== MISSING METHODS - TEMPLATE MANAGEMENT =====
 
     /// Create template
-    pub async fn create_template(&self, pipeline_id: &str, name: &str, description: Option<&str>, category: Option<&str>, tags: Vec<String>) -> Result<String> {
+    pub async fn create_template(
+        &self,
+        pipeline_id: &str,
+        name: &str,
+        description: Option<&str>,
+        category: Option<&str>,
+        tags: Vec<String>,
+    ) -> Result<String> {
         let template_id = Uuid::new_v4().to_string();
         info!("Creating template '{}' from pipeline {} with ID: {} (description: {:?}, category: {:?}, tags: {:?})", name, pipeline_id, template_id, description, category, tags);
         // Mock implementation - would store template
@@ -2967,8 +3167,16 @@ impl DataPipelineSystem {
     }
 
     /// Update template
-    pub async fn update_template(&self, template_id: &str, updates: HashMap<String, Value>) -> Result<()> {
-        info!("Updating template: {} with {} updates", template_id, updates.len());
+    pub async fn update_template(
+        &self,
+        template_id: &str,
+        updates: HashMap<String, Value>,
+    ) -> Result<()> {
+        info!(
+            "Updating template: {} with {} updates",
+            template_id,
+            updates.len()
+        );
         Ok(())
     }
 
@@ -3006,8 +3214,17 @@ impl DataPipelineSystem {
     }
 
     /// Apply template
-    pub async fn apply_template(&self, template_id: &str, pipeline_name: &str, template_params: Option<serde_json::Value>, config_overrides: Option<serde_json::Value>) -> Result<String> {
-        info!("Applying template {} to create pipeline '{}' (params: {:?}, overrides: {:?})", template_id, pipeline_name, template_params, config_overrides);
+    pub async fn apply_template(
+        &self,
+        template_id: &str,
+        pipeline_name: &str,
+        template_params: Option<serde_json::Value>,
+        config_overrides: Option<serde_json::Value>,
+    ) -> Result<String> {
+        info!(
+            "Applying template {} to create pipeline '{}' (params: {:?}, overrides: {:?})",
+            template_id, pipeline_name, template_params, config_overrides
+        );
         let template_config = self.get_template_config(template_id).await?;
         let mut config = template_config;
         config.name = pipeline_name.to_string();
@@ -3019,14 +3236,30 @@ impl DataPipelineSystem {
     /// Create alert rule
     pub async fn create_alert_rule(&self, alert_config: HashMap<String, Value>) -> Result<String> {
         let alert_id = Uuid::new_v4().to_string();
-        let name = alert_config.get("name").and_then(|v| v.as_str()).unwrap_or("unknown");
-        info!("Creating alert rule '{}' with ID: {} and {} config items", name, alert_id, alert_config.len());
+        let name = alert_config
+            .get("name")
+            .and_then(|v| v.as_str())
+            .unwrap_or("unknown");
+        info!(
+            "Creating alert rule '{}' with ID: {} and {} config items",
+            name,
+            alert_id,
+            alert_config.len()
+        );
         Ok(alert_id)
     }
 
     /// Update alert rule
-    pub async fn update_alert_rule(&self, alert_id: &str, updates: HashMap<String, Value>) -> Result<()> {
-        info!("Updating alert rule: {} with {} updates", alert_id, updates.len());
+    pub async fn update_alert_rule(
+        &self,
+        alert_id: &str,
+        updates: HashMap<String, Value>,
+    ) -> Result<()> {
+        info!(
+            "Updating alert rule: {} with {} updates",
+            alert_id,
+            updates.len()
+        );
         Ok(())
     }
 
@@ -3037,24 +3270,53 @@ impl DataPipelineSystem {
     }
 
     /// List alerts
-    pub async fn list_alerts(&self, severity: Option<&str>, status: Option<&str>, limit: Option<usize>) -> Result<Vec<AlertInfo>> {
-        info!("Listing alerts (severity: {:?}, status: {:?}, limit: {:?})", severity, status, limit);
+    pub async fn list_alerts(
+        &self,
+        severity: Option<&str>,
+        status: Option<&str>,
+        limit: Option<usize>,
+    ) -> Result<Vec<AlertInfo>> {
+        info!(
+            "Listing alerts (severity: {:?}, status: {:?}, limit: {:?})",
+            severity, status, limit
+        );
         Ok(vec![])
     }
 
     // ===== MISSING METHODS - MONITORING AND QUALITY =====
 
     /// Monitor pipeline status
-    pub async fn monitor_pipeline_status(&self, pipeline_id: &str, refresh_interval: u64, metrics: bool, alerts: bool) -> Result<()> {
-        info!("Monitoring pipeline status: {} (refresh: {}s, metrics: {}, alerts: {})", pipeline_id, refresh_interval, metrics, alerts);
+    pub async fn monitor_pipeline_status(
+        &self,
+        pipeline_id: &str,
+        refresh_interval: u64,
+        metrics: bool,
+        alerts: bool,
+    ) -> Result<()> {
+        info!(
+            "Monitoring pipeline status: {} (refresh: {}s, metrics: {}, alerts: {})",
+            pipeline_id, refresh_interval, metrics, alerts
+        );
         let pipeline = self.get_pipeline(pipeline_id).await?;
         println!("Pipeline '{}' status: {:?}", pipeline.name, pipeline.status);
         Ok(())
     }
 
     /// Run quality checks
-    pub async fn run_quality_checks(&self, pipeline_id: &str, check_types: Vec<String>, severity: Option<&str>, rules: Vec<String>) -> Result<DataQualityReport> {
-        info!("Running quality checks for pipeline: {} (types: {:?}, severity: {:?}, rules: {})", pipeline_id, check_types, severity, rules.len());
+    pub async fn run_quality_checks(
+        &self,
+        pipeline_id: &str,
+        check_types: Vec<String>,
+        severity: Option<&str>,
+        rules: Vec<String>,
+    ) -> Result<DataQualityReport> {
+        info!(
+            "Running quality checks for pipeline: {} (types: {:?}, severity: {:?}, rules: {})",
+            pipeline_id,
+            check_types,
+            severity,
+            rules.len()
+        );
         // Mock implementation - always returns success
         Ok(DataQualityReport {
             pipeline_id: pipeline_id.to_string(),
@@ -3064,8 +3326,16 @@ impl DataPipelineSystem {
     }
 
     /// Generate quality report
-    pub async fn generate_quality_report(&self, pipeline_id: &str, time_range: Option<&str>, report_type: Option<&str>) -> Result<DataQualityReport> {
-        info!("Generating quality report for pipeline: {} (time_range: {:?}, type: {:?})", pipeline_id, time_range, report_type);
+    pub async fn generate_quality_report(
+        &self,
+        pipeline_id: &str,
+        time_range: Option<&str>,
+        report_type: Option<&str>,
+    ) -> Result<DataQualityReport> {
+        info!(
+            "Generating quality report for pipeline: {} (time_range: {:?}, type: {:?})",
+            pipeline_id, time_range, report_type
+        );
         Ok(DataQualityReport {
             pipeline_id: pipeline_id.to_string(),
             overall_score: 0.95,
@@ -3074,20 +3344,40 @@ impl DataPipelineSystem {
     }
 
     /// Configure anomaly detection
-    pub async fn configure_anomaly_detection(&self, pipeline_id: &str, config: AnomalyDetectionConfig, enabled: bool) -> Result<()> {
-        info!("Configuring anomaly detection for pipeline: {} with config: {:?} (enabled: {})", pipeline_id, config, enabled);
+    pub async fn configure_anomaly_detection(
+        &self,
+        pipeline_id: &str,
+        config: AnomalyDetectionConfig,
+        enabled: bool,
+    ) -> Result<()> {
+        info!(
+            "Configuring anomaly detection for pipeline: {} with config: {:?} (enabled: {})",
+            pipeline_id, config, enabled
+        );
         Ok(())
     }
 
     /// Detect anomalies
-    pub async fn detect_anomalies(&self, pipeline_id: &str, detection_method: &str, time_range: &str, sensitivity_level: f64) -> Result<Vec<PipelineAnomaly>> {
+    pub async fn detect_anomalies(
+        &self,
+        pipeline_id: &str,
+        detection_method: &str,
+        time_range: &str,
+        sensitivity_level: f64,
+    ) -> Result<Vec<PipelineAnomaly>> {
         info!("Detecting anomalies for pipeline: {} (method: {:?}, time_range: {:?}, sensitivity: {:?})", pipeline_id, detection_method, time_range, sensitivity_level);
         // Mock implementation - return empty list
         Ok(vec![])
     }
 
     /// Get anomaly history
-    pub async fn get_anomaly_history(&self, pipeline_id: &str, time_range: &str, severity: Option<&str>, limit: Option<usize>) -> Result<Vec<PipelineAnomaly>> {
+    pub async fn get_anomaly_history(
+        &self,
+        pipeline_id: &str,
+        time_range: &str,
+        severity: Option<&str>,
+        limit: Option<usize>,
+    ) -> Result<Vec<PipelineAnomaly>> {
         info!("Getting anomaly history for pipeline: {} (time_range: {:?}, severity: {:?}, limit: {:?})", pipeline_id, time_range, severity, limit);
         Ok(vec![])
     }
@@ -3095,8 +3385,14 @@ impl DataPipelineSystem {
     // ===== MISSING METHODS - SCHEDULING =====
 
     /// List scheduled pipelines
-    pub async fn list_scheduled_pipelines(&self, show_disabled: bool) -> Result<Vec<(String, PipelineSchedule)>> {
-        info!("Listing scheduled pipelines (show_disabled: {})", show_disabled);
+    pub async fn list_scheduled_pipelines(
+        &self,
+        show_disabled: bool,
+    ) -> Result<Vec<(String, PipelineSchedule)>> {
+        info!(
+            "Listing scheduled pipelines (show_disabled: {})",
+            show_disabled
+        );
         let pipelines = self.pipelines.read().await;
         let mut result = Vec::new();
 
@@ -3116,8 +3412,15 @@ impl DataPipelineSystem {
     }
 
     /// Update pipeline schedule
-    pub async fn update_pipeline_schedule(&self, pipeline_id: &str, updates: HashMap<String, Value>) -> Result<()> {
-        info!("Updating schedule for pipeline: {} with updates: {:?}", pipeline_id, updates);
+    pub async fn update_pipeline_schedule(
+        &self,
+        pipeline_id: &str,
+        updates: HashMap<String, Value>,
+    ) -> Result<()> {
+        info!(
+            "Updating schedule for pipeline: {} with updates: {:?}",
+            pipeline_id, updates
+        );
         let mut pipelines = self.pipelines.write().await;
         if let Some(pipeline) = pipelines.get_mut(pipeline_id) {
             // Apply updates to the existing schedule
@@ -3127,22 +3430,22 @@ impl DataPipelineSystem {
                         if let Value::Bool(enabled) = value {
                             pipeline.schedule.enabled = enabled;
                         }
-                    },
+                    }
                     "cron_expression" => {
                         if let Value::String(cron) = value {
                             pipeline.schedule.cron_expression = Some(cron);
                         }
-                    },
+                    }
                     "interval_seconds" => {
                         if let Value::Number(interval) = value {
                             pipeline.schedule.interval_seconds = interval.as_u64();
                         }
-                    },
+                    }
                     "timezone" => {
                         if let Value::String(tz) = value {
                             pipeline.schedule.timezone = tz;
                         }
-                    },
+                    }
                     _ => {}
                 }
             }
@@ -3152,8 +3455,16 @@ impl DataPipelineSystem {
     }
 
     /// Trigger scheduled execution
-    pub async fn trigger_scheduled_execution(&self, pipeline_id: &str, execution_params: Option<serde_json::Value>, skip_if_running: bool) -> Result<String> {
-        info!("Triggering scheduled execution for pipeline: {} (params: {:?}, skip_if_running: {})", pipeline_id, execution_params, skip_if_running);
+    pub async fn trigger_scheduled_execution(
+        &self,
+        pipeline_id: &str,
+        execution_params: Option<serde_json::Value>,
+        skip_if_running: bool,
+    ) -> Result<String> {
+        info!(
+            "Triggering scheduled execution for pipeline: {} (params: {:?}, skip_if_running: {})",
+            pipeline_id, execution_params, skip_if_running
+        );
         self.scheduler.trigger_pipeline(pipeline_id)
     }
 
@@ -3167,8 +3478,16 @@ impl DataPipelineSystem {
     // ===== MISSING METHODS - METRICS AND REPORTING =====
 
     /// Get pipeline metrics range
-    pub async fn get_pipeline_metrics_range(&self, pipeline_id: &str, time_range: &str, metrics_filter: Option<Vec<String>>) -> Result<Vec<ExecutionMetrics>> {
-        info!("Getting metrics for pipeline: {} for range: {} with filter: {:?}", pipeline_id, time_range, metrics_filter);
+    pub async fn get_pipeline_metrics_range(
+        &self,
+        pipeline_id: &str,
+        time_range: &str,
+        metrics_filter: Option<Vec<String>>,
+    ) -> Result<Vec<ExecutionMetrics>> {
+        info!(
+            "Getting metrics for pipeline: {} for range: {} with filter: {:?}",
+            pipeline_id, time_range, metrics_filter
+        );
         // Mock implementation - return single metric
         Ok(vec![self.get_pipeline_metrics(pipeline_id).await?])
     }
@@ -3177,11 +3496,13 @@ impl DataPipelineSystem {
 
     /// Start dashboard
     pub async fn start_dashboard(&self, bind_addr: &str, port: u16, open: bool) -> Result<()> {
-        info!("Starting dashboard on {}:{} (open: {})", bind_addr, port, open);
+        info!(
+            "Starting dashboard on {}:{} (open: {})",
+            bind_addr, port, open
+        );
         // Mock implementation - would start web dashboard
         Ok(())
     }
-
 }
 
 /// Simple in-memory scheduler implementation
@@ -3222,16 +3543,18 @@ impl PipelineScheduler for InMemoryScheduler {
 
     fn get_scheduled_pipelines(&self) -> Result<Vec<String>> {
         let scheduled = tokio::task::block_in_place(|| {
-            tokio::runtime::Handle::current().block_on(async {
-                self.scheduled_pipelines.read().await
-            })
+            tokio::runtime::Handle::current()
+                .block_on(async { self.scheduled_pipelines.read().await })
         });
         Ok(scheduled.keys().cloned().collect())
     }
 
     fn trigger_pipeline(&self, pipeline_id: &str) -> Result<String> {
         let execution_id = Uuid::new_v4().to_string();
-        info!("Triggered pipeline {} with execution {}", pipeline_id, execution_id);
+        info!(
+            "Triggered pipeline {} with execution {}",
+            pipeline_id, execution_id
+        );
         Ok(execution_id)
     }
 }
@@ -3248,7 +3571,10 @@ impl InMemoryExecutor {
 impl PipelineExecutor for InMemoryExecutor {
     fn execute_pipeline(&self, pipeline: &DataPipeline) -> Result<String> {
         let execution_id = Uuid::new_v4().to_string();
-        info!("Executing pipeline {} with execution {}", pipeline.id, execution_id);
+        info!(
+            "Executing pipeline {} with execution {}",
+            pipeline.id, execution_id
+        );
 
         // Mock execution - would implement actual task execution
         for task in &pipeline.tasks {
@@ -3261,7 +3587,10 @@ impl PipelineExecutor for InMemoryExecutor {
     }
 
     fn execute_task(&self, task: &PipelineTask, context: &ExecutionContext) -> Result<TaskResult> {
-        info!("Executing task {} in context {}", task.name, context.execution_id);
+        info!(
+            "Executing task {} in context {}",
+            task.name, context.execution_id
+        );
 
         // Mock task execution
         let result = TaskResult {
@@ -3275,15 +3604,13 @@ impl PipelineExecutor for InMemoryExecutor {
                 cpu_usage_percent: 25.0,
                 memory_usage_gb: 0.5,
             },
-            logs: vec![
-                ExecutionLog {
-                    timestamp: Utc::now(),
-                    level: "INFO".to_string(),
-                    message: format!("Task {} completed successfully", task.name),
-                    task_id: Some(task.id.clone()),
-                    metadata: HashMap::new(),
-                }
-            ],
+            logs: vec![ExecutionLog {
+                timestamp: Utc::now(),
+                level: "INFO".to_string(),
+                message: format!("Task {} completed successfully", task.name),
+                task_id: Some(task.id.clone()),
+                metadata: HashMap::new(),
+            }],
             error: None,
         };
 
@@ -3335,14 +3662,12 @@ impl PipelineMonitor for InMemoryMonitor {
 
     fn get_logs(&self, execution_id: &str) -> Result<Vec<ExecutionLog>> {
         info!("Getting logs for execution: {}", execution_id);
-        Ok(vec![
-            ExecutionLog {
-                timestamp: Utc::now(),
-                level: "INFO".to_string(),
-                message: "Pipeline execution started".to_string(),
-                task_id: None,
-                metadata: HashMap::new(),
-            }
-        ])
+        Ok(vec![ExecutionLog {
+            timestamp: Utc::now(),
+            level: "INFO".to_string(),
+            message: "Pipeline execution started".to_string(),
+            task_id: None,
+            metadata: HashMap::new(),
+        }])
     }
 }

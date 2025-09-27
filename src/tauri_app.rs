@@ -1,23 +1,21 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use tauri::{
-    command, generate_context, generate_handler, AppHandle, Manager, State, Window,
-};
+use tauri::{command, generate_context, generate_handler, AppHandle, Manager, State, Window};
 use tokio::sync::Mutex;
 
 #[cfg(feature = "tauri-app")]
 use crate::macos_integration::{
-    create_system_tray, create_app_menu, handle_system_tray_event, handle_menu_event,
-    send_native_notification, get_system_appearance, set_window_vibrancy,
-    toggle_always_on_top, minimize_to_tray, MacOSNotification
+    create_app_menu, create_system_tray, get_system_appearance, handle_menu_event,
+    handle_system_tray_event, minimize_to_tray, send_native_notification, set_window_vibrancy,
+    toggle_always_on_top, MacOSNotification,
 };
 
 use crate::{
     backends::{Backend, BackendConfig, BackendType, InferenceParams},
-    models::{ModelInfo, ModelManager},
-    metrics::MetricsCollector,
     config::Config,
+    metrics::MetricsCollector,
+    models::{ModelInfo, ModelManager},
 };
 
 // App state for Tauri
@@ -33,10 +31,7 @@ pub struct AppState {
 #[command]
 async fn get_models(state: State<'_, AppState>) -> Result<Vec<ModelInfo>, String> {
     let model_manager = state.model_manager.lock().await;
-    model_manager
-        .list_models()
-        .await
-        .map_err(|e| e.to_string())
+    model_manager.list_models().await.map_err(|e| e.to_string())
 }
 
 #[command]
@@ -50,7 +45,10 @@ async fn load_model(
     let config = state.config.lock().await;
 
     // Find the model
-    let models = model_manager.list_models().await.map_err(|e| e.to_string())?;
+    let models = model_manager
+        .list_models()
+        .await
+        .map_err(|e| e.to_string())?;
     let model = models
         .iter()
         .find(|m| m.name == model_name)
@@ -64,8 +62,7 @@ async fn load_model(
     };
 
     let backend_config = config.backend_config.clone();
-    let mut backend = Backend::new(backend_type, &backend_config)
-        .map_err(|e| e.to_string())?;
+    let mut backend = Backend::new(backend_type, &backend_config).map_err(|e| e.to_string())?;
 
     // Load the model
     backend.load_model(model).await.map_err(|e| e.to_string())?;
@@ -124,10 +121,7 @@ async fn validate_model(model_path: String) -> Result<bool, String> {
         return Ok(false);
     }
 
-    let extension = path
-        .extension()
-        .and_then(|ext| ext.to_str())
-        .unwrap_or("");
+    let extension = path.extension().and_then(|ext| ext.to_str()).unwrap_or("");
 
     match extension {
         "gguf" | "onnx" | "pt" | "safetensors" => Ok(true),
@@ -149,7 +143,7 @@ async fn open_file_dialog(window: Window) -> Result<Option<String>, String> {
 
 #[command]
 async fn get_system_info() -> Result<SystemInfo, String> {
-    use sysinfo::{System, SystemExt, CpuExt};
+    use sysinfo::{CpuExt, System, SystemExt};
 
     let mut system = System::new_all();
     system.refresh_all();

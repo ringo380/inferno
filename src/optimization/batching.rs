@@ -70,7 +70,10 @@ pub struct BatchRequest {
 }
 
 impl BatchRequest {
-    pub fn new(input: String, priority: Priority) -> (Self, tokio::sync::oneshot::Receiver<Result<String>>) {
+    pub fn new(
+        input: String,
+        priority: Priority,
+    ) -> (Self, tokio::sync::oneshot::Receiver<Result<String>>) {
         let (tx, rx) = tokio::sync::oneshot::channel();
         let request = Self {
             id: Uuid::new_v4(),
@@ -114,7 +117,11 @@ impl Batch {
         if self.requests.is_empty() {
             return 0.0;
         }
-        self.requests.iter().map(|r| r.sequence_length).sum::<usize>() as f64 / self.requests.len() as f64
+        self.requests
+            .iter()
+            .map(|r| r.sequence_length)
+            .sum::<usize>() as f64
+            / self.requests.len() as f64
     }
 }
 
@@ -178,7 +185,11 @@ impl DynamicBatcher {
     }
 
     /// Submit request for batching
-    pub async fn submit_request(&self, input: String, priority: Priority) -> Result<tokio::sync::oneshot::Receiver<Result<String>>> {
+    pub async fn submit_request(
+        &self,
+        input: String,
+        priority: Priority,
+    ) -> Result<tokio::sync::oneshot::Receiver<Result<String>>> {
         let (request, receiver) = BatchRequest::new(input, priority);
 
         // Add to appropriate priority queue
@@ -187,7 +198,10 @@ impl DynamicBatcher {
             queues.get_mut(&priority).unwrap().push_back(request);
         }
 
-        tracing::debug!("Request submitted for batching with priority: {:?}", priority);
+        tracing::debug!(
+            "Request submitted for batching with priority: {:?}",
+            priority
+        );
         Ok(receiver)
     }
 
@@ -246,7 +260,9 @@ impl DynamicBatcher {
                     // Check if we should wait for more requests
                     if batch_requests.len() < self.config.min_batch_size {
                         if let Some(oldest_request) = queue.front() {
-                            if oldest_request.received_at.elapsed() < adaptive_params.current_wait_time {
+                            if oldest_request.received_at.elapsed()
+                                < adaptive_params.current_wait_time
+                            {
                                 continue; // Wait for more requests
                             }
                         }
@@ -263,7 +279,8 @@ impl DynamicBatcher {
             }
         }
 
-        if !batch_requests.is_empty() && self.should_create_batch(&batch_requests, &adaptive_params) {
+        if !batch_requests.is_empty() && self.should_create_batch(&batch_requests, &adaptive_params)
+        {
             // Group by sequence length if enabled
             if self.config.sequence_length_grouping {
                 batch_requests = self.group_by_sequence_length(batch_requests);
@@ -276,7 +293,11 @@ impl DynamicBatcher {
     }
 
     /// Determine if a batch should be created
-    fn should_create_batch(&self, requests: &[BatchRequest], adaptive_params: &AdaptiveParams) -> bool {
+    fn should_create_batch(
+        &self,
+        requests: &[BatchRequest],
+        adaptive_params: &AdaptiveParams,
+    ) -> bool {
         if requests.is_empty() {
             return false;
         }
@@ -294,7 +315,9 @@ impl DynamicBatcher {
         }
 
         // Force batch if any request is too old
-        requests.iter().any(|r| r.received_at.elapsed() > adaptive_params.current_wait_time * 2)
+        requests
+            .iter()
+            .any(|r| r.received_at.elapsed() > adaptive_params.current_wait_time * 2)
     }
 
     /// Group requests by similar sequence length
@@ -314,10 +337,11 @@ impl DynamicBatcher {
         let mut current_len = 1;
 
         for i in 1..requests.len() {
-            let length_diff = (requests[i].sequence_length as i32 - requests[i-1].sequence_length as i32).abs();
+            let length_diff =
+                (requests[i].sequence_length as i32 - requests[i - 1].sequence_length as i32).abs();
 
             // Group if length difference is within 20% or 50 tokens
-            let prev_length = requests[i-1].sequence_length;
+            let prev_length = requests[i - 1].sequence_length;
             if length_diff <= (prev_length as f32 * 0.2) as i32 || length_diff <= 50 {
                 current_len += 1;
             } else {
@@ -337,11 +361,18 @@ impl DynamicBatcher {
         }
 
         // Extract the best group
-        requests.into_iter().skip(best_start).take(best_len).collect()
+        requests
+            .into_iter()
+            .skip(best_start)
+            .take(best_len)
+            .collect()
     }
 
     /// Batch execution loop
-    async fn batch_execution_loop(batcher: Arc<Self>, mut receiver: mpsc::UnboundedReceiver<Batch>) {
+    async fn batch_execution_loop(
+        batcher: Arc<Self>,
+        mut receiver: mpsc::UnboundedReceiver<Batch>,
+    ) {
         while let Some(batch) = receiver.recv().await {
             let batcher_clone = Arc::clone(&batcher);
 
@@ -381,16 +412,22 @@ impl DynamicBatcher {
     async fn execute_batch_inference(&self, batch: &Batch) -> Vec<Result<String>> {
         // Simulate batch processing time based on batch size and sequence length
         let avg_seq_len = batch.avg_sequence_length();
-        let processing_time = Duration::from_millis(
-            (batch.size() as f64 * avg_seq_len * 0.1) as u64
-        );
+        let processing_time =
+            Duration::from_millis((batch.size() as f64 * avg_seq_len * 0.1) as u64);
 
         tokio::time::sleep(processing_time).await;
 
         // Generate mock responses
-        batch.requests.iter().map(|request| {
-            Ok(format!("Batch response for request {}: {}", request.id, request.input))
-        }).collect()
+        batch
+            .requests
+            .iter()
+            .map(|request| {
+                Ok(format!(
+                    "Batch response for request {}: {}",
+                    request.id, request.input
+                ))
+            })
+            .collect()
     }
 
     /// Update batching metrics
@@ -402,15 +439,18 @@ impl DynamicBatcher {
 
         // Update running averages
         let total_batches = metrics.total_batches_processed as f64;
-        metrics.avg_batch_size = (metrics.avg_batch_size * (total_batches - 1.0) + batch_size as f64) / total_batches;
+        metrics.avg_batch_size =
+            (metrics.avg_batch_size * (total_batches - 1.0) + batch_size as f64) / total_batches;
 
         let processing_time_ms = processing_time.as_millis() as f64;
-        metrics.avg_wait_time_ms = (metrics.avg_wait_time_ms * (total_batches - 1.0) + processing_time_ms) / total_batches;
+        metrics.avg_wait_time_ms =
+            (metrics.avg_wait_time_ms * (total_batches - 1.0) + processing_time_ms) / total_batches;
 
         // Calculate requests per second
         if processing_time.as_secs_f64() > 0.0 {
             let current_rps = batch_size as f64 / processing_time.as_secs_f64();
-            metrics.requests_per_second = (metrics.requests_per_second * 0.9) + (current_rps * 0.1); // Exponential moving average
+            metrics.requests_per_second = (metrics.requests_per_second * 0.9) + (current_rps * 0.1);
+            // Exponential moving average
         }
 
         // Calculate efficiency ratio (actual vs ideal throughput)
@@ -434,28 +474,34 @@ impl DynamicBatcher {
         let current_throughput = metrics.requests_per_second;
         let target_throughput = self.config.throughput_target;
 
-        tracing::debug!("Adjusting adaptive parameters: current_throughput={:.2}, target={:.2}",
-                       current_throughput, target_throughput);
+        tracing::debug!(
+            "Adjusting adaptive parameters: current_throughput={:.2}, target={:.2}",
+            current_throughput,
+            target_throughput
+        );
 
         // Adjust batch size based on throughput
         if current_throughput < target_throughput * 0.8 {
             // Increase batch size to improve throughput
-            adaptive_params.current_batch_size = (adaptive_params.current_batch_size + 2)
-                .min(self.config.max_batch_size);
+            adaptive_params.current_batch_size =
+                (adaptive_params.current_batch_size + 2).min(self.config.max_batch_size);
         } else if current_throughput > target_throughput * 1.2 {
             // Decrease batch size to reduce latency
-            adaptive_params.current_batch_size = (adaptive_params.current_batch_size.saturating_sub(1))
-                .max(self.config.min_batch_size);
+            adaptive_params.current_batch_size =
+                (adaptive_params.current_batch_size.saturating_sub(1))
+                    .max(self.config.min_batch_size);
         }
 
         // Adjust wait time based on efficiency
         if metrics.efficiency_ratio < 0.7 {
             // Increase wait time to allow larger batches
-            adaptive_params.current_wait_time = (adaptive_params.current_wait_time + Duration::from_millis(5))
-                .min(Duration::from_millis(self.config.max_wait_time_ms));
+            adaptive_params.current_wait_time = (adaptive_params.current_wait_time
+                + Duration::from_millis(5))
+            .min(Duration::from_millis(self.config.max_wait_time_ms));
         } else if metrics.efficiency_ratio > 1.3 {
             // Decrease wait time to reduce latency
-            adaptive_params.current_wait_time = adaptive_params.current_wait_time
+            adaptive_params.current_wait_time = adaptive_params
+                .current_wait_time
                 .saturating_sub(Duration::from_millis(2))
                 .max(Duration::from_millis(1));
         }
@@ -463,8 +509,11 @@ impl DynamicBatcher {
         adaptive_params.recent_throughput = current_throughput;
         adaptive_params.last_adjustment = Instant::now();
 
-        tracing::debug!("Adaptive parameters adjusted: batch_size={}, wait_time={:?}",
-                       adaptive_params.current_batch_size, adaptive_params.current_wait_time);
+        tracing::debug!(
+            "Adaptive parameters adjusted: batch_size={}, wait_time={:?}",
+            adaptive_params.current_batch_size,
+            adaptive_params.current_wait_time
+        );
     }
 
     /// Get current batching metrics
@@ -487,7 +536,9 @@ impl DynamicBatcher {
                 _ => Priority::Low,
             };
 
-            let receiver = self.submit_request(format!("test request {}", i), priority).await?;
+            let receiver = self
+                .submit_request(format!("test request {}", i), priority)
+                .await?;
             receivers.push(receiver);
         }
 
@@ -499,7 +550,10 @@ impl DynamicBatcher {
         let total_time = start_time.elapsed();
         let throughput = num_requests as f64 / total_time.as_secs_f64();
 
-        tracing::info!("Batch benchmark completed: {:.2} requests/second", throughput);
+        tracing::info!(
+            "Batch benchmark completed: {:.2} requests/second",
+            throughput
+        );
         Ok(throughput / 100.0) // Return as performance multiplier
     }
 
@@ -546,7 +600,9 @@ mod tests {
         let config = BatchingConfig::default();
         let batcher = DynamicBatcher::new(config).await.unwrap();
 
-        let receiver = batcher.submit_request("test input".to_string(), Priority::Normal).await;
+        let receiver = batcher
+            .submit_request("test input".to_string(), Priority::Normal)
+            .await;
         assert!(receiver.is_ok());
     }
 

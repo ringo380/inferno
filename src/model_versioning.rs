@@ -1,4 +1,3 @@
-use crate::config::Config;
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -6,7 +5,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{debug, error, info, warn};
+use tracing::{info, warn};
 use uuid::Uuid;
 
 /// Model versioning and A/B testing configuration
@@ -1385,7 +1384,12 @@ pub trait VersionStorage: Send + Sync {
 
 pub trait ExperimentTracker: Send + Sync {
     fn start_experiment(&self, experiment: &ABExperiment) -> Result<()>;
-    fn track_event(&self, experiment_id: &str, variant_id: &str, event: &ExperimentEvent) -> Result<()>;
+    fn track_event(
+        &self,
+        experiment_id: &str,
+        variant_id: &str,
+        event: &ExperimentEvent,
+    ) -> Result<()>;
     fn get_experiment_results(&self, experiment_id: &str) -> Result<ExperimentResults>;
     fn stop_experiment(&self, experiment_id: &str) -> Result<()>;
 }
@@ -1487,21 +1491,25 @@ impl ModelVersioningSystem {
         let mut versions = self.versions.write().await;
         versions.insert(version_id.clone(), model_version);
 
-        info!("Created model version: {} for model: {}", version, model_name);
+        info!(
+            "Created model version: {} for model: {}",
+            version, model_name
+        );
         Ok(version_id)
     }
 
     /// Validate a model version
     pub async fn validate_version(&self, version_id: &str) -> Result<ValidationResults> {
         let mut versions = self.versions.write().await;
-        let version = versions.get_mut(version_id)
+        let version = versions
+            .get_mut(version_id)
             .ok_or_else(|| anyhow::anyhow!("Version not found: {}", version_id))?;
 
         version.status = VersionStatus::Validating;
 
         // Perform validation tests
-        let mut test_results = Vec::new();
-        let mut benchmark_results = Vec::new();
+        let test_results = Vec::new();
+        let benchmark_results = Vec::new();
 
         // Run configured validation tests
         // TODO: Add validation tests configuration to ModelVersioningConfig
@@ -1547,7 +1555,11 @@ impl ModelVersioningSystem {
         Ok(validation_results)
     }
 
-    async fn run_validation_test(&self, _version: &ModelVersion, test: &ValidationTest) -> Result<TestResult> {
+    async fn run_validation_test(
+        &self,
+        _version: &ModelVersion,
+        test: &ValidationTest,
+    ) -> Result<TestResult> {
         info!("Running validation test: {}", test.name);
 
         // Mock test execution
@@ -1562,7 +1574,11 @@ impl ModelVersioningSystem {
         })
     }
 
-    async fn run_benchmark(&self, _version: &ModelVersion, benchmark: &PerformanceBenchmark) -> Result<BenchmarkResult> {
+    async fn run_benchmark(
+        &self,
+        _version: &ModelVersion,
+        benchmark: &PerformanceBenchmark,
+    ) -> Result<BenchmarkResult> {
         info!("Running benchmark: {}", benchmark.name);
 
         // Mock benchmark execution
@@ -1604,7 +1620,8 @@ impl ModelVersioningSystem {
         strategy: RolloutStrategy,
     ) -> Result<()> {
         let mut versions = self.versions.write().await;
-        let version = versions.get_mut(version_id)
+        let version = versions
+            .get_mut(version_id)
             .ok_or_else(|| anyhow::anyhow!("Version not found: {}", version_id))?;
 
         // Check if version is valid
@@ -1623,7 +1640,10 @@ impl ModelVersioningSystem {
                 self.deploy_rolling(version, environment).await?;
             }
             _ => {
-                return Err(anyhow::anyhow!("Deployment strategy not implemented: {:?}", strategy));
+                return Err(anyhow::anyhow!(
+                    "Deployment strategy not implemented: {:?}",
+                    strategy
+                ));
             }
         }
 
@@ -1632,11 +1652,18 @@ impl ModelVersioningSystem {
         version.deployment_status.environment = environment.to_string();
         version.status = VersionStatus::Production;
 
-        info!("Deployed version {} to environment: {}", version_id, environment);
+        info!(
+            "Deployed version {} to environment: {}",
+            version_id, environment
+        );
         Ok(())
     }
 
-    async fn deploy_blue_green(&self, _version: &mut ModelVersion, _environment: &str) -> Result<()> {
+    async fn deploy_blue_green(
+        &self,
+        _version: &mut ModelVersion,
+        _environment: &str,
+    ) -> Result<()> {
         info!("Executing blue-green deployment");
         // Mock deployment
         tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
@@ -1652,7 +1679,10 @@ impl ModelVersioningSystem {
 
         // Mock deployment stages
         for stage in &self.config.rollout.stages {
-            info!("Deploying to stage: {} ({}% traffic)", stage.name, stage.traffic_percentage);
+            info!(
+                "Deploying to stage: {} ({}% traffic)",
+                stage.name, stage.traffic_percentage
+            );
             version.deployment_status.traffic_percentage = stage.traffic_percentage;
 
             // Wait for stage duration
@@ -1762,7 +1792,8 @@ impl ModelVersioningSystem {
     /// Start A/B experiment
     pub async fn start_experiment(&self, experiment_id: &str) -> Result<()> {
         let mut experiments = self.experiments.write().await;
-        let experiment = experiments.get_mut(experiment_id)
+        let experiment = experiments
+            .get_mut(experiment_id)
             .ok_or_else(|| anyhow::anyhow!("Experiment not found: {}", experiment_id))?;
 
         experiment.status = ExperimentStatus::Running;
@@ -1778,14 +1809,17 @@ impl ModelVersioningSystem {
     /// Stop A/B experiment
     pub async fn stop_experiment(&self, experiment_id: &str) -> Result<ExperimentResults> {
         let mut experiments = self.experiments.write().await;
-        let experiment = experiments.get_mut(experiment_id)
+        let experiment = experiments
+            .get_mut(experiment_id)
             .ok_or_else(|| anyhow::anyhow!("Experiment not found: {}", experiment_id))?;
 
         experiment.status = ExperimentStatus::Completed;
         experiment.end_date = Some(Utc::now());
 
         // Get results from experiment tracker
-        let results = self.experiment_tracker.get_experiment_results(experiment_id)?;
+        let results = self
+            .experiment_tracker
+            .get_experiment_results(experiment_id)?;
         experiment.results = Some(results.clone());
 
         // Stop tracking
@@ -1823,7 +1857,8 @@ impl ModelVersioningSystem {
     /// Get version status
     pub async fn get_version_status(&self, version_id: &str) -> Result<ModelVersion> {
         let versions = self.versions.read().await;
-        versions.get(version_id)
+        versions
+            .get(version_id)
             .cloned()
             .ok_or_else(|| anyhow::anyhow!("Version not found: {}", version_id))
     }
@@ -1843,7 +1878,8 @@ impl ModelVersioningSystem {
     /// Get experiment status
     pub async fn get_experiment_status(&self, experiment_id: &str) -> Result<ABExperiment> {
         let experiments = self.experiments.read().await;
-        experiments.get(experiment_id)
+        experiments
+            .get(experiment_id)
             .cloned()
             .ok_or_else(|| anyhow::anyhow!("Experiment not found: {}", experiment_id))
     }
@@ -1902,7 +1938,9 @@ impl VersionStorage for FileSystemVersionStorage {
         for entry in std::fs::read_dir(&self.base_path)? {
             let entry = entry?;
             if entry.path().extension().and_then(|s| s.to_str()) == Some("json") {
-                if let Ok(version) = self.load_version(&entry.file_name().to_string_lossy().replace(".json", "")) {
+                if let Ok(version) =
+                    self.load_version(&entry.file_name().to_string_lossy().replace(".json", ""))
+                {
                     if version.model_name == model_name {
                         versions.push(version);
                     }
@@ -1921,8 +1959,7 @@ impl VersionStorage for FileSystemVersionStorage {
 
     fn get_latest_version(&self, model_name: &str) -> Result<Option<ModelVersion>> {
         let versions = self.list_versions(model_name)?;
-        let latest = versions.into_iter()
-            .max_by_key(|v| v.created_at);
+        let latest = versions.into_iter().max_by_key(|v| v.created_at);
         Ok(latest)
     }
 }
@@ -1951,7 +1988,12 @@ impl ExperimentTracker for InMemoryExperimentTracker {
         Ok(())
     }
 
-    fn track_event(&self, experiment_id: &str, _variant_id: &str, event: &ExperimentEvent) -> Result<()> {
+    fn track_event(
+        &self,
+        experiment_id: &str,
+        _variant_id: &str,
+        event: &ExperimentEvent,
+    ) -> Result<()> {
         tokio::task::block_in_place(|| {
             tokio::runtime::Handle::current().block_on(async {
                 let mut events = self.events.write().await;
@@ -1967,39 +2009,51 @@ impl ExperimentTracker for InMemoryExperimentTracker {
         // Mock results generation
         let mut variant_results = HashMap::new();
 
-        variant_results.insert("control".to_string(), VariantResult {
-            variant_id: "control".to_string(),
-            sample_size: 1000,
-            metrics: {
-                let mut metrics = HashMap::new();
-                metrics.insert("conversion_rate".to_string(), MetricResult {
-                    value: 0.15,
-                    standard_error: 0.01,
-                    sample_size: 1000,
-                    unit: "rate".to_string(),
-                });
-                metrics
+        variant_results.insert(
+            "control".to_string(),
+            VariantResult {
+                variant_id: "control".to_string(),
+                sample_size: 1000,
+                metrics: {
+                    let mut metrics = HashMap::new();
+                    metrics.insert(
+                        "conversion_rate".to_string(),
+                        MetricResult {
+                            value: 0.15,
+                            standard_error: 0.01,
+                            sample_size: 1000,
+                            unit: "rate".to_string(),
+                        },
+                    );
+                    metrics
+                },
+                conversion_rate: 0.15,
+                confidence_intervals: HashMap::new(),
             },
-            conversion_rate: 0.15,
-            confidence_intervals: HashMap::new(),
-        });
+        );
 
-        variant_results.insert("treatment".to_string(), VariantResult {
-            variant_id: "treatment".to_string(),
-            sample_size: 1000,
-            metrics: {
-                let mut metrics = HashMap::new();
-                metrics.insert("conversion_rate".to_string(), MetricResult {
-                    value: 0.18,
-                    standard_error: 0.01,
-                    sample_size: 1000,
-                    unit: "rate".to_string(),
-                });
-                metrics
+        variant_results.insert(
+            "treatment".to_string(),
+            VariantResult {
+                variant_id: "treatment".to_string(),
+                sample_size: 1000,
+                metrics: {
+                    let mut metrics = HashMap::new();
+                    metrics.insert(
+                        "conversion_rate".to_string(),
+                        MetricResult {
+                            value: 0.18,
+                            standard_error: 0.01,
+                            sample_size: 1000,
+                            unit: "rate".to_string(),
+                        },
+                    );
+                    metrics
+                },
+                conversion_rate: 0.18,
+                confidence_intervals: HashMap::new(),
             },
-            conversion_rate: 0.18,
-            confidence_intervals: HashMap::new(),
-        });
+        );
 
         Ok(ExperimentResults {
             winner: Some("treatment".to_string()),
@@ -2007,16 +2061,14 @@ impl ExperimentTracker for InMemoryExperimentTracker {
             statistical_significance: true,
             practical_significance: true,
             variant_results,
-            statistical_tests: vec![
-                StatisticalTestResult {
-                    test_name: "t-test".to_string(),
-                    test_statistic: 2.5,
-                    p_value: 0.012,
-                    effect_size: 0.2,
-                    critical_value: 1.96,
-                    degrees_of_freedom: Some(1998),
-                }
-            ],
+            statistical_tests: vec![StatisticalTestResult {
+                test_name: "t-test".to_string(),
+                test_statistic: 2.5,
+                p_value: 0.012,
+                effect_size: 0.2,
+                critical_value: 1.96,
+                degrees_of_freedom: Some(1998),
+            }],
             analyzed_at: Utc::now(),
         })
     }

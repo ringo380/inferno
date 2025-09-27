@@ -1,4 +1,4 @@
-use crate::{config::Config, InfernoError};
+use crate::InfernoError;
 use anyhow::Result;
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
@@ -7,7 +7,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::net::IpAddr;
 use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info, warn};
 
 /// Security configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -162,8 +162,8 @@ pub struct TokenClaims {
     pub sub: String, // Subject (user ID)
     pub username: String,
     pub role: UserRole,
-    pub exp: i64, // Expiration time
-    pub iat: i64, // Issued at
+    pub exp: i64,    // Expiration time
+    pub iat: i64,    // Issued at
     pub jti: String, // JWT ID for revocation
 }
 
@@ -268,27 +268,21 @@ impl RateLimiter {
         let minute_remaining = {
             let minute_window = self.minute_window.lock().await;
             let minute_ago = now - Duration::minutes(1);
-            let recent_count = minute_window.iter()
-                .filter(|&&t| t >= minute_ago)
-                .count() as u32;
+            let recent_count = minute_window.iter().filter(|&&t| t >= minute_ago).count() as u32;
             self.config.requests_per_minute.saturating_sub(recent_count)
         };
 
         let hour_remaining = {
             let hour_window = self.hour_window.lock().await;
             let hour_ago = now - Duration::hours(1);
-            let recent_count = hour_window.iter()
-                .filter(|&&t| t >= hour_ago)
-                .count() as u32;
+            let recent_count = hour_window.iter().filter(|&&t| t >= hour_ago).count() as u32;
             self.config.requests_per_hour.saturating_sub(recent_count)
         };
 
         let day_remaining = if let Some(daily_limit) = self.config.requests_per_day {
             let day_window = self.day_window.lock().await;
             let day_ago = now - Duration::days(1);
-            let recent_count = day_window.iter()
-                .filter(|&&t| t >= day_ago)
-                .count() as u32;
+            let recent_count = day_window.iter().filter(|&&t| t >= day_ago).count() as u32;
             Some(daily_limit.saturating_sub(recent_count))
         } else {
             None
@@ -377,9 +371,11 @@ impl SecurityManager {
         let mut users = self.users.write().await;
 
         if users.contains_key(&user.id) {
-            return Err(InfernoError::SecurityValidation(
-                format!("User {} already exists", user.id)
-            ).into());
+            return Err(InfernoError::SecurityValidation(format!(
+                "User {} already exists",
+                user.id
+            ))
+            .into());
         }
 
         info!("Creating user: {} with role {:?}", user.username, user.role);
@@ -394,7 +390,8 @@ impl SecurityManager {
             ip_address: None,
             success: true,
             details: None,
-        }).await;
+        })
+        .await;
 
         Ok(())
     }
@@ -409,10 +406,9 @@ impl SecurityManager {
     ) -> Result<String> {
         let mut users = self.users.write().await;
 
-        let user = users.get_mut(user_id)
-            .ok_or_else(|| InfernoError::SecurityValidation(
-                format!("User {} not found", user_id)
-            ))?;
+        let user = users.get_mut(user_id).ok_or_else(|| {
+            InfernoError::SecurityValidation(format!("User {} not found", user_id))
+        })?;
 
         // Generate random API key
         let api_key = Self::generate_random_key();
@@ -445,7 +441,8 @@ impl SecurityManager {
             ip_address: None,
             success: true,
             details: None,
-        }).await;
+        })
+        .await;
 
         Ok(api_key)
     }
@@ -455,22 +452,20 @@ impl SecurityManager {
         let key_hash = Self::hash_api_key(api_key);
 
         let api_keys = self.api_keys.read().await;
-        let user_id = api_keys.get(&key_hash)
-            .ok_or_else(|| InfernoError::SecurityValidation(
-                "Invalid API key".to_string()
-            ))?;
+        let user_id = api_keys
+            .get(&key_hash)
+            .ok_or_else(|| InfernoError::SecurityValidation("Invalid API key".to_string()))?;
 
         let mut users = self.users.write().await;
-        let user = users.get_mut(user_id)
-            .ok_or_else(|| InfernoError::SecurityValidation(
-                "User not found".to_string()
-            ))?;
+        let user = users
+            .get_mut(user_id)
+            .ok_or_else(|| InfernoError::SecurityValidation("User not found".to_string()))?;
 
         // Check if user is active
         if !user.is_active {
-            return Err(InfernoError::SecurityValidation(
-                "User account is disabled".to_string()
-            ).into());
+            return Err(
+                InfernoError::SecurityValidation("User account is disabled".to_string()).into(),
+            );
         }
 
         // Find and update the API key
@@ -479,16 +474,18 @@ impl SecurityManager {
                 // Check if key is active
                 if !api_key_info.is_active {
                     return Err(InfernoError::SecurityValidation(
-                        "API key is disabled".to_string()
-                    ).into());
+                        "API key is disabled".to_string(),
+                    )
+                    .into());
                 }
 
                 // Check expiration
                 if let Some(expires_at) = api_key_info.expires_at {
                     if expires_at < Utc::now() {
                         return Err(InfernoError::SecurityValidation(
-                            "API key has expired".to_string()
-                        ).into());
+                            "API key has expired".to_string(),
+                        )
+                        .into());
                     }
                 }
 
@@ -516,7 +513,7 @@ impl SecurityManager {
 
         // In production, use a proper JWT library like jsonwebtoken
         // For now, create a simple token representation
-        use base64::{Engine as _, engine::general_purpose};
+        use base64::{engine::general_purpose, Engine as _};
         let token = format!(
             "{}.{}.{}",
             general_purpose::STANDARD.encode(serde_json::to_string(&claims)?),
@@ -534,27 +531,25 @@ impl SecurityManager {
         let parts: Vec<&str> = token.split('.').collect();
 
         if parts.len() != 3 {
-            return Err(InfernoError::SecurityValidation(
-                "Invalid token format".to_string()
-            ).into());
+            return Err(
+                InfernoError::SecurityValidation("Invalid token format".to_string()).into(),
+            );
         }
 
-        use base64::{Engine as _, engine::general_purpose};
+        use base64::{engine::general_purpose, Engine as _};
         let claims_json = String::from_utf8(general_purpose::STANDARD.decode(parts[0])?)?;
         let claims: TokenClaims = serde_json::from_str(&claims_json)?;
 
         // Check if token is revoked
         if blocked_tokens.contains(&claims.jti) {
-            return Err(InfernoError::SecurityValidation(
-                "Token has been revoked".to_string()
-            ).into());
+            return Err(
+                InfernoError::SecurityValidation("Token has been revoked".to_string()).into(),
+            );
         }
 
         // Check expiration
         if claims.exp < Utc::now().timestamp() {
-            return Err(InfernoError::SecurityValidation(
-                "Token has expired".to_string()
-            ).into());
+            return Err(InfernoError::SecurityValidation("Token has expired".to_string()).into());
         }
 
         Ok(claims)
@@ -569,13 +564,16 @@ impl SecurityManager {
         // Check user-specific rate limit
         let mut rate_limiters = self.rate_limiters.write().await;
 
-        let user_limiter = rate_limiters.entry(identifier.to_string())
-            .or_insert_with(|| RateLimiter::new(RateLimitConfig {
-                requests_per_minute: self.config.max_requests_per_minute,
-                requests_per_hour: self.config.max_requests_per_hour,
-                requests_per_day: None,
-                burst_size: 10,
-            }));
+        let user_limiter = rate_limiters
+            .entry(identifier.to_string())
+            .or_insert_with(|| {
+                RateLimiter::new(RateLimitConfig {
+                    requests_per_minute: self.config.max_requests_per_minute,
+                    requests_per_hour: self.config.max_requests_per_hour,
+                    requests_per_day: None,
+                    burst_size: 10,
+                })
+            });
 
         if !user_limiter.check_rate_limit().await? {
             warn!("Rate limit exceeded for user: {}", identifier);
@@ -586,13 +584,14 @@ impl SecurityManager {
         if let Some(ip_addr) = ip {
             let mut ip_limiters = self.ip_rate_limiters.write().await;
 
-            let ip_limiter = ip_limiters.entry(ip_addr)
-                .or_insert_with(|| RateLimiter::new(RateLimitConfig {
+            let ip_limiter = ip_limiters.entry(ip_addr).or_insert_with(|| {
+                RateLimiter::new(RateLimitConfig {
                     requests_per_minute: self.config.max_requests_per_minute * 2,
                     requests_per_hour: self.config.max_requests_per_hour * 2,
                     requests_per_day: None,
                     burst_size: 20,
-                }));
+                })
+            });
 
             if !ip_limiter.check_rate_limit().await? {
                 warn!("Rate limit exceeded for IP: {}", ip_addr);
@@ -634,17 +633,30 @@ impl SecurityManager {
 
         // Check input length
         if input.len() > self.config.max_input_length {
-            return Err(InfernoError::SecurityValidation(
-                format!("Input exceeds maximum length of {} characters", self.config.max_input_length)
-            ).into());
+            return Err(InfernoError::SecurityValidation(format!(
+                "Input exceeds maximum length of {} characters",
+                self.config.max_input_length
+            ))
+            .into());
         }
 
         // Check for potential injection attacks
         let dangerous_patterns = [
-            "<script", "javascript:", "onerror=", "onclick=",
-            "../", "..\\", "%2e%2e", "0x", "\\x",
-            "DROP TABLE", "DELETE FROM", "INSERT INTO",
-            "cmd.exe", "/bin/sh", "powershell",
+            "<script",
+            "javascript:",
+            "onerror=",
+            "onclick=",
+            "../",
+            "..\\",
+            "%2e%2e",
+            "0x",
+            "\\x",
+            "DROP TABLE",
+            "DELETE FROM",
+            "INSERT INTO",
+            "cmd.exe",
+            "/bin/sh",
+            "powershell",
         ];
 
         let input_lower = input.to_lowercase();
@@ -652,8 +664,9 @@ impl SecurityManager {
             if input_lower.contains(pattern) {
                 warn!("Potentially dangerous input pattern detected: {}", pattern);
                 return Err(InfernoError::SecurityValidation(
-                    "Input contains potentially dangerous content".to_string()
-                ).into());
+                    "Input contains potentially dangerous content".to_string(),
+                )
+                .into());
             }
         }
 
@@ -671,10 +684,13 @@ impl SecurityManager {
 
         // Remove potential API keys (simple pattern)
         let api_key_pattern = regex::Regex::new(r"[A-Za-z0-9]{32,}").unwrap();
-        sanitized = api_key_pattern.replace_all(&sanitized, "[REDACTED]").to_string();
+        sanitized = api_key_pattern
+            .replace_all(&sanitized, "[REDACTED]")
+            .to_string();
 
         // Remove email addresses
-        let email_pattern = regex::Regex::new(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}").unwrap();
+        let email_pattern =
+            regex::Regex::new(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}").unwrap();
         sanitized = email_pattern.replace_all(&sanitized, "[EMAIL]").to_string();
 
         // Remove IP addresses
@@ -706,11 +722,7 @@ impl SecurityManager {
         let audit_log = self.audit_log.lock().await;
         let limit = limit.unwrap_or(100);
 
-        audit_log.iter()
-            .rev()
-            .take(limit)
-            .cloned()
-            .collect()
+        audit_log.iter().rev().take(limit).cloned().collect()
     }
 
     // Helper methods
@@ -747,7 +759,8 @@ impl SecurityManager {
             ip_address: None,
             success: true,
             details: None,
-        }).await;
+        })
+        .await;
 
         Ok(())
     }

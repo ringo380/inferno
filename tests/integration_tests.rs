@@ -197,9 +197,9 @@ async fn test_backend_creation() {
 
 #[tokio::test]
 async fn test_io_operations() {
-    use inferno::io::{text, json};
-    use tempfile::tempdir;
+    use inferno::io::{json, text};
     use serde_json::json;
+    use tempfile::tempdir;
 
     let temp_dir = tempdir().unwrap();
 
@@ -207,7 +207,9 @@ async fn test_io_operations() {
     let text_path = temp_dir.path().join("test.txt");
     let test_content = "Hello, world!\nTest content.";
 
-    text::write_text_file(&text_path, test_content).await.unwrap();
+    text::write_text_file(&text_path, test_content)
+        .await
+        .unwrap();
     let read_content = text::read_text_file(&text_path).await.unwrap();
     assert_eq!(test_content, read_content);
 
@@ -226,7 +228,7 @@ async fn test_io_operations() {
 
 #[tokio::test]
 async fn test_metrics_collector() {
-    use inferno::metrics::{MetricsCollector, InferenceEvent};
+    use inferno::metrics::{InferenceEvent, MetricsCollector};
     use std::time::Duration;
     use tokio::time::sleep;
 
@@ -271,9 +273,9 @@ async fn test_metrics_collector() {
 #[tokio::test]
 async fn test_full_pipeline_smoke_test() {
     use inferno::{
+        backends::{Backend, BackendConfig, BackendType},
         config::Config,
         models::ModelManager,
-        backends::{Backend, BackendConfig, BackendType},
     };
     use tempfile::tempdir;
     use tokio::fs;

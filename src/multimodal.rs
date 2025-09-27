@@ -396,20 +396,20 @@ impl MultiModalProcessor {
         self.validate_input_compatibility(&input, &capabilities)?;
 
         // Update session status
-        self.update_session_status(&session_id, ProcessingStatus::Processing, 10.0).await?;
+        self.update_session_status(&session_id, ProcessingStatus::Processing, 10.0)
+            .await?;
 
         // Process input components
         let processed_components = self.process_media_components(&input).await?;
-        self.update_session_status(&session_id, ProcessingStatus::Processing, 50.0).await?;
+        self.update_session_status(&session_id, ProcessingStatus::Processing, 50.0)
+            .await?;
 
         // Perform inference
-        let inference_result = self.perform_multimodal_inference(
-            model_id,
-            &input,
-            &processed_components,
-            params,
-        ).await?;
-        self.update_session_status(&session_id, ProcessingStatus::Processing, 90.0).await?;
+        let inference_result = self
+            .perform_multimodal_inference(model_id, &input, &processed_components, params)
+            .await?;
+        self.update_session_status(&session_id, ProcessingStatus::Processing, 90.0)
+            .await?;
 
         // Create result
         let result = MultiModalResult {
@@ -424,7 +424,8 @@ impl MultiModalProcessor {
         };
 
         // Complete session
-        self.update_session_status(&session_id, ProcessingStatus::Completed, 100.0).await?;
+        self.update_session_status(&session_id, ProcessingStatus::Completed, 100.0)
+            .await?;
 
         // Clean up session after delay
         let sessions_clone = Arc::clone(&self.active_sessions);
@@ -495,16 +496,26 @@ impl MultiModalProcessor {
 
     /// Cancel processing session
     pub async fn cancel_session(&self, session_id: &str) -> Result<()> {
-        self.update_session_status(session_id, ProcessingStatus::Cancelled, 0.0).await?;
+        self.update_session_status(session_id, ProcessingStatus::Cancelled, 0.0)
+            .await?;
         Ok(())
     }
 
     /// Get supported media formats
     pub fn get_supported_formats(&self) -> HashMap<String, Vec<String>> {
         let mut formats = HashMap::new();
-        formats.insert("image".to_string(), self.config.supported_image_formats.clone());
-        formats.insert("audio".to_string(), self.config.supported_audio_formats.clone());
-        formats.insert("video".to_string(), self.config.supported_video_formats.clone());
+        formats.insert(
+            "image".to_string(),
+            self.config.supported_image_formats.clone(),
+        );
+        formats.insert(
+            "audio".to_string(),
+            self.config.supported_audio_formats.clone(),
+        );
+        formats.insert(
+            "video".to_string(),
+            self.config.supported_video_formats.clone(),
+        );
         formats
     }
 
@@ -516,41 +527,52 @@ impl MultiModalProcessor {
         let mut caps = self.model_capabilities.write().await;
 
         // Example multi-modal model capabilities
-        caps.insert("gpt-4-vision".to_string(), ModelCapabilities {
-            supports_text: true,
-            supports_images: true,
-            supports_audio: false,
-            supports_video: false,
-            max_context_length: Some(8000),
-            supported_languages: vec!["en".to_string(), "es".to_string(), "fr".to_string()],
-            vision_features: Some(VisionFeatures {
-                object_detection: true,
-                ocr: true,
-                scene_understanding: true,
-                face_recognition: false,
-                image_generation: false,
-                max_image_size: (2048, 2048),
-            }),
-            audio_features: None,
-        });
+        caps.insert(
+            "gpt-4-vision".to_string(),
+            ModelCapabilities {
+                supports_text: true,
+                supports_images: true,
+                supports_audio: false,
+                supports_video: false,
+                max_context_length: Some(8000),
+                supported_languages: vec!["en".to_string(), "es".to_string(), "fr".to_string()],
+                vision_features: Some(VisionFeatures {
+                    object_detection: true,
+                    ocr: true,
+                    scene_understanding: true,
+                    face_recognition: false,
+                    image_generation: false,
+                    max_image_size: (2048, 2048),
+                }),
+                audio_features: None,
+            },
+        );
 
-        caps.insert("whisper-large".to_string(), ModelCapabilities {
-            supports_text: true,
-            supports_images: false,
-            supports_audio: true,
-            supports_video: false,
-            max_context_length: None,
-            supported_languages: vec!["en".to_string(), "es".to_string(), "fr".to_string(), "de".to_string()],
-            vision_features: None,
-            audio_features: Some(AudioFeatures {
-                speech_to_text: true,
-                audio_classification: false,
-                music_analysis: false,
-                voice_synthesis: false,
-                noise_reduction: true,
-                max_audio_length_seconds: 3600,
-            }),
-        });
+        caps.insert(
+            "whisper-large".to_string(),
+            ModelCapabilities {
+                supports_text: true,
+                supports_images: false,
+                supports_audio: true,
+                supports_video: false,
+                max_context_length: None,
+                supported_languages: vec![
+                    "en".to_string(),
+                    "es".to_string(),
+                    "fr".to_string(),
+                    "de".to_string(),
+                ],
+                vision_features: None,
+                audio_features: Some(AudioFeatures {
+                    speech_to_text: true,
+                    audio_classification: false,
+                    music_analysis: false,
+                    voice_synthesis: false,
+                    noise_reduction: true,
+                    max_audio_length_seconds: 3600,
+                }),
+            },
+        );
 
         Ok(())
     }
@@ -564,52 +586,90 @@ impl MultiModalProcessor {
 
     async fn get_model_capabilities(&self, model_id: &str) -> Result<ModelCapabilities> {
         let caps = self.model_capabilities.read().await;
-        caps.get(model_id)
-            .cloned()
-            .ok_or_else(|| InfernoError::ModelNotFound(format!("Model capabilities not found: {}", model_id)).into())
+        caps.get(model_id).cloned().ok_or_else(|| {
+            InfernoError::ModelNotFound(format!("Model capabilities not found: {}", model_id))
+                .into()
+        })
     }
 
-    fn validate_input_compatibility(&self, input: &MediaInput, capabilities: &ModelCapabilities) -> Result<()> {
+    fn validate_input_compatibility(
+        &self,
+        input: &MediaInput,
+        capabilities: &ModelCapabilities,
+    ) -> Result<()> {
         match input {
             MediaInput::Text { .. } => {
                 if !capabilities.supports_text {
-                    return Err(InfernoError::InvalidArgument("Model does not support text input".to_string()).into());
+                    return Err(InfernoError::InvalidArgument(
+                        "Model does not support text input".to_string(),
+                    )
+                    .into());
                 }
             }
             MediaInput::Image { .. } => {
                 if !capabilities.supports_images {
-                    return Err(InfernoError::InvalidArgument("Model does not support image input".to_string()).into());
+                    return Err(InfernoError::InvalidArgument(
+                        "Model does not support image input".to_string(),
+                    )
+                    .into());
                 }
             }
             MediaInput::Audio { .. } => {
                 if !capabilities.supports_audio {
-                    return Err(InfernoError::InvalidArgument("Model does not support audio input".to_string()).into());
+                    return Err(InfernoError::InvalidArgument(
+                        "Model does not support audio input".to_string(),
+                    )
+                    .into());
                 }
             }
             MediaInput::Video { .. } => {
                 if !capabilities.supports_video {
-                    return Err(InfernoError::InvalidArgument("Model does not support video input".to_string()).into());
+                    return Err(InfernoError::InvalidArgument(
+                        "Model does not support video input".to_string(),
+                    )
+                    .into());
                 }
             }
-            MediaInput::MultiModal { text, images, audio, video, .. } => {
+            MediaInput::MultiModal {
+                text,
+                images,
+                audio,
+                video,
+                ..
+            } => {
                 if text.is_some() && !capabilities.supports_text {
-                    return Err(InfernoError::InvalidArgument("Model does not support text in multi-modal input".to_string()).into());
+                    return Err(InfernoError::InvalidArgument(
+                        "Model does not support text in multi-modal input".to_string(),
+                    )
+                    .into());
                 }
                 if !images.is_empty() && !capabilities.supports_images {
-                    return Err(InfernoError::InvalidArgument("Model does not support images in multi-modal input".to_string()).into());
+                    return Err(InfernoError::InvalidArgument(
+                        "Model does not support images in multi-modal input".to_string(),
+                    )
+                    .into());
                 }
                 if !audio.is_empty() && !capabilities.supports_audio {
-                    return Err(InfernoError::InvalidArgument("Model does not support audio in multi-modal input".to_string()).into());
+                    return Err(InfernoError::InvalidArgument(
+                        "Model does not support audio in multi-modal input".to_string(),
+                    )
+                    .into());
                 }
                 if !video.is_empty() && !capabilities.supports_video {
-                    return Err(InfernoError::InvalidArgument("Model does not support video in multi-modal input".to_string()).into());
+                    return Err(InfernoError::InvalidArgument(
+                        "Model does not support video in multi-modal input".to_string(),
+                    )
+                    .into());
                 }
             }
         }
         Ok(())
     }
 
-    async fn process_media_components(&self, input: &MediaInput) -> Result<Vec<ProcessedComponent>> {
+    async fn process_media_components(
+        &self,
+        input: &MediaInput,
+    ) -> Result<Vec<ProcessedComponent>> {
         let mut components = Vec::new();
 
         match input {
@@ -621,7 +681,11 @@ impl MultiModalProcessor {
                     processing_time_ms: 1,
                 });
             }
-            MediaInput::Image { data, format, metadata } => {
+            MediaInput::Image {
+                data,
+                format,
+                metadata,
+            } => {
                 let start = std::time::Instant::now();
                 let description = format!("Image input ({:?}, {} bytes)", format, data.len());
 
@@ -643,7 +707,11 @@ impl MultiModalProcessor {
                     processing_time_ms: start.elapsed().as_millis() as u64,
                 });
             }
-            MediaInput::Audio { data, format, metadata } => {
+            MediaInput::Audio {
+                data,
+                format,
+                metadata,
+            } => {
                 let start = std::time::Instant::now();
                 let description = format!("Audio input ({:?}, {} bytes)", format, data.len());
 
@@ -653,8 +721,14 @@ impl MultiModalProcessor {
                 features.insert("size_bytes".to_string(), serde_json::json!(data.len()));
 
                 if let Some(meta) = metadata {
-                    features.insert("duration_seconds".to_string(), serde_json::json!(meta.duration_seconds));
-                    features.insert("sample_rate".to_string(), serde_json::json!(meta.sample_rate));
+                    features.insert(
+                        "duration_seconds".to_string(),
+                        serde_json::json!(meta.duration_seconds),
+                    );
+                    features.insert(
+                        "sample_rate".to_string(),
+                        serde_json::json!(meta.sample_rate),
+                    );
                     features.insert("channels".to_string(), serde_json::json!(meta.channels));
                 }
 
@@ -665,7 +739,11 @@ impl MultiModalProcessor {
                     processing_time_ms: start.elapsed().as_millis() as u64,
                 });
             }
-            MediaInput::Video { data, format, metadata } => {
+            MediaInput::Video {
+                data,
+                format,
+                metadata,
+            } => {
                 let start = std::time::Instant::now();
                 let description = format!("Video input ({:?}, {} bytes)", format, data.len());
 
@@ -675,7 +753,10 @@ impl MultiModalProcessor {
                 features.insert("size_bytes".to_string(), serde_json::json!(data.len()));
 
                 if let Some(meta) = metadata {
-                    features.insert("duration_seconds".to_string(), serde_json::json!(meta.duration_seconds));
+                    features.insert(
+                        "duration_seconds".to_string(),
+                        serde_json::json!(meta.duration_seconds),
+                    );
                     features.insert("width".to_string(), serde_json::json!(meta.width));
                     features.insert("height".to_string(), serde_json::json!(meta.height));
                     features.insert("frame_rate".to_string(), serde_json::json!(meta.frame_rate));
@@ -688,7 +769,13 @@ impl MultiModalProcessor {
                     processing_time_ms: start.elapsed().as_millis() as u64,
                 });
             }
-            MediaInput::MultiModal { text, images, audio, video, .. } => {
+            MediaInput::MultiModal {
+                text,
+                images,
+                audio,
+                video,
+                ..
+            } => {
                 if let Some(text_content) = text {
                     components.push(ProcessedComponent {
                         component_type: "text".to_string(),
@@ -699,9 +786,15 @@ impl MultiModalProcessor {
                 }
 
                 for (i, img) in images.iter().enumerate() {
-                    if let MediaInput::Image { data, format, metadata } = img {
+                    if let MediaInput::Image {
+                        data,
+                        format,
+                        metadata,
+                    } = img
+                    {
                         let start = std::time::Instant::now();
-                        let description = format!("Image {} ({:?}, {} bytes)", i + 1, format, data.len());
+                        let description =
+                            format!("Image {} ({:?}, {} bytes)", i + 1, format, data.len());
 
                         let mut features = std::collections::HashMap::new();
                         features.insert("format".to_string(), serde_json::json!(format));
@@ -710,7 +803,8 @@ impl MultiModalProcessor {
                         if let Some(meta) = metadata {
                             features.insert("width".to_string(), serde_json::json!(meta.width));
                             features.insert("height".to_string(), serde_json::json!(meta.height));
-                            features.insert("channels".to_string(), serde_json::json!(meta.channels));
+                            features
+                                .insert("channels".to_string(), serde_json::json!(meta.channels));
                         }
 
                         components.push(ProcessedComponent {
@@ -723,18 +817,31 @@ impl MultiModalProcessor {
                 }
 
                 for (i, aud) in audio.iter().enumerate() {
-                    if let MediaInput::Audio { data, format, metadata } = aud {
+                    if let MediaInput::Audio {
+                        data,
+                        format,
+                        metadata,
+                    } = aud
+                    {
                         let start = std::time::Instant::now();
-                        let description = format!("Audio {} ({:?}, {} bytes)", i + 1, format, data.len());
+                        let description =
+                            format!("Audio {} ({:?}, {} bytes)", i + 1, format, data.len());
 
                         let mut features = std::collections::HashMap::new();
                         features.insert("format".to_string(), serde_json::json!(format));
                         features.insert("size_bytes".to_string(), serde_json::json!(data.len()));
 
                         if let Some(meta) = metadata {
-                            features.insert("duration_seconds".to_string(), serde_json::json!(meta.duration_seconds));
-                            features.insert("sample_rate".to_string(), serde_json::json!(meta.sample_rate));
-                            features.insert("channels".to_string(), serde_json::json!(meta.channels));
+                            features.insert(
+                                "duration_seconds".to_string(),
+                                serde_json::json!(meta.duration_seconds),
+                            );
+                            features.insert(
+                                "sample_rate".to_string(),
+                                serde_json::json!(meta.sample_rate),
+                            );
+                            features
+                                .insert("channels".to_string(), serde_json::json!(meta.channels));
                         }
 
                         components.push(ProcessedComponent {
@@ -747,19 +854,31 @@ impl MultiModalProcessor {
                 }
 
                 for (i, vid) in video.iter().enumerate() {
-                    if let MediaInput::Video { data, format, metadata } = vid {
+                    if let MediaInput::Video {
+                        data,
+                        format,
+                        metadata,
+                    } = vid
+                    {
                         let start = std::time::Instant::now();
-                        let description = format!("Video {} ({:?}, {} bytes)", i + 1, format, data.len());
+                        let description =
+                            format!("Video {} ({:?}, {} bytes)", i + 1, format, data.len());
 
                         let mut features = std::collections::HashMap::new();
                         features.insert("format".to_string(), serde_json::json!(format));
                         features.insert("size_bytes".to_string(), serde_json::json!(data.len()));
 
                         if let Some(meta) = metadata {
-                            features.insert("duration_seconds".to_string(), serde_json::json!(meta.duration_seconds));
+                            features.insert(
+                                "duration_seconds".to_string(),
+                                serde_json::json!(meta.duration_seconds),
+                            );
                             features.insert("width".to_string(), serde_json::json!(meta.width));
                             features.insert("height".to_string(), serde_json::json!(meta.height));
-                            features.insert("frame_rate".to_string(), serde_json::json!(meta.frame_rate));
+                            features.insert(
+                                "frame_rate".to_string(),
+                                serde_json::json!(meta.frame_rate),
+                            );
                         }
 
                         components.push(ProcessedComponent {
@@ -788,7 +907,10 @@ impl MultiModalProcessor {
 
         let result = match input {
             MediaInput::Text { content, .. } => {
-                format!("Text analysis result for: {}", content.chars().take(50).collect::<String>())
+                format!(
+                    "Text analysis result for: {}",
+                    content.chars().take(50).collect::<String>()
+                )
             }
             MediaInput::Image { format, .. } => {
                 format!("Image analysis result: Detected objects in {:?} image - cars, buildings, people", format)
@@ -799,7 +921,13 @@ impl MultiModalProcessor {
             MediaInput::Video { format, .. } => {
                 format!("Video analysis result: Scene analysis of {:?} video - outdoor scene with moving objects", format)
             }
-            MediaInput::MultiModal { text, images, audio, video, .. } => {
+            MediaInput::MultiModal {
+                text,
+                images,
+                audio,
+                video,
+                ..
+            } => {
                 let mut parts = Vec::new();
 
                 if text.is_some() {
@@ -852,12 +980,26 @@ impl MultiModalProcessor {
             MediaInput::Video { format, .. } => {
                 format!("Video input ({:?})", format)
             }
-            MediaInput::MultiModal { text, images, audio, video, .. } => {
+            MediaInput::MultiModal {
+                text,
+                images,
+                audio,
+                video,
+                ..
+            } => {
                 let mut parts = Vec::new();
-                if text.is_some() { parts.push("text".to_string()); }
-                if !images.is_empty() { parts.push(format!("{} images", images.len())); }
-                if !audio.is_empty() { parts.push(format!("{} audio", audio.len())); }
-                if !video.is_empty() { parts.push(format!("{} videos", video.len())); }
+                if text.is_some() {
+                    parts.push("text".to_string());
+                }
+                if !images.is_empty() {
+                    parts.push(format!("{} images", images.len()));
+                }
+                if !audio.is_empty() {
+                    parts.push(format!("{} audio", audio.len()));
+                }
+                if !video.is_empty() {
+                    parts.push(format!("{} videos", video.len()));
+                }
                 format!("Multi-modal input: {}", parts.join(", "))
             }
         }
@@ -871,13 +1013,19 @@ impl MultiModalProcessor {
     ) -> Result<MediaInput> {
         // Check file size
         if data.len() as u64 > self.config.max_file_size_bytes {
-            return Err(InfernoError::InvalidArgument(
-                format!("File size exceeds maximum allowed: {} bytes", self.config.max_file_size_bytes)
-            ).into());
+            return Err(InfernoError::InvalidArgument(format!(
+                "File size exceeds maximum allowed: {} bytes",
+                self.config.max_file_size_bytes
+            ))
+            .into());
         }
 
         // Determine media type based on extension
-        if self.config.supported_image_formats.contains(&file_extension.to_lowercase()) {
+        if self
+            .config
+            .supported_image_formats
+            .contains(&file_extension.to_lowercase())
+        {
             let format = ImageFormat::from(file_extension);
             let metadata = self.extract_image_metadata(&data, &format)?;
 
@@ -899,7 +1047,11 @@ impl MultiModalProcessor {
             } else {
                 Ok(input)
             }
-        } else if self.config.supported_audio_formats.contains(&file_extension.to_lowercase()) {
+        } else if self
+            .config
+            .supported_audio_formats
+            .contains(&file_extension.to_lowercase())
+        {
             let format = AudioFormat::from(file_extension);
             let metadata = self.extract_audio_metadata(&data, &format)?;
 
@@ -920,7 +1072,11 @@ impl MultiModalProcessor {
             } else {
                 Ok(input)
             }
-        } else if self.config.supported_video_formats.contains(&file_extension.to_lowercase()) {
+        } else if self
+            .config
+            .supported_video_formats
+            .contains(&file_extension.to_lowercase())
+        {
             let format = VideoFormat::from(file_extension);
             let metadata = self.extract_video_metadata(&data, &format)?;
 
@@ -942,9 +1098,11 @@ impl MultiModalProcessor {
                 Ok(input)
             }
         } else {
-            Err(InfernoError::UnsupportedFormat(
-                format!("Unsupported file format: {}", file_extension)
-            ).into())
+            Err(InfernoError::UnsupportedFormat(format!(
+                "Unsupported file format: {}",
+                file_extension
+            ))
+            .into())
         }
     }
 
@@ -1010,19 +1168,22 @@ mod tests {
         processor.initialize().await.unwrap();
 
         // Register mock model capabilities
-        processor.register_model_capabilities(
-            "test-model".to_string(),
-            ModelCapabilities {
-                supports_text: true,
-                supports_images: false,
-                supports_audio: false,
-                supports_video: false,
-                max_context_length: Some(1000),
-                supported_languages: vec!["en".to_string()],
-                vision_features: None,
-                audio_features: None,
-            }
-        ).await.unwrap();
+        processor
+            .register_model_capabilities(
+                "test-model".to_string(),
+                ModelCapabilities {
+                    supports_text: true,
+                    supports_images: false,
+                    supports_audio: false,
+                    supports_video: false,
+                    max_context_length: Some(1000),
+                    supported_languages: vec!["en".to_string()],
+                    vision_features: None,
+                    audio_features: None,
+                },
+            )
+            .await
+            .unwrap();
 
         let input = MediaInput::Text {
             content: "Test text input".to_string(),

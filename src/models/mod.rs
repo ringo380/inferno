@@ -93,7 +93,10 @@ impl ModelManager {
 
     pub async fn list_models(&self) -> Result<Vec<ModelInfo>> {
         if !self.models_dir.exists() {
-            warn!("Models directory does not exist: {}", self.models_dir.display());
+            warn!(
+                "Models directory does not exist: {}",
+                self.models_dir.display()
+            );
             return Ok(Vec::new());
         }
 
@@ -121,7 +124,11 @@ impl ModelManager {
         // Sort models by modification time (newest first)
         models.sort_by(|a, b| b.modified.cmp(&a.modified));
 
-        info!("Found {} models in {}", models.len(), self.models_dir.display());
+        info!(
+            "Found {} models in {}",
+            models.len(),
+            self.models_dir.display()
+        );
         Ok(models)
     }
 
@@ -158,7 +165,10 @@ impl ModelManager {
             }
         }
 
-        Err(anyhow::anyhow!("Model '{}' not found in models directory", name))
+        Err(anyhow::anyhow!(
+            "Model '{}' not found in models directory",
+            name
+        ))
     }
 
     async fn create_model_info(&self, path: &Path) -> Result<ModelInfo> {
@@ -313,23 +323,28 @@ impl ModelManager {
         Ok(result)
     }
 
-    async fn security_validate(&self, path: &Path, metadata: &std::fs::Metadata) -> Result<(), InfernoError> {
+    async fn security_validate(
+        &self,
+        path: &Path,
+        metadata: &std::fs::Metadata,
+    ) -> Result<(), InfernoError> {
         // Check for suspicious file patterns
-        let file_name = path.file_name()
+        let file_name = path
+            .file_name()
             .and_then(|name| name.to_str())
             .unwrap_or("");
 
         // Block files with suspicious names
         let suspicious_patterns = [
-            "..", "~", "$", "`", ";", "|", "&", "<", ">", "\\",
-            "script", "exec", "eval", "system"
+            "..", "~", "$", "`", ";", "|", "&", "<", ">", "\\", "script", "exec", "eval", "system",
         ];
 
         for pattern in &suspicious_patterns {
             if file_name.contains(pattern) {
-                return Err(InfernoError::SecurityValidation(
-                    format!("Suspicious filename pattern detected: {}", pattern)
-                ));
+                return Err(InfernoError::SecurityValidation(format!(
+                    "Suspicious filename pattern detected: {}",
+                    pattern
+                )));
             }
         }
 
@@ -343,7 +358,7 @@ impl ModelManager {
             // Check if file is executable (suspicious for model files)
             if mode & 0o111 != 0 {
                 return Err(InfernoError::SecurityValidation(
-                    "Model file should not be executable".to_string()
+                    "Model file should not be executable".to_string(),
                 ));
             }
         }
@@ -359,13 +374,21 @@ impl ModelManager {
 
             // Check for script patterns in binary files
             let script_patterns: &[&[u8]] = &[
-                b"#!/bin/", b"#!/usr/", b"<script", b"javascript:", b"python", b"exec("
+                b"#!/bin/",
+                b"#!/usr/",
+                b"<script",
+                b"javascript:",
+                b"python",
+                b"exec(",
             ];
 
             for pattern in script_patterns {
-                if content.windows(pattern.len()).any(|window| window == *pattern) {
+                if content
+                    .windows(pattern.len())
+                    .any(|window| window == *pattern)
+                {
                     return Err(InfernoError::SecurityValidation(
-                        "Suspicious script content detected in model file".to_string()
+                        "Suspicious script content detected in model file".to_string(),
                     ));
                 }
             }
@@ -374,7 +397,11 @@ impl ModelManager {
         Ok(())
     }
 
-    async fn validate_format_specific(&self, path: &Path, extension: &str) -> Result<(bool, String)> {
+    async fn validate_format_specific(
+        &self,
+        path: &Path,
+        extension: &str,
+    ) -> Result<(bool, String)> {
         let mut file = async_fs::File::open(path).await?;
         let mut buffer = vec![0u8; 8192];
         use tokio::io::AsyncReadExt;
@@ -409,10 +436,13 @@ impl ModelManager {
         // Check magic bytes
         let magic = &buffer[0..4];
         if magic != b"GGUF" {
-            return Ok((false, format!(
-                "Invalid GGUF magic bytes. Expected 'GGUF', found {:?}",
-                String::from_utf8_lossy(magic)
-            )));
+            return Ok((
+                false,
+                format!(
+                    "Invalid GGUF magic bytes. Expected 'GGUF', found {:?}",
+                    String::from_utf8_lossy(magic)
+                ),
+            ));
         }
 
         // Check version (next 4 bytes, little-endian)
@@ -452,7 +482,10 @@ impl ModelManager {
         }
 
         if !has_valid_protobuf_structure {
-            return Ok((false, "Invalid ONNX file: No valid protobuf structure found".to_string()));
+            return Ok((
+                false,
+                "Invalid ONNX file: No valid protobuf structure found".to_string(),
+            ));
         }
 
         // Check for common ONNX strings in the header
@@ -463,7 +496,10 @@ impl ModelManager {
             || buffer.windows(4).any(|w| w == b"onnx");
 
         if !has_onnx_markers {
-            return Ok((false, "Invalid ONNX file: No ONNX markers found in header".to_string()));
+            return Ok((
+                false,
+                "Invalid ONNX file: No ONNX markers found in header".to_string(),
+            ));
         }
 
         Ok((true, "Valid ONNX file detected".to_string()))
@@ -570,19 +606,29 @@ mod tests {
     async fn test_model_manager() {
         let temp_dir = tempdir().expect("Failed to create temporary directory for test");
         let models_dir = temp_dir.path().join("models");
-        fs::create_dir_all(&models_dir).await.expect("Failed to create models directory for test");
+        fs::create_dir_all(&models_dir)
+            .await
+            .expect("Failed to create models directory for test");
 
         let manager = ModelManager::new(&models_dir);
 
         // Initially no models
-        let models = manager.list_models().await.expect("Failed to list models in test");
+        let models = manager
+            .list_models()
+            .await
+            .expect("Failed to list models in test");
         assert!(models.is_empty());
 
         // Create a mock model file
         let model_path = models_dir.join("test_model.gguf");
-        fs::write(&model_path, b"GGUF\x00\x00\x00\x01mock data").await.expect("Failed to write test model file");
+        fs::write(&model_path, b"GGUF\x00\x00\x00\x01mock data")
+            .await
+            .expect("Failed to write test model file");
 
-        let models = manager.list_models().await.expect("Failed to list models in test");
+        let models = manager
+            .list_models()
+            .await
+            .expect("Failed to list models in test");
         assert_eq!(models.len(), 1);
         assert_eq!(models[0].name, "test_model.gguf");
         assert_eq!(models[0].backend_type, "gguf");
@@ -592,44 +638,71 @@ mod tests {
     async fn test_model_validation() {
         let temp_dir = tempdir().expect("Failed to create temporary directory for test");
         let models_dir = temp_dir.path().join("models");
-        fs::create_dir_all(&models_dir).await.expect("Failed to create models directory for test");
+        fs::create_dir_all(&models_dir)
+            .await
+            .expect("Failed to create models directory for test");
 
         let manager = ModelManager::new(&models_dir);
 
         // Valid GGUF file
         let gguf_path = models_dir.join("valid.gguf");
-        fs::write(&gguf_path, b"GGUF\x00\x00\x00\x01mock data").await.expect("Failed to write valid GGUF file");
-        assert!(manager.validate_model(&gguf_path).await.expect("Failed to validate valid GGUF model"));
+        fs::write(&gguf_path, b"GGUF\x00\x00\x00\x01mock data")
+            .await
+            .expect("Failed to write valid GGUF file");
+        assert!(manager
+            .validate_model(&gguf_path)
+            .await
+            .expect("Failed to validate valid GGUF model"));
 
         // Invalid GGUF file (wrong magic bytes)
         let invalid_path = models_dir.join("invalid.gguf");
-        fs::write(&invalid_path, b"INVALID_DATA").await.expect("Failed to write invalid file");
-        assert!(!manager.validate_model(&invalid_path).await.expect("Failed to validate invalid model"));
+        fs::write(&invalid_path, b"INVALID_DATA")
+            .await
+            .expect("Failed to write invalid file");
+        assert!(!manager
+            .validate_model(&invalid_path)
+            .await
+            .expect("Failed to validate invalid model"));
 
         // Empty file
         let empty_path = models_dir.join("empty.gguf");
-        fs::write(&empty_path, b"").await.expect("Failed to write empty file");
-        assert!(!manager.validate_model(&empty_path).await.expect("Failed to validate empty model"));
+        fs::write(&empty_path, b"")
+            .await
+            .expect("Failed to write empty file");
+        assert!(!manager
+            .validate_model(&empty_path)
+            .await
+            .expect("Failed to validate empty model"));
     }
 
     #[tokio::test]
     async fn test_checksum_computation() {
         let temp_dir = tempdir().expect("Failed to create temporary directory for test");
         let models_dir = temp_dir.path().join("models");
-        fs::create_dir_all(&models_dir).await.expect("Failed to create models directory for test");
+        fs::create_dir_all(&models_dir)
+            .await
+            .expect("Failed to create models directory for test");
 
         let manager = ModelManager::new(&models_dir);
 
         let model_path = models_dir.join("test.gguf");
         let test_data = b"test model data for checksum";
-        fs::write(&model_path, test_data).await.expect("Failed to write test data for checksum test");
+        fs::write(&model_path, test_data)
+            .await
+            .expect("Failed to write test data for checksum test");
 
-        let checksum = manager.compute_checksum(&model_path).await.expect("Failed to compute checksum");
+        let checksum = manager
+            .compute_checksum(&model_path)
+            .await
+            .expect("Failed to compute checksum");
         assert!(!checksum.is_empty());
         assert_eq!(checksum.len(), 64); // SHA256 hex string length
 
         // Same data should produce same checksum
-        let checksum2 = manager.compute_checksum(&model_path).await.expect("Failed to compute second checksum");
+        let checksum2 = manager
+            .compute_checksum(&model_path)
+            .await
+            .expect("Failed to compute second checksum");
         assert_eq!(checksum, checksum2);
     }
 }

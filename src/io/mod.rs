@@ -60,8 +60,7 @@ pub mod text {
     }
 
     pub fn validate_utf8(data: &[u8]) -> Result<String> {
-        String::from_utf8(data.to_vec())
-            .map_err(|e| anyhow::anyhow!("Invalid UTF-8: {}", e))
+        String::from_utf8(data.to_vec()).map_err(|e| anyhow::anyhow!("Invalid UTF-8: {}", e))
     }
 }
 
@@ -116,7 +115,7 @@ pub mod image {
 
 pub mod audio {
     use anyhow::Result;
-    use hound::{WavReader, WavWriter, WavSpec, SampleFormat};
+    use hound::{SampleFormat, WavReader, WavSpec, WavWriter};
     use std::path::Path;
 
     pub async fn load_wav_file(path: &Path) -> Result<(Vec<f32>, WavSpec)> {
@@ -178,9 +177,7 @@ pub mod audio {
     }
 
     pub fn normalize_audio(samples: &[f32]) -> Vec<f32> {
-        let max_amplitude = samples.iter()
-            .map(|&s| s.abs())
-            .fold(0.0f32, f32::max);
+        let max_amplitude = samples.iter().map(|&s| s.abs()).fold(0.0f32, f32::max);
 
         if max_amplitude > 0.0 {
             samples.iter().map(|&s| s / max_amplitude).collect()
@@ -283,7 +280,9 @@ mod tests {
         let file_path = temp_dir.path().join("test.txt");
 
         let test_content = "Hello, world!\nThis is a test.";
-        text::write_text_file(&file_path, test_content).await.unwrap();
+        text::write_text_file(&file_path, test_content)
+            .await
+            .unwrap();
 
         let read_content = text::read_text_file(&file_path).await.unwrap();
         assert_eq!(test_content, read_content);

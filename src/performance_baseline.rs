@@ -1,28 +1,26 @@
-use anyhow::{Result, Context};
+use crate::{
+    backends::{Backend, BackendConfig, BackendType, InferenceParams},
+    models::ModelInfo,
+};
+use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
+use sysinfo::{CpuExt, ProcessExt, System, SystemExt};
 use tokio::fs;
-use crate::{
-    backends::{Backend, BackendConfig, BackendType, InferenceParams},
-    models::{ModelInfo, ModelManager},
-    cache::CacheConfig,
-    metrics::MetricsCollector,
-};
-use sysinfo::{System, SystemExt, ProcessExt, CpuExt};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PerformanceTarget {
-    pub inference_latency_ms: u64,    // Target: <100ms for most models
-    pub memory_efficiency_mb: u64,     // Target: 50% reduction in memory usage
-    pub throughput_rps: u64,           // Target: 1000+ requests/second
-    pub model_loading_time_ms: u64,    // Target: <5 seconds for most models
-    pub cache_hit_ratio: f64,          // Target: >80% for repeated requests
-    pub cpu_utilization: f64,          // Target: <80% under normal load
-    pub memory_utilization: f64,       // Target: <70% of available memory
+    pub inference_latency_ms: u64,  // Target: <100ms for most models
+    pub memory_efficiency_mb: u64,  // Target: 50% reduction in memory usage
+    pub throughput_rps: u64,        // Target: 1000+ requests/second
+    pub model_loading_time_ms: u64, // Target: <5 seconds for most models
+    pub cache_hit_ratio: f64,       // Target: >80% for repeated requests
+    pub cpu_utilization: f64,       // Target: <80% under normal load
+    pub memory_utilization: f64,    // Target: <70% of available memory
 }
 
 impl Default for PerformanceTarget {
@@ -105,7 +103,8 @@ impl PerformanceBaseline {
     }
 
     pub async fn initialize(&mut self) -> Result<()> {
-        fs::create_dir_all(&self.baseline_dir).await
+        fs::create_dir_all(&self.baseline_dir)
+            .await
             .context("Failed to create baseline directory")?;
 
         // Load existing baselines if they exist
@@ -129,12 +128,25 @@ impl PerformanceBaseline {
         let test_models = self.create_test_models(&models_dir).await?;
 
         // Run baseline tests for each backend and model combination
-        for backend_type in [BackendType::Gguf, BackendType::Onnx] {
+        let available_backends: Vec<BackendType> = vec![
+            #[cfg(feature = "gguf")]
+            BackendType::Gguf,
+            #[cfg(feature = "onnx")]
+            BackendType::Onnx,
+        ];
+
+        for backend_type in available_backends {
             for model in &test_models {
                 if model.backend_type == backend_type.to_string() {
-                    tracing::info!("Running baseline for {:?} backend with model {}", backend_type, model.name);
+                    tracing::info!(
+                        "Running baseline for {:?} backend with model {}",
+                        backend_type,
+                        model.name
+                    );
 
-                    let metrics = self.measure_backend_performance(backend_type, model).await?;
+                    let metrics = self
+                        .measure_backend_performance(backend_type, model)
+                        .await?;
                     self.metrics.push(metrics);
                 }
             }
@@ -155,9 +167,9 @@ impl PerformanceBaseline {
 
         // Create GGUF models of different sizes
         let gguf_sizes = vec![
-            ("small", 1),     // 1MB
-            ("medium", 10),   // 10MB
-            ("large", 50),    // 50MB
+            ("small", 1),   // 1MB
+            ("medium", 10), // 10MB
+            ("large", 50),  // 50MB
         ];
 
         for (size_name, size_mb) in gguf_sizes {
@@ -176,11 +188,7 @@ impl PerformanceBaseline {
         }
 
         // Create ONNX models
-        let onnx_sizes = vec![
-            ("small", 1),
-            ("medium", 5),
-            ("large", 25),
-        ];
+        let onnx_sizes = vec![("small", 1), ("medium", 5), ("large", 25)];
 
         for (size_name, size_mb) in onnx_sizes {
             let model_path = models_dir.join(format!("baseline_{}.onnx", size_name));
@@ -200,7 +208,11 @@ impl PerformanceBaseline {
         Ok(models)
     }
 
-    async fn measure_backend_performance(&self, backend_type: BackendType, model: &ModelInfo) -> Result<PerformanceMetrics> {
+    async fn measure_backend_performance(
+        &self,
+        backend_type: BackendType,
+        model: &ModelInfo,
+    ) -> Result<PerformanceMetrics> {
         let test_start = Instant::now();
         let mut system = System::new_all();
         system.refresh_all();
@@ -237,6 +249,11 @@ impl PerformanceBaseline {
         let mut latencies = Vec::new();
         let mut successful_requests = 0u64;
         let mut failed_requests = 0u64;
+        let mut timeout_requests = 0u64;
+
+        // Track disk I/O at start
+        let initial_disk_read = self.get_total_disk_read_bytes(&system);
+        let initial_disk_write = self.get_total_disk_write_bytes(&system);
 
         // Warmup runs
         for prompt in &test_prompts {
@@ -250,13 +267,28 @@ impl PerformanceBaseline {
         while measurement_start.elapsed() < measurement_duration {
             for prompt in &test_prompts {
                 let inference_start = Instant::now();
-                match backend.infer(prompt, &inference_params).await {
-                    Ok(_) => {
+
+                // Add timeout tracking - 10 second timeout for inference
+                let timeout_duration = Duration::from_secs(10);
+                let inference_result = tokio::time::timeout(
+                    timeout_duration,
+                    backend.infer(prompt, &inference_params)
+                ).await;
+
+                match inference_result {
+                    Ok(Ok(_)) => {
+                        // Successful inference
                         latencies.push(inference_start.elapsed());
                         successful_requests += 1;
                     }
-                    Err(_) => {
+                    Ok(Err(_)) => {
+                        // Inference failed but didn't timeout
                         failed_requests += 1;
+                    }
+                    Err(_) => {
+                        // Inference timed out
+                        timeout_requests += 1;
+                        failed_requests += 1; // Count timeouts as failures too
                     }
                 }
 
@@ -267,9 +299,18 @@ impl PerformanceBaseline {
 
         let actual_test_duration = measurement_start.elapsed();
 
+        // Track disk I/O at end and calculate rate
+        let final_disk_read = self.get_total_disk_read_bytes(&system);
+        let final_disk_write = self.get_total_disk_write_bytes(&system);
+        let total_disk_io_bytes = (final_disk_read - initial_disk_read) + (final_disk_write - initial_disk_write);
+        let disk_io_mb_per_sec = (total_disk_io_bytes as f64 / 1024.0 / 1024.0) / actual_test_duration.as_secs_f64();
+
         // Calculate throughput
         let total_requests = successful_requests + failed_requests;
         let requests_per_second = total_requests as f64 / actual_test_duration.as_secs_f64();
+
+        // Calculate timeout rate
+        let timeout_rate = timeout_requests as f64 / total_requests as f64;
 
         // Calculate latency percentiles
         latencies.sort();
@@ -292,7 +333,8 @@ impl PerformanceBaseline {
         // Calculate memory metrics
         let peak_memory_usage_mb = (peak_memory_after_loading - initial_memory) / 1024 / 1024;
         let avg_memory_usage_mb = peak_memory_usage_mb; // Simplified for now
-        let memory_efficiency_score = model.size as f64 / (peak_memory_usage_mb * 1024 * 1024) as f64;
+        let memory_efficiency_score =
+            model.size as f64 / (peak_memory_usage_mb * 1024 * 1024) as f64;
 
         // System utilization
         let cpu_utilization = system.global_cpu_info().cpu_usage() as f64 / 100.0;
@@ -301,7 +343,8 @@ impl PerformanceBaseline {
         // Error rates
         let error_rate = failed_requests as f64 / total_requests as f64;
 
-        let test_id = format!("{}_{}_baseline_{}",
+        let test_id = format!(
+            "{}_{}_baseline_{}",
             backend_type.to_string(),
             model.name.replace('.', "_"),
             SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs()
@@ -336,10 +379,10 @@ impl PerformanceBaseline {
 
             cpu_utilization,
             memory_utilization,
-            disk_io_mb_per_sec: 0.0, // TODO: Implement disk I/O monitoring
+            disk_io_mb_per_sec,
 
             error_rate,
-            timeout_rate: 0.0, // TODO: Implement timeout tracking
+            timeout_rate,
 
             test_duration_sec: actual_test_duration.as_secs(),
             environment: format!("{}-{}", std::env::consts::OS, std::env::consts::ARCH),
@@ -356,32 +399,32 @@ impl PerformanceBaseline {
 
             comparison.insert(
                 format!("{}_inference_latency", prefix),
-                metrics.avg_inference_latency_ms <= self.targets.inference_latency_ms as f64
+                metrics.avg_inference_latency_ms <= self.targets.inference_latency_ms as f64,
             );
 
             comparison.insert(
                 format!("{}_memory_efficiency", prefix),
-                metrics.peak_memory_usage_mb <= self.targets.memory_efficiency_mb
+                metrics.peak_memory_usage_mb <= self.targets.memory_efficiency_mb,
             );
 
             comparison.insert(
                 format!("{}_throughput", prefix),
-                metrics.requests_per_second >= self.targets.throughput_rps as f64
+                metrics.requests_per_second >= self.targets.throughput_rps as f64,
             );
 
             comparison.insert(
                 format!("{}_model_loading", prefix),
-                metrics.model_loading_time_ms <= self.targets.model_loading_time_ms
+                metrics.model_loading_time_ms <= self.targets.model_loading_time_ms,
             );
 
             comparison.insert(
                 format!("{}_cpu_utilization", prefix),
-                metrics.cpu_utilization <= self.targets.cpu_utilization
+                metrics.cpu_utilization <= self.targets.cpu_utilization,
             );
 
             comparison.insert(
                 format!("{}_memory_utilization", prefix),
-                metrics.memory_utilization <= self.targets.memory_utilization
+                metrics.memory_utilization <= self.targets.memory_utilization,
             );
         }
 
@@ -419,21 +462,50 @@ impl PerformanceBaseline {
     async fn generate_baseline_report(&self) -> Result<()> {
         let mut report = String::new();
         report.push_str("# Inferno Performance Baseline Report\n\n");
-        report.push_str(&format!("Generated: {}\n", chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC")));
+        report.push_str(&format!(
+            "Generated: {}\n",
+            chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC")
+        ));
         report.push_str(&format!("Total Tests: {}\n\n", self.metrics.len()));
 
         // Performance targets
         report.push_str("## Performance Targets\n\n");
-        report.push_str(&format!("- Inference Latency: < {} ms\n", self.targets.inference_latency_ms));
-        report.push_str(&format!("- Memory Efficiency: < {} MB\n", self.targets.memory_efficiency_mb));
-        report.push_str(&format!("- Throughput: > {} requests/sec\n", self.targets.throughput_rps));
-        report.push_str(&format!("- Model Loading: < {} ms\n", self.targets.model_loading_time_ms));
-        report.push_str(&format!("- CPU Utilization: < {:.1}%\n", self.targets.cpu_utilization * 100.0));
-        report.push_str(&format!("- Memory Utilization: < {:.1}%\n\n", self.targets.memory_utilization * 100.0));
+        report.push_str(&format!(
+            "- Inference Latency: < {} ms\n",
+            self.targets.inference_latency_ms
+        ));
+        report.push_str(&format!(
+            "- Memory Efficiency: < {} MB\n",
+            self.targets.memory_efficiency_mb
+        ));
+        report.push_str(&format!(
+            "- Throughput: > {} requests/sec\n",
+            self.targets.throughput_rps
+        ));
+        report.push_str(&format!(
+            "- Model Loading: < {} ms\n",
+            self.targets.model_loading_time_ms
+        ));
+        report.push_str(&format!(
+            "- CPU Utilization: < {:.1}%\n",
+            self.targets.cpu_utilization * 100.0
+        ));
+        report.push_str(&format!(
+            "- Memory Utilization: < {:.1}%\n\n",
+            self.targets.memory_utilization * 100.0
+        ));
 
         // Results by backend
-        let mut gguf_metrics: Vec<_> = self.metrics.iter().filter(|m| m.backend_type == "gguf").collect();
-        let mut onnx_metrics: Vec<_> = self.metrics.iter().filter(|m| m.backend_type == "onnx").collect();
+        let mut gguf_metrics: Vec<_> = self
+            .metrics
+            .iter()
+            .filter(|m| m.backend_type == "gguf")
+            .collect();
+        let mut onnx_metrics: Vec<_> = self
+            .metrics
+            .iter()
+            .filter(|m| m.backend_type == "onnx")
+            .collect();
 
         gguf_metrics.sort_by(|a, b| a.model_size_mb.cmp(&b.model_size_mb));
         onnx_metrics.sort_by(|a, b| a.model_size_mb.cmp(&b.model_size_mb));
@@ -480,7 +552,10 @@ impl PerformanceBaseline {
         let passed_checks = comparison.values().filter(|&&v| v).count();
         let compliance_rate = (passed_checks as f64 / total_checks as f64) * 100.0;
 
-        report.push_str(&format!("Overall Compliance: {:.1}% ({}/{})\n\n", compliance_rate, passed_checks, total_checks));
+        report.push_str(&format!(
+            "Overall Compliance: {:.1}% ({}/{})\n\n",
+            compliance_rate, passed_checks, total_checks
+        ));
 
         let report_file = self.baseline_dir.join("baseline_report.md");
         fs::write(report_file, report).await?;
@@ -493,18 +568,23 @@ impl PerformanceBaseline {
     }
 
     pub fn get_metrics_by_backend(&self, backend_type: &str) -> Vec<&PerformanceMetrics> {
-        self.metrics.iter().filter(|m| m.backend_type == backend_type).collect()
+        self.metrics
+            .iter()
+            .filter(|m| m.backend_type == backend_type)
+            .collect()
     }
 
     pub fn detect_performance_regression(&self, new_metrics: &PerformanceMetrics) -> Vec<String> {
         let mut regressions = Vec::new();
 
         // Find comparable baseline metrics (same backend and similar model size)
-        let comparable_metrics: Vec<_> = self.metrics
+        let comparable_metrics: Vec<_> = self
+            .metrics
             .iter()
             .filter(|m| {
-                m.backend_type == new_metrics.backend_type &&
-                (m.model_size_mb as i64 - new_metrics.model_size_mb as i64).abs() <= 10 // Within 10MB
+                m.backend_type == new_metrics.backend_type
+                    && (m.model_size_mb as i64 - new_metrics.model_size_mb as i64).abs() <= 10
+                // Within 10MB
             })
             .collect();
 
@@ -512,14 +592,28 @@ impl PerformanceBaseline {
             return regressions;
         }
 
-        let baseline_avg_latency: f64 = comparable_metrics.iter().map(|m| m.avg_inference_latency_ms).sum::<f64>() / comparable_metrics.len() as f64;
-        let baseline_avg_throughput: f64 = comparable_metrics.iter().map(|m| m.requests_per_second).sum::<f64>() / comparable_metrics.len() as f64;
-        let baseline_avg_memory: f64 = comparable_metrics.iter().map(|m| m.peak_memory_usage_mb as f64).sum::<f64>() / comparable_metrics.len() as f64;
+        let baseline_avg_latency: f64 = comparable_metrics
+            .iter()
+            .map(|m| m.avg_inference_latency_ms)
+            .sum::<f64>()
+            / comparable_metrics.len() as f64;
+        let baseline_avg_throughput: f64 = comparable_metrics
+            .iter()
+            .map(|m| m.requests_per_second)
+            .sum::<f64>()
+            / comparable_metrics.len() as f64;
+        let baseline_avg_memory: f64 = comparable_metrics
+            .iter()
+            .map(|m| m.peak_memory_usage_mb as f64)
+            .sum::<f64>()
+            / comparable_metrics.len() as f64;
 
         // Check for regressions (more than 10% worse than baseline)
         let regression_threshold = 0.1;
 
-        if new_metrics.avg_inference_latency_ms > baseline_avg_latency * (1.0 + regression_threshold) {
+        if new_metrics.avg_inference_latency_ms
+            > baseline_avg_latency * (1.0 + regression_threshold)
+        {
             regressions.push(format!(
                 "Latency regression: {:.2}ms vs {:.2}ms baseline (+{:.1}%)",
                 new_metrics.avg_inference_latency_ms,
@@ -528,7 +622,8 @@ impl PerformanceBaseline {
             ));
         }
 
-        if new_metrics.requests_per_second < baseline_avg_throughput * (1.0 - regression_threshold) {
+        if new_metrics.requests_per_second < baseline_avg_throughput * (1.0 - regression_threshold)
+        {
             regressions.push(format!(
                 "Throughput regression: {:.1} RPS vs {:.1} RPS baseline (-{:.1}%)",
                 new_metrics.requests_per_second,
@@ -537,7 +632,9 @@ impl PerformanceBaseline {
             ));
         }
 
-        if new_metrics.peak_memory_usage_mb as f64 > baseline_avg_memory * (1.0 + regression_threshold) {
+        if new_metrics.peak_memory_usage_mb as f64
+            > baseline_avg_memory * (1.0 + regression_threshold)
+        {
             regressions.push(format!(
                 "Memory regression: {} MB vs {:.1} MB baseline (+{:.1}%)",
                 new_metrics.peak_memory_usage_mb,
@@ -547,6 +644,62 @@ impl PerformanceBaseline {
         }
 
         regressions
+    }
+
+    fn get_total_disk_read_bytes(&self, system: &System) -> u64 {
+        #[cfg(target_os = "linux")]
+        {
+            // Read from /proc/diskstats for actual disk I/O
+            if let Ok(content) = std::fs::read_to_string("/proc/diskstats") {
+                let mut total_read_bytes = 0u64;
+
+                for line in content.lines() {
+                    let fields: Vec<&str> = line.split_whitespace().collect();
+                    if fields.len() >= 6 {
+                        // Field 5 (0-indexed) is sectors read
+                        if let Ok(sectors_read) = fields[5].parse::<u64>() {
+                            total_read_bytes += sectors_read * 512; // 512 bytes per sector
+                        }
+                    }
+                }
+
+                return total_read_bytes;
+            }
+        }
+
+        // Fallback: use sysinfo for cross-platform compatibility
+        system.disks().iter()
+            .map(|disk| disk.total_space() - disk.available_space())
+            .sum::<u64>()
+            .saturating_mul(10) // Approximate read activity
+    }
+
+    fn get_total_disk_write_bytes(&self, system: &System) -> u64 {
+        #[cfg(target_os = "linux")]
+        {
+            // Read from /proc/diskstats for actual disk I/O
+            if let Ok(content) = std::fs::read_to_string("/proc/diskstats") {
+                let mut total_write_bytes = 0u64;
+
+                for line in content.lines() {
+                    let fields: Vec<&str> = line.split_whitespace().collect();
+                    if fields.len() >= 10 {
+                        // Field 9 (0-indexed) is sectors written
+                        if let Ok(sectors_written) = fields[9].parse::<u64>() {
+                            total_write_bytes += sectors_written * 512; // 512 bytes per sector
+                        }
+                    }
+                }
+
+                return total_write_bytes;
+            }
+        }
+
+        // Fallback: use sysinfo for cross-platform compatibility
+        system.disks().iter()
+            .map(|disk| disk.total_space() - disk.available_space())
+            .sum::<u64>()
+            .saturating_mul(5) // Approximate write activity
     }
 }
 

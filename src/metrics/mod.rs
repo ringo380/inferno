@@ -137,25 +137,30 @@ impl MetricsCollector {
 
                     if event.success {
                         counters.successful_requests.fetch_add(1, Ordering::Relaxed);
-                        counters.total_tokens_generated.fetch_add(event.output_length as u64, Ordering::Relaxed);
+                        counters
+                            .total_tokens_generated
+                            .fetch_add(event.output_length as u64, Ordering::Relaxed);
                     } else {
                         counters.failed_requests.fetch_add(1, Ordering::Relaxed);
                     }
 
-                    counters.total_inference_time_ms.fetch_add(event.duration.as_millis() as u64, Ordering::Relaxed);
+                    counters
+                        .total_inference_time_ms
+                        .fetch_add(event.duration.as_millis() as u64, Ordering::Relaxed);
 
                     // Update model-specific stats
                     if let Ok(mut stats) = model_stats.write() {
-                        let model_stat = stats
-                            .entry(event.model_name.clone())
-                            .or_insert_with(|| ModelStats {
-                                name: event.model_name.clone(),
-                                size_bytes: 0, // Will be updated when model is loaded
-                                load_time_ms: 0,
-                                inference_count: 0,
-                                total_inference_time_ms: 0,
-                                backend_type: "unknown".to_string(),
-                            });
+                        let model_stat =
+                            stats
+                                .entry(event.model_name.clone())
+                                .or_insert_with(|| ModelStats {
+                                    name: event.model_name.clone(),
+                                    size_bytes: 0, // Will be updated when model is loaded
+                                    load_time_ms: 0,
+                                    inference_count: 0,
+                                    total_inference_time_ms: 0,
+                                    backend_type: "unknown".to_string(),
+                                });
 
                         model_stat.inference_count += 1;
                         model_stat.total_inference_time_ms += event.duration.as_millis() as u64;
@@ -168,7 +173,6 @@ impl MetricsCollector {
 
         Ok(())
     }
-
 
     pub fn record_model_loaded(
         &self,
@@ -217,11 +221,26 @@ impl MetricsCollector {
     }
 
     async fn get_inference_metrics(&self) -> InferenceMetrics {
-        let total_requests = self.inference_counters.total_requests.load(Ordering::Relaxed);
-        let successful_requests = self.inference_counters.successful_requests.load(Ordering::Relaxed);
-        let failed_requests = self.inference_counters.failed_requests.load(Ordering::Relaxed);
-        let total_tokens = self.inference_counters.total_tokens_generated.load(Ordering::Relaxed);
-        let total_time_ms = self.inference_counters.total_inference_time_ms.load(Ordering::Relaxed);
+        let total_requests = self
+            .inference_counters
+            .total_requests
+            .load(Ordering::Relaxed);
+        let successful_requests = self
+            .inference_counters
+            .successful_requests
+            .load(Ordering::Relaxed);
+        let failed_requests = self
+            .inference_counters
+            .failed_requests
+            .load(Ordering::Relaxed);
+        let total_tokens = self
+            .inference_counters
+            .total_tokens_generated
+            .load(Ordering::Relaxed);
+        let total_time_ms = self
+            .inference_counters
+            .total_inference_time_ms
+            .load(Ordering::Relaxed);
 
         let average_tokens_per_second = if total_time_ms > 0 {
             (total_tokens as f64 * 1000.0) / total_time_ms as f64
@@ -247,7 +266,7 @@ impl MetricsCollector {
     }
 
     async fn get_system_metrics(&self) -> Result<SystemMetrics> {
-        use sysinfo::{System, SystemExt, CpuExt};
+        use sysinfo::{CpuExt, System, SystemExt};
 
         let mut system = System::new_all();
         system.refresh_all();
@@ -276,9 +295,7 @@ impl MetricsCollector {
             HashMap::new()
         };
 
-        let total_model_size_bytes = loaded_models.values()
-            .map(|stats| stats.size_bytes)
-            .sum();
+        let total_model_size_bytes = loaded_models.values().map(|stats| stats.size_bytes).sum();
 
         ModelMetrics {
             loaded_models,
@@ -304,46 +321,78 @@ impl MetricsCollector {
         let mut output = String::new();
 
         // Inference metrics
-        output.push_str("# HELP inferno_inference_requests_total Total number of inference requests\n");
+        output.push_str(
+            "# HELP inferno_inference_requests_total Total number of inference requests\n",
+        );
         output.push_str("# TYPE inferno_inference_requests_total counter\n");
-        output.push_str(&format!("inferno_inference_requests_total {}\n", snapshot.inference_metrics.total_requests));
+        output.push_str(&format!(
+            "inferno_inference_requests_total {}\n",
+            snapshot.inference_metrics.total_requests
+        ));
 
         output.push_str("# HELP inferno_inference_requests_successful_total Total number of successful inference requests\n");
         output.push_str("# TYPE inferno_inference_requests_successful_total counter\n");
-        output.push_str(&format!("inferno_inference_requests_successful_total {}\n", snapshot.inference_metrics.successful_requests));
+        output.push_str(&format!(
+            "inferno_inference_requests_successful_total {}\n",
+            snapshot.inference_metrics.successful_requests
+        ));
 
         output.push_str("# HELP inferno_inference_requests_failed_total Total number of failed inference requests\n");
         output.push_str("# TYPE inferno_inference_requests_failed_total counter\n");
-        output.push_str(&format!("inferno_inference_requests_failed_total {}\n", snapshot.inference_metrics.failed_requests));
+        output.push_str(&format!(
+            "inferno_inference_requests_failed_total {}\n",
+            snapshot.inference_metrics.failed_requests
+        ));
 
         output.push_str("# HELP inferno_inference_tokens_total Total number of tokens generated\n");
         output.push_str("# TYPE inferno_inference_tokens_total counter\n");
-        output.push_str(&format!("inferno_inference_tokens_total {}\n", snapshot.inference_metrics.total_tokens_generated));
+        output.push_str(&format!(
+            "inferno_inference_tokens_total {}\n",
+            snapshot.inference_metrics.total_tokens_generated
+        ));
 
         output.push_str("# HELP inferno_inference_duration_ms_total Total time spent on inference in milliseconds\n");
         output.push_str("# TYPE inferno_inference_duration_ms_total counter\n");
-        output.push_str(&format!("inferno_inference_duration_ms_total {}\n", snapshot.inference_metrics.total_inference_time_ms));
+        output.push_str(&format!(
+            "inferno_inference_duration_ms_total {}\n",
+            snapshot.inference_metrics.total_inference_time_ms
+        ));
 
         output.push_str("# HELP inferno_tokens_per_second Average tokens generated per second\n");
         output.push_str("# TYPE inferno_tokens_per_second gauge\n");
-        output.push_str(&format!("inferno_tokens_per_second {}\n", snapshot.inference_metrics.average_tokens_per_second));
+        output.push_str(&format!(
+            "inferno_tokens_per_second {}\n",
+            snapshot.inference_metrics.average_tokens_per_second
+        ));
 
         output.push_str("# HELP inferno_latency_ms Average latency in milliseconds\n");
         output.push_str("# TYPE inferno_latency_ms gauge\n");
-        output.push_str(&format!("inferno_latency_ms {}\n", snapshot.inference_metrics.average_latency_ms));
+        output.push_str(&format!(
+            "inferno_latency_ms {}\n",
+            snapshot.inference_metrics.average_latency_ms
+        ));
 
         // System metrics
         output.push_str("# HELP inferno_memory_usage_bytes Memory usage in bytes\n");
         output.push_str("# TYPE inferno_memory_usage_bytes gauge\n");
-        output.push_str(&format!("inferno_memory_usage_bytes {}\n", snapshot.system_metrics.memory_usage_bytes));
+        output.push_str(&format!(
+            "inferno_memory_usage_bytes {}\n",
+            snapshot.system_metrics.memory_usage_bytes
+        ));
 
         output.push_str("# HELP inferno_cpu_usage_percent CPU usage percentage\n");
         output.push_str("# TYPE inferno_cpu_usage_percent gauge\n");
-        output.push_str(&format!("inferno_cpu_usage_percent {}\n", snapshot.system_metrics.cpu_usage_percent));
+        output.push_str(&format!(
+            "inferno_cpu_usage_percent {}\n",
+            snapshot.system_metrics.cpu_usage_percent
+        ));
 
         output.push_str("# HELP inferno_uptime_seconds Server uptime in seconds\n");
         output.push_str("# TYPE inferno_uptime_seconds counter\n");
-        output.push_str(&format!("inferno_uptime_seconds {}\n", snapshot.system_metrics.uptime_seconds));
+        output.push_str(&format!(
+            "inferno_uptime_seconds {}\n",
+            snapshot.system_metrics.uptime_seconds
+        ));
 
         // GPU metrics (if available)
         if let Some(gpu_memory) = snapshot.system_metrics.gpu_memory_usage_bytes {
@@ -361,35 +410,52 @@ impl MetricsCollector {
         // Model metrics
         output.push_str("# HELP inferno_loaded_models_count Number of currently loaded models\n");
         output.push_str("# TYPE inferno_loaded_models_count gauge\n");
-        output.push_str(&format!("inferno_loaded_models_count {}\n", snapshot.model_metrics.loaded_models.len()));
+        output.push_str(&format!(
+            "inferno_loaded_models_count {}\n",
+            snapshot.model_metrics.loaded_models.len()
+        ));
 
-        output.push_str("# HELP inferno_models_size_bytes_total Total size of all loaded models in bytes\n");
+        output.push_str(
+            "# HELP inferno_models_size_bytes_total Total size of all loaded models in bytes\n",
+        );
         output.push_str("# TYPE inferno_models_size_bytes_total gauge\n");
-        output.push_str(&format!("inferno_models_size_bytes_total {}\n", snapshot.model_metrics.total_model_size_bytes));
+        output.push_str(&format!(
+            "inferno_models_size_bytes_total {}\n",
+            snapshot.model_metrics.total_model_size_bytes
+        ));
 
         // Per-model metrics
         for (model_name, stats) in &snapshot.model_metrics.loaded_models {
             let safe_model_name = model_name.replace("\"", "\\\"");
 
-            output.push_str("# HELP inferno_model_inference_count Number of inferences per model\n");
+            output
+                .push_str("# HELP inferno_model_inference_count Number of inferences per model\n");
             output.push_str("# TYPE inferno_model_inference_count counter\n");
-            output.push_str(&format!("inferno_model_inference_count{{model=\"{}\",backend=\"{}\"}} {}\n",
-                safe_model_name, stats.backend_type, stats.inference_count));
+            output.push_str(&format!(
+                "inferno_model_inference_count{{model=\"{}\",backend=\"{}\"}} {}\n",
+                safe_model_name, stats.backend_type, stats.inference_count
+            ));
 
             output.push_str("# HELP inferno_model_size_bytes Model size in bytes\n");
             output.push_str("# TYPE inferno_model_size_bytes gauge\n");
-            output.push_str(&format!("inferno_model_size_bytes{{model=\"{}\",backend=\"{}\"}} {}\n",
-                safe_model_name, stats.backend_type, stats.size_bytes));
+            output.push_str(&format!(
+                "inferno_model_size_bytes{{model=\"{}\",backend=\"{}\"}} {}\n",
+                safe_model_name, stats.backend_type, stats.size_bytes
+            ));
 
             output.push_str("# HELP inferno_model_load_time_ms Model load time in milliseconds\n");
             output.push_str("# TYPE inferno_model_load_time_ms gauge\n");
-            output.push_str(&format!("inferno_model_load_time_ms{{model=\"{}\",backend=\"{}\"}} {}\n",
-                safe_model_name, stats.backend_type, stats.load_time_ms));
+            output.push_str(&format!(
+                "inferno_model_load_time_ms{{model=\"{}\",backend=\"{}\"}} {}\n",
+                safe_model_name, stats.backend_type, stats.load_time_ms
+            ));
 
             output.push_str("# HELP inferno_model_inference_duration_ms_total Total inference time per model in milliseconds\n");
             output.push_str("# TYPE inferno_model_inference_duration_ms_total counter\n");
-            output.push_str(&format!("inferno_model_inference_duration_ms_total{{model=\"{}\",backend=\"{}\"}} {}\n",
-                safe_model_name, stats.backend_type, stats.total_inference_time_ms));
+            output.push_str(&format!(
+                "inferno_model_inference_duration_ms_total{{model=\"{}\",backend=\"{}\"}} {}\n",
+                safe_model_name, stats.backend_type, stats.total_inference_time_ms
+            ));
         }
 
         Ok(output)

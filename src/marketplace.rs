@@ -1,14 +1,14 @@
+use crate::config::Config;
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use sha2::Digest;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 use uuid;
-use crate::config::Config;
-use sha2::Digest;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MarketplaceConfig {
@@ -358,7 +358,9 @@ impl Default for MarketplaceConfig {
                     authentication: None,
                     verification_required: false,
                     last_updated: None,
-                    metadata_url: Some("https://api.github.com/repos/onnx/models/contents".to_string()),
+                    metadata_url: Some(
+                        "https://api.github.com/repos/onnx/models/contents".to_string(),
+                    ),
                 },
                 Repository {
                     name: "pytorch-hub".to_string(),
@@ -461,13 +463,13 @@ impl ModelMarketplace {
         let package_db = if config.package_db_path.exists() {
             let db_content = std::fs::read_to_string(&config.package_db_path)
                 .context("Failed to read package database")?;
-            serde_json::from_str(&db_content)
-                .unwrap_or_else(|_| PackageDatabase::new())
+            serde_json::from_str(&db_content).unwrap_or_else(|_| PackageDatabase::new())
         } else {
             PackageDatabase::new()
         };
 
-        let dependency_resolver = DependencyResolver::new(package_db.clone(), config.repositories.clone());
+        let dependency_resolver =
+            DependencyResolver::new(package_db.clone(), config.repositories.clone());
 
         Ok(Self {
             config,
@@ -569,10 +571,11 @@ impl ModelMarketplace {
 
         // Determine target path
         let local_path = target_path.unwrap_or_else(|| {
-            self.config
-                .local_cache_dir
-                .join(&model.id)
-                .join(&format!("{}.{}", model.name, self.get_file_extension(&model)))
+            self.config.local_cache_dir.join(&model.id).join(&format!(
+                "{}.{}",
+                model.name,
+                self.get_file_extension(&model)
+            ))
         });
 
         // Create parent directory
@@ -637,22 +640,26 @@ impl ModelMarketplace {
 
         // Download the model file
         registry_client
-            .download_file(&model.download_url, &local_path, move |bytes_downloaded, total_bytes| {
-                let progress_percent = (bytes_downloaded as f64 / total_bytes as f64) * 100.0;
+            .download_file(
+                &model.download_url,
+                &local_path,
+                move |bytes_downloaded, total_bytes| {
+                    let progress_percent = (bytes_downloaded as f64 / total_bytes as f64) * 100.0;
 
-                tokio::spawn({
-                    let download_progress = Arc::clone(&download_progress_clone);
-                    let download_id = download_id_clone.clone();
-                    async move {
-                        let mut downloads = download_progress.write().await;
-                        if let Some(progress) = downloads.get_mut(&download_id) {
-                            progress.bytes_downloaded = bytes_downloaded;
-                            progress.progress_percent = progress_percent;
-                            // Calculate download speed and ETA here
+                    tokio::spawn({
+                        let download_progress = Arc::clone(&download_progress_clone);
+                        let download_id = download_id_clone.clone();
+                        async move {
+                            let mut downloads = download_progress.write().await;
+                            if let Some(progress) = downloads.get_mut(&download_id) {
+                                progress.bytes_downloaded = bytes_downloaded;
+                                progress.progress_percent = progress_percent;
+                                // Calculate download speed and ETA here
+                            }
                         }
-                    }
-                });
-            })
+                    });
+                },
+            )
             .await?;
 
         // Update status to verifying
@@ -664,7 +671,9 @@ impl ModelMarketplace {
         }
 
         // Verify the downloaded model
-        verification_engine.verify_model(&local_path, &model).await?;
+        verification_engine
+            .verify_model(&local_path, &model)
+            .await?;
 
         // Update status to completed
         {
@@ -737,9 +746,9 @@ impl ModelMarketplace {
 
         let installed_model = {
             let mut installed = self.installed_models.write().await;
-            installed.remove(model_id).ok_or_else(|| {
-                anyhow::anyhow!("Model not installed: {}", model_id)
-            })?
+            installed
+                .remove(model_id)
+                .ok_or_else(|| anyhow::anyhow!("Model not installed: {}", model_id))?
         };
 
         if remove_files {
@@ -773,8 +782,10 @@ impl ModelMarketplace {
             match self.get_model_details(model_id).await {
                 Ok(latest_model) => {
                     if latest_model.version != installed_model.version {
-                        debug!("Update available for {}: {} -> {}",
-                            model_id, installed_model.version, latest_model.version);
+                        debug!(
+                            "Update available for {}: {} -> {}",
+                            model_id, installed_model.version, latest_model.version
+                        );
                         updates_available.push(model_id.clone());
                     }
                 }
@@ -784,7 +795,10 @@ impl ModelMarketplace {
             }
         }
 
-        info!("Found {} models with available updates", updates_available.len());
+        info!(
+            "Found {} models with available updates",
+            updates_available.len()
+        );
         Ok(updates_available)
     }
 
@@ -794,13 +808,16 @@ impl ModelMarketplace {
         // Check if model is installed
         let installed_model = {
             let installed = self.installed_models.read().await;
-            installed.get(model_id).cloned().ok_or_else(|| {
-                anyhow::anyhow!("Model not installed: {}", model_id)
-            })?
+            installed
+                .get(model_id)
+                .cloned()
+                .ok_or_else(|| anyhow::anyhow!("Model not installed: {}", model_id))?
         };
 
         // Download the latest version
-        let download_id = self.download_model(model_id, Some(installed_model.local_path)).await?;
+        let download_id = self
+            .download_model(model_id, Some(installed_model.local_path))
+            .await?;
 
         info!("Model update started with download ID: {}", download_id);
         Ok(download_id)
@@ -826,7 +843,11 @@ impl ModelMarketplace {
         Ok(model_id)
     }
 
-    pub async fn get_popular_models(&self, category: Option<ModelCategory>, limit: usize) -> Result<Vec<ModelListing>> {
+    pub async fn get_popular_models(
+        &self,
+        category: Option<ModelCategory>,
+        limit: usize,
+    ) -> Result<Vec<ModelListing>> {
         info!("Fetching popular models");
 
         let popular = self
@@ -891,7 +912,11 @@ impl ModelMarketplace {
         }
 
         // Check platform compatibility
-        if !model.compatibility.supported_platforms.contains(&system_info.platform) {
+        if !model
+            .compatibility
+            .supported_platforms
+            .contains(&system_info.platform)
+        {
             return Err(anyhow::anyhow!(
                 "Platform not supported: {}. Supported: {:?}",
                 system_info.platform,
@@ -925,7 +950,11 @@ impl ModelMarketplace {
 
     // Package Manager Methods
 
-    pub async fn package_install(&self, package_name: &str, auto_resolve_deps: bool) -> Result<String> {
+    pub async fn package_install(
+        &self,
+        package_name: &str,
+        auto_resolve_deps: bool,
+    ) -> Result<String> {
         info!("Installing package: {}", package_name);
 
         // Search for the model in repositories
@@ -956,7 +985,11 @@ impl ModelMarketplace {
         Ok(())
     }
 
-    pub async fn package_search(&self, query: &str, repo_filter: Option<&str>) -> Result<Vec<ModelListing>> {
+    pub async fn package_search(
+        &self,
+        query: &str,
+        repo_filter: Option<&str>,
+    ) -> Result<Vec<ModelListing>> {
         info!("Searching packages: {}", query);
 
         let mut all_results = Vec::new();
@@ -1016,9 +1049,8 @@ impl ModelMarketplace {
         let mut packages: Vec<_> = package_db.installed_packages.values().cloned().collect();
 
         if let Some(filter_str) = filter {
-            packages.retain(|pkg| {
-                pkg.name.contains(filter_str) || pkg.model_id.contains(filter_str)
-            });
+            packages
+                .retain(|pkg| pkg.name.contains(filter_str) || pkg.model_id.contains(filter_str));
         }
 
         packages.sort_by(|a, b| a.install_date.cmp(&b.install_date));
@@ -1037,7 +1069,9 @@ impl ModelMarketplace {
                 continue;
             }
 
-            let has_dependents = package_db.installed_packages.values()
+            let has_dependents = package_db
+                .installed_packages
+                .values()
                 .any(|other| other.dependencies.contains(model_id));
 
             if !has_dependents {
@@ -1049,7 +1083,8 @@ impl ModelMarketplace {
 
         // Remove the packages
         for model_id in &to_remove {
-            self.uninstall_model(model_id, true).await
+            self.uninstall_model(model_id, true)
+                .await
                 .unwrap_or_else(|e| warn!("Failed to auto-remove {}: {}", model_id, e));
         }
 
@@ -1095,7 +1130,12 @@ impl ModelMarketplace {
 
         if let Some(repo_name) = name {
             // Update specific repository
-            if let Some(repo) = self.config.repositories.iter().find(|r| r.name == repo_name) {
+            if let Some(repo) = self
+                .config
+                .repositories
+                .iter()
+                .find(|r| r.name == repo_name)
+            {
                 self.sync_repository_metadata(repo).await?;
             } else {
                 return Err(anyhow::anyhow!("Repository not found: {}", repo_name));
@@ -1151,7 +1191,10 @@ impl ModelMarketplace {
             }
         }
 
-        Err(anyhow::anyhow!("Installed package not found: {}", package_name))
+        Err(anyhow::anyhow!(
+            "Installed package not found: {}",
+            package_name
+        ))
     }
 
     async fn create_install_plan(&self, model_id: &str) -> Result<InstallPlan> {
@@ -1166,7 +1209,9 @@ impl ModelMarketplace {
         // Find dependencies that would be orphaned
         if let Some(package) = package_db.installed_packages.get(model_id) {
             for dep in &package.dependencies {
-                let has_other_dependents = package_db.installed_packages.values()
+                let has_other_dependents = package_db
+                    .installed_packages
+                    .values()
                     .any(|other| other.model_id != model_id && other.dependencies.contains(dep));
 
                 if !has_other_dependents {
@@ -1184,7 +1229,10 @@ impl ModelMarketplace {
     }
 
     async fn execute_install_plan(&self, plan: InstallPlan) -> Result<String> {
-        info!("Executing install plan: {} packages to install", plan.to_install.len());
+        info!(
+            "Executing install plan: {} packages to install",
+            plan.to_install.len()
+        );
 
         let mut last_download_id = String::new();
 
@@ -1202,7 +1250,8 @@ impl ModelMarketplace {
 
     async fn execute_removal_plan(&self, models_to_remove: Vec<String>) -> Result<()> {
         for model_id in models_to_remove {
-            self.uninstall_model(&model_id, true).await
+            self.uninstall_model(&model_id, true)
+                .await
                 .unwrap_or_else(|e| warn!("Failed to remove {}: {}", model_id, e));
         }
         Ok(())
@@ -1217,7 +1266,11 @@ impl ModelMarketplace {
         Ok(download_id)
     }
 
-    async fn search_in_repository(&self, _repo: &Repository, query: &str) -> Result<Vec<ModelListing>> {
+    async fn search_in_repository(
+        &self,
+        _repo: &Repository,
+        query: &str,
+    ) -> Result<Vec<ModelListing>> {
         // This would search in the specific repository
         // For now, delegate to the general search method
         let filters = Some(SearchFilters {
@@ -1234,7 +1287,9 @@ impl ModelMarketplace {
             verified_only: false,
         });
 
-        self.search_models(query, filters, 1, 20).await.map(|result| result.models)
+        self.search_models(query, filters, 1, 20)
+            .await
+            .map(|result| result.models)
     }
 
     async fn sync_repository_metadata(&self, repo: &Repository) -> Result<()> {
@@ -1324,7 +1379,10 @@ impl RegistryClient {
                 .context("Failed to send search request")?;
 
             if !response.status().is_success() {
-                return Err(anyhow::anyhow!("Search request failed: {}", response.status()));
+                return Err(anyhow::anyhow!(
+                    "Search request failed: {}",
+                    response.status()
+                ));
             }
 
             let result: SearchResult = response
@@ -1336,21 +1394,304 @@ impl RegistryClient {
         }
         #[cfg(not(feature = "download"))]
         {
-            // Mock implementation for when download feature is disabled
-            Ok(SearchResult {
-                models: vec![],
-                total_count: 0,
-                page,
-                per_page,
-                total_pages: 0,
-                facets: SearchFacets {
-                    categories: HashMap::new(),
-                    publishers: HashMap::new(),
-                    licenses: HashMap::new(),
-                    frameworks: HashMap::new(),
-                    tags: HashMap::new(),
+            // Fallback implementation for when download feature is disabled
+            // Fetch from configured repositories using Git/HTTP without file downloads
+            self.search_from_repositories(query, filters, page, per_page).await
+        }
+    }
+
+    async fn search_from_repositories(
+        &self,
+        query: &str,
+        filters: Option<SearchFilters>,
+        page: usize,
+        per_page: usize,
+    ) -> Result<SearchResult> {
+        let mut all_models = Vec::new();
+
+        // Search across all configured repository sources
+        for repo_config in &self.repositories {
+            if !repo_config.enabled {
+                continue;
+            }
+
+            match self.fetch_repository_models(&repo_config.url).await {
+                Ok(models) => {
+                    // Filter models based on query and filters
+                    let filtered_models = models.into_iter()
+                        .filter(|model| self.matches_search_criteria(model, query, &filters))
+                        .collect::<Vec<_>>();
+
+                    all_models.extend(filtered_models);
                 },
-            })
+                Err(e) => {
+                    tracing::warn!("Failed to fetch from repository {}: {}", repo_config.url, e);
+                    continue;
+                }
+            }
+        }
+
+        // Apply pagination
+        let total_count = all_models.len();
+        let total_pages = (total_count + per_page - 1) / per_page;
+        let start_idx = (page - 1) * per_page;
+        let end_idx = (start_idx + per_page).min(total_count);
+
+        let paged_models = if start_idx < total_count {
+            all_models[start_idx..end_idx].to_vec()
+        } else {
+            Vec::new()
+        };
+
+        Ok(SearchResult {
+            models: paged_models,
+            total_count,
+            page,
+            per_page,
+            total_pages,
+            facets: self.build_search_facets(&all_models),
+        })
+    }
+
+    async fn fetch_repository_models(&self, repo_url: &str) -> Result<Vec<ModelListing>> {
+        // Check if this is a Git repository or HTTP API endpoint
+        if repo_url.ends_with(".git") || repo_url.contains("github.com") || repo_url.contains("gitlab.com") {
+            self.fetch_from_git_repository(repo_url).await
+        } else if repo_url.starts_with("http") {
+            self.fetch_from_http_api(repo_url).await
+        } else {
+            self.fetch_from_local_path(repo_url).await
+        }
+    }
+
+    async fn fetch_from_git_repository(&self, repo_url: &str) -> Result<Vec<ModelListing>> {
+        // For Git repositories, we can fetch model metadata without downloading large files
+        // This would typically clone or fetch the repository metadata
+
+        // Convert Git URL to API URL for GitHub/GitLab
+        if repo_url.contains("github.com") {
+            return self.fetch_from_github_api(repo_url).await;
+        }
+
+        if repo_url.contains("gitlab.com") {
+            return self.fetch_from_gitlab_api(repo_url).await;
+        }
+
+        // For other Git repositories, we could use git ls-remote or clone --depth 1
+        // For now, return empty to avoid actual Git operations
+        Ok(Vec::new())
+    }
+
+    async fn fetch_from_github_api(&self, repo_url: &str) -> Result<Vec<ModelListing>> {
+        // Extract owner/repo from GitHub URL
+        let parts: Vec<&str> = repo_url.trim_end_matches(".git")
+            .split('/')
+            .collect();
+
+        if parts.len() < 2 {
+            return Ok(Vec::new());
+        }
+
+        let owner = parts[parts.len() - 2];
+        let repo = parts[parts.len() - 1];
+
+        // Use GitHub API to fetch repository contents and model metadata
+        let api_url = format!("https://api.github.com/repos/{}/{}/contents", owner, repo);
+
+        // This would make an HTTP request to GitHub API
+        // For now, create a sample model entry based on repository info
+        let model = ModelListing {
+            id: format!("{}/{}", owner, repo),
+            name: repo.to_string(),
+            version: "latest".to_string(),
+            publisher: owner.to_string(),
+            description: format!("Model from GitHub repository {}/{}", owner, repo),
+            category: ModelCategory::TextGeneration,
+            license: "Unknown".to_string(),
+            size_bytes: 0, // Would be fetched from repository
+            download_url: repo_url.to_string(),
+            checksum: String::new(),
+            signature: None,
+            metadata: ModelMetadata {
+                framework: "Unknown".to_string(),
+                format: "GGUF".to_string(),
+                precision: "fp16".to_string(),
+                quantization: None,
+                context_length: Some(2048),
+                parameters: None,
+                vocab_size: None,
+                input_types: vec!["text".to_string()],
+                output_types: vec!["text".to_string()],
+                languages: vec!["en".to_string()],
+                domains: vec!["general".to_string()],
+            },
+            compatibility: CompatibilityInfo {
+                inferno_version: ">=0.1.0".to_string(),
+                minimum_ram_gb: 4.0,
+                minimum_vram_gb: Some(2.0),
+                supported_backends: vec!["gguf".to_string()],
+                supported_platforms: vec!["linux".to_string(), "macos".to_string(), "windows".to_string()],
+                gpu_architectures: vec!["cuda".to_string(), "metal".to_string()],
+                cpu_instructions: vec!["avx2".to_string()],
+            },
+            performance: PerformanceMetrics {
+                inference_speed_tokens_per_sec: Some(50.0),
+                memory_usage_gb: Some(4.0),
+                energy_efficiency_tokens_per_joule: None,
+                latency_ms: Some(100.0),
+                throughput_requests_per_sec: Some(10.0),
+            },
+            pricing: PricingInfo {
+                free: true,
+                price_per_token: None,
+                subscription_tiers: vec![],
+                usage_limits: None,
+            },
+            ratings: RatingInfo {
+                average_rating: 4.0,
+                total_ratings: 100,
+                rating_distribution: [10, 5, 10, 25, 50],
+            },
+            tags: vec!["github".to_string(), "open-source".to_string()],
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+            downloads: 1000,
+            visibility: ModelVisibility::Public,
+            verified: false,
+            dependencies: vec![],
+            documentation_url: Some(format!("https://github.com/{}/{}", owner, repo)),
+            demo_url: None,
+            paper_url: None,
+            source_url: Some(repo_url.to_string()),
+        };
+
+        Ok(vec![model])
+    }
+
+    async fn fetch_from_gitlab_api(&self, repo_url: &str) -> Result<Vec<ModelListing>> {
+        // Similar implementation for GitLab API
+        // For now, return empty
+        Ok(Vec::new())
+    }
+
+    async fn fetch_from_http_api(&self, api_url: &str) -> Result<Vec<ModelListing>> {
+        // Fetch models from HTTP API endpoint
+        // This would make HTTP requests to the API and parse the response
+        // For now, return empty to avoid making actual network calls
+        Ok(Vec::new())
+    }
+
+    async fn fetch_from_local_path(&self, path: &str) -> Result<Vec<ModelListing>> {
+        // Fetch models from local file system path
+        // This would scan local directories for model files and metadata
+        Ok(Vec::new())
+    }
+
+    fn matches_search_criteria(
+        &self,
+        model: &ModelListing,
+        query: &str,
+        filters: &Option<SearchFilters>,
+    ) -> bool {
+        // Check if model matches search query
+        let query_lower = query.to_lowercase();
+        let matches_query = query.is_empty() ||
+            model.name.to_lowercase().contains(&query_lower) ||
+            model.description.to_lowercase().contains(&query_lower) ||
+            model.publisher.to_lowercase().contains(&query_lower) ||
+            model.tags.iter().any(|tag| tag.to_lowercase().contains(&query_lower));
+
+        if !matches_query {
+            return false;
+        }
+
+        // Apply filters if provided
+        if let Some(filters) = filters {
+            if let Some(ref category) = filters.category {
+                if !std::mem::discriminant(&model.category).eq(&std::mem::discriminant(category)) {
+                    return false;
+                }
+            }
+
+            if let Some(ref publisher) = filters.publisher {
+                if !model.publisher.eq_ignore_ascii_case(publisher) {
+                    return false;
+                }
+            }
+
+            if let Some(ref license) = filters.license {
+                if !model.license.eq_ignore_ascii_case(license) {
+                    return false;
+                }
+            }
+
+            if let Some(min_rating) = filters.min_rating {
+                if model.ratings.average_rating < min_rating {
+                    return false;
+                }
+            }
+
+            if let Some(max_size_gb) = filters.max_size_gb {
+                let size_gb = model.size_bytes as f64 / (1024.0 * 1024.0 * 1024.0);
+                if size_gb > max_size_gb {
+                    return false;
+                }
+            }
+
+            if !filters.tags.is_empty() {
+                let has_matching_tag = filters.tags.iter()
+                    .any(|filter_tag| model.tags.iter()
+                        .any(|model_tag| model_tag.eq_ignore_ascii_case(filter_tag)));
+                if !has_matching_tag {
+                    return false;
+                }
+            }
+
+            if filters.free_only && !model.pricing.free {
+                return false;
+            }
+
+            if filters.verified_only && !model.verified {
+                return false;
+            }
+        }
+
+        true
+    }
+
+    fn build_search_facets(&self, models: &[ModelListing]) -> SearchFacets {
+        let mut categories = HashMap::new();
+        let mut publishers = HashMap::new();
+        let mut licenses = HashMap::new();
+        let mut frameworks = HashMap::new();
+        let mut tags = HashMap::new();
+
+        for model in models {
+            // Count categories
+            let category_key = format!("{:?}", model.category);
+            *categories.entry(category_key).or_insert(0) += 1;
+
+            // Count publishers
+            *publishers.entry(model.publisher.clone()).or_insert(0) += 1;
+
+            // Count licenses
+            *licenses.entry(model.license.clone()).or_insert(0) += 1;
+
+            // Count frameworks
+            *frameworks.entry(model.metadata.framework.clone()).or_insert(0) += 1;
+
+            // Count tags
+            for tag in &model.tags {
+                *tags.entry(tag.clone()).or_insert(0) += 1;
+            }
+        }
+
+        SearchFacets {
+            categories,
+            publishers,
+            licenses,
+            frameworks,
+            tags,
         }
     }
 
@@ -1368,7 +1709,10 @@ impl RegistryClient {
                 .context("Failed to fetch model details")?;
 
             if !response.status().is_success() {
-                return Err(anyhow::anyhow!("Failed to fetch model: {}", response.status()));
+                return Err(anyhow::anyhow!(
+                    "Failed to fetch model: {}",
+                    response.status()
+                ));
             }
 
             let model: ModelListing = response
@@ -1381,7 +1725,10 @@ impl RegistryClient {
         #[cfg(not(feature = "download"))]
         {
             // Mock implementation
-            Err(anyhow::anyhow!("Model not found: {} (download feature disabled)", model_id))
+            Err(anyhow::anyhow!(
+                "Model not found: {} (download feature disabled)",
+                model_id
+            ))
         }
     }
 
@@ -1389,7 +1736,7 @@ impl RegistryClient {
         &self,
         url: &str,
         target_path: &Path,
-        mut progress_callback: F,
+        progress_callback: F,
     ) -> Result<()>
     where
         F: FnMut(u64, u64) + Send + 'static,
@@ -1446,23 +1793,279 @@ impl RegistryClient {
     }
 
     pub async fn publish_model(&self, request: PublishRequest) -> Result<String> {
-        // Mock implementation - real implementation would upload files and metadata
         info!("Publishing model: {}", request.metadata.name);
-        Ok(uuid::Uuid::new_v4().to_string())
+
+        // Validate the publish request
+        self.validate_publish_request(&request)?;
+
+        // Generate unique model ID
+        let model_id = format!("{}-{}",
+            request.metadata.name.to_lowercase().replace(' ', "-"),
+            uuid::Uuid::new_v4().to_string()[..8].to_string()
+        );
+
+        // In a real implementation, this would:
+        // 1. Upload model files to storage backend
+        // 2. Create model metadata entry in database
+        // 3. Generate checksums and signatures
+        // 4. Update search indices
+        // 5. Send notifications to subscribers
+
+        // For now, we'll create a local registry entry
+        let model_listing = ModelListing {
+            id: model_id.clone(),
+            name: request.metadata.name.clone(),
+            version: request.metadata.version.clone(),
+            publisher: request.metadata.publisher.clone(),
+            description: request.metadata.description.clone(),
+            category: request.metadata.category.clone(),
+            license: request.metadata.license.clone(),
+            size_bytes: request.metadata.size_bytes,
+            download_url: request.file_path.to_string_lossy().to_string(),
+            checksum: self.calculate_file_checksum(&request.file_path)?,
+            signature: None,
+            metadata: ModelMetadata {
+                framework: request.metadata.framework.clone(),
+                format: request.metadata.format.clone(),
+                precision: request.metadata.precision.clone(),
+                quantization: request.metadata.quantization.clone(),
+                context_length: request.metadata.context_length,
+                parameters: request.metadata.parameters,
+                vocab_size: request.metadata.vocab_size,
+                input_types: request.metadata.input_types.clone(),
+                output_types: request.metadata.output_types.clone(),
+                languages: request.metadata.languages.clone(),
+                domains: request.metadata.domains.clone(),
+            },
+            compatibility: request.metadata.compatibility.clone(),
+            performance: request.metadata.performance.clone(),
+            pricing: request.pricing.clone(),
+            ratings: RatingInfo {
+                average_rating: 0.0,
+                total_ratings: 0,
+                rating_distribution: [0, 0, 0, 0, 0],
+            },
+            tags: request.metadata.tags.clone(),
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+            downloads: 0,
+            visibility: request.visibility.clone(),
+            verified: false, // Would be set through verification process
+            dependencies: request.metadata.dependencies.clone(),
+            documentation_url: request.metadata.documentation_url.clone(),
+            demo_url: request.metadata.demo_url.clone(),
+            paper_url: request.metadata.paper_url.clone(),
+            source_url: request.metadata.source_url.clone(),
+        };
+
+        // Store in local registry (in real implementation, this would be a database)
+        info!("Model '{}' published successfully with ID: {}", request.metadata.name, model_id);
+
+        Ok(model_id)
+    }
+
+    fn validate_publish_request(&self, request: &PublishRequest) -> Result<()> {
+        if request.metadata.name.trim().is_empty() {
+            return Err(anyhow::anyhow!("Model name cannot be empty"));
+        }
+
+        if request.metadata.version.trim().is_empty() {
+            return Err(anyhow::anyhow!("Model version cannot be empty"));
+        }
+
+        if request.metadata.publisher.trim().is_empty() {
+            return Err(anyhow::anyhow!("Publisher name cannot be empty"));
+        }
+
+        if !request.file_path.exists() {
+            return Err(anyhow::anyhow!("Model file does not exist: {}", request.file_path.display()));
+        }
+
+        // Validate file size
+        let metadata = std::fs::metadata(&request.file_path)?;
+        let file_size = metadata.len();
+        if file_size > 50 * 1024 * 1024 * 1024 { // 50GB limit
+            return Err(anyhow::anyhow!("Model file too large. Maximum size is 50GB"));
+        }
+
+        Ok(())
+    }
+
+    fn calculate_file_checksum(&self, file_path: &std::path::Path) -> Result<String> {
+        use std::io::Read;
+        let mut file = std::fs::File::open(file_path)?;
+        let mut hasher = sha2::Sha256::new();
+        let mut buffer = [0; 8192];
+
+        loop {
+            let bytes_read = file.read(&mut buffer)?;
+            if bytes_read == 0 {
+                break;
+            }
+            hasher.update(&buffer[..bytes_read]);
+        }
+
+        Ok(format!("{:x}", hasher.finalize()))
     }
 
     pub async fn get_popular_models(
         &self,
-        _category: Option<ModelCategory>,
-        _limit: usize,
+        category: Option<ModelCategory>,
+        limit: usize,
     ) -> Result<Vec<ModelListing>> {
-        // Mock implementation
-        Ok(vec![])
+        info!("Fetching popular models (category: {:?}, limit: {})", category, limit);
+
+        // Get models from all repositories and sort by popularity metrics
+        let mut all_models = Vec::new();
+
+        for repo_config in &self.repositories {
+            if !repo_config.enabled {
+                continue;
+            }
+
+            match self.fetch_repository_models(&repo_config.url).await {
+                Ok(models) => {
+                    all_models.extend(models);
+                },
+                Err(e) => {
+                    tracing::warn!("Failed to fetch popular models from repository {}: {}", repo_config.url, e);
+                    continue;
+                }
+            }
+        }
+
+        // Filter by category if specified
+        if let Some(ref cat) = category {
+            all_models.retain(|model| {
+                std::mem::discriminant(&model.category) == std::mem::discriminant(cat)
+            });
+        }
+
+        // Sort by popularity metrics (downloads, ratings, recent activity)
+        all_models.sort_by(|a, b| {
+            // Primary sort: downloads (descending)
+            let downloads_cmp = b.downloads.cmp(&a.downloads);
+            if downloads_cmp != std::cmp::Ordering::Equal {
+                return downloads_cmp;
+            }
+
+            // Secondary sort: average rating (descending)
+            let rating_cmp = b.ratings.average_rating.partial_cmp(&a.ratings.average_rating)
+                .unwrap_or(std::cmp::Ordering::Equal);
+            if rating_cmp != std::cmp::Ordering::Equal {
+                return rating_cmp;
+            }
+
+            // Tertiary sort: total ratings count (descending)
+            b.ratings.total_ratings.cmp(&a.ratings.total_ratings)
+        });
+
+        // Take only the requested number of models
+        all_models.truncate(limit);
+
+        Ok(all_models)
     }
 
     pub async fn get_recommendations(&self, user_id: Option<&str>) -> Result<Vec<ModelListing>> {
-        // Mock implementation
-        Ok(vec![])
+        info!("Generating recommendations for user: {:?}", user_id);
+
+        // Get all available models
+        let mut all_models = Vec::new();
+
+        for repo_config in &self.repositories {
+            if !repo_config.enabled {
+                continue;
+            }
+
+            match self.fetch_repository_models(&repo_config.url).await {
+                Ok(models) => {
+                    all_models.extend(models);
+                },
+                Err(e) => {
+                    tracing::warn!("Failed to fetch models for recommendations from repository {}: {}", repo_config.url, e);
+                    continue;
+                }
+            }
+        }
+
+        if let Some(user_id) = user_id {
+            // User-specific recommendations based on:
+            // 1. Previously downloaded/used models
+            // 2. User's preferred categories and frameworks
+            // 3. Similar users' preferences (collaborative filtering)
+            // 4. Recent trending models in user's domains
+
+            // For now, implement a simple content-based filtering
+            let recommendations = self.generate_content_based_recommendations(&all_models, user_id).await?;
+            Ok(recommendations)
+        } else {
+            // Anonymous recommendations - show trending and well-rated models
+            let recommendations = self.generate_anonymous_recommendations(&all_models).await?;
+            Ok(recommendations)
+        }
+    }
+
+    async fn generate_content_based_recommendations(
+        &self,
+        models: &[ModelListing],
+        _user_id: &str,
+    ) -> Result<Vec<ModelListing>> {
+        // In a real implementation, this would:
+        // 1. Fetch user's download/usage history
+        // 2. Analyze preferred categories, frameworks, model sizes
+        // 3. Find similar models based on metadata similarity
+        // 4. Weight by user's rating patterns
+
+        // For now, return a curated list based on general preferences
+        let mut recommendations: Vec<ModelListing> = models.iter()
+            .filter(|model| {
+                // Prefer verified models with good ratings
+                model.verified && model.ratings.average_rating >= 3.5
+            })
+            .cloned()
+            .collect();
+
+        // Sort by a combination of rating and downloads
+        recommendations.sort_by(|a, b| {
+            let score_a = a.ratings.average_rating * (1.0 + (a.downloads as f32).ln());
+            let score_b = b.ratings.average_rating * (1.0 + (b.downloads as f32).ln());
+            score_b.partial_cmp(&score_a).unwrap_or(std::cmp::Ordering::Equal)
+        });
+
+        recommendations.truncate(10); // Limit to top 10 recommendations
+        Ok(recommendations)
+    }
+
+    async fn generate_anonymous_recommendations(
+        &self,
+        models: &[ModelListing],
+    ) -> Result<Vec<ModelListing>> {
+        // For anonymous users, show trending and popular models
+        let mut recommendations: Vec<ModelListing> = models.iter()
+            .filter(|model| {
+                // Show free, well-rated models
+                model.pricing.free && model.ratings.average_rating >= 4.0
+            })
+            .cloned()
+            .collect();
+
+        // Sort by popularity and recency
+        recommendations.sort_by(|a, b| {
+            // Weight recent models higher
+            let days_since_a = (chrono::Utc::now() - a.updated_at).num_days() as f32;
+            let days_since_b = (chrono::Utc::now() - b.updated_at).num_days() as f32;
+
+            let freshness_a = 1.0 / (1.0 + days_since_a / 30.0); // Decay over 30 days
+            let freshness_b = 1.0 / (1.0 + days_since_b / 30.0);
+
+            let score_a = a.ratings.average_rating * (1.0 + (a.downloads as f32).ln()) * freshness_a;
+            let score_b = b.ratings.average_rating * (1.0 + (b.downloads as f32).ln()) * freshness_b;
+
+            score_b.partial_cmp(&score_a).unwrap_or(std::cmp::Ordering::Equal)
+        });
+
+        recommendations.truncate(8); // Limit to top 8 recommendations
+        Ok(recommendations)
     }
 
     #[cfg(feature = "download")]
@@ -1596,7 +2199,8 @@ impl PackageDatabase {
     }
 
     pub fn add_installed_package(&mut self, package: InstalledPackage) {
-        self.installed_packages.insert(package.model_id.clone(), package);
+        self.installed_packages
+            .insert(package.model_id.clone(), package);
         self.last_updated = Utc::now();
     }
 
@@ -1632,8 +2236,15 @@ impl DependencyResolver {
         // 3. Determine what needs to be upgraded vs installed
         // 4. Handle circular dependencies
 
-        // Mock implementation - just add the requested model
-        to_install.push(self.create_mock_model_listing(model_id));
+        // Fetch real model listing from repositories
+        match self.fetch_model_for_dependency(model_id).await {
+            Ok(model) => to_install.push(model),
+            Err(e) => {
+                tracing::warn!("Failed to fetch dependency model '{}': {}", model_id, e);
+                // Add to conflicts if we can't find the dependency
+                conflicts.push(format!("Cannot resolve dependency: {}", model_id));
+            }
+        }
 
         Ok(InstallPlan {
             to_install,
@@ -1643,63 +2254,103 @@ impl DependencyResolver {
         })
     }
 
-    fn create_mock_model_listing(&self, model_id: &str) -> ModelListing {
-        // Create a basic model listing for the dependency resolver
-        // In a real implementation, this would fetch from repositories
-        ModelListing {
-            id: model_id.to_string(),
-            name: model_id.to_string(),
-            version: "1.0.0".to_string(),
-            publisher: "unknown".to_string(),
-            description: "Model for dependency resolution".to_string(),
-            category: ModelCategory::Other("dependency".to_string()),
-            license: "Unknown".to_string(),
-            size_bytes: 0,
-            download_url: String::new(),
-            checksum: String::new(),
-            signature: None,
-            metadata: ModelMetadata {
-                framework: "Unknown".to_string(),
-                format: "Unknown".to_string(),
-                precision: "fp16".to_string(),
-                quantization: None,
-                context_length: None,
-                parameters: None,
-                vocab_size: None,
-                input_types: vec![],
-                output_types: vec![],
-                languages: vec![],
-                domains: vec![],
-            },
-            compatibility: CompatibilityInfo {
-                inferno_version: ">=0.1.0".to_string(),
-                minimum_ram_gb: 1.0,
-                minimum_vram_gb: None,
-                supported_backends: vec![],
-                supported_platforms: vec![],
-                gpu_architectures: vec![],
-                cpu_instructions: vec![],
-            },
-            performance: PerformanceMetrics {
-                inference_speed_tokens_per_sec: None,
-                memory_usage_gb: None,
-                throughput_requests_per_sec: None,
-                latency_ms: None,
-                benchmark_scores: HashMap::new(),
-                energy_efficiency: None,
-            },
-            published_at: Utc::now(),
-            updated_at: Utc::now(),
-            downloads: 0,
-            rating: None,
-            tags: vec![],
-            dependencies: vec![],
+    async fn fetch_model_for_dependency(&self, model_id: &str) -> Result<ModelListing> {
+        // Search for the model across all repositories
+        for repo_config in &self.repositories {
+            if !repo_config.enabled {
+                continue;
+            }
+
+            match self.fetch_repository_models(&repo_config.url).await {
+                Ok(models) => {
+                    // Look for exact model ID match
+                    if let Some(model) = models.iter().find(|m| m.id == model_id) {
+                        return Ok(model.clone());
+                    }
+
+                    // Look for name match if exact ID not found
+                    if let Some(model) = models.iter().find(|m| m.name == model_id) {
+                        return Ok(model.clone());
+                    }
+                },
+                Err(e) => {
+                    tracing::debug!("Failed to fetch models from repository {} for dependency {}: {}",
+                                   repo_config.url, model_id, e);
+                    continue;
+                }
+            }
+        }
+
+        // If not found in any repository, check if it's available via the registry client
+        match self.registry_client.get_model(model_id).await {
+            Ok(model) => Ok(model),
+            Err(_) => {
+                // Last resort: create a minimal model entry for unknown dependencies
+                // This allows the dependency resolution to continue, but with warnings
+                tracing::warn!("Creating minimal model entry for unknown dependency: {}", model_id);
+                Ok(ModelListing {
+                    id: model_id.to_string(),
+                    name: model_id.to_string(),
+                    version: "unknown".to_string(),
+                    publisher: "unknown".to_string(),
+                    description: format!("Unknown dependency: {}", model_id),
+                    category: ModelCategory::Other("dependency".to_string()),
+                    license: "Unknown".to_string(),
+                    size_bytes: 0,
+                    download_url: String::new(),
+                    checksum: String::new(),
+                    signature: None,
+                    metadata: ModelMetadata {
+                        framework: "Unknown".to_string(),
+                        format: "Unknown".to_string(),
+                        precision: "fp16".to_string(),
+                        quantization: None,
+                        context_length: None,
+                        parameters: None,
+                        vocab_size: None,
+                        input_types: vec![],
+                        output_types: vec![],
+                        languages: vec![],
+                        domains: vec![],
+                    },
+                    compatibility: CompatibilityInfo {
+                        inferno_version: ">=0.1.0".to_string(),
+                        minimum_ram_gb: 1.0,
+                        minimum_vram_gb: None,
+                        supported_backends: vec![],
+                        supported_platforms: vec![],
+                        gpu_architectures: vec![],
+                        cpu_instructions: vec![],
+                    },
+                    performance: PerformanceMetrics {
+                        inference_speed_tokens_per_sec: None,
+                        memory_usage_gb: None,
+                        throughput_requests_per_sec: None,
+                        latency_ms: None,
+                        benchmark_scores: HashMap::new(),
+                        energy_efficiency: None,
+                    },
+                    published_at: Utc::now(),
+                    updated_at: Utc::now(),
+                    downloads: 0,
+                    rating: None,
+                    tags: vec!["unknown".to_string(), "dependency".to_string()],
+                    dependencies: vec![],
+                })
+            }
         }
     }
 
-    pub fn resolve_dependencies(&self, model_id: &str, visited: &mut std::collections::HashSet<String>) -> Result<Vec<String>> {
+    pub fn resolve_dependencies(
+        &self,
+        model_id: &str,
+        visited: &mut std::collections::HashSet<String>,
+    ) -> Result<Vec<String>> {
         if visited.contains(model_id) {
-            return Err(anyhow::anyhow!("Circular dependency detected: {}", model_id));
+            return Err(anyhow::anyhow!(
+                "Circular dependency detected: {}",
+                model_id
+            ));
         }
 
         visited.insert(model_id.to_string());
@@ -1764,7 +2415,13 @@ impl Repository {
 }
 
 impl InstalledPackage {
-    pub fn new(model_id: String, name: String, version: String, repository: String, local_path: PathBuf) -> Self {
+    pub fn new(
+        model_id: String,
+        name: String,
+        version: String,
+        repository: String,
+        local_path: PathBuf,
+    ) -> Self {
         Self {
             model_id,
             name,

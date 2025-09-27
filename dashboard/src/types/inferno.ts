@@ -4,6 +4,7 @@ export interface ModelInfo {
   name: string;
   path: string;
   format: 'gguf' | 'onnx' | 'pytorch' | 'safetensors';
+  backend_type?: 'gguf' | 'onnx' | 'pytorch';
   size: number;
   checksum: string;
   metadata?: {
@@ -106,14 +107,27 @@ export interface BatchJob {
 
 export interface SecurityEvent {
   id: string;
+  event_type: SecurityEventType;
+  severity: SecuritySeverity;
   timestamp: string;
-  event_type: 'auth_success' | 'auth_failure' | 'rate_limit' | 'suspicious_activity';
-  user_id?: string;
-  ip_address: string;
+  source_ip?: string;
   user_agent?: string;
-  details: Record<string, any>;
-  severity: 'low' | 'medium' | 'high' | 'critical';
+  api_key_id?: string;
+  description: string;
+  metadata: Record<string, any>;
 }
+
+export type SecurityEventType =
+  | 'apikeyCreated'
+  | 'apikeyRevoked'
+  | 'apikeyUsed'
+  | 'unauthorizedAccess'
+  | 'authenticationFailed'
+  | 'permissionDenied'
+  | 'suspiciousActivity'
+  | 'configurationChanged';
+
+export type SecuritySeverity = 'low' | 'medium' | 'high' | 'critical';
 
 export interface AuditLog {
   id: string;
@@ -175,14 +189,15 @@ export interface Tenant {
 export interface ApiKey {
   id: string;
   name: string;
+  key_hash: string;
   key_prefix: string;
-  tenant_id?: string;
   permissions: string[];
-  expires_at?: string;
   created_at: string;
   last_used?: string;
+  expires_at?: string;
+  is_active: boolean;
   usage_count: number;
-  status: 'active' | 'revoked' | 'expired';
+  created_by: string;
 }
 
 export interface WebSocketMessage {
@@ -208,4 +223,155 @@ export interface DashboardConfig {
     size: { width: number; height: number };
     config: Record<string, any>;
   }[];
+}
+
+// Additional types for Tauri API
+export interface SystemInfo {
+  cpu_name: string;
+  cpu_usage: number;
+  cpu_cores: number;
+  cpu_frequency?: string;
+  total_memory: number;
+  used_memory: number;
+  available_memory: number;
+  platform: string;
+  arch: string;
+}
+
+export interface MetricsSnapshot {
+  inference_count: number;
+  success_count: number;
+  error_count: number;
+  average_latency: number;
+  models_loaded: number;
+  active_models?: number;
+  cpu_usage?: number;
+  memory_usage?: number;
+}
+
+export interface InfernoMetrics {
+  cpu_usage: number;
+  memory_usage: number;
+  gpu_usage?: number;
+  active_models: number;
+  models_loaded?: number;
+  active_inferences: number;
+  inference_count: number;
+  success_count: number;
+  error_count: number;
+  average_latency: number;
+  avg_response_time_ms?: number;
+}
+
+export interface ActiveProcessInfo {
+  active_models: string[];
+  active_inferences: number;
+  batch_jobs: number;
+  streaming_sessions: number;
+}
+
+export interface Notification {
+  id: string;
+  title: string;
+  message: string;
+  type: 'info' | 'success' | 'warning' | 'error';
+  timestamp: string;
+  read: boolean;
+  action?: {
+    label: string;
+    url?: string;
+    callback?: string;
+  };
+  source: 'system' | 'inference' | 'security' | 'batch' | 'model';
+  priority: 'low' | 'medium' | 'high' | 'critical';
+  metadata?: Record<string, any>;
+}
+
+export interface NotificationSettings {
+  enabled: boolean;
+  types: {
+    system: boolean;
+    inference: boolean;
+    security: boolean;
+    batch: boolean;
+    model: boolean;
+  };
+  priority_filter: 'all' | 'medium' | 'high' | 'critical';
+  auto_dismiss_after: number; // seconds, 0 = no auto dismiss
+  max_notifications: number;
+}
+
+export interface AppSettings {
+  // Model Settings
+  modelsDirectory: string;
+  autoDiscoverModels: boolean;
+
+  // Inference Settings
+  defaultTemperature: number;
+  defaultMaxTokens: number;
+  defaultTopP: number;
+  defaultTopK: number;
+
+  // System Settings
+  maxMemoryUsage: number;
+  preferGPU: boolean;
+  maxConcurrentInferences: number;
+
+  // Cache Settings
+  enableCache: boolean;
+  cacheDirectory: string;
+  maxCacheSize: number;
+
+  // API Settings
+  enableRestAPI: boolean;
+  apiPort: number;
+  enableCORS: boolean;
+
+  // Security Settings
+  requireAuthentication: boolean;
+  enableAuditLog: boolean;
+  logLevel: 'error' | 'warn' | 'info' | 'debug';
+
+  // Notification Settings
+  notifications: NotificationSettings;
+}
+
+// Search Types
+export interface SearchResult {
+  id: string;
+  type: 'model' | 'batch_job' | 'notification' | 'setting' | 'page';
+  title: string;
+  description?: string;
+  url?: string;
+  metadata?: Record<string, any>;
+  relevance_score: number;
+}
+
+export interface SearchResponse {
+  results: SearchResult[];
+  total_count: number;
+  query: string;
+  search_time_ms: number;
+}
+
+// Additional Security Types
+export interface SecurityMetrics {
+  total_api_keys: number;
+  active_api_keys: number;
+  expired_api_keys: number;
+  security_events_24h: number;
+  failed_auth_attempts_24h: number;
+  suspicious_activities_24h: number;
+  last_security_scan?: string;
+}
+
+export interface CreateApiKeyRequest {
+  name: string;
+  permissions: string[];
+  expires_in_days?: number;
+}
+
+export interface CreateApiKeyResponse {
+  api_key: ApiKey;
+  raw_key: string;
 }

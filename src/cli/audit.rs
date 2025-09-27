@@ -1,14 +1,15 @@
 use crate::{
     audit::{
-        AuditLogger, AuditConfiguration, AuditQuery, AuditEvent, EventType, Severity,
-        Actor, ActorType, Resource, ResourceType, SortField, SortOrder, ExportFormat, LogLevel
+        Actor, ActorType, AuditConfiguration, AuditEvent, AuditLogger, AuditQuery, EventType,
+        ExportFormat, LogLevel, Resource, ResourceType, Severity, SortField, SortOrder,
     },
     config::Config,
 };
 use anyhow::Result;
-use clap::{Args, Subcommand, ValueEnum};
-use std::{collections::HashMap, path::PathBuf, time::SystemTime};
 use chrono::{DateTime, Utc};
+use clap::{Args, Subcommand, ValueEnum};
+use serde_json;
+use std::{collections::HashMap, path::PathBuf, time::SystemTime};
 
 #[derive(Args)]
 pub struct AuditArgs {
@@ -404,8 +405,10 @@ pub async fn execute(args: AuditArgs, _config: &Config) -> Result<()> {
             let query = AuditQuery {
                 event_types: event_types.map(|types| parse_event_types(&types)),
                 severities: severities.map(|sevs| parse_severities(&sevs)),
-                actors: actors.map(|actors| actors.split(',').map(|s| s.trim().to_string()).collect()),
-                resources: resources.map(|resources| resources.split(',').map(|s| s.trim().to_string()).collect()),
+                actors: actors
+                    .map(|actors| actors.split(',').map(|s| s.trim().to_string()).collect()),
+                resources: resources
+                    .map(|resources| resources.split(',').map(|s| s.trim().to_string()).collect()),
                 start_time: start_time.map(|t| parse_time(&t)).transpose()?,
                 end_time: end_time.map(|t| parse_time(&t)).transpose()?,
                 limit: Some(limit),
@@ -452,7 +455,9 @@ pub async fn execute(args: AuditArgs, _config: &Config) -> Result<()> {
                 ..Default::default()
             };
 
-            logger.export_events(query, &output, ExportFormat::from(format)).await?;
+            logger
+                .export_events(query, &output, ExportFormat::from(format))
+                .await?;
             println!("Audit events exported to {:?}", output);
         }
 
@@ -496,7 +501,10 @@ pub async fn execute(args: AuditArgs, _config: &Config) -> Result<()> {
                     println!("No recent events");
                 }
 
-                println!("\nLast updated: {}", chrono::Local::now().format("%H:%M:%S"));
+                println!(
+                    "\nLast updated: {}",
+                    chrono::Local::now().format("%H:%M:%S")
+                );
                 tokio::time::sleep(std::time::Duration::from_secs(interval)).await;
             }
         }
@@ -585,24 +593,308 @@ pub async fn execute(args: AuditArgs, _config: &Config) -> Result<()> {
         }
 
         AuditCommand::Validate {
-            file: _,
-            check_gaps: _,
-            verify_timestamps: _,
+            file,
+            check_gaps,
+            verify_timestamps,
         } => {
             println!("Validating audit log integrity...");
-            // TODO: Implement validation logic
-            println!("Audit logs validation completed successfully");
+
+            let audit_logger = AuditLogger::new(&config.audit)?;
+            let mut validation_errors = Vec::new();
+
+            // Determine which files to validate
+            let log_files = if let Some(specific_file) = file {
+                if specific_file.exists() {
+                    vec![specific_file]
+                } else {
+                    println!("Error: Specified file does not exist: {}", specific_file.display());
+                    return Ok(());
+                }
+            } else {
+                // Get all audit log files from the audit directory
+                let audit_dir = std::path::Path::new(&config.audit.storage_path);
+                if !audit_dir.exists() {
+                    println!("Error: Audit directory does not exist: {}", audit_dir.display());
+                    return Ok(());
+                }
+
+                std::fs::read_dir(audit_dir)?
+                    .filter_map(|entry| {
+                        let entry = entry.ok()?;
+                        let path = entry.path();
+                        if path.extension() == Some(std::ffi::OsStr::new("log")) {
+                            Some(path)
+                        } else {
+                            None
+                        }
+                    })
+                    .collect()
+            };
+
+            if log_files.is_empty() {
+                println!("No audit log files found to validate");
+                return Ok(());
+            }
+
+            println!("Validating {} log file(s)...", log_files.len());
+
+            let mut total_events = 0;
+            let mut previous_timestamp: Option<DateTime<Utc>> = None;
+
+            for log_file in &log_files {
+                println!("Validating file: {}", log_file.display());
+
+                match std::fs::read_to_string(log_file) {
+                    Ok(content) => {
+                        let lines: Vec<&str> = content.lines().collect();
+                        total_events += lines.len();
+
+                        for (line_num, line) in lines.iter().enumerate() {
+                            if line.trim().is_empty() {
+                                continue;
+                            }
+
+                            // Try to parse the line as JSON audit event
+                            match serde_json::from_str::<AuditEvent>(line) {
+                                Ok(event) => {
+                                    if *verify_timestamps {
+                                        // Check timestamp order
+                                        if let Some(prev_ts) = previous_timestamp {
+                                            if event.timestamp < prev_ts {
+                                                validation_errors.push(format!(
+                                                    "{}:{} - Timestamp out of order: {} < {}",
+                                                    log_file.display(),
+                                                    line_num + 1,
+                                                    event.timestamp,
+                                                    prev_ts
+                                                ));
+                                            }
+                                        }
+                                        previous_timestamp = Some(event.timestamp);
+
+                                        // Check if timestamp is in the future
+                                        let now = Utc::now();
+                                        if event.timestamp > now {
+                                            validation_errors.push(format!(
+                                                "{}:{} - Future timestamp detected: {}",
+                                                log_file.display(),
+                                                line_num + 1,
+                                                event.timestamp
+                                            ));
+                                        }
+                                    }
+                                },
+                                Err(_) => {
+                                    validation_errors.push(format!(
+                                        "{}:{} - Invalid JSON format",
+                                        log_file.display(),
+                                        line_num + 1
+                                    ));
+                                }
+                            }
+                        }
+                    },
+                    Err(e) => {
+                        validation_errors.push(format!(
+                            "Failed to read file {}: {}",
+                            log_file.display(),
+                            e
+                        ));
+                    }
+                }
+            }
+
+            if *check_gaps {
+                // Check for gaps in audit event sequence
+                // This is a simplified check - in a real implementation you might
+                // check for missing sequence numbers or large time gaps
+                println!("Checking for potential gaps in audit trail...");
+
+                if total_events == 0 {
+                    validation_errors.push("No audit events found - potential data loss".to_string());
+                } else {
+                    println!("Found {} total audit events", total_events);
+
+                    // Check if we have recent events (within last 24 hours)
+                    let yesterday = Utc::now() - chrono::Duration::hours(24);
+                    if let Some(last_ts) = previous_timestamp {
+                        if last_ts < yesterday {
+                            validation_errors.push(format!(
+                                "No recent audit events - last event was at {}",
+                                last_ts
+                            ));
+                        }
+                    }
+                }
+            }
+
+            // Report validation results
+            if validation_errors.is_empty() {
+                println!("✓ Audit logs validation completed successfully");
+                println!("  - Files validated: {}", log_files.len());
+                println!("  - Total events: {}", total_events);
+                println!("  - No integrity issues found");
+            } else {
+                println!("✗ Audit logs validation found {} issue(s):", validation_errors.len());
+                for error in &validation_errors {
+                    println!("  - {}", error);
+                }
+            }
         }
 
         AuditCommand::Archive {
-            older_than_days: _,
-            destination: _,
-            compression: _,
-            remove_originals: _,
+            older_than_days,
+            destination,
+            compression,
+            remove_originals,
         } => {
             println!("Archiving old audit logs...");
-            // TODO: Implement archiving logic
-            println!("Audit logs archived successfully");
+
+            let audit_dir = std::path::Path::new(&config.audit.storage_path);
+            if !audit_dir.exists() {
+                println!("Error: Audit directory does not exist: {}", audit_dir.display());
+                return Ok(());
+            }
+
+            // Create destination directory if it doesn't exist
+            if !destination.exists() {
+                std::fs::create_dir_all(&destination)?;
+                println!("Created destination directory: {}", destination.display());
+            }
+
+            let cutoff_date = Utc::now() - chrono::Duration::days(*older_than_days as i64);
+            let mut archived_files = Vec::new();
+            let mut total_size_bytes = 0u64;
+
+            // Find audit log files older than cutoff date
+            let log_files = std::fs::read_dir(audit_dir)?
+                .filter_map(|entry| {
+                    let entry = entry.ok()?;
+                    let path = entry.path();
+                    if path.extension() == Some(std::ffi::OsStr::new("log")) {
+                        Some(path)
+                    } else {
+                        None
+                    }
+                })
+                .collect::<Vec<_>>();
+
+            if log_files.is_empty() {
+                println!("No audit log files found to archive");
+                return Ok(());
+            }
+
+            println!("Checking {} log files for archival...", log_files.len());
+
+            for log_file in log_files {
+                // Check file modification time
+                let metadata = std::fs::metadata(&log_file)?;
+                let modified_time = metadata.modified()?;
+                let modified_datetime: DateTime<Utc> = modified_time.into();
+
+                if modified_datetime < cutoff_date {
+                    let file_size = metadata.len();
+                    total_size_bytes += file_size;
+
+                    // Create archive filename with timestamp
+                    let filename = log_file.file_name().unwrap();
+                    let archive_name = match compression {
+                        CompressionFormat::Gzip => {
+                            format!("{}.{}.gz", filename.to_string_lossy(), modified_datetime.format("%Y%m%d"))
+                        },
+                        CompressionFormat::Zip => {
+                            format!("{}.{}.zip", filename.to_string_lossy(), modified_datetime.format("%Y%m%d"))
+                        },
+                        CompressionFormat::Tar => {
+                            format!("{}.{}.tar", filename.to_string_lossy(), modified_datetime.format("%Y%m%d"))
+                        },
+                    };
+
+                    let archive_path = destination.join(&archive_name);
+
+                    // Perform compression based on format
+                    match compression {
+                        CompressionFormat::Gzip => {
+                            // Simple gzip compression
+                            let input_data = std::fs::read(&log_file)?;
+                            use std::io::Write;
+                            let mut encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+                            encoder.write_all(&input_data)?;
+                            let compressed_data = encoder.finish()?;
+                            std::fs::write(&archive_path, compressed_data)?;
+                        },
+                        CompressionFormat::Zip => {
+                            // Create a ZIP file with the log file
+                            let zip_file = std::fs::File::create(&archive_path)?;
+                            let mut zip = zip::ZipWriter::new(zip_file);
+                            let options = zip::write::FileOptions::default()
+                                .compression_method(zip::CompressionMethod::Deflated);
+
+                            zip.start_file(filename.to_string_lossy(), options)?;
+                            let input_data = std::fs::read(&log_file)?;
+                            use std::io::Write;
+                            zip.write_all(&input_data)?;
+                            zip.finish()?;
+                        },
+                        CompressionFormat::Tar => {
+                            // Create a simple tar file with the log file
+                            let tar_file = std::fs::File::create(&archive_path)?;
+                            let mut tar = tar::Builder::new(tar_file);
+                            tar.append_path_with_name(&log_file, filename)?;
+                            tar.finish()?;
+                        },
+                    }
+
+                    println!("Archived: {} -> {} ({} bytes -> {} bytes)",
+                        log_file.display(),
+                        archive_path.display(),
+                        file_size,
+                        std::fs::metadata(&archive_path)?.len()
+                    );
+
+                    // If remove_originals is true, delete the original file
+                    if *remove_originals {
+                        std::fs::remove_file(&log_file)?;
+                        println!("  Removed original file: {}", log_file.display());
+                    }
+
+                    archived_files.push((log_file, archive_path));
+                } else {
+                    println!("Skipping file (not old enough): {} (modified: {})",
+                        log_file.display(),
+                        modified_datetime.format("%Y-%m-%d %H:%M:%S UTC")
+                    );
+                }
+            }
+
+            // Summary
+            if archived_files.is_empty() {
+                println!("No files were old enough to archive (older than {} days)", older_than_days);
+            } else {
+                let total_archived_size = archived_files.iter()
+                    .map(|(_, archive_path)| std::fs::metadata(archive_path).map(|m| m.len()).unwrap_or(0))
+                    .sum::<u64>();
+
+                let compression_ratio = if total_size_bytes > 0 {
+                    (total_archived_size as f64) / (total_size_bytes as f64) * 100.0
+                } else {
+                    100.0
+                };
+
+                println!("✓ Audit logs archived successfully");
+                println!("  - Files archived: {}", archived_files.len());
+                println!("  - Original size: {} bytes", total_size_bytes);
+                println!("  - Compressed size: {} bytes", total_archived_size);
+                println!("  - Compression ratio: {:.1}%", compression_ratio);
+                println!("  - Destination: {}", destination.display());
+                println!("  - Compression format: {:?}", compression);
+
+                if *remove_originals {
+                    println!("  - Original files removed");
+                } else {
+                    println!("  - Original files preserved");
+                }
+            }
         }
 
         AuditCommand::Report {
@@ -612,7 +904,10 @@ pub async fn execute(args: AuditArgs, _config: &Config) -> Result<()> {
             include_charts: _,
             format,
         } => {
-            println!("Generating {:?} report in {:?} format...", report_type, format);
+            println!(
+                "Generating {:?} report in {:?} format...",
+                report_type, format
+            );
 
             if let Some(output_path) = output {
                 println!("Report saved to {:?}", output_path);
@@ -666,44 +961,42 @@ pub async fn execute(args: AuditArgs, _config: &Config) -> Result<()> {
 }
 
 fn parse_event_types(types_str: &str) -> Vec<EventType> {
-    types_str.split(',')
-        .filter_map(|s| {
-            match s.trim().to_lowercase().as_str() {
-                "authentication" => Some(EventType::Authentication),
-                "authorization" => Some(EventType::Authorization),
-                "model" | "modelmanagement" => Some(EventType::ModelManagement),
-                "data" | "dataaccess" => Some(EventType::DataAccess),
-                "system" | "systemchange" => Some(EventType::SystemChange),
-                "security" | "securityevent" => Some(EventType::SecurityEvent),
-                "performance" | "performanceevent" => Some(EventType::PerformanceEvent),
-                "error" | "errorevent" => Some(EventType::ErrorEvent),
-                "user" | "useraction" => Some(EventType::UserAction),
-                "api" | "apicall" => Some(EventType::ApiCall),
-                "file" | "fileaccess" => Some(EventType::FileAccess),
-                "config" | "configchange" => Some(EventType::ConfigChange),
-                "network" | "networkevent" => Some(EventType::NetworkEvent),
-                "batch" | "batchjob" => Some(EventType::BatchJob),
-                "abtest" => Some(EventType::ABTest),
-                "deployment" => Some(EventType::Deployment),
-                "rollback" => Some(EventType::Rollback),
-                "gpu" | "gpuusage" => Some(EventType::GpuUsage),
-                _ => None,
-            }
+    types_str
+        .split(',')
+        .filter_map(|s| match s.trim().to_lowercase().as_str() {
+            "authentication" => Some(EventType::Authentication),
+            "authorization" => Some(EventType::Authorization),
+            "model" | "modelmanagement" => Some(EventType::ModelManagement),
+            "data" | "dataaccess" => Some(EventType::DataAccess),
+            "system" | "systemchange" => Some(EventType::SystemChange),
+            "security" | "securityevent" => Some(EventType::SecurityEvent),
+            "performance" | "performanceevent" => Some(EventType::PerformanceEvent),
+            "error" | "errorevent" => Some(EventType::ErrorEvent),
+            "user" | "useraction" => Some(EventType::UserAction),
+            "api" | "apicall" => Some(EventType::ApiCall),
+            "file" | "fileaccess" => Some(EventType::FileAccess),
+            "config" | "configchange" => Some(EventType::ConfigChange),
+            "network" | "networkevent" => Some(EventType::NetworkEvent),
+            "batch" | "batchjob" => Some(EventType::BatchJob),
+            "abtest" => Some(EventType::ABTest),
+            "deployment" => Some(EventType::Deployment),
+            "rollback" => Some(EventType::Rollback),
+            "gpu" | "gpuusage" => Some(EventType::GpuUsage),
+            _ => None,
         })
         .collect()
 }
 
 fn parse_severities(severities_str: &str) -> Vec<Severity> {
-    severities_str.split(',')
-        .filter_map(|s| {
-            match s.trim().to_lowercase().as_str() {
-                "critical" => Some(Severity::Critical),
-                "high" => Some(Severity::High),
-                "medium" => Some(Severity::Medium),
-                "low" => Some(Severity::Low),
-                "info" => Some(Severity::Info),
-                _ => None,
-            }
+    severities_str
+        .split(',')
+        .filter_map(|s| match s.trim().to_lowercase().as_str() {
+            "critical" => Some(Severity::Critical),
+            "high" => Some(Severity::High),
+            "medium" => Some(Severity::Medium),
+            "low" => Some(Severity::Low),
+            "info" => Some(Severity::Info),
+            _ => None,
         })
         .collect()
 }
@@ -721,20 +1014,25 @@ fn display_events(events: &[AuditEvent], format: OutputFormat) {
                 return;
             }
 
-            println!("{:<20} {:<12} {:<8} {:<15} {:<15} {:<30}",
-                     "Timestamp", "Type", "Severity", "Actor", "Resource", "Action");
+            println!(
+                "{:<20} {:<12} {:<8} {:<15} {:<15} {:<30}",
+                "Timestamp", "Type", "Severity", "Actor", "Resource", "Action"
+            );
             println!("{:-<100}", "");
 
             for event in events {
                 let timestamp = chrono::DateTime::<chrono::Local>::from(event.timestamp)
-                    .format("%Y-%m-%d %H:%M:%S").to_string();
-                println!("{:<20} {:<12} {:<8} {:<15} {:<15} {:<30}",
-                         timestamp,
-                         format!("{:?}", event.event_type),
-                         format!("{:?}", event.severity),
-                         &event.actor.name[..event.actor.name.len().min(15)],
-                         &event.resource.name[..event.resource.name.len().min(15)],
-                         &event.action[..event.action.len().min(30)]);
+                    .format("%Y-%m-%d %H:%M:%S")
+                    .to_string();
+                println!(
+                    "{:<20} {:<12} {:<8} {:<15} {:<15} {:<30}",
+                    timestamp,
+                    format!("{:?}", event.event_type),
+                    format!("{:?}", event.severity),
+                    &event.actor.name[..event.actor.name.len().min(15)],
+                    &event.resource.name[..event.resource.name.len().min(15)],
+                    &event.action[..event.action.len().min(30)]
+                );
             }
         }
         OutputFormat::Json => {
@@ -743,14 +1041,20 @@ fn display_events(events: &[AuditEvent], format: OutputFormat) {
         OutputFormat::Csv => {
             println!("timestamp,event_type,severity,actor,resource,action,success");
             for event in events {
-                println!("{},{:?},{:?},{},{},{},{}",
-                         event.timestamp.duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs(),
-                         event.event_type,
-                         event.severity,
-                         event.actor.name,
-                         event.resource.name,
-                         event.action,
-                         event.outcome.success);
+                println!(
+                    "{},{:?},{:?},{},{},{},{}",
+                    event
+                        .timestamp
+                        .duration_since(SystemTime::UNIX_EPOCH)
+                        .unwrap()
+                        .as_secs(),
+                    event.event_type,
+                    event.severity,
+                    event.actor.name,
+                    event.resource.name,
+                    event.action,
+                    event.outcome.success
+                );
             }
         }
         OutputFormat::Yaml => {
@@ -759,7 +1063,11 @@ fn display_events(events: &[AuditEvent], format: OutputFormat) {
     }
 }
 
-fn display_statistics(stats: &crate::audit::AuditStatistics, _group_by: Option<GroupByField>, format: OutputFormat) {
+fn display_statistics(
+    stats: &crate::audit::AuditStatistics,
+    _group_by: Option<GroupByField>,
+    format: OutputFormat,
+) {
     match format {
         OutputFormat::Table => {
             println!("Audit Statistics:");
@@ -801,7 +1109,7 @@ fn create_audit_event(
     actor_name: Option<String>,
     resource_name: Option<String>,
 ) -> AuditEvent {
-    use crate::audit::{EventDetails, EventContext, EventOutcome};
+    use crate::audit::{EventContext, EventDetails, EventOutcome};
 
     AuditEvent {
         id: uuid::Uuid::new_v4().to_string(),
@@ -818,7 +1126,9 @@ fn create_audit_event(
         },
         resource: Resource {
             resource_type: ResourceType::Custom("manual".to_string()),
-            id: resource_name.clone().unwrap_or_else(|| "unknown".to_string()),
+            id: resource_name
+                .clone()
+                .unwrap_or_else(|| "unknown".to_string()),
             name: resource_name.unwrap_or_else(|| "unknown".to_string()),
             path: None,
             owner: None,

@@ -8,6 +8,7 @@ import { RecentActivity } from './recent-activity';
 import { SystemChart } from './system-chart';
 import { ModelStatus } from './model-status';
 import { QuickActions } from './quick-actions';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   Brain,
   Cpu,
@@ -20,8 +21,45 @@ import {
   TrendingUp,
   Play,
 } from 'lucide-react';
+import {
+  useSystemInfo,
+  useInfernoMetrics,
+  useLoadedModels,
+  useActiveProcesses,
+  useBatchJobCount,
+  useActiveBatchJobCount
+} from '@/hooks/use-tauri-api';
+import {
+  useRealTimeSystemMetrics,
+  useRealTimeEvents,
+  useRealTimeModelEvents,
+  useRealTimeInferenceEvents
+} from '@/hooks/use-real-time-events';
+import { ConnectionStatus, EventStreamDebugger } from '@/components/ui/connection-status';
 
 export function DashboardOverview() {
+  // Original polling-based hooks for fallback
+  const { data: systemInfo, isLoading: systemLoading } = useSystemInfo();
+  const { data: infernoMetrics, isLoading: metricsLoading } = useInfernoMetrics();
+  const { data: loadedModels, isLoading: modelsLoading } = useLoadedModels();
+  const { data: activeProcesses, isLoading: processesLoading } = useActiveProcesses();
+  const { data: batchJobCount, isLoading: batchCountLoading } = useBatchJobCount();
+  const { data: activeBatchJobCount, isLoading: activeBatchCountLoading } = useActiveBatchJobCount();
+
+  // Real-time event hooks
+  const { metrics: realTimeSystemMetrics } = useRealTimeSystemMetrics();
+  const { connectionStatus } = useRealTimeEvents();
+  const { modelEvents } = useRealTimeModelEvents();
+  const { activeInferenceCount } = useRealTimeInferenceEvents();
+
+  // Use real-time metrics if available, otherwise fall back to polling
+  const currentSystemMetrics = realTimeSystemMetrics || {
+    cpu_usage: systemInfo?.cpu_usage || 0,
+    memory_usage: systemInfo?.used_memory || 0,
+  };
+
+  const isLoading = systemLoading || metricsLoading || modelsLoading || processesLoading || batchCountLoading || activeBatchCountLoading;
+
   return (
     <div className="space-y-6">
       {/* Page Header */}
@@ -33,9 +71,13 @@ export function DashboardOverview() {
           </p>
         </div>
         <div className="flex items-center space-x-2">
-          <Badge variant="success" className="flex items-center gap-1">
+          <ConnectionStatus compact />
+          <Badge
+            variant={connectionStatus === 'Connected' ? 'success' : 'destructive'}
+            className="flex items-center gap-1"
+          >
             <Activity className="h-3 w-3" />
-            All Systems Operational
+            {connectionStatus === 'Connected' ? 'Real-time Active' : 'Polling Mode'}
           </Badge>
           <Button>
             <Play className="h-4 w-4 mr-2" />
@@ -48,32 +90,32 @@ export function DashboardOverview() {
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <MetricCard
           title="Active Models"
-          value="12"
-          description="+2 from last week"
+          value={modelsLoading ? "..." : (loadedModels?.length || 0).toString()}
+          description={modelsLoading ? "Loading..." : `${loadedModels?.length || 0} models loaded`}
           icon={Brain}
-          trend="up"
+          trend="stable"
           color="blue"
         />
         <MetricCard
           title="Total Inferences"
-          value="1,247"
-          description="+18% from yesterday"
+          value={metricsLoading ? "..." : (infernoMetrics?.inference_count?.toLocaleString() || "0")}
+          description={metricsLoading ? "Loading..." : `${activeInferenceCount} active (real-time)`}
           icon={TrendingUp}
           trend="up"
           color="green"
         />
         <MetricCard
           title="Avg Response Time"
-          value="247ms"
-          description="-12ms from last hour"
+          value={metricsLoading ? "..." : `${infernoMetrics?.avg_response_time_ms || 0}ms`}
+          description={metricsLoading ? "Loading..." : "Real-time average"}
           icon={Zap}
-          trend="down"
+          trend="stable"
           color="yellow"
         />
         <MetricCard
           title="System Load"
-          value="72%"
-          description="Normal operation"
+          value={systemLoading ? "..." : `${currentSystemMetrics.cpu_usage?.toFixed(1) || 0}%`}
+          description={realTimeSystemMetrics ? "Real-time CPU" : "CPU utilization"}
           icon={Cpu}
           trend="stable"
           color="blue"
@@ -140,12 +182,28 @@ export function DashboardOverview() {
             <Cpu className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">45.2%</div>
+            {systemLoading ? (
+              <Skeleton className="h-8 w-16 mb-2" />
+            ) : (
+              <div className="text-2xl font-bold flex items-center gap-2">
+                {currentSystemMetrics.cpu_usage?.toFixed(1) || 0}%
+                {realTimeSystemMetrics && (
+                  <span className="text-xs bg-green-100 text-green-800 px-1.5 py-0.5 rounded">LIVE</span>
+                )}
+              </div>
+            )}
             <div className="w-full bg-secondary rounded-full h-2 mt-2">
-              <div className="bg-blue-500 h-2 rounded-full w-[45%]"></div>
+              <div
+                className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+                style={{ width: `${Math.min(currentSystemMetrics.cpu_usage || 0, 100)}%` }}
+              ></div>
             </div>
             <p className="text-xs text-muted-foreground mt-2">
-              8 cores • 3.2GHz base frequency
+              {systemLoading ? (
+                <Skeleton className="h-3 w-32" />
+              ) : (
+                `${systemInfo?.cpu_cores || 0} cores • ${systemInfo?.cpu_frequency || '0'}GHz`
+              )}
             </p>
           </CardContent>
         </Card>
@@ -156,12 +214,33 @@ export function DashboardOverview() {
             <HardDrive className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">24.1 GB</div>
+            {systemLoading ? (
+              <Skeleton className="h-8 w-20 mb-2" />
+            ) : (
+              <div className="text-2xl font-bold flex items-center gap-2">
+                {((currentSystemMetrics.memory_usage || 0) / (1024 ** 3)).toFixed(1)} GB
+                {realTimeSystemMetrics && (
+                  <span className="text-xs bg-green-100 text-green-800 px-1.5 py-0.5 rounded">LIVE</span>
+                )}
+              </div>
+            )}
             <div className="w-full bg-secondary rounded-full h-2 mt-2">
-              <div className="bg-green-500 h-2 rounded-full w-[60%]"></div>
+              <div
+                className="bg-green-500 h-2 rounded-full transition-all duration-300"
+                style={{
+                  width: `${Math.min(
+                    ((currentSystemMetrics.memory_usage || 0) / (systemInfo?.total_memory || 1)) * 100,
+                    100
+                  )}%`,
+                }}
+              ></div>
             </div>
             <p className="text-xs text-muted-foreground mt-2">
-              60% of 40GB • DDR4 3200MHz
+              {systemLoading ? (
+                <Skeleton className="h-3 w-40" />
+              ) : (
+                `${(((currentSystemMetrics.memory_usage || 0) / (systemInfo?.total_memory || 1)) * 100).toFixed(0)}% of ${((systemInfo?.total_memory || 0) / (1024 ** 3)).toFixed(0)}GB`
+              )}
             </p>
           </CardContent>
         </Card>
@@ -172,17 +251,41 @@ export function DashboardOverview() {
             <Clock className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">7</div>
+            {batchCountLoading || activeBatchCountLoading ? (
+              <Skeleton className="h-8 w-8 mb-2" />
+            ) : (
+              <div className="text-2xl font-bold">{batchJobCount || 0}</div>
+            )}
             <div className="flex items-center space-x-2 mt-2">
-              <Badge variant="success" className="text-xs">3 Running</Badge>
-              <Badge variant="secondary" className="text-xs">4 Queued</Badge>
+              {batchCountLoading || activeBatchCountLoading ? (
+                <>
+                  <Skeleton className="h-5 w-16" />
+                  <Skeleton className="h-5 w-16" />
+                </>
+              ) : (
+                <>
+                  <Badge variant="success" className="text-xs">
+                    {activeBatchJobCount || 0} Running
+                  </Badge>
+                  <Badge variant="secondary" className="text-xs">
+                    {(batchJobCount || 0) - (activeBatchJobCount || 0)} Queued
+                  </Badge>
+                </>
+              )}
             </div>
             <p className="text-xs text-muted-foreground mt-2">
-              2 batch jobs • 5 inference requests
+              {batchCountLoading ? (
+                <Skeleton className="h-3 w-32" />
+              ) : (
+                `${batchJobCount || 0} total jobs • ${infernoMetrics?.active_inferences || 0} inferences`
+              )}
             </p>
           </CardContent>
         </Card>
       </div>
+
+      {/* Event Stream Debugger (development only) */}
+      <EventStreamDebugger />
     </div>
   );
 }

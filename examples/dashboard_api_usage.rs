@@ -37,14 +37,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
     println!("✓ Create Model Response: {}", response.status());
     if response.status().is_success() {
         let model: serde_json::Value = response.json().await?;
-        println!("  Created model ID: {}", model["data"]["id"].as_str().unwrap_or("N/A"));
+        println!(
+            "  Created model ID: {}",
+            model["data"]["id"].as_str().unwrap_or("N/A")
+        );
     }
 
     // List all models
-    let response = client
-        .get(&format!("{}/models", base_url))
-        .send()
-        .await?;
+    let response = client.get(&format!("{}/models", base_url)).send().await?;
 
     println!("✓ List Models Response: {}", response.status());
 
@@ -57,9 +57,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
     println!("✓ Model Metrics Response: {}", response.status());
     if response.status().is_success() {
         let metrics: serde_json::Value = response.json().await?;
-        println!("  Model requests/sec: {}",
-                 metrics["inference_metrics"]["requests_per_second"]
-                     .as_f64().unwrap_or(0.0));
+        println!(
+            "  Model requests/sec: {}",
+            metrics["inference_metrics"]["requests_per_second"]
+                .as_f64()
+                .unwrap_or(0.0)
+        );
     }
 
     // 2. Deployment Management Examples
@@ -118,10 +121,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
     println!("✓ Get Node Info Response: {}", response.status());
     if response.status().is_success() {
         let node: serde_json::Value = response.json().await?;
-        println!("  Node load: {}%",
-                 node["node"]["current_load"].as_f64().unwrap_or(0.0));
-        println!("  Node status: {}",
-                 node["node"]["status"].as_str().unwrap_or("unknown"));
+        println!(
+            "  Node load: {}%",
+            node["node"]["current_load"].as_f64().unwrap_or(0.0)
+        );
+        println!(
+            "  Node status: {}",
+            node["node"]["status"].as_str().unwrap_or("unknown")
+        );
     }
 
     // Get node status
@@ -136,18 +143,19 @@ async fn main() -> Result<(), Box<dyn Error>> {
     println!("\n📊 Metrics Management:");
 
     // Get current system metrics
-    let response = client
-        .get(&format!("{}/metrics", base_url))
-        .send()
-        .await?;
+    let response = client.get(&format!("{}/metrics", base_url)).send().await?;
 
     println!("✓ System Metrics Response: {}", response.status());
     if response.status().is_success() {
         let metrics: serde_json::Value = response.json().await?;
-        println!("  CPU Usage: {}%",
-                 metrics["cpu_usage"].as_f64().unwrap_or(0.0));
-        println!("  Memory Usage: {}%",
-                 metrics["memory_usage"].as_f64().unwrap_or(0.0));
+        println!(
+            "  CPU Usage: {}%",
+            metrics["cpu_usage"].as_f64().unwrap_or(0.0)
+        );
+        println!(
+            "  Memory Usage: {}%",
+            metrics["memory_usage"].as_f64().unwrap_or(0.0)
+        );
     }
 
     // Get metrics history
@@ -159,8 +167,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
     println!("✓ Metrics History Response: {}", response.status());
     if response.status().is_success() {
         let history: serde_json::Value = response.json().await?;
-        println!("  Data points: {}",
-                 history["data_points"].as_u64().unwrap_or(0));
+        println!(
+            "  Data points: {}",
+            history["data_points"].as_u64().unwrap_or(0)
+        );
     }
 
     // Export metrics in different formats
@@ -170,7 +180,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
             .send()
             .await?;
 
-        println!("✓ Export Metrics ({}) Response: {}", format, response.status());
+        println!(
+            "✓ Export Metrics ({}) Response: {}",
+            format,
+            response.status()
+        );
     }
 
     // 5. System Health Check
@@ -184,10 +198,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
     println!("✓ Health Check Response: {}", response.status());
     if response.status().is_success() {
         let health: serde_json::Value = response.json().await?;
-        println!("  Status: {}",
-                 health["status"].as_str().unwrap_or("unknown"));
-        println!("  Version: {}",
-                 health["version"].as_str().unwrap_or("unknown"));
+        println!(
+            "  Status: {}",
+            health["status"].as_str().unwrap_or("unknown")
+        );
+        println!(
+            "  Version: {}",
+            health["version"].as_str().unwrap_or("unknown")
+        );
     }
 
     println!("\n🎉 All API examples completed!");

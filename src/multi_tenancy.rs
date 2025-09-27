@@ -1,10 +1,10 @@
 use anyhow::Result;
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use uuid::Uuid;
-use chrono::{DateTime, Utc};
 
 // Configuration structures
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -28,14 +28,14 @@ pub struct MultiTenancyConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum IsolationMode {
-    Physical,           // Complete physical separation
-    Logical,           // Logical separation with shared resources
-    Hybrid,            // Mix of physical and logical
-    Container,         // Container-based isolation
-    VirtualMachine,    // VM-based isolation
-    Process,           // Process-level isolation
-    Namespace,         // Namespace isolation (Linux)
-    Custom(String),    // Custom isolation strategy
+    Physical,       // Complete physical separation
+    Logical,        // Logical separation with shared resources
+    Hybrid,         // Mix of physical and logical
+    Container,      // Container-based isolation
+    VirtualMachine, // VM-based isolation
+    Process,        // Process-level isolation
+    Namespace,      // Namespace isolation (Linux)
+    Custom(String), // Custom isolation strategy
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -54,15 +54,15 @@ pub struct ResourceAllocationConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum AllocationStrategy {
-    Static,             // Fixed allocation
-    Dynamic,            // Dynamic based on usage
-    Fair,               // Fair share among tenants
-    Priority,           // Priority-based allocation
-    Weighted,           // Weighted allocation
-    Reserved,           // Reserved capacity
-    BestEffort,         // Best effort allocation
-    Guaranteed,         // Guaranteed resources
-    Elastic,            // Elastic scaling
+    Static,     // Fixed allocation
+    Dynamic,    // Dynamic based on usage
+    Fair,       // Fair share among tenants
+    Priority,   // Priority-based allocation
+    Weighted,   // Weighted allocation
+    Reserved,   // Reserved capacity
+    BestEffort, // Best effort allocation
+    Guaranteed, // Guaranteed resources
+    Elastic,    // Elastic scaling
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -94,13 +94,13 @@ pub struct BillingConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum BillingModel {
-    PayPerUse,          // Pay for what you use
-    Subscription,       // Fixed monthly/yearly fee
-    Tiered,            // Tiered pricing
-    Reserved,          // Reserved capacity pricing
-    Spot,              // Spot pricing
-    Hybrid,            // Mix of models
-    Custom(String),    // Custom billing model
+    PayPerUse,      // Pay for what you use
+    Subscription,   // Fixed monthly/yearly fee
+    Tiered,         // Tiered pricing
+    Reserved,       // Reserved capacity pricing
+    Spot,           // Spot pricing
+    Hybrid,         // Mix of models
+    Custom(String), // Custom billing model
 }
 
 // Core data structures
@@ -2811,14 +2811,12 @@ impl MultiTenancySystem {
                 data_classification: DataClassification::Internal,
                 isolation_policies: Vec::new(),
             },
-            contacts: vec![
-                TenantContact {
-                    name: info.admin_email.clone(),
-                    email: info.admin_email,
-                    phone: None,
-                    role: "Admin".to_string(),
-                },
-            ],
+            contacts: vec![TenantContact {
+                name: info.admin_email.clone(),
+                email: info.admin_email,
+                phone: None,
+                role: "Admin".to_string(),
+            }],
             tags: HashSet::new(),
         };
 
@@ -2833,7 +2831,11 @@ impl MultiTenancySystem {
         Ok(manager.tenants.get(&tenant_id).cloned())
     }
 
-    pub async fn update_tenant(&self, tenant_id: Uuid, updates: HashMap<String, serde_json::Value>) -> Result<()> {
+    pub async fn update_tenant(
+        &self,
+        tenant_id: Uuid,
+        updates: HashMap<String, serde_json::Value>,
+    ) -> Result<()> {
         let mut manager = self.manager.write().await;
 
         if let Some(tenant) = manager.tenants.get_mut(&tenant_id) {
@@ -2866,14 +2868,19 @@ impl MultiTenancySystem {
         Ok(())
     }
 
-    pub async fn allocate_resources(&self, tenant_id: Uuid, requirements: ResourceRequirements) -> Result<()> {
+    pub async fn allocate_resources(
+        &self,
+        tenant_id: Uuid,
+        requirements: ResourceRequirements,
+    ) -> Result<()> {
         let mut manager = self.manager.write().await;
 
         // Find suitable resource pool
         for pool in manager.resource_pools.values_mut() {
             if pool.available_resources.cpu_cores >= requirements.min_requirements.cpu_cores
-                && pool.available_resources.memory_bytes >= requirements.min_requirements.memory_bytes {
-
+                && pool.available_resources.memory_bytes
+                    >= requirements.min_requirements.memory_bytes
+            {
                 // Allocate resources
                 let allocation = ResourceAllocation {
                     tenant_id,
@@ -2887,7 +2894,8 @@ impl MultiTenancySystem {
 
                 pool.tenant_allocations.insert(tenant_id, allocation);
                 pool.available_resources.cpu_cores -= requirements.preferred_requirements.cpu_cores;
-                pool.available_resources.memory_bytes -= requirements.preferred_requirements.memory_bytes;
+                pool.available_resources.memory_bytes -=
+                    requirements.preferred_requirements.memory_bytes;
 
                 break;
             }
@@ -2952,7 +2960,9 @@ impl MultiTenancySystem {
         let mut monitoring = self.monitoring.write().await;
 
         if let Some(metrics) = monitoring.metrics.get_mut(&tenant_id) {
-            metrics.custom_metrics.insert(metric.name.clone(), metric.value);
+            metrics
+                .custom_metrics
+                .insert(metric.name.clone(), metric.value);
         }
 
         Ok(())
@@ -3001,7 +3011,11 @@ impl MultiTenancySystem {
         Ok(())
     }
 
-    pub async fn check_compliance(&self, _tenant_id: Uuid, _standard: ComplianceStandard) -> Result<bool> {
+    pub async fn check_compliance(
+        &self,
+        _tenant_id: Uuid,
+        _standard: ComplianceStandard,
+    ) -> Result<bool> {
         // Mock compliance check
         Ok(true)
     }

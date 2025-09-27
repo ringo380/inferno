@@ -1,15 +1,14 @@
 // CLI module for optimization commands
 // Provides command-line interface for ML optimization features
 
-use anyhow::Result;
-use crate::optimization::{OptimizationConfig, OptimizationManager};
-use crate::optimization::quantization::QuantizationType;
 use crate::optimization::batching::Priority;
 use crate::optimization::hardware::GpuVendor;
-use crate::optimization::inference::{RequestSchedulingStrategy, OptimizationLevel};
+use crate::optimization::inference::{OptimizationLevel, RequestSchedulingStrategy};
+use crate::optimization::quantization::QuantizationType;
+use crate::optimization::{OptimizationConfig, OptimizationManager};
+use anyhow::Result;
 use clap::{Args, Subcommand};
 use serde_json;
-use std::collections::HashMap;
 
 /// Optimization command arguments
 #[derive(Debug, Args)]
@@ -279,33 +278,31 @@ pub async fn execute_optimization_command(args: OptimizationArgs) -> Result<()> 
             accuracy_threshold,
             symmetric,
         } => {
-            quantize_model(input, output, precision, format, accuracy_threshold, symmetric).await
+            quantize_model(
+                input,
+                output,
+                precision,
+                format,
+                accuracy_threshold,
+                symmetric,
+            )
+            .await
         }
 
-        OptimizationCommand::Batch { command } => {
-            execute_batch_command(command).await
-        }
+        OptimizationCommand::Batch { command } => execute_batch_command(command).await,
 
-        OptimizationCommand::Memory { command } => {
-            execute_memory_command(command).await
-        }
+        OptimizationCommand::Memory { command } => execute_memory_command(command).await,
 
-        OptimizationCommand::Hardware { command } => {
-            execute_hardware_command(command).await
-        }
+        OptimizationCommand::Hardware { command } => execute_hardware_command(command).await,
 
-        OptimizationCommand::Inference { command } => {
-            execute_inference_command(command).await
-        }
+        OptimizationCommand::Inference { command } => execute_inference_command(command).await,
 
         OptimizationCommand::Benchmark {
             model,
             requests,
             optimizations,
             format,
-        } => {
-            run_optimization_benchmark(model, requests, optimizations, format).await
-        }
+        } => run_optimization_benchmark(model, requests, optimizations, format).await,
 
         OptimizationCommand::Status { detailed, format } => {
             show_optimization_status(detailed, format).await
@@ -316,9 +313,7 @@ pub async fn execute_optimization_command(args: OptimizationArgs) -> Result<()> 
             output,
             profile,
             target,
-        } => {
-            optimize_model_comprehensive(input, output, profile, target).await
-        }
+        } => optimize_model_comprehensive(input, output, profile, target).await,
 
         OptimizationCommand::Configure { key, value, show } => {
             configure_optimization(key, value, show).await
@@ -343,7 +338,12 @@ async fn quantize_model(
         "fp16" => QuantizationType::FP16,
         "int8" => QuantizationType::INT8,
         "int4" => QuantizationType::INT4,
-        _ => return Err(anyhow::anyhow!("Invalid quantization precision: {}", precision)),
+        _ => {
+            return Err(anyhow::anyhow!(
+                "Invalid quantization precision: {}",
+                precision
+            ))
+        }
     };
 
     // Create quantization config
@@ -366,7 +366,10 @@ async fn quantize_model(
     println!("   Output: {}", output_path);
     println!("   Precision: {}", precision);
     println!("   Compression ratio: {:.2}x", metrics.compression_ratio);
-    println!("   Memory reduction: {:.1}%", metrics.memory_reduction * 100.0);
+    println!(
+        "   Memory reduction: {:.1}%",
+        metrics.memory_reduction * 100.0
+    );
     println!("   Expected speedup: {:.2}x", metrics.inference_speedup);
     println!("   Accuracy loss: {:.2}%", metrics.accuracy_loss * 100.0);
 
@@ -514,8 +517,14 @@ async fn execute_memory_command(command: MemoryCommand) -> Result<()> {
             println!("📊 Memory Optimization Status");
             println!("   Current usage: {:.1}MB", metrics.current_memory_usage_mb);
             println!("   Peak usage: {:.1}MB", metrics.peak_memory_usage_mb);
-            println!("   Memory saved: {:.1}%", metrics.memory_saved_ratio * 100.0);
-            println!("   Pool efficiency: {:.1}%", metrics.memory_pool_efficiency * 100.0);
+            println!(
+                "   Memory saved: {:.1}%",
+                metrics.memory_saved_ratio * 100.0
+            );
+            println!(
+                "   Pool efficiency: {:.1}%",
+                metrics.memory_pool_efficiency * 100.0
+            );
             println!("   Zero-copy ops: {}", metrics.zero_copy_operations);
         }
     }
@@ -543,8 +552,14 @@ async fn execute_hardware_command(command: HardwareCommand) -> Result<()> {
                 println!("   GPU {}: {} ({}MB)", i, device.name, device.memory_mb);
             }
 
-            println!("   SIMD support: {} instruction sets", capabilities.cpu_simd_support.len());
-            println!("   Mixed precision: {}", capabilities.supports_mixed_precision);
+            println!(
+                "   SIMD support: {} instruction sets",
+                capabilities.cpu_simd_support.len()
+            );
+            println!(
+                "   Mixed precision: {}",
+                capabilities.supports_mixed_precision
+            );
             println!("   Tensor cores: {}", capabilities.supports_tensor_cores);
         }
 
@@ -582,10 +597,22 @@ async fn execute_hardware_command(command: HardwareCommand) -> Result<()> {
             println!("📊 Hardware Acceleration Status");
             println!("   GPU utilization: {:.1}%", metrics.gpu_utilization);
             println!("   CPU utilization: {:.1}%", metrics.cpu_utilization);
-            println!("   Memory bandwidth: {:.1}%", metrics.memory_bandwidth_utilization);
-            println!("   Tensor throughput: {:.1} GOPS", metrics.tensor_throughput_gops);
-            println!("   Mixed precision speedup: {:.2}x", metrics.mixed_precision_speedup);
-            println!("   SIMD ops/sec: {:.1}M", metrics.simd_operations_per_second / 1_000_000.0);
+            println!(
+                "   Memory bandwidth: {:.1}%",
+                metrics.memory_bandwidth_utilization
+            );
+            println!(
+                "   Tensor throughput: {:.1} GOPS",
+                metrics.tensor_throughput_gops
+            );
+            println!(
+                "   Mixed precision speedup: {:.2}x",
+                metrics.mixed_precision_speedup
+            );
+            println!(
+                "   SIMD ops/sec: {:.1}M",
+                metrics.simd_operations_per_second / 1_000_000.0
+            );
         }
     }
 
@@ -647,13 +674,13 @@ async fn execute_inference_command(command: InferenceCommand) -> Result<()> {
             };
 
             let config = crate::optimization::inference::InferenceConfig::default();
-            let _optimizer = crate::optimization::inference::InferenceOptimizer::new(config).await?;
+            let _optimizer =
+                crate::optimization::inference::InferenceOptimizer::new(config).await?;
 
             // Note: In real implementation, this field would be public or have a getter method
             // For now, we'll simulate the compilation
             println!("✅ Model compilation simulated successfully!");
             println!("   Optimization level: {:?}", opt_level);
-
         }
 
         InferenceCommand::Status => {
@@ -663,13 +690,34 @@ async fn execute_inference_command(command: InferenceCommand) -> Result<()> {
 
             println!("📊 Inference Optimization Status");
             println!("   Speedup ratio: {:.2}x", metrics.speedup_ratio);
-            println!("   Cache hit ratio: {:.1}%", metrics.cache_hit_ratio * 100.0);
-            println!("   Speculative acceptance: {:.1}%", metrics.speculative_acceptance_rate * 100.0);
-            println!("   Operator fusion speedup: {:.2}x", metrics.operator_fusion_speedup);
-            println!("   Compilation speedup: {:.2}x", metrics.compilation_speedup);
-            println!("   Pipeline efficiency: {:.1}%", metrics.pipeline_efficiency * 100.0);
-            println!("   Avg inference time: {:.1}ms", metrics.avg_inference_time_ms);
-            println!("   Throughput: {:.1} tokens/sec", metrics.throughput_tokens_per_second);
+            println!(
+                "   Cache hit ratio: {:.1}%",
+                metrics.cache_hit_ratio * 100.0
+            );
+            println!(
+                "   Speculative acceptance: {:.1}%",
+                metrics.speculative_acceptance_rate * 100.0
+            );
+            println!(
+                "   Operator fusion speedup: {:.2}x",
+                metrics.operator_fusion_speedup
+            );
+            println!(
+                "   Compilation speedup: {:.2}x",
+                metrics.compilation_speedup
+            );
+            println!(
+                "   Pipeline efficiency: {:.1}%",
+                metrics.pipeline_efficiency * 100.0
+            );
+            println!(
+                "   Avg inference time: {:.1}ms",
+                metrics.avg_inference_time_ms
+            );
+            println!(
+                "   Throughput: {:.1} tokens/sec",
+                metrics.throughput_tokens_per_second
+            );
         }
     }
 
@@ -715,7 +763,10 @@ async fn run_optimization_benchmark(
 
             // Calculate total improvement
             let total_improvement: f64 = results.values().sum::<f64>() / results.len() as f64;
-            println!("\n🎯 Average performance improvement: {:.2}x", total_improvement);
+            println!(
+                "\n🎯 Average performance improvement: {:.2}x",
+                total_improvement
+            );
         }
     }
 
@@ -738,13 +789,34 @@ async fn show_optimization_status(detailed: bool, format: String) -> Result<()> 
             println!("┌─────────────────────────┬─────────────┐");
             println!("│ Metric                  │ Value       │");
             println!("├─────────────────────────┼─────────────┤");
-            println!("│ Inference speedup       │ {:>9.2}x │", metrics.inference_speedup);
-            println!("│ Memory reduction        │ {:>8.1}% │", metrics.memory_reduction * 100.0);
-            println!("│ Throughput improvement  │ {:>9.2}x │", metrics.throughput_improvement);
-            println!("│ GPU utilization         │ {:>8.1}% │", metrics.gpu_utilization);
-            println!("│ Cache hit ratio         │ {:>8.1}% │", metrics.cache_hit_ratio * 100.0);
-            println!("│ Batch efficiency        │ {:>8.1}% │", metrics.batch_efficiency * 100.0);
-            println!("│ Quantization accuracy   │ {:>8.1}% │", (1.0 - metrics.quantization_accuracy_loss) * 100.0);
+            println!(
+                "│ Inference speedup       │ {:>9.2}x │",
+                metrics.inference_speedup
+            );
+            println!(
+                "│ Memory reduction        │ {:>8.1}% │",
+                metrics.memory_reduction * 100.0
+            );
+            println!(
+                "│ Throughput improvement  │ {:>9.2}x │",
+                metrics.throughput_improvement
+            );
+            println!(
+                "│ GPU utilization         │ {:>8.1}% │",
+                metrics.gpu_utilization
+            );
+            println!(
+                "│ Cache hit ratio         │ {:>8.1}% │",
+                metrics.cache_hit_ratio * 100.0
+            );
+            println!(
+                "│ Batch efficiency        │ {:>8.1}% │",
+                metrics.batch_efficiency * 100.0
+            );
+            println!(
+                "│ Quantization accuracy   │ {:>8.1}% │",
+                (1.0 - metrics.quantization_accuracy_loss) * 100.0
+            );
             println!("└─────────────────────────┴─────────────┘");
 
             if detailed {
@@ -808,8 +880,14 @@ async fn optimize_model_comprehensive(
     println!("✅ Comprehensive optimization completed!");
     println!("   Optimized model: {}", optimized_path);
     println!("   Total speedup: {:.2}x", metrics.inference_speedup);
-    println!("   Memory reduction: {:.1}%", metrics.memory_reduction * 100.0);
-    println!("   Throughput improvement: {:.2}x", metrics.throughput_improvement);
+    println!(
+        "   Memory reduction: {:.1}%",
+        metrics.memory_reduction * 100.0
+    );
+    println!(
+        "   Throughput improvement: {:.2}x",
+        metrics.throughput_improvement
+    );
 
     Ok(())
 }
@@ -854,7 +932,8 @@ mod tests {
             "".to_string(),
             0.95,
             false,
-        ).await;
+        )
+        .await;
 
         // This would fail in tests without actual model files, but tests the parsing logic
         assert!(result.is_err() || result.is_ok());

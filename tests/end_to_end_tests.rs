@@ -2,9 +2,9 @@
 use assert_cmd::Command;
 use predicates::prelude::*;
 use std::fs;
-use tempfile::tempdir;
-use std::time::Duration;
 use std::process::{Command as StdCommand, Stdio};
+use std::time::Duration;
+use tempfile::tempdir;
 use tokio::time::sleep;
 
 /// Test complete model lifecycle: discovery, validation, caching, inference
@@ -18,7 +18,11 @@ async fn test_complete_model_lifecycle() {
 
     // Create a mock model
     let model_path = models_dir.join("test-model.gguf");
-    fs::write(&model_path, b"GGUF\x00\x00\x00\x01test model data for lifecycle test").unwrap();
+    fs::write(
+        &model_path,
+        b"GGUF\x00\x00\x00\x01test model data for lifecycle test",
+    )
+    .unwrap();
 
     // Step 1: Model discovery
     let mut cmd = Command::cargo_bin("inferno").unwrap();
@@ -45,13 +49,14 @@ async fn test_complete_model_lifecycle() {
     let mut cmd = Command::cargo_bin("inferno").unwrap();
     cmd.arg("cache")
         .arg("warmup")
-        .arg("--model").arg("test-model.gguf")
+        .arg("--model")
+        .arg("test-model.gguf")
         .env("INFERNO_MODELS_DIR", models_dir.to_str().unwrap())
         .env("INFERNO_CACHE_DIR", cache_dir.to_str().unwrap());
 
-    cmd.assert()
-        .success()
-        .stdout(predicate::str::contains("Model cache functionality is not yet implemented"));
+    cmd.assert().success().stdout(predicate::str::contains(
+        "Model cache functionality is not yet implemented",
+    ));
 
     // Step 4: Cache status check
     let mut cmd = Command::cargo_bin("inferno").unwrap();
@@ -59,15 +64,17 @@ async fn test_complete_model_lifecycle() {
         .arg("status")
         .env("INFERNO_CACHE_DIR", cache_dir.to_str().unwrap());
 
-    cmd.assert()
-        .success()
-        .stdout(predicate::str::contains("Model cache functionality is not yet implemented"));
+    cmd.assert().success().stdout(predicate::str::contains(
+        "Model cache functionality is not yet implemented",
+    ));
 
     // Step 5: Inference attempt
     let mut cmd = Command::cargo_bin("inferno").unwrap();
     cmd.arg("run")
-        .arg("--model").arg("test-model.gguf")
-        .arg("--prompt").arg("Hello, world!")
+        .arg("--model")
+        .arg("test-model.gguf")
+        .arg("--prompt")
+        .arg("Hello, world!")
         .env("INFERNO_MODELS_DIR", models_dir.to_str().unwrap())
         .env("INFERNO_CACHE_DIR", cache_dir.to_str().unwrap());
 
@@ -103,9 +110,12 @@ async fn test_batch_processing_workflow() {
     // Step 1: Validate batch input format
     let mut cmd = Command::cargo_bin("inferno").unwrap();
     cmd.arg("batch")
-        .arg("--model").arg("batch-model.gguf")
-        .arg("--input").arg(input_file.to_str().unwrap())
-        .arg("--output").arg(output_dir.to_str().unwrap())
+        .arg("--model")
+        .arg("batch-model.gguf")
+        .arg("--input")
+        .arg(input_file.to_str().unwrap())
+        .arg("--output")
+        .arg(output_dir.to_str().unwrap())
         .arg("--dry-run")
         .env("INFERNO_MODELS_DIR", models_dir.to_str().unwrap());
 
@@ -116,10 +126,14 @@ async fn test_batch_processing_workflow() {
     // Step 2: Run batch processing
     let mut cmd = Command::cargo_bin("inferno").unwrap();
     cmd.arg("batch")
-        .arg("--model").arg("batch-model.gguf")
-        .arg("--input").arg(input_file.to_str().unwrap())
-        .arg("--output").arg(output_dir.to_str().unwrap())
-        .arg("--max-concurrent").arg("2")
+        .arg("--model")
+        .arg("batch-model.gguf")
+        .arg("--input")
+        .arg(input_file.to_str().unwrap())
+        .arg("--output")
+        .arg(output_dir.to_str().unwrap())
+        .arg("--max-concurrent")
+        .arg("2")
         .env("INFERNO_MODELS_DIR", models_dir.to_str().unwrap());
 
     // This may fail due to mock backends, but should show progress
@@ -143,13 +157,15 @@ async fn test_queue_management_workflow() {
     let mut cmd = Command::cargo_bin("inferno").unwrap();
     cmd.arg("queue")
         .arg("create")
-        .arg("--name").arg("test-processing-queue")
-        .arg("--max-concurrent").arg("3")
+        .arg("--name")
+        .arg("test-processing-queue")
+        .arg("--max-concurrent")
+        .arg("3")
         .arg("--priority-enabled");
 
-    cmd.assert()
-        .success()
-        .stdout(predicate::str::contains("Job queue management functionality is not yet implemented"));
+    cmd.assert().success().stdout(predicate::str::contains(
+        "Job queue management functionality is not yet implemented",
+    ));
 
     // Step 2: List queues
     let mut cmd = Command::cargo_bin("inferno").unwrap();
@@ -166,25 +182,30 @@ async fn test_queue_management_workflow() {
     let mut cmd = Command::cargo_bin("inferno").unwrap();
     cmd.arg("queue")
         .arg("submit")
-        .arg("--queue-id").arg("test-processing-queue")
-        .arg("--input-file").arg(input_file.to_str().unwrap())
-        .arg("--model").arg("queue-model.gguf")
-        .arg("--priority").arg("high")
+        .arg("--queue-id")
+        .arg("test-processing-queue")
+        .arg("--input-file")
+        .arg(input_file.to_str().unwrap())
+        .arg("--model")
+        .arg("queue-model.gguf")
+        .arg("--priority")
+        .arg("high")
         .env("INFERNO_MODELS_DIR", models_dir.to_str().unwrap());
 
-    cmd.assert()
-        .success()
-        .stdout(predicate::str::contains("Job queue management functionality is not yet implemented"));
+    cmd.assert().success().stdout(predicate::str::contains(
+        "Job queue management functionality is not yet implemented",
+    ));
 
     // Step 4: Monitor queue status
     let mut cmd = Command::cargo_bin("inferno").unwrap();
     cmd.arg("queue")
         .arg("status")
-        .arg("--queue-id").arg("test-processing-queue");
+        .arg("--queue-id")
+        .arg("test-processing-queue");
 
-    cmd.assert()
-        .success()
-        .stdout(predicate::str::contains("Job queue management functionality is not yet implemented"));
+    cmd.assert().success().stdout(predicate::str::contains(
+        "Job queue management functionality is not yet implemented",
+    ));
 }
 
 /// Test model versioning and deployment workflow
@@ -199,75 +220,94 @@ async fn test_versioning_and_deployment_workflow() {
     let model_v2 = models_dir.join("chat-model-v2.gguf");
 
     fs::write(&model_v1, b"GGUF\x00\x00\x00\x01chat model version 1.0").unwrap();
-    fs::write(&model_v2, b"GGUF\x00\x00\x00\x01chat model version 2.0 with improvements").unwrap();
+    fs::write(
+        &model_v2,
+        b"GGUF\x00\x00\x00\x01chat model version 2.0 with improvements",
+    )
+    .unwrap();
 
     // Step 1: Register model versions
     let mut cmd = Command::cargo_bin("inferno").unwrap();
     cmd.arg("version")
         .arg("create")
-        .arg("--model").arg("chat-model")
-        .arg("--version").arg("1.0.0")
-        .arg("--file").arg(model_v1.to_str().unwrap())
-        .arg("--description").arg("Initial release");
+        .arg("--model")
+        .arg("chat-model")
+        .arg("--version")
+        .arg("1.0.0")
+        .arg("--file")
+        .arg(model_v1.to_str().unwrap())
+        .arg("--description")
+        .arg("Initial release");
 
-    cmd.assert()
-        .success()
-        .stdout(predicate::str::contains("Model versioning functionality is not yet implemented"));
+    cmd.assert().success().stdout(predicate::str::contains(
+        "Model versioning functionality is not yet implemented",
+    ));
 
     let mut cmd = Command::cargo_bin("inferno").unwrap();
     cmd.arg("version")
         .arg("create")
-        .arg("--model").arg("chat-model")
-        .arg("--version").arg("2.0.0")
-        .arg("--file").arg(model_v2.to_str().unwrap())
-        .arg("--description").arg("Performance improvements");
+        .arg("--model")
+        .arg("chat-model")
+        .arg("--version")
+        .arg("2.0.0")
+        .arg("--file")
+        .arg(model_v2.to_str().unwrap())
+        .arg("--description")
+        .arg("Performance improvements");
 
-    cmd.assert()
-        .success()
-        .stdout(predicate::str::contains("Model versioning functionality is not yet implemented"));
+    cmd.assert().success().stdout(predicate::str::contains(
+        "Model versioning functionality is not yet implemented",
+    ));
 
     // Step 2: List versions
     let mut cmd = Command::cargo_bin("inferno").unwrap();
     cmd.arg("version")
         .arg("list")
-        .arg("--model").arg("chat-model");
+        .arg("--model")
+        .arg("chat-model");
 
-    cmd.assert()
-        .success()
-        .stdout(predicate::str::contains("Model versioning functionality is not yet implemented"));
+    cmd.assert().success().stdout(predicate::str::contains(
+        "Model versioning functionality is not yet implemented",
+    ));
 
     // Step 3: Promote to staging
     let mut cmd = Command::cargo_bin("inferno").unwrap();
     cmd.arg("version")
         .arg("promote")
-        .arg("--version-id").arg("chat-model-2.0.0")
-        .arg("--target").arg("staging");
+        .arg("--version-id")
+        .arg("chat-model-2.0.0")
+        .arg("--target")
+        .arg("staging");
 
-    cmd.assert()
-        .success()
-        .stdout(predicate::str::contains("Model versioning functionality is not yet implemented"));
+    cmd.assert().success().stdout(predicate::str::contains(
+        "Model versioning functionality is not yet implemented",
+    ));
 
     // Step 4: Deploy to production
     let mut cmd = Command::cargo_bin("inferno").unwrap();
     cmd.arg("version")
         .arg("deploy")
-        .arg("--version-id").arg("chat-model-2.0.0")
-        .arg("--target").arg("production");
+        .arg("--version-id")
+        .arg("chat-model-2.0.0")
+        .arg("--target")
+        .arg("production");
 
-    cmd.assert()
-        .success()
-        .stdout(predicate::str::contains("Model versioning functionality is not yet implemented"));
+    cmd.assert().success().stdout(predicate::str::contains(
+        "Model versioning functionality is not yet implemented",
+    ));
 
     // Step 5: Compare versions
     let mut cmd = Command::cargo_bin("inferno").unwrap();
     cmd.arg("version")
         .arg("compare")
-        .arg("--version1").arg("chat-model-1.0.0")
-        .arg("--version2").arg("chat-model-2.0.0");
+        .arg("--version1")
+        .arg("chat-model-1.0.0")
+        .arg("--version2")
+        .arg("chat-model-2.0.0");
 
-    cmd.assert()
-        .success()
-        .stdout(predicate::str::contains("Model versioning functionality is not yet implemented"));
+    cmd.assert().success().stdout(predicate::str::contains(
+        "Model versioning functionality is not yet implemented",
+    ));
 }
 
 /// Test A/B testing workflow
@@ -281,16 +321,27 @@ async fn test_ab_testing_workflow() {
     let control_model = models_dir.join("control-model.gguf");
     let treatment_model = models_dir.join("treatment-model.gguf");
 
-    fs::write(&control_model, b"GGUF\x00\x00\x00\x01control model baseline").unwrap();
-    fs::write(&treatment_model, b"GGUF\x00\x00\x00\x01treatment model experimental").unwrap();
+    fs::write(
+        &control_model,
+        b"GGUF\x00\x00\x00\x01control model baseline",
+    )
+    .unwrap();
+    fs::write(
+        &treatment_model,
+        b"GGUF\x00\x00\x00\x01treatment model experimental",
+    )
+    .unwrap();
 
     // Step 1: Start A/B test
     let mut cmd = Command::cargo_bin("inferno").unwrap();
     cmd.arg("ab-test")
         .arg("start")
-        .arg("--name").arg("performance-comparison")
-        .arg("--control-model").arg("control-model.gguf")
-        .arg("--treatment-model").arg("treatment-model.gguf")
+        .arg("--name")
+        .arg("performance-comparison")
+        .arg("--control-model")
+        .arg("control-model.gguf")
+        .arg("--treatment-model")
+        .arg("treatment-model.gguf")
         .env("INFERNO_MODELS_DIR", models_dir.to_str().unwrap());
 
     cmd.assert()
@@ -317,9 +368,7 @@ async fn test_ab_testing_workflow() {
 
     // Step 4: Stop test
     let mut cmd = Command::cargo_bin("inferno").unwrap();
-    cmd.arg("ab-test")
-        .arg("stop")
-        .arg("performance-comparison");
+    cmd.arg("ab-test").arg("stop").arg("performance-comparison");
 
     cmd.assert()
         .success()
@@ -333,39 +382,43 @@ async fn test_monitoring_workflow() {
     let mut cmd = Command::cargo_bin("inferno").unwrap();
     cmd.arg("monitor").arg("status");
 
-    cmd.assert()
-        .success()
-        .stdout(predicate::str::contains("Real-time monitoring functionality is not yet implemented"));
+    cmd.assert().success().stdout(predicate::str::contains(
+        "Real-time monitoring functionality is not yet implemented",
+    ));
 
     // Step 2: Start monitoring with custom thresholds
     let mut cmd = Command::cargo_bin("inferno").unwrap();
     cmd.arg("monitor")
         .arg("start")
-        .arg("--cpu-threshold").arg("80")
-        .arg("--memory-threshold").arg("90")
-        .arg("--interval").arg("5");
+        .arg("--cpu-threshold")
+        .arg("80")
+        .arg("--memory-threshold")
+        .arg("90")
+        .arg("--interval")
+        .arg("5");
 
-    cmd.assert()
-        .success()
-        .stdout(predicate::str::contains("Real-time monitoring functionality is not yet implemented"));
+    cmd.assert().success().stdout(predicate::str::contains(
+        "Real-time monitoring functionality is not yet implemented",
+    ));
 
     // Step 3: List active alerts
     let mut cmd = Command::cargo_bin("inferno").unwrap();
     cmd.arg("monitor").arg("alerts");
 
-    cmd.assert()
-        .success()
-        .stdout(predicate::str::contains("Real-time monitoring functionality is not yet implemented"));
+    cmd.assert().success().stdout(predicate::str::contains(
+        "Real-time monitoring functionality is not yet implemented",
+    ));
 
     // Step 4: Show metrics dashboard
     let mut cmd = Command::cargo_bin("inferno").unwrap();
     cmd.arg("monitor")
         .arg("dashboard")
-        .arg("--port").arg("3000");
+        .arg("--port")
+        .arg("3000");
 
-    cmd.assert()
-        .success()
-        .stdout(predicate::str::contains("Real-time monitoring functionality is not yet implemented"));
+    cmd.assert().success().stdout(predicate::str::contains(
+        "Real-time monitoring functionality is not yet implemented",
+    ));
 }
 
 /// Test audit and compliance workflow
@@ -377,47 +430,55 @@ async fn test_audit_workflow() {
     let mut cmd = Command::cargo_bin("inferno").unwrap();
     cmd.arg("audit")
         .arg("query")
-        .arg("--limit").arg("50")
-        .arg("--since").arg("1h");
+        .arg("--limit")
+        .arg("50")
+        .arg("--since")
+        .arg("1h");
 
-    cmd.assert()
-        .success()
-        .stdout(predicate::str::contains("Audit logging functionality is not yet implemented"));
+    cmd.assert().success().stdout(predicate::str::contains(
+        "Audit logging functionality is not yet implemented",
+    ));
 
     // Step 2: Search for specific events
     let mut cmd = Command::cargo_bin("inferno").unwrap();
     cmd.arg("audit")
         .arg("search")
-        .arg("--event-type").arg("model_loaded")
-        .arg("--actor").arg("test-user");
+        .arg("--event-type")
+        .arg("model_loaded")
+        .arg("--actor")
+        .arg("test-user");
 
-    cmd.assert()
-        .success()
-        .stdout(predicate::str::contains("Audit logging functionality is not yet implemented"));
+    cmd.assert().success().stdout(predicate::str::contains(
+        "Audit logging functionality is not yet implemented",
+    ));
 
     // Step 3: Export audit logs
     let export_file = temp_dir.path().join("audit_export.json");
     let mut cmd = Command::cargo_bin("inferno").unwrap();
     cmd.arg("audit")
         .arg("export")
-        .arg("--format").arg("json")
-        .arg("--output").arg(export_file.to_str().unwrap())
-        .arg("--since").arg("24h");
+        .arg("--format")
+        .arg("json")
+        .arg("--output")
+        .arg(export_file.to_str().unwrap())
+        .arg("--since")
+        .arg("24h");
 
-    cmd.assert()
-        .success()
-        .stdout(predicate::str::contains("Audit logging functionality is not yet implemented"));
+    cmd.assert().success().stdout(predicate::str::contains(
+        "Audit logging functionality is not yet implemented",
+    ));
 
     // Step 4: Monitor live audit events
     let mut cmd = Command::cargo_bin("inferno").unwrap();
     cmd.arg("audit")
         .arg("monitor")
         .arg("--follow")
-        .arg("--filter").arg("severity:warning");
+        .arg("--filter")
+        .arg("severity:warning");
 
-    cmd.assert()
-        .success()
-        .stdout(predicate::str::contains("Audit logging functionality is not yet implemented"));
+    cmd.assert().success().stdout(predicate::str::contains(
+        "Audit logging functionality is not yet implemented",
+    ));
 }
 
 /// Test GPU management workflow
@@ -427,42 +488,48 @@ async fn test_gpu_workflow() {
     let mut cmd = Command::cargo_bin("inferno").unwrap();
     cmd.arg("gpu").arg("list");
 
-    cmd.assert()
-        .success()
-        .stdout(predicate::str::contains("GPU management functionality is not yet implemented"));
+    cmd.assert().success().stdout(predicate::str::contains(
+        "GPU management functionality is not yet implemented",
+    ));
 
     // Step 2: Monitor GPU usage
     let mut cmd = Command::cargo_bin("inferno").unwrap();
     cmd.arg("gpu")
         .arg("monitor")
-        .arg("--interval").arg("2")
-        .arg("--duration").arg("10");
+        .arg("--interval")
+        .arg("2")
+        .arg("--duration")
+        .arg("10");
 
-    cmd.assert()
-        .success()
-        .stdout(predicate::str::contains("GPU management functionality is not yet implemented"));
+    cmd.assert().success().stdout(predicate::str::contains(
+        "GPU management functionality is not yet implemented",
+    ));
 
     // Step 3: Benchmark GPU performance
     let mut cmd = Command::cargo_bin("inferno").unwrap();
     cmd.arg("gpu")
         .arg("benchmark")
-        .arg("--gpu-id").arg("0")
-        .arg("--iterations").arg("100");
+        .arg("--gpu-id")
+        .arg("0")
+        .arg("--iterations")
+        .arg("100");
 
-    cmd.assert()
-        .success()
-        .stdout(predicate::str::contains("GPU management functionality is not yet implemented"));
+    cmd.assert().success().stdout(predicate::str::contains(
+        "GPU management functionality is not yet implemented",
+    ));
 
     // Step 4: Allocate GPU memory
     let mut cmd = Command::cargo_bin("inferno").unwrap();
     cmd.arg("gpu")
         .arg("allocate")
-        .arg("--gpu-id").arg("0")
-        .arg("--memory").arg("1024");
+        .arg("--gpu-id")
+        .arg("0")
+        .arg("--memory")
+        .arg("1024");
 
-    cmd.assert()
-        .success()
-        .stdout(predicate::str::contains("GPU management functionality is not yet implemented"));
+    cmd.assert().success().stdout(predicate::str::contains(
+        "GPU management functionality is not yet implemented",
+    ));
 }
 
 /// Test distributed processing workflow
@@ -472,40 +539,45 @@ async fn test_distributed_workflow() {
     let mut cmd = Command::cargo_bin("inferno").unwrap();
     cmd.arg("distributed").arg("status");
 
-    cmd.assert()
-        .success()
-        .stdout(predicate::str::contains("Distributed processing functionality is not yet implemented"));
+    cmd.assert().success().stdout(predicate::str::contains(
+        "Distributed processing functionality is not yet implemented",
+    ));
 
     // Step 2: Start coordinator
     let mut cmd = Command::cargo_bin("inferno").unwrap();
     cmd.arg("distributed")
         .arg("coordinator")
-        .arg("--port").arg("8080")
-        .arg("--max-workers").arg("10");
+        .arg("--port")
+        .arg("8080")
+        .arg("--max-workers")
+        .arg("10");
 
-    cmd.assert()
-        .success()
-        .stdout(predicate::str::contains("Distributed processing functionality is not yet implemented"));
+    cmd.assert().success().stdout(predicate::str::contains(
+        "Distributed processing functionality is not yet implemented",
+    ));
 
     // Step 3: Register worker nodes
     let mut cmd = Command::cargo_bin("inferno").unwrap();
     cmd.arg("distributed")
         .arg("worker")
-        .arg("--coordinator").arg("127.0.0.1:8080")
-        .arg("--port").arg("8081")
-        .arg("--capabilities").arg("gguf,onnx");
+        .arg("--coordinator")
+        .arg("127.0.0.1:8080")
+        .arg("--port")
+        .arg("8081")
+        .arg("--capabilities")
+        .arg("gguf,onnx");
 
-    cmd.assert()
-        .success()
-        .stdout(predicate::str::contains("Distributed processing functionality is not yet implemented"));
+    cmd.assert().success().stdout(predicate::str::contains(
+        "Distributed processing functionality is not yet implemented",
+    ));
 
     // Step 4: List registered workers
     let mut cmd = Command::cargo_bin("inferno").unwrap();
     cmd.arg("distributed").arg("workers");
 
-    cmd.assert()
-        .success()
-        .stdout(predicate::str::contains("Distributed processing functionality is not yet implemented"));
+    cmd.assert().success().stdout(predicate::str::contains(
+        "Distributed processing functionality is not yet implemented",
+    ));
 }
 
 /// Test metrics and observability workflow
@@ -517,40 +589,44 @@ async fn test_metrics_workflow() {
     let mut cmd = Command::cargo_bin("inferno").unwrap();
     cmd.arg("metrics").arg("show");
 
-    cmd.assert()
-        .success()
-        .stdout(predicate::str::contains("Metrics functionality is not yet implemented"));
+    cmd.assert().success().stdout(predicate::str::contains(
+        "Metrics functionality is not yet implemented",
+    ));
 
     // Step 2: Export metrics in Prometheus format
     let metrics_file = temp_dir.path().join("metrics.prom");
     let mut cmd = Command::cargo_bin("inferno").unwrap();
     cmd.arg("metrics")
         .arg("export")
-        .arg("--format").arg("prometheus")
-        .arg("--output").arg(metrics_file.to_str().unwrap());
+        .arg("--format")
+        .arg("prometheus")
+        .arg("--output")
+        .arg(metrics_file.to_str().unwrap());
 
-    cmd.assert()
-        .success()
-        .stdout(predicate::str::contains("Metrics functionality is not yet implemented"));
+    cmd.assert().success().stdout(predicate::str::contains(
+        "Metrics functionality is not yet implemented",
+    ));
 
     // Step 3: Start metrics server
     let mut cmd = Command::cargo_bin("inferno").unwrap();
     cmd.arg("metrics")
         .arg("serve")
-        .arg("--port").arg("9090")
-        .arg("--interval").arg("15");
+        .arg("--port")
+        .arg("9090")
+        .arg("--interval")
+        .arg("15");
 
-    cmd.assert()
-        .success()
-        .stdout(predicate::str::contains("Metrics functionality is not yet implemented"));
+    cmd.assert().success().stdout(predicate::str::contains(
+        "Metrics functionality is not yet implemented",
+    ));
 
     // Step 4: Reset metrics
     let mut cmd = Command::cargo_bin("inferno").unwrap();
     cmd.arg("metrics").arg("reset");
 
-    cmd.assert()
-        .success()
-        .stdout(predicate::str::contains("Metrics functionality is not yet implemented"));
+    cmd.assert().success().stdout(predicate::str::contains(
+        "Metrics functionality is not yet implemented",
+    ));
 }
 
 /// Test configuration management across all features
@@ -563,9 +639,9 @@ async fn test_configuration_workflow() {
     let mut cmd = Command::cargo_bin("inferno").unwrap();
     cmd.arg("config").arg("show");
 
-    cmd.assert()
-        .success()
-        .stdout(predicate::str::contains("models_dir").or(predicate::str::contains("Configuration")));
+    cmd.assert().success().stdout(
+        predicate::str::contains("models_dir").or(predicate::str::contains("Configuration")),
+    );
 
     // Step 2: Set configuration values
     let mut cmd = Command::cargo_bin("inferno").unwrap();
@@ -574,17 +650,16 @@ async fn test_configuration_workflow() {
         .arg("models_dir")
         .arg(temp_dir.path().join("models").to_str().unwrap());
 
-    cmd.assert()
-        .success();
+    cmd.assert().success();
 
     // Step 3: Export configuration
     let mut cmd = Command::cargo_bin("inferno").unwrap();
     cmd.arg("config")
         .arg("export")
-        .arg("--output").arg(config_file.to_str().unwrap());
+        .arg("--output")
+        .arg(config_file.to_str().unwrap());
 
-    cmd.assert()
-        .success();
+    cmd.assert().success();
 
     // Verify config file was created
     assert!(config_file.exists());
@@ -595,10 +670,10 @@ async fn test_configuration_workflow() {
     let mut cmd = Command::cargo_bin("inferno").unwrap();
     cmd.arg("config")
         .arg("validate")
-        .arg("--file").arg(config_file.to_str().unwrap());
+        .arg("--file")
+        .arg(config_file.to_str().unwrap());
 
-    cmd.assert()
-        .success();
+    cmd.assert().success();
 }
 
 /// Test error recovery and resilience
@@ -631,10 +706,14 @@ async fn test_error_recovery_workflow() {
     // Test handling of resource exhaustion scenarios
     let mut cmd = Command::cargo_bin("inferno").unwrap();
     cmd.arg("batch")
-        .arg("--model").arg("nonexistent-model")
-        .arg("--input").arg("/dev/null")
-        .arg("--output").arg("/tmp/test_output")
-        .arg("--max-concurrent").arg("1000"); // Unrealistic value
+        .arg("--model")
+        .arg("nonexistent-model")
+        .arg("--input")
+        .arg("/dev/null")
+        .arg("--output")
+        .arg("/tmp/test_output")
+        .arg("--max-concurrent")
+        .arg("1000"); // Unrealistic value
 
     // Should fail gracefully
     cmd.assert().failure();

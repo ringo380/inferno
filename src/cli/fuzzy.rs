@@ -81,48 +81,74 @@ impl FuzzyMatcher {
 
     fn initialize_aliases(&mut self) {
         // Common typos and alternatives
-        self.aliases.insert("instal".to_string(), "install".to_string());
-        self.aliases.insert("instll".to_string(), "install".to_string());
-        self.aliases.insert("isntall".to_string(), "install".to_string());
-        self.aliases.insert("add".to_string(), "install".to_string());
-        self.aliases.insert("get".to_string(), "install".to_string());
+        self.aliases
+            .insert("instal".to_string(), "install".to_string());
+        self.aliases
+            .insert("instll".to_string(), "install".to_string());
+        self.aliases
+            .insert("isntall".to_string(), "install".to_string());
+        self.aliases
+            .insert("add".to_string(), "install".to_string());
+        self.aliases
+            .insert("get".to_string(), "install".to_string());
 
         self.aliases.insert("rm".to_string(), "remove".to_string());
         self.aliases.insert("del".to_string(), "remove".to_string());
-        self.aliases.insert("delete".to_string(), "remove".to_string());
-        self.aliases.insert("uninstall".to_string(), "remove".to_string());
+        self.aliases
+            .insert("delete".to_string(), "remove".to_string());
+        self.aliases
+            .insert("uninstall".to_string(), "remove".to_string());
 
-        self.aliases.insert("find".to_string(), "search".to_string());
-        self.aliases.insert("query".to_string(), "search".to_string());
-        self.aliases.insert("lookup".to_string(), "search".to_string());
+        self.aliases
+            .insert("find".to_string(), "search".to_string());
+        self.aliases
+            .insert("query".to_string(), "search".to_string());
+        self.aliases
+            .insert("lookup".to_string(), "search".to_string());
 
         self.aliases.insert("ls".to_string(), "list".to_string());
         self.aliases.insert("show".to_string(), "list".to_string());
-        self.aliases.insert("display".to_string(), "list".to_string());
+        self.aliases
+            .insert("display".to_string(), "list".to_string());
 
-        self.aliases.insert("update".to_string(), "package update".to_string());
-        self.aliases.insert("upgrade".to_string(), "package upgrade".to_string());
-        self.aliases.insert("autoremove".to_string(), "package autoremove".to_string());
-        self.aliases.insert("autoclean".to_string(), "package clean".to_string());
+        self.aliases
+            .insert("update".to_string(), "package update".to_string());
+        self.aliases
+            .insert("upgrade".to_string(), "package upgrade".to_string());
+        self.aliases
+            .insert("autoremove".to_string(), "package autoremove".to_string());
+        self.aliases
+            .insert("autoclean".to_string(), "package clean".to_string());
 
-        self.aliases.insert("repository".to_string(), "repo".to_string());
-        self.aliases.insert("repositories".to_string(), "repo".to_string());
+        self.aliases
+            .insert("repository".to_string(), "repo".to_string());
+        self.aliases
+            .insert("repositories".to_string(), "repo".to_string());
         self.aliases.insert("repos".to_string(), "repo".to_string());
 
-        self.aliases.insert("market".to_string(), "marketplace".to_string());
-        self.aliases.insert("store".to_string(), "marketplace".to_string());
-        self.aliases.insert("registry".to_string(), "marketplace".to_string());
+        self.aliases
+            .insert("market".to_string(), "marketplace".to_string());
+        self.aliases
+            .insert("store".to_string(), "marketplace".to_string());
+        self.aliases
+            .insert("registry".to_string(), "marketplace".to_string());
 
-        self.aliases.insert("pkg".to_string(), "package".to_string());
-        self.aliases.insert("packages".to_string(), "package".to_string());
+        self.aliases
+            .insert("pkg".to_string(), "package".to_string());
+        self.aliases
+            .insert("packages".to_string(), "package".to_string());
 
         self.aliases.insert("cfg".to_string(), "config".to_string());
-        self.aliases.insert("configuration".to_string(), "config".to_string());
-        self.aliases.insert("settings".to_string(), "config".to_string());
+        self.aliases
+            .insert("configuration".to_string(), "config".to_string());
+        self.aliases
+            .insert("settings".to_string(), "config".to_string());
 
         self.aliases.insert("ui".to_string(), "tui".to_string());
-        self.aliases.insert("terminal".to_string(), "tui".to_string());
-        self.aliases.insert("interface".to_string(), "tui".to_string());
+        self.aliases
+            .insert("terminal".to_string(), "tui".to_string());
+        self.aliases
+            .insert("interface".to_string(), "tui".to_string());
     }
 
     /// Find the best command suggestion for a given input
@@ -173,7 +199,8 @@ impl FuzzyMatcher {
         }
 
         // Get fuzzy matches
-        let mut matches: Vec<(String, usize)> = self.commands
+        let mut matches: Vec<(String, usize)> = self
+            .commands
             .iter()
             .map(|cmd| {
                 let distance = levenshtein_distance(&input_lower, &cmd.to_lowercase());
@@ -197,7 +224,8 @@ impl FuzzyMatcher {
             for command in &self.commands {
                 if command.to_lowercase().starts_with(&input_lower)
                     && input.len() >= 2
-                    && !suggestions.contains(command) {
+                    && !suggestions.contains(command)
+                {
                     suggestions.push(command.clone());
                     if suggestions.len() >= limit {
                         break;
@@ -267,14 +295,18 @@ fn levenshtein_distance(s1: &str, s2: &str) -> usize {
 
     for i in 1..=len1 {
         for j in 1..=len2 {
-            let cost = if s1_chars[i - 1] == s2_chars[j - 1] { 0 } else { 1 };
+            let cost = if s1_chars[i - 1] == s2_chars[j - 1] {
+                0
+            } else {
+                1
+            };
 
             matrix[i][j] = std::cmp::min(
                 std::cmp::min(
-                    matrix[i - 1][j] + 1,        // deletion
-                    matrix[i][j - 1] + 1,        // insertion
+                    matrix[i - 1][j] + 1, // deletion
+                    matrix[i][j - 1] + 1, // insertion
                 ),
-                matrix[i - 1][j - 1] + cost,     // substitution
+                matrix[i - 1][j - 1] + cost, // substitution
             );
         }
     }
@@ -298,7 +330,10 @@ mod tests {
     fn test_command_suggestions() {
         let matcher = FuzzyMatcher::new();
 
-        assert_eq!(matcher.suggest_command("instal"), Some("install".to_string()));
+        assert_eq!(
+            matcher.suggest_command("instal"),
+            Some("install".to_string())
+        );
         assert_eq!(matcher.suggest_command("serch"), Some("search".to_string()));
         assert_eq!(matcher.suggest_command("rm"), Some("remove".to_string()));
         assert_eq!(matcher.suggest_command("ls"), Some("list".to_string()));
@@ -308,10 +343,22 @@ mod tests {
     fn test_command_validation() {
         let matcher = FuzzyMatcher::new();
 
-        assert_eq!(matcher.validate_command("install"), CommandValidation::Valid);
-        assert_eq!(matcher.validate_command("rm"), CommandValidation::Alias("remove".to_string()));
-        assert_eq!(matcher.validate_command("instal"), CommandValidation::Suggestion("install".to_string()));
-        assert_eq!(matcher.validate_command("xyz123"), CommandValidation::Invalid);
+        assert_eq!(
+            matcher.validate_command("install"),
+            CommandValidation::Valid
+        );
+        assert_eq!(
+            matcher.validate_command("rm"),
+            CommandValidation::Alias("remove".to_string())
+        );
+        assert_eq!(
+            matcher.validate_command("instal"),
+            CommandValidation::Suggestion("install".to_string())
+        );
+        assert_eq!(
+            matcher.validate_command("xyz123"),
+            CommandValidation::Invalid
+        );
     }
 
     #[test]
