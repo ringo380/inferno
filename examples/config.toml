@@ -1,0 +1,106 @@
+# Inferno AI/ML Platform Configuration
+# This file demonstrates the comprehensive configuration options available
+
+[server]
+host = "0.0.0.0"
+port = 8080
+workers = 4
+timeout_ms = 30000
+max_request_size = "100MB"
+
+[models]
+# Model directory configuration
+models_dir = "./models"
+cache_dir = "./cache"
+max_model_size = "50GB"
+auto_download = false
+
+# Model validation and security
+checksum_validation = true
+signature_verification = true
+sandbox_execution = true
+
+[backends]
+# GGUF backend configuration
+[backends.gguf]
+enabled = true
+threads = 0  # Auto-detect
+context_size = 4096
+batch_size = 512
+gpu_layers = -1  # Auto-detect
+memory_map = true
+
+# ONNX backend configuration  
+[backends.onnx]
+enabled = true
+execution_provider = "auto"  # auto, cpu, cuda, tensorrt, directml
+parallel_execution = true
+memory_optimization = true
+
+[security]
+# Authentication and authorization
+auth_required = false
+api_key_header = "X-API-Key"
+rate_limit_requests = 100
+rate_limit_window = "1m"
+
+# Encryption and data protection
+encrypt_at_rest = false
+encrypt_in_transit = true
+log_retention_days = 30
+
+[observability]
+# Logging configuration
+log_level = "info"
+log_format = "pretty"  # pretty, json, compact
+log_file = "./logs/inferno.log"
+
+# Metrics and monitoring
+metrics_enabled = true
+metrics_endpoint = "/metrics"
+health_check_endpoint = "/health"
+
+# Distributed tracing
+tracing_enabled = false
+jaeger_endpoint = "http://localhost:14268"
+
+[performance]
+# Caching configuration
+response_cache_enabled = true
+response_cache_ttl = "1h"
+response_cache_size = "1GB"
+
+# Batch processing
+batch_queue_enabled = true
+batch_max_size = 100
+batch_timeout = "5s"
+
+# Resource limits
+max_concurrent_requests = 50
+memory_limit = "8GB"
+cpu_limit_percent = 80
+
+[features]
+# Optional features
+model_download = true
+web_ui = true
+websocket_streaming = true
+openai_compatibility = true
+
+# Advanced features
+a_b_testing = false
+federated_learning = false
+model_marketplace = false
+multi_tenancy = false
+
+[development]
+# Development and debugging
+debug_mode = false
+hot_reload = false
+cors_enabled = true
+api_docs_enabled = true
+
+# Testing configuration
+test_mode = false
+mock_responses = false
+simulation_mode = false
