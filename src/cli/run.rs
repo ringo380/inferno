@@ -105,6 +105,8 @@ pub async fn execute(args: RunArgs, config: &Config) -> Result<()> {
             temperature: args.temperature,
             top_p: args.top_p,
             stream: false,
+            stop_sequences: vec![],
+            seed: None,
         };
 
         let progress = processor
@@ -185,6 +187,8 @@ async fn process_single(backend: &mut Backend, args: &RunArgs, _config: &Config)
         temperature: args.temperature,
         top_p: args.top_p,
         stream: args.stream,
+        stop_sequences: vec![],
+        seed: None,
     };
 
     if args.stream {
@@ -228,6 +232,8 @@ async fn process_batch(backend: &mut Backend, args: &RunArgs, _config: &Config) 
         temperature: args.temperature,
         top_p: args.top_p,
         stream: false, // No streaming in batch mode
+        stop_sequences: vec![],
+        seed: None,
     };
 
     let mut results = Vec::new();

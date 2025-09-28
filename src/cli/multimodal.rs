@@ -355,6 +355,8 @@ async fn handle_process_command(
         temperature,
         top_p: 0.9,
         stream: false,
+        stop_sequences: vec![],
+        seed: None,
     };
 
     let result = processor
@@ -378,7 +380,7 @@ async fn handle_process_command(
     if let Some(output_path) = output_file {
         tokio::fs::write(&output_path, &output_content)
             .await
-            .map_err(|e| InfernoError::IoError(format!("Failed to write output file: {}", e)))?;
+            .map_err(|e| InfernoError::Io(e))?;
         println!("Results saved to: {:?}", output_path);
     } else {
         println!("{}", output_content);
@@ -404,6 +406,8 @@ async fn handle_process_base64_command(
         temperature,
         top_p: 0.9,
         stream: false,
+        stop_sequences: vec![],
+        seed: None,
     };
 
     let result = processor
@@ -447,7 +451,7 @@ async fn handle_batch_command(
     // Create output directory
     tokio::fs::create_dir_all(&output_dir)
         .await
-        .map_err(|e| InfernoError::IoError(format!("Failed to create output directory: {}", e)))?;
+        .map_err(|e| InfernoError::Io(e))?;
 
     // Find matching files
     let files = find_matching_files(&input_dir, &pattern).await?;
@@ -463,6 +467,8 @@ async fn handle_batch_command(
         temperature: 0.7,
         top_p: 0.9,
         stream: false,
+        stop_sequences: vec![],
+        seed: None,
     };
 
     let mut processed = 0;
@@ -954,7 +960,7 @@ async fn handle_register_model_command(
 ) -> Result<(), InfernoError> {
     let config_content = tokio::fs::read_to_string(&config_file)
         .await
-        .map_err(|e| InfernoError::IoError(format!("Failed to read config file: {}", e)))?;
+        .map_err(|e| InfernoError::Io(e))?;
 
     let capabilities: ModelCapabilities = serde_json::from_str(&config_content)
         .map_err(|e| InfernoError::InvalidArgument(format!("Invalid JSON config: {}", e)))?;
@@ -979,7 +985,7 @@ async fn handle_analyze_command(
     // Mock analysis - in real implementation would extract actual metadata
     let file_metadata = tokio::fs::metadata(&input)
         .await
-        .map_err(|e| InfernoError::IoError(format!("Failed to read file metadata: {}", e)))?;
+        .map_err(|e| InfernoError::Io(e))?;
 
     let file_extension = input
         .extension()
@@ -1034,7 +1040,7 @@ async fn handle_convert_command(
     // Mock conversion - in real implementation would use media processing libraries
     let input_data = tokio::fs::read(&input)
         .await
-        .map_err(|e| InfernoError::IoError(format!("Failed to read input file: {}", e)))?;
+        .map_err(|e| InfernoError::Io(e))?;
 
     // Simulate conversion process
     println!("🔄 Converting...");
@@ -1043,7 +1049,7 @@ async fn handle_convert_command(
     // Write mock converted data
     tokio::fs::write(&output, &input_data)
         .await
-        .map_err(|e| InfernoError::IoError(format!("Failed to write output file: {}", e)))?;
+        .map_err(|e| InfernoError::Io(e))?;
 
     println!("✅ Conversion completed: {:?}", output);
     Ok(())
@@ -1055,12 +1061,12 @@ async fn find_matching_files(dir: &PathBuf, pattern: &str) -> Result<Vec<PathBuf
     let mut files = Vec::new();
     let mut entries = tokio::fs::read_dir(dir)
         .await
-        .map_err(|e| InfernoError::IoError(format!("Failed to read directory: {}", e)))?;
+        .map_err(|e| InfernoError::Io(e))?;
 
     while let Some(entry) = entries
         .next_entry()
         .await
-        .map_err(|e| InfernoError::IoError(format!("Failed to read directory entry: {}", e)))?
+        .map_err(|e| InfernoError::Io(e))?
     {
         let path = entry.path();
         if path.is_file() {

@@ -242,14 +242,18 @@ pub async fn chat_completions(
         }
     };
 
+    let stream = request.stream;
+    let stop_sequences = request.stop.clone().unwrap_or_default();
     let inference_params = InferenceParams {
         max_tokens: request.max_tokens,
         temperature: request.temperature,
         top_p: request.top_p,
         stream: request.stream,
+        stop_sequences,
+        seed: None,
     };
 
-    if request.stream {
+    if stream {
         // Handle streaming response
         handle_streaming_chat(&request, backend, prompt, inference_params)
             .await
@@ -291,14 +295,18 @@ pub async fn completions(
         }
     };
 
+    let stream = request.stream;
+    let stop_sequences = request.stop.clone().unwrap_or_default();
     let inference_params = InferenceParams {
         max_tokens: request.max_tokens,
         temperature: request.temperature,
         top_p: request.top_p,
         stream: request.stream,
+        stop_sequences,
+        seed: None,
     };
 
-    if request.stream {
+    if stream {
         // Handle streaming response
         handle_streaming_completion(&request, backend, prompt, inference_params)
             .await

@@ -1190,6 +1190,7 @@ async fn handle_publish(
             latency_ms: None,
             benchmark_scores: HashMap::new(),
             energy_efficiency: None,
+            energy_efficiency_tokens_per_joule: None,
         },
         published_at: chrono::Utc::now(),
         updated_at: chrono::Utc::now(),
@@ -1199,13 +1200,35 @@ async fn handle_publish(
             .map(|t| t.split(',').map(|s| s.trim().to_string()).collect())
             .unwrap_or_default(),
         dependencies: vec![],
+        pricing: crate::marketplace::PricingInfo {
+            free: true,
+            price_per_download: None,
+            price_per_token: None,
+            subscription_tiers: vec![],
+            usage_based: None,
+            usage_limits: None,
+        },
+        ratings: crate::marketplace::RatingInfo {
+            average_rating: 0.0,
+            total_ratings: 0,
+            rating_distribution: [0, 0, 0, 0, 0],
+        },
+        created_at: chrono::Utc::now(),
+        visibility: crate::marketplace::ModelVisibility::Public,
+        verified: false,
+        documentation_url: None,
+        demo_url: None,
+        paper_url: None,
+        source_url: None,
     };
 
     let pricing = PricingInfo {
         free,
         price_per_download: price,
+        price_per_token: None,
         subscription_tiers: vec![],
         usage_based: None,
+        usage_limits: None,
     };
 
     let request = PublishRequest {

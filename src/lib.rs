@@ -58,6 +58,7 @@ pub mod marketplace;
 pub mod multi_tenancy;
 pub mod multimodal;
 pub mod streaming;
+pub mod upgrade;
 pub mod versioning;
 pub mod resilience;
 pub mod optimization;
@@ -82,7 +83,10 @@ pub enum InfernoError {
     
     #[error("Model error: {0}")]
     Model(String),
-    
+
+    #[error("Unsupported format: {0}")]
+    UnsupportedFormat(String),
+
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
     
@@ -127,6 +131,15 @@ pub enum InfernoError {
     
     #[error("Unknown error: {0}")]
     Unknown(String),
+
+    #[error("Invalid argument: {0}")]
+    InvalidArgument(String),
+
+    #[error("Model not found: {0}")]
+    ModelNotFound(String),
+
+    #[error("Streaming limit exceeded: {0}")]
+    StreamingLimit(String),
 }
 
 /// Result type for Inferno operations

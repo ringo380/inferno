@@ -18,6 +18,7 @@ use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
 use tracing::{info, warn};
 use uuid::Uuid;
+use sysinfo::{System, SystemExt};
 
 /// Configuration for the web dashboard
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -810,6 +811,8 @@ impl DashboardServer {
             deployments: Arc::new(RwLock::new(vec![])),
             users: Arc::new(RwLock::new(vec![])),
             notifications: notification_tx,
+            security_manager: Arc::new(crate::security::SecurityManager::new(Default::default())),
+            marketplace: Arc::new(crate::marketplace::ModelMarketplace::new(Default::default())?),
         };
 
         Ok(Self { config, state })
@@ -2571,9 +2574,9 @@ async fn api_system_info(
             "download_support": cfg!(feature = "download")
         },
         "endpoints": {
-            "dashboard": format!("http://{}:{}", state.config.host, state.config.port),
-            "api": format!("http://{}:{}/api", state.config.host, state.config.port),
-            "websocket": format!("ws://{}:{}/ws", state.config.host, state.config.port)
+            "dashboard": format!("http://{}:{}", state.config.bind_address, state.config.port),
+            "api": format!("http://{}:{}/api", state.config.bind_address, state.config.port),
+            "websocket": format!("ws://{}:{}/ws", state.config.bind_address, state.config.port)
         }
     });
 
@@ -2835,9 +2838,9 @@ async fn api_list_users(
     }
 
     // Get all users from security manager
-    let users = state.security_manager.users.read().await;
+    let users = state.security_manager.get_all_users().await;
     let user_summaries: Vec<UserSummary> = users
-        .values()
+        .iter()
         .map(|user| UserSummary {
             id: user.id.clone(),
             username: user.username.clone(),
@@ -2971,8 +2974,7 @@ async fn api_get_user(
     }
 
     // Get user from security manager
-    let users = state.security_manager.users.read().await;
-    let user = match users.get(&user_id) {
+    let user = match state.security_manager.get_user_by_id(&user_id).await {
         Some(user) => user,
         None => {
             let error = ApiError {

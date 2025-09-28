@@ -101,6 +101,8 @@ pub struct InferenceParams {
     pub temperature: f32,
     pub top_p: f32,
     pub stream: bool,
+    pub stop_sequences: Vec<String>,
+    pub seed: Option<u64>,
 }
 
 impl Default for InferenceParams {
@@ -110,6 +112,8 @@ impl Default for InferenceParams {
             temperature: 0.7,
             top_p: 0.9,
             stream: false,
+            stop_sequences: vec![],
+            seed: None,
         }
     }
 }

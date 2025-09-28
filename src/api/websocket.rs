@@ -5,6 +5,7 @@ use crate::{
     backends::{Backend, InferenceParams},
     cli::serve::ServerState,
     streaming::{StreamingConfig, StreamingManager},
+    upgrade::{UpgradeStatus, UpgradeEvent, UpdateInfo, ApplicationVersion},
     InfernoError,
 };
 use axum::{
@@ -58,6 +59,26 @@ pub enum WSMessage {
         server_version: String,
         capabilities: Vec<String>,
     },
+    #[serde(rename = "upgrade_status")]
+    UpgradeStatus {
+        status: UpgradeStatus,
+        current_version: ApplicationVersion,
+    },
+    #[serde(rename = "upgrade_event")]
+    UpgradeEvent {
+        event: UpgradeEvent,
+    },
+    #[serde(rename = "upgrade_check_request")]
+    UpgradeCheckRequest {
+        id: String,
+        force: bool,
+    },
+    #[serde(rename = "upgrade_install_request")]
+    UpgradeInstallRequest {
+        id: String,
+        version: Option<String>,
+        auto_backup: bool,
+    },
 }
 
 /// WebSocket streaming handler
@@ -100,6 +121,8 @@ async fn handle_websocket(socket: WebSocket, state: Arc<ServerState>) {
             "streaming_chat".to_string(),
             "real_time_metrics".to_string(),
             "heartbeat".to_string(),
+            "upgrade_notifications".to_string(),
+            "upgrade_management".to_string(),
         ],
     };
 
@@ -237,6 +260,8 @@ async fn handle_ws_message(
                 temperature: data.temperature,
                 top_p: data.top_p,
                 stream: true, // Always stream for WebSocket
+                stop_sequences: data.stop.unwrap_or_default(),
+                seed: None,
             };
 
             // Create streaming session
@@ -371,6 +396,135 @@ async fn handle_ws_message(
 
             Ok(())
         }
+        WSMessage::UpgradeCheckRequest { id, force } => {
+            info!("Processing upgrade check request {} for connection {}", id, connection_id);
+
+            // Initialize upgrade system if not already available
+            let upgrade_manager = match &state.upgrade_manager {
+                Some(manager) => manager.clone(),
+                None => {
+                    let error_msg = WSMessage::Error {
+                        id: Some(id),
+                        message: "Upgrade system not initialized".to_string(),
+                        code: "UPGRADE_NOT_AVAILABLE".to_string(),
+                    };
+                    send_ws_message(sender, &error_msg).await?;
+                    return Ok(());
+                }
+            };
+
+            // Spawn upgrade check task
+            let sender_clone = sender.clone();
+            let manager_clone = upgrade_manager.clone();
+            tokio::spawn(async move {
+                match manager_clone.check_for_updates().await {
+                    Ok(update_info) => {
+                        let status = if let Some(update) = update_info {
+                            crate::upgrade::UpgradeStatus::Available(update)
+                        } else {
+                            crate::upgrade::UpgradeStatus::UpToDate
+                        };
+
+                        let status_msg = WSMessage::UpgradeStatus {
+                            status,
+                            current_version: ApplicationVersion::current(),
+                        };
+
+                        let _ = send_ws_message(&sender_clone, &status_msg).await;
+                    }
+                    Err(e) => {
+                        let error_msg = WSMessage::Error {
+                            id: Some(id),
+                            message: format!("Update check failed: {}", e),
+                            code: "UPDATE_CHECK_FAILED".to_string(),
+                        };
+                        let _ = send_ws_message(&sender_clone, &error_msg).await;
+                    }
+                }
+            });
+
+            Ok(())
+        }
+        WSMessage::UpgradeInstallRequest { id, version, auto_backup } => {
+            info!("Processing upgrade install request {} for connection {}", id, connection_id);
+
+            // Initialize upgrade system if not already available
+            let upgrade_manager = match &state.upgrade_manager {
+                Some(manager) => manager.clone(),
+                None => {
+                    let error_msg = WSMessage::Error {
+                        id: Some(id),
+                        message: "Upgrade system not initialized".to_string(),
+                        code: "UPGRADE_NOT_AVAILABLE".to_string(),
+                    };
+                    send_ws_message(sender, &error_msg).await?;
+                    return Ok(());
+                }
+            };
+
+            // First check for available updates
+            let sender_clone = sender.clone();
+            let manager_clone = upgrade_manager.clone();
+            tokio::spawn(async move {
+                match manager_clone.check_for_updates().await {
+                    Ok(Some(update_info)) => {
+                        // Verify version if specified
+                        if let Some(requested_version) = version {
+                            if update_info.version.to_string() != requested_version {
+                                let error_msg = WSMessage::Error {
+                                    id: Some(id),
+                                    message: format!("Requested version {} not available", requested_version),
+                                    code: "VERSION_NOT_FOUND".to_string(),
+                                };
+                                let _ = send_ws_message(&sender_clone, &error_msg).await;
+                                return;
+                            }
+                        }
+
+                        // Start installation
+                        match manager_clone.install_update(&update_info).await {
+                            Ok(_) => {
+                                let status_msg = WSMessage::UpgradeStatus {
+                                    status: crate::upgrade::UpgradeStatus::Completed {
+                                        old_version: ApplicationVersion::current(),
+                                        new_version: update_info.version,
+                                        restart_required: true,
+                                    },
+                                    current_version: ApplicationVersion::current(),
+                                };
+                                let _ = send_ws_message(&sender_clone, &status_msg).await;
+                            }
+                            Err(e) => {
+                                let error_msg = WSMessage::Error {
+                                    id: Some(id),
+                                    message: format!("Installation failed: {}", e),
+                                    code: "INSTALLATION_FAILED".to_string(),
+                                };
+                                let _ = send_ws_message(&sender_clone, &error_msg).await;
+                            }
+                        }
+                    }
+                    Ok(None) => {
+                        let error_msg = WSMessage::Error {
+                            id: Some(id),
+                            message: "No updates available".to_string(),
+                            code: "NO_UPDATES_AVAILABLE".to_string(),
+                        };
+                        let _ = send_ws_message(&sender_clone, &error_msg).await;
+                    }
+                    Err(e) => {
+                        let error_msg = WSMessage::Error {
+                            id: Some(id),
+                            message: format!("Update check failed: {}", e),
+                            code: "UPDATE_CHECK_FAILED".to_string(),
+                        };
+                        let _ = send_ws_message(&sender_clone, &error_msg).await;
+                    }
+                }
+            });
+
+            Ok(())
+        }
         _ => {
             warn!("Unsupported WebSocket message type");
             Err(InfernoError::WebSocket(
@@ -428,4 +582,22 @@ fn format_chat_messages(messages: &[ChatMessage]) -> String {
         .map(|msg| format!("{}: {}", msg.role, msg.content))
         .collect::<Vec<_>>()
         .join("\n")
+}
+
+/// Send a WebSocket message
+async fn send_ws_message(
+    sender: &Arc<Mutex<futures::stream::SplitSink<WebSocket, Message>>>,
+    message: &WSMessage,
+) -> Result<(), InfernoError> {
+    let json = serde_json::to_string(message)
+        .map_err(|e| InfernoError::WebSocket(format!("Failed to serialize message: {}", e)))?;
+
+    sender
+        .lock()
+        .await
+        .send(Message::Text(json))
+        .await
+        .map_err(|e| InfernoError::WebSocket(format!("Failed to send message: {}", e)))?;
+
+    Ok(())
 }

@@ -10,10 +10,14 @@ use tracing::{error, info, warn};
 pub struct ModelInfo {
     pub name: String,
     pub path: PathBuf,
+    pub file_path: PathBuf,
     pub size: u64,
+    pub size_bytes: u64,
     pub modified: chrono::DateTime<chrono::Utc>,
     pub backend_type: String,
+    pub format: String,
     pub checksum: Option<String>,
+    pub metadata: std::collections::HashMap<String, String>,
 }
 
 #[derive(Debug, Clone)]
@@ -186,10 +190,14 @@ impl ModelManager {
         Ok(ModelInfo {
             name,
             path: path.to_path_buf(),
+            file_path: path.to_path_buf(),
             size: metadata.len(),
+            size_bytes: metadata.len(),
             modified,
-            backend_type,
+            backend_type: backend_type.clone(),
+            format: backend_type,
             checksum: None, // Computed on demand
+            metadata: std::collections::HashMap::new(),
         })
     }
 

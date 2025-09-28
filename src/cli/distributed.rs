@@ -230,6 +230,8 @@ async fn benchmark_distributed_inference(
                     temperature: 0.7,
                     top_p: 0.9,
                     stream: false,
+                    stop_sequences: vec![],
+                    seed: None,
                 };
 
                 match distributed_clone.infer(&model_name, &prompt, &params).await {
@@ -367,6 +369,8 @@ async fn test_inference(
         temperature,
         top_p: 0.9,
         stream,
+        stop_sequences: vec![],
+        seed: None,
     };
 
     let start_time = Instant::now();

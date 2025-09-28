@@ -176,6 +176,8 @@ pub async fn execute(args: BatchArgs, config: &Config) -> Result<()> {
         temperature: args.temperature,
         top_p: args.top_p,
         stream: false, // Batch processing uses non-streaming
+        stop_sequences: vec![],
+        seed: None,
     };
 
     // Estimate total items for progress tracking

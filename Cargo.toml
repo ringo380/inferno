@@ -1,9 +1,9 @@
 [package]
 name = "inferno"
-version = "0.2.1"
+version = "0.3.0"
 edition = "2021"
 authors = ["Inferno Developers"]
-description = "An offline AI/ML model runner for GGUF and ONNX models"
+description = "Enterprise AI/ML model runner with automatic updates, real-time monitoring, and multi-interface support"
 readme = "README.md"
 homepage = "https://github.com/inferno-ai/inferno"
 repository = "https://github.com/inferno-ai/inferno"

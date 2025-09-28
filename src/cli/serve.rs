@@ -5,6 +5,7 @@ use crate::{
     distributed::DistributedInference,
     metrics::MetricsCollector,
     models::ModelManager,
+    upgrade::UpgradeManager,
 };
 use anyhow::Result;
 use axum::{
@@ -104,6 +105,26 @@ pub async fn execute(args: ServeArgs, config: &Config) -> Result<()> {
         (None, None)
     };
 
+    // Initialize upgrade manager
+    let upgrade_manager = match crate::upgrade::UpgradeConfig::from_config(config) {
+        Ok(upgrade_config) => {
+            match UpgradeManager::new(upgrade_config).await {
+                Ok(manager) => {
+                    info!("Upgrade system initialized for HTTP server");
+                    Some(Arc::new(manager))
+                }
+                Err(e) => {
+                    warn!("Failed to initialize upgrade system: {}", e);
+                    None
+                }
+            }
+        }
+        Err(e) => {
+            warn!("Failed to load upgrade config: {}", e);
+            None
+        }
+    };
+
     // Create shared application state
     let state = Arc::new(ServerState {
         config: config.clone(),
@@ -112,6 +133,7 @@ pub async fn execute(args: ServeArgs, config: &Config) -> Result<()> {
         metrics: metrics_collector,
         model_manager: (*model_manager).clone(),
         distributed,
+        upgrade_manager,
     });
 
     // Build the router with all endpoints
@@ -132,6 +154,10 @@ pub async fn execute(args: ServeArgs, config: &Config) -> Result<()> {
         .route("/ws/stream", get(websocket::websocket_handler))
         // API v1 endpoints
         .route("/v1/status", get(server_status))
+        // Upgrade API endpoints
+        .route("/v1/upgrade/status", get(upgrade_status))
+        .route("/v1/upgrade/check", post(upgrade_check))
+        .route("/v1/upgrade/install", post(upgrade_install))
         // Add middleware
         .layer(
             ServiceBuilder::new()
@@ -172,6 +198,7 @@ pub struct ServerState {
     pub metrics: MetricsCollector,
     pub model_manager: ModelManager,
     pub distributed: Option<Arc<DistributedInference>>,
+    pub upgrade_manager: Option<Arc<UpgradeManager>>,
 }
 
 // Helper functions
@@ -300,6 +327,152 @@ async fn server_status(State(state): State<Arc<ServerState>>) -> impl IntoRespon
         }
     }))
     .into_response()
+}
+
+// Upgrade API handlers
+
+async fn upgrade_status(State(state): State<Arc<ServerState>>) -> impl IntoResponse {
+    let upgrade_manager = match &state.upgrade_manager {
+        Some(manager) => manager,
+        None => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(json!({
+                    "error": "Upgrade system not available"
+                })),
+            )
+                .into_response()
+        }
+    };
+
+    let status = upgrade_manager.get_status().await;
+    let current_version = crate::upgrade::ApplicationVersion::current();
+
+    Json(json!({
+        "current_version": current_version.to_string(),
+        "status": status,
+        "upgrade_available": matches!(status, crate::upgrade::UpgradeStatus::Available(_)),
+        "timestamp": chrono::Utc::now().to_rfc3339()
+    }))
+    .into_response()
+}
+
+async fn upgrade_check(State(state): State<Arc<ServerState>>) -> impl IntoResponse {
+    let upgrade_manager = match &state.upgrade_manager {
+        Some(manager) => manager,
+        None => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(json!({
+                    "error": "Upgrade system not available"
+                })),
+            )
+                .into_response()
+        }
+    };
+
+    match upgrade_manager.check_for_updates().await {
+        Ok(Some(update_info)) => Json(json!({
+            "update_available": true,
+            "current_version": crate::upgrade::ApplicationVersion::current().to_string(),
+            "new_version": update_info.version.to_string(),
+            "release_date": update_info.release_date.to_rfc3339(),
+            "changelog": update_info.changelog,
+            "is_critical": update_info.is_critical,
+            "is_security_update": update_info.is_security_update,
+            "download_urls": update_info.download_urls,
+            "checksums": update_info.checksums
+        }))
+        .into_response(),
+        Ok(None) => Json(json!({
+            "update_available": false,
+            "current_version": crate::upgrade::ApplicationVersion::current().to_string(),
+            "message": "Application is up to date"
+        }))
+        .into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({
+                "error": format!("Update check failed: {}", e)
+            })),
+        )
+            .into_response(),
+    }
+}
+
+#[derive(serde::Deserialize)]
+struct UpgradeInstallRequest {
+    version: Option<String>,
+    auto_backup: Option<bool>,
+}
+
+async fn upgrade_install(
+    State(state): State<Arc<ServerState>>,
+    Json(payload): Json<UpgradeInstallRequest>,
+) -> impl IntoResponse {
+    let upgrade_manager = match &state.upgrade_manager {
+        Some(manager) => manager,
+        None => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(json!({
+                    "error": "Upgrade system not available"
+                })),
+            )
+                .into_response()
+        }
+    };
+
+    // First check for available updates
+    match upgrade_manager.check_for_updates().await {
+        Ok(Some(update_info)) => {
+            // Verify version if specified
+            if let Some(requested_version) = &payload.version {
+                if &update_info.version.to_string() != requested_version {
+                    return (
+                        StatusCode::BAD_REQUEST,
+                        Json(json!({
+                            "error": format!("Requested version {} not available", requested_version)
+                        })),
+                    )
+                        .into_response();
+                }
+            }
+
+            // Start installation
+            match upgrade_manager.install_update(&update_info).await {
+                Ok(_) => Json(json!({
+                    "success": true,
+                    "message": "Update installation completed successfully",
+                    "old_version": crate::upgrade::ApplicationVersion::current().to_string(),
+                    "new_version": update_info.version.to_string(),
+                    "restart_required": true
+                }))
+                .into_response(),
+                Err(e) => (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({
+                        "error": format!("Installation failed: {}", e)
+                    })),
+                )
+                    .into_response(),
+            }
+        }
+        Ok(None) => (
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "error": "No updates available"
+            })),
+        )
+            .into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({
+                "error": format!("Update check failed: {}", e)
+            })),
+        )
+            .into_response(),
+    }
 }
 
 async fn shutdown_signal() {

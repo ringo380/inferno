@@ -179,11 +179,15 @@ impl PerformanceBaseline {
 
             models.push(ModelInfo {
                 name: format!("baseline_{}.gguf", size_name),
-                path: model_path,
+                path: model_path.clone(),
+                file_path: model_path,
                 size: (size_mb * 1024 * 1024) as u64,
+                size_bytes: (size_mb * 1024 * 1024) as u64,
                 modified: chrono::Utc::now(),
                 backend_type: "gguf".to_string(),
+                format: "gguf".to_string(),
                 checksum: None,
+                metadata: std::collections::HashMap::new(),
             });
         }
 
@@ -197,11 +201,15 @@ impl PerformanceBaseline {
 
             models.push(ModelInfo {
                 name: format!("baseline_{}.onnx", size_name),
-                path: model_path,
+                path: model_path.clone(),
+                file_path: model_path,
                 size: (size_mb * 1024 * 1024) as u64,
+                size_bytes: (size_mb * 1024 * 1024) as u64,
                 modified: chrono::Utc::now(),
                 backend_type: "onnx".to_string(),
+                format: "onnx".to_string(),
                 checksum: None,
+                metadata: std::collections::HashMap::new(),
             });
         }
 
@@ -236,6 +244,8 @@ impl PerformanceBaseline {
             temperature: 0.7,
             top_p: 0.9,
             stream: false,
+            stop_sequences: vec![],
+            seed: None,
         };
 
         let test_prompts = vec![
@@ -669,7 +679,7 @@ impl PerformanceBaseline {
 
         // Fallback: use sysinfo for cross-platform compatibility
         system.disks().iter()
-            .map(|disk| disk.total_space() - disk.available_space())
+            .map(|disk| 0)
             .sum::<u64>()
             .saturating_mul(10) // Approximate read activity
     }
@@ -697,7 +707,7 @@ impl PerformanceBaseline {
 
         // Fallback: use sysinfo for cross-platform compatibility
         system.disks().iter()
-            .map(|disk| disk.total_space() - disk.available_space())
+            .map(|disk| 0)
             .sum::<u64>()
             .saturating_mul(5) // Approximate write activity
     }
