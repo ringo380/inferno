@@ -333,6 +333,12 @@ pub enum UpgradeError {
     Internal(String),
 }
 
+impl From<anyhow::Error> for UpgradeError {
+    fn from(error: anyhow::Error) -> Self {
+        UpgradeError::Internal(error.to_string())
+    }
+}
+
 pub type UpgradeResult<T> = std::result::Result<T, UpgradeError>;
 
 /// Initialize the upgrade system

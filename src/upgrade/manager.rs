@@ -21,10 +21,10 @@ use uuid::Uuid;
 pub struct UpgradeManager {
     config: UpgradeConfig,
     current_version: ApplicationVersion,
-    update_checker: UpdateChecker,
+    update_checker: Arc<RwLock<UpdateChecker>>,
     downloader: UpdateDownloader,
     backup_manager: BackupManager,
-    safety_checker: SafetyChecker,
+    safety_checker: Arc<RwLock<SafetyChecker>>,
     platform_handler: Box<dyn PlatformUpgradeHandler>,
     status: Arc<RwLock<UpgradeStatus>>,
     event_sender: broadcast::Sender<UpgradeEvent>,
@@ -49,10 +49,10 @@ impl UpgradeManager {
         Ok(Self {
             config,
             current_version,
-            update_checker,
+            update_checker: Arc::new(RwLock::new(update_checker)),
             downloader,
             backup_manager,
-            safety_checker,
+            safety_checker: Arc::new(RwLock::new(safety_checker)),
             platform_handler,
             status,
             event_sender,
@@ -80,7 +80,11 @@ impl UpgradeManager {
             *status = UpgradeStatus::Checking;
         }
 
-        match self.update_checker.check_for_updates(&self.current_version).await {
+        let result = {
+            let mut checker = self.update_checker.write().await;
+            checker.check_for_updates(&self.current_version).await
+        };
+        match result {
             Ok(Some(update_info)) => {
                 info!("Update available: {}", update_info.version.to_string());
 
@@ -136,7 +140,10 @@ impl UpgradeManager {
         info!("Starting installation of version {}", update_info.version.to_string());
 
         // Pre-installation safety checks
-        self.safety_checker.check_pre_installation(&update_info).await?;
+        {
+            let mut checker = self.safety_checker.write().await;
+            checker.check_pre_installation(&update_info).await?;
+        }
 
         // Stage 1: Download the update
         let package_path = self.download_update(update_info).await?;
@@ -309,7 +316,7 @@ impl UpgradeManager {
 
         // Stage 1: Verify the package
         self.update_installation_status(InstallationStage::VerifyingUpdate, 10.0).await;
-        self.safety_checker.verify_package(package_path, update_info).await?;
+        self.safety_checker.read().await.verify_package(package_path, update_info).await?;
 
         // Stage 2: Prepare for upgrade
         self.update_installation_status(InstallationStage::StoppingServices, 20.0).await;
@@ -387,7 +394,7 @@ impl UpgradeManager {
 
         {
             let mut status = self.status.write().await;
-            *status = UpgradeStatus::Installing { stage, progress };
+            *status = UpgradeStatus::Installing { stage: stage.clone(), progress };
         }
 
         self.emit_event(
@@ -500,9 +507,9 @@ impl UpgradeManager {
         let has_existing_config = self.has_existing_configuration(&config_dir).await;
         let has_existing_data = self.has_existing_user_data(&data_dir).await;
 
-        let installation_type = match previous_installation_info {
+        let installation_type = match &previous_installation_info {
             Some(prev_version) => {
-                if prev_version == self.current_version {
+                if *prev_version == self.current_version {
                     InstallationType::Reinstall
                 } else if prev_version.is_newer_than(&self.current_version) {
                     InstallationType::Downgrade { from_version: prev_version.clone() }
@@ -608,7 +615,7 @@ impl UpgradeManager {
 
         // Create backup before upgrade
         self.emit_event(UpgradeEventType::InstallationStarted, "Creating backup before upgrade").await;
-        let backup_id = self.backup_manager.create_backup(&context.installation_directory).await
+        let backup_id = self.backup_manager.create_backup().await
             .map_err(|e| UpgradeError::BackupFailed(format!("Pre-upgrade backup failed: {}", e)))?;
 
         // Download and verify the update
@@ -663,7 +670,7 @@ impl UpgradeManager {
 
         // Minimal backup for safety
         self.emit_event(UpgradeEventType::InstallationStarted, "Creating safety backup for reinstall").await;
-        let backup_id = self.backup_manager.create_backup(&context.installation_directory).await
+        let backup_id = self.backup_manager.create_backup().await
             .map_err(|e| UpgradeError::BackupFailed(format!("Pre-reinstall backup failed: {}", e)))?;
 
         // Download and verify the update
@@ -700,7 +707,7 @@ impl UpgradeManager {
 
         // Mandatory backup for downgrades
         self.emit_event(UpgradeEventType::InstallationStarted, "Creating mandatory backup for downgrade").await;
-        let backup_id = self.backup_manager.create_backup(&context.installation_directory).await
+        let backup_id = self.backup_manager.create_backup().await
             .map_err(|e| UpgradeError::BackupFailed(format!("Pre-downgrade backup failed: {}", e)))?;
 
         // Download and verify the update
@@ -850,12 +857,26 @@ impl UpgradeManager {
         // Download the update package
         self.emit_event(UpgradeEventType::DownloadStarted, "Starting download").await;
 
-        let package_path = self.downloader.download_update(update_info).await?;
+        // Get platform-specific download URL and checksum
+        let platform = std::env::consts::OS;
+        let download_url = update_info.download_urls.get(platform)
+            .ok_or_else(|| UpgradeError::PlatformNotSupported(platform.to_string()))?;
+        let expected_checksum = update_info.checksums.get(platform)
+            .ok_or_else(|| UpgradeError::VerificationFailed("No checksum available".to_string()))?;
+
+        let package_path = self.downloader.download_update(
+            download_url,
+            expected_checksum,
+            |downloaded, total, _speed| {
+                // Progress callback - could emit events here if needed
+                debug!("Download progress: {}/{} bytes", downloaded, total);
+            },
+        ).await?;
 
         self.emit_event(UpgradeEventType::DownloadCompleted, "Download completed").await;
 
         // Verify the downloaded package
-        self.safety_checker.verify_package(&package_path, update_info).await?;
+        self.safety_checker.read().await.verify_package(&package_path, update_info).await?;
 
         Ok(package_path)
     }

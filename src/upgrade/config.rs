@@ -335,10 +335,10 @@ impl UpgradeConfig {
         let mut upgrade_config = Self::default();
 
         // Override with values from main config if they exist
-        if let Some(data_dir) = &config.data_dir {
-            upgrade_config.download_dir = data_dir.join("downloads");
-            upgrade_config.backup_dir = data_dir.join("backups");
-        }
+        // Use cache_dir as the base for upgrade directories
+        let base_dir = config.cache_dir.parent().unwrap_or(&config.cache_dir);
+        upgrade_config.download_dir = base_dir.join("downloads");
+        upgrade_config.backup_dir = base_dir.join("backups");
 
         // Parse configuration from environment or config files
         upgrade_config.load_from_environment()?;
