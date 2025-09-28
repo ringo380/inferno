@@ -17,6 +17,7 @@ jobs:
   create-dmg:
     name: Create macOS DMG
     runs-on: macos-latest
+    timeout-minutes: 30  # Prevent hanging builds
     permissions:
       contents: write  # Need write permission to upload release assets
 
@@ -66,12 +67,12 @@ jobs:
 
           # Build for x86_64 first (most common architecture)
           echo "Building for x86_64-apple-darwin..."
-          timeout 10m cargo build --release --target x86_64-apple-darwin --bin inferno
+          cargo build --release --target x86_64-apple-darwin --bin inferno
           cp target/x86_64-apple-darwin/release/inferno binaries/x86_64/
 
-          # Build for aarch64 (ARM64) with timeout to prevent hanging
+          # Build for aarch64 (ARM64)
           echo "Building for aarch64-apple-darwin..."
-          timeout 10m cargo build --release --target aarch64-apple-darwin --bin inferno
+          cargo build --release --target aarch64-apple-darwin --bin inferno
           cp target/aarch64-apple-darwin/release/inferno binaries/aarch64/
 
           # Make binaries executable
