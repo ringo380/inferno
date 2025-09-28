@@ -93,7 +93,6 @@ xxhash-rust = { version = "0.8", features = ["xxh3"] }
 hex = "0.4"
 
 # Path utilities
-dirs = "5.0"
 
 # Progress bars and indicators
 indicatif = "0.17"
