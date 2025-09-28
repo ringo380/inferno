@@ -35,6 +35,37 @@ pub mod models;
 pub mod io;
 pub mod metrics;
 pub mod batch;
+pub mod security;
+pub mod model_versioning;
+
+// Additional modules
+pub mod audit;
+pub mod cache;
+pub mod dashboard;
+pub mod distributed;
+pub mod monitoring;
+pub mod observability;
+pub mod response_cache;
+pub mod advanced_cache;
+pub mod advanced_monitoring;
+pub mod backup_recovery;
+pub mod data_pipeline;
+pub mod deployment;
+pub mod federated;
+pub mod gpu;
+pub mod logging_audit;
+pub mod marketplace;
+pub mod multi_tenancy;
+pub mod multimodal;
+pub mod streaming;
+pub mod versioning;
+pub mod resilience;
+pub mod optimization;
+pub mod conversion;
+pub mod api_gateway;
+pub mod qa_framework;
+pub mod performance_optimization;
+pub mod performance_baseline;
 
 // Conditional Tauri app support
 #[cfg(feature = "tauri-app")]
@@ -81,7 +112,13 @@ pub enum InfernoError {
     
     #[error("Security error: {0}")]
     Security(String),
-    
+
+    #[error("Security validation error: {0}")]
+    SecurityValidation(String),
+
+    #[error("WebSocket error: {0}")]
+    WebSocket(String),
+
     #[error("Distributed error: {0}")]
     Distributed(String),
     

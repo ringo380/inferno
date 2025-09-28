@@ -315,6 +315,8 @@ pub struct DashboardState {
     pub deployments: Arc<RwLock<Vec<DeploymentInfo>>>,
     pub users: Arc<RwLock<Vec<UserInfo>>>,
     pub notifications: broadcast::Sender<NotificationMessage>,
+    pub security_manager: Arc<crate::security::SecurityManager>,
+    pub marketplace: Arc<crate::marketplace::ModelMarketplace>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -520,6 +522,222 @@ pub struct UpdateDeploymentRequest {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ScaleDeploymentRequest {
     pub replicas: u32,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct LoginRequest {
+    pub username: String,
+    pub password: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct LoginResponse {
+    pub token: String,
+    pub user: UserProfile,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct UserProfile {
+    pub id: String,
+    pub username: String,
+    pub email: Option<String>,
+    pub role: String,
+    pub last_login: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CreateUserRequest {
+    pub username: String,
+    pub email: Option<String>,
+    pub password: String,
+    pub role: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct UpdateUserRequest {
+    pub username: Option<String>,
+    pub email: Option<String>,
+    pub role: Option<String>,
+    pub is_active: Option<bool>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct UserListResponse {
+    pub users: Vec<UserSummary>,
+    pub total: usize,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct UserSummary {
+    pub id: String,
+    pub username: String,
+    pub email: Option<String>,
+    pub role: String,
+    pub is_active: bool,
+    pub created_at: DateTime<Utc>,
+    pub last_login: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct UserDetailResponse {
+    pub id: String,
+    pub username: String,
+    pub email: Option<String>,
+    pub role: String,
+    pub is_active: bool,
+    pub created_at: DateTime<Utc>,
+    pub last_login: Option<DateTime<Utc>>,
+    pub permissions: Vec<String>,
+}
+
+/// Authentication context extracted from JWT
+#[derive(Debug, Clone)]
+pub struct AuthContext {
+    pub user_id: String,
+    pub username: String,
+    pub role: crate::security::UserRole,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SystemConfigResponse {
+    pub dashboard: DashboardConfigSummary,
+    pub security: SecurityConfigSummary,
+    pub server: ServerConfigSummary,
+    pub features: FeatureConfigSummary,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SystemConfigUpdateRequest {
+    pub dashboard: Option<DashboardConfigUpdate>,
+    pub security: Option<SecurityConfigUpdate>,
+    pub server: Option<ServerConfigUpdate>,
+    pub features: Option<FeatureConfigUpdate>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DashboardConfigSummary {
+    pub enabled: bool,
+    pub port: u16,
+    pub bind_address: String,
+    pub auth_enabled: bool,
+    pub theme: String,
+    pub title: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SecurityConfigSummary {
+    pub auth_enabled: bool,
+    pub rate_limiting_enabled: bool,
+    pub max_requests_per_minute: u32,
+    pub token_expiry_hours: i64,
+    pub tls_required: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ServerConfigSummary {
+    pub max_concurrent_requests: usize,
+    pub request_timeout_seconds: u64,
+    pub enable_cors: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct FeatureConfigSummary {
+    pub model_management: bool,
+    pub metrics: bool,
+    pub marketplace: bool,
+    pub deployment: bool,
+    pub user_management: bool,
+    pub monitoring: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DashboardConfigUpdate {
+    pub enabled: Option<bool>,
+    pub port: Option<u16>,
+    pub bind_address: Option<String>,
+    pub theme: Option<String>,
+    pub title: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SecurityConfigUpdate {
+    pub rate_limiting_enabled: Option<bool>,
+    pub max_requests_per_minute: Option<u32>,
+    pub token_expiry_hours: Option<i64>,
+    pub tls_required: Option<bool>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ServerConfigUpdate {
+    pub max_concurrent_requests: Option<usize>,
+    pub request_timeout_seconds: Option<u64>,
+    pub enable_cors: Option<bool>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct FeatureConfigUpdate {
+    pub model_management: Option<bool>,
+    pub metrics: Option<bool>,
+    pub marketplace: Option<bool>,
+    pub deployment: Option<bool>,
+    pub user_management: Option<bool>,
+    pub monitoring: Option<bool>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct MarketplaceSearchRequest {
+    pub query: Option<String>,
+    pub format: Option<String>, // gguf, onnx, pytorch, etc.
+    pub category: Option<String>, // llm, embedding, vision, etc.
+    pub size_limit_gb: Option<f64>,
+    pub limit: Option<usize>,
+    pub offset: Option<usize>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct MarketplaceSearchResponse {
+    pub models: Vec<MarketplaceModel>,
+    pub total: usize,
+    pub has_more: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct MarketplaceModel {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+    pub author: String,
+    pub version: String,
+    pub format: String,
+    pub size_gb: f64,
+    pub category: String,
+    pub license: String,
+    pub downloads: u64,
+    pub rating: f32,
+    pub tags: Vec<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub download_url: String,
+    pub homepage_url: Option<String>,
+    pub documentation_url: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct FeaturedModelsResponse {
+    pub featured: Vec<MarketplaceModel>,
+    pub trending: Vec<MarketplaceModel>,
+    pub recent: Vec<MarketplaceModel>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ModelDownloadInfo {
+    pub model_id: String,
+    pub download_url: String,
+    pub checksum: String,
+    pub checksum_type: String, // sha256, md5, etc.
+    pub size_bytes: u64,
+    pub expires_at: Option<DateTime<Utc>>,
+    pub download_instructions: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -1879,50 +2097,1257 @@ async fn api_scale_deployment(
         )
     }
 }
-async fn api_deployment_logs() -> impl IntoResponse {
-    Json(serde_json::json!({"message": "Not implemented"}))
+async fn api_deployment_logs(
+    State(state): State<DashboardState>,
+    Path(deployment_id): Path<String>,
+    Query(params): Query<DeploymentLogsQuery>,
+    headers: axum::http::HeaderMap,
+) -> impl IntoResponse {
+    // Verify authentication
+    let _auth = match extract_auth_context(&state, &headers).await {
+        Ok(auth) => auth,
+        Err(error_response) => return error_response.into_response(),
+    };
+
+    // Validate deployment exists (mock validation)
+    if deployment_id.is_empty() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"error": "Invalid deployment ID"})),
+        ).into_response();
+    }
+
+    // Parse query parameters
+    let level = params.level.unwrap_or_else(|| "info".to_string());
+    let lines = params.lines.unwrap_or(100).min(1000); // Cap at 1000 lines
+    let since = params.since.unwrap_or_else(|| Utc::now() - chrono::Duration::hours(24));
+    let follow = params.follow.unwrap_or(false);
+
+    // Mock deployment logs - in real implementation, this would fetch from logging system
+    let log_entries = generate_mock_deployment_logs(&deployment_id, &level, lines, since);
+
+    let response = serde_json::json!({
+        "deployment_id": deployment_id,
+        "total_lines": log_entries.len(),
+        "requested_lines": lines,
+        "level_filter": level,
+        "since": since,
+        "follow": follow,
+        "logs": log_entries,
+        "metadata": {
+            "container_id": format!("container-{}", deployment_id),
+            "pod_name": format!("inferno-{}", deployment_id),
+            "namespace": "default",
+            "node": "worker-node-01",
+            "log_source": "container",
+            "last_updated": Utc::now()
+        }
+    });
+
+    (StatusCode::OK, Json(response)).into_response()
 }
-async fn api_marketplace_search() -> impl IntoResponse {
-    Json(serde_json::json!({"message": "Not implemented"}))
+
+#[derive(serde::Deserialize)]
+struct DeploymentLogsQuery {
+    #[serde(default)]
+    level: Option<String>,
+    #[serde(default)]
+    lines: Option<usize>,
+    #[serde(default)]
+    since: Option<chrono::DateTime<Utc>>,
+    #[serde(default)]
+    follow: Option<bool>,
 }
-async fn api_marketplace_featured() -> impl IntoResponse {
-    Json(serde_json::json!({"message": "Not implemented"}))
+
+fn generate_mock_deployment_logs(
+    deployment_id: &str,
+    level: &str,
+    lines: usize,
+    since: chrono::DateTime<Utc>,
+) -> Vec<serde_json::Value> {
+    let mut logs = Vec::new();
+    let base_time = since;
+
+    // Generate realistic deployment logs
+    let log_templates = vec![
+        ("info", "Model loading started for deployment {}", "model_loading"),
+        ("info", "Backend initialization completed", "backend_init"),
+        ("info", "Health check endpoint registered on port 8080", "health_check"),
+        ("info", "Processing inference request from user {}", "inference_request"),
+        ("debug", "Token processing: {} tokens/sec", "token_processing"),
+        ("info", "Model inference completed in {}ms", "inference_complete"),
+        ("warn", "High memory usage detected: {}%", "memory_warning"),
+        ("info", "Scaling event triggered: current replicas {}", "scaling"),
+        ("error", "Failed to process request: {}", "request_error"),
+        ("info", "Graceful shutdown initiated", "shutdown"),
+    ];
+
+    for i in 0..lines.min(200) {
+        let template = &log_templates[i % log_templates.len()];
+        let timestamp = base_time + chrono::Duration::minutes(i as i64);
+
+        // Filter by log level
+        if !should_include_log_level(&template.0, level) {
+            continue;
+        }
+
+        let message = match template.2 {
+            "model_loading" => format!("Model loading started for deployment {}", deployment_id),
+            "inference_request" => format!("Processing inference request from user {}", format!("user_{}", i % 5 + 1)),
+            "token_processing" => format!("Token processing: {} tokens/sec", 450 + (i % 100)),
+            "inference_complete" => format!("Model inference completed in {}ms", 125 + (i % 50)),
+            "memory_warning" => format!("High memory usage detected: {}%", 75 + (i % 20)),
+            "scaling" => format!("Scaling event triggered: current replicas {}", 2 + (i % 3)),
+            "request_error" => format!("Failed to process request: {}", "timeout after 30s"),
+            _ => template.1.to_string(),
+        };
+
+        logs.push(serde_json::json!({
+            "timestamp": timestamp,
+            "level": template.0.to_uppercase(),
+            "message": message,
+            "source": "inferno-worker",
+            "deployment_id": deployment_id,
+            "request_id": format!("req-{:04x}", i),
+            "thread": format!("worker-{}", i % 4 + 1),
+            "module": template.2
+        }));
+    }
+
+    logs
 }
-async fn api_marketplace_downloads() -> impl IntoResponse {
-    Json(serde_json::json!({"message": "Not implemented"}))
+
+fn should_include_log_level(log_level: &str, filter_level: &str) -> bool {
+    let level_priority = |level: &str| match level.to_lowercase().as_str() {
+        "trace" => 0,
+        "debug" => 1,
+        "info" => 2,
+        "warn" => 3,
+        "error" => 4,
+        _ => 2, // default to info
+    };
+
+    level_priority(log_level) >= level_priority(filter_level)
 }
-async fn api_system_info() -> impl IntoResponse {
-    Json(serde_json::json!({"message": "Not implemented"}))
+async fn api_marketplace_search(
+    State(state): State<DashboardState>,
+    Query(params): Query<MarketplaceSearchRequest>,
+    headers: axum::http::HeaderMap,
+) -> impl IntoResponse {
+    // Verify authentication (marketplace browsing requires login)
+    let _auth = match extract_auth_context(&state, &headers).await {
+        Ok(auth) => auth,
+        Err(error_response) => return error_response.into_response(),
+    };
+
+    // Convert dashboard search request to marketplace search filters
+    let query = params.query.as_deref().unwrap_or("");
+    let page = params.offset.unwrap_or(0) / params.limit.unwrap_or(20);
+    let per_page = params.limit.unwrap_or(20);
+
+    // Map category from string to ModelCategory enum if needed
+    let category_filter = params.category.as_ref().and_then(|cat| {
+        match cat.to_lowercase().as_str() {
+            "llm" => Some(crate::marketplace::ModelCategory::Language),
+            "embedding" => Some(crate::marketplace::ModelCategory::Embedding),
+            "vision" => Some(crate::marketplace::ModelCategory::Vision),
+            "audio" => Some(crate::marketplace::ModelCategory::Audio),
+            _ => None,
+        }
+    });
+
+    let filters = Some(crate::marketplace::SearchFilters {
+        category: category_filter,
+        publisher: None,
+        license: None,
+        min_rating: None,
+        max_size_gb: params.size_limit_gb,
+        tags: vec![],
+        frameworks: params.format.as_ref().map(|f| vec![f.clone()]).unwrap_or_default(),
+        languages: vec![],
+        platforms: vec![],
+        free_only: false,
+        verified_only: false,
+    });
+
+    // Query the real marketplace
+    let search_result = match state.marketplace.search_models(query, filters, page, per_page).await {
+        Ok(result) => result,
+        Err(e) => {
+            warn!("Marketplace search failed: {}", e);
+            // Return empty result on error
+            crate::marketplace::SearchResult {
+                models: vec![],
+                total_count: 0,
+                page,
+                per_page,
+                total_pages: 0,
+                facets: crate::marketplace::SearchFacets::default(),
+            }
+        }
+    };
+
+    // Convert marketplace ModelListing to dashboard MarketplaceModel
+    let mut marketplace_models = Vec::new();
+    for model in search_result.models {
+        marketplace_models.push(MarketplaceModel {
+            id: model.id,
+            name: model.name,
+            description: model.description,
+            author: model.publisher,
+            version: model.version,
+            format: "gguf".to_string(), // Default format, could be derived from model metadata
+            size_gb: model.size_bytes as f64 / (1024.0 * 1024.0 * 1024.0),
+            category: format!("{:?}", model.category).to_lowercase(),
+            license: model.license,
+            downloads: model.downloads,
+            rating: model.rating.unwrap_or(0.0),
+            tags: model.tags,
+            created_at: model.published_at,
+            updated_at: model.updated_at,
+            download_url: model.download_url,
+            homepage_url: None, // Could be derived from model metadata
+            documentation_url: None, // Could be derived from model metadata
+        });
+    }
+
+    // Create response using actual search results
+    let response = MarketplaceSearchResponse {
+        models: marketplace_models,
+        total: search_result.total_count,
+        has_more: search_result.page < search_result.total_pages - 1,
+    };
+
+    (StatusCode::OK, Json(response)).into_response()
 }
-async fn api_get_config() -> impl IntoResponse {
-    Json(serde_json::json!({"message": "Not implemented"}))
+
+async fn api_marketplace_featured(
+    State(state): State<DashboardState>,
+    headers: axum::http::HeaderMap,
+) -> impl IntoResponse {
+    // Verify authentication
+    let _auth = match extract_auth_context(&state, &headers).await {
+        Ok(auth) => auth,
+        Err(error_response) => return error_response.into_response(),
+    };
+
+    // In a real implementation, this would query featured models from the marketplace
+    // For demo purposes, we'll return curated lists of mock models
+
+    let featured_models = vec![
+        MarketplaceModel {
+            id: "llama-2-7b-chat".to_string(),
+            name: "Llama 2 7B Chat".to_string(),
+            description: "Editor's choice: Best general-purpose chat model for most use cases".to_string(),
+            author: "Meta".to_string(),
+            version: "1.0.0".to_string(),
+            format: "gguf".to_string(),
+            size_gb: 4.1,
+            category: "llm".to_string(),
+            license: "Custom".to_string(),
+            downloads: 1250000,
+            rating: 4.8,
+            tags: vec!["featured".to_string(), "chat".to_string(), "recommended".to_string()],
+            created_at: Utc::now() - chrono::Duration::days(180),
+            updated_at: Utc::now() - chrono::Duration::days(30),
+            download_url: "https://huggingface.co/meta-llama/Llama-2-7b-chat-hf".to_string(),
+            homepage_url: Some("https://ai.meta.com/llama/".to_string()),
+            documentation_url: Some("https://github.com/facebookresearch/llama".to_string()),
+        },
+        MarketplaceModel {
+            id: "bert-base-uncased".to_string(),
+            name: "BERT Base Uncased".to_string(),
+            description: "Staff pick: Most reliable embeddings model for text understanding".to_string(),
+            author: "Google".to_string(),
+            version: "1.0.0".to_string(),
+            format: "onnx".to_string(),
+            size_gb: 0.42,
+            category: "embedding".to_string(),
+            license: "Apache 2.0".to_string(),
+            downloads: 2100000,
+            rating: 4.6,
+            tags: vec!["featured".to_string(), "embeddings".to_string(), "reliable".to_string()],
+            created_at: Utc::now() - chrono::Duration::days(900),
+            updated_at: Utc::now() - chrono::Duration::days(60),
+            download_url: "https://huggingface.co/bert-base-uncased".to_string(),
+            homepage_url: Some("https://ai.googleblog.com/2018/11/open-sourcing-bert-state-of-art-pre.html".to_string()),
+            documentation_url: Some("https://huggingface.co/docs/transformers/model_doc/bert".to_string()),
+        },
+    ];
+
+    let trending_models = vec![
+        MarketplaceModel {
+            id: "whisper-large-v3".to_string(),
+            name: "Whisper Large v3".to_string(),
+            description: "🔥 Trending: Latest speech recognition breakthrough from OpenAI".to_string(),
+            author: "OpenAI".to_string(),
+            version: "3.0".to_string(),
+            format: "onnx".to_string(),
+            size_gb: 2.9,
+            category: "audio".to_string(),
+            license: "MIT".to_string(),
+            downloads: 750000,
+            rating: 4.9,
+            tags: vec!["trending".to_string(), "new".to_string(), "speech-to-text".to_string()],
+            created_at: Utc::now() - chrono::Duration::days(60),
+            updated_at: Utc::now() - chrono::Duration::days(5),
+            download_url: "https://huggingface.co/openai/whisper-large-v3".to_string(),
+            homepage_url: Some("https://openai.com/research/whisper".to_string()),
+            documentation_url: Some("https://github.com/openai/whisper".to_string()),
+        },
+        MarketplaceModel {
+            id: "mistral-7b-instruct".to_string(),
+            name: "Mistral 7B Instruct".to_string(),
+            description: "📈 Hot: Outperforming larger models on reasoning tasks".to_string(),
+            author: "Mistral AI".to_string(),
+            version: "0.2".to_string(),
+            format: "gguf".to_string(),
+            size_gb: 4.4,
+            category: "llm".to_string(),
+            license: "Apache 2.0".to_string(),
+            downloads: 890000,
+            rating: 4.7,
+            tags: vec!["trending".to_string(), "reasoning".to_string(), "efficient".to_string()],
+            created_at: Utc::now() - chrono::Duration::days(120),
+            updated_at: Utc::now() - chrono::Duration::days(15),
+            download_url: "https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.2".to_string(),
+            homepage_url: Some("https://mistral.ai/".to_string()),
+            documentation_url: Some("https://docs.mistral.ai/".to_string()),
+        },
+    ];
+
+    let recent_models = vec![
+        MarketplaceModel {
+            id: "phi-3-mini".to_string(),
+            name: "Phi-3 Mini".to_string(),
+            description: "🆕 Just released: Compact yet powerful 3.8B parameter model from Microsoft".to_string(),
+            author: "Microsoft".to_string(),
+            version: "1.0.0".to_string(),
+            format: "onnx".to_string(),
+            size_gb: 2.3,
+            category: "llm".to_string(),
+            license: "MIT".to_string(),
+            downloads: 45000,
+            rating: 4.5,
+            tags: vec!["new".to_string(), "compact".to_string(), "mobile-ready".to_string()],
+            created_at: Utc::now() - chrono::Duration::days(7),
+            updated_at: Utc::now() - chrono::Duration::days(2),
+            download_url: "https://huggingface.co/microsoft/Phi-3-mini-4k-instruct".to_string(),
+            homepage_url: Some("https://azure.microsoft.com/en-us/products/ai-services/phi-3".to_string()),
+            documentation_url: Some("https://github.com/microsoft/Phi-3CookBook".to_string()),
+        },
+    ];
+
+    let response = FeaturedModelsResponse {
+        featured: featured_models,
+        trending: trending_models,
+        recent: recent_models,
+    };
+
+    (StatusCode::OK, Json(response)).into_response()
 }
-async fn api_update_config() -> impl IntoResponse {
-    Json(serde_json::json!({"message": "Not implemented"}))
+async fn api_marketplace_downloads(
+    State(state): State<DashboardState>,
+    headers: axum::http::HeaderMap,
+) -> impl IntoResponse {
+    // Verify authentication
+    let _auth = match extract_auth_context(&state, &headers).await {
+        Ok(auth) => auth,
+        Err(error_response) => return error_response.into_response(),
+    };
+
+    // Mock download statistics - in a real implementation, this would fetch from marketplace service
+    let downloads = serde_json::json!({
+        "recent_downloads": [
+            {
+                "model_id": "llama-2-7b-chat",
+                "name": "Llama 2 7B Chat",
+                "version": "v1.0.0",
+                "downloaded_at": "2024-01-15T14:30:00Z",
+                "download_count": 15420,
+                "size_gb": 3.5,
+                "status": "completed"
+            },
+            {
+                "model_id": "codellama-7b-instruct",
+                "name": "Code Llama 7B Instruct",
+                "version": "v1.1.0",
+                "downloaded_at": "2024-01-14T09:15:00Z",
+                "download_count": 8930,
+                "size_gb": 3.8,
+                "status": "completed"
+            },
+            {
+                "model_id": "mistral-7b-v0.1",
+                "name": "Mistral 7B v0.1",
+                "version": "v0.1.0",
+                "downloaded_at": "2024-01-13T16:45:00Z",
+                "download_count": 12750,
+                "size_gb": 4.1,
+                "status": "completed"
+            }
+        ],
+        "popular_downloads": [
+            {
+                "model_id": "llama-2-13b-chat",
+                "name": "Llama 2 13B Chat",
+                "total_downloads": 45230,
+                "growth_rate": 23.5,
+                "size_gb": 7.2
+            },
+            {
+                "model_id": "vicuna-13b-v1.3",
+                "name": "Vicuna 13B v1.3",
+                "total_downloads": 38920,
+                "growth_rate": 18.2,
+                "size_gb": 6.8
+            }
+        ],
+        "download_stats": {
+            "total_downloads_today": 1247,
+            "total_downloads_week": 8934,
+            "total_downloads_month": 34521,
+            "total_bandwidth_gb": 156.8,
+            "unique_users": 3421,
+            "peak_download_hour": "14:00-15:00"
+        },
+        "top_categories": [
+            {"name": "Chat Models", "downloads": 18743, "percentage": 42.1},
+            {"name": "Code Generation", "downloads": 12456, "percentage": 28.0},
+            {"name": "Text Completion", "downloads": 8921, "percentage": 20.0},
+            {"name": "Embeddings", "downloads": 4356, "percentage": 9.9}
+        ]
+    });
+
+    (StatusCode::OK, Json(downloads)).into_response()
 }
-async fn api_list_users() -> impl IntoResponse {
-    Json(serde_json::json!({"message": "Not implemented"}))
+async fn api_system_info(
+    State(state): State<DashboardState>,
+    headers: axum::http::HeaderMap,
+) -> impl IntoResponse {
+    // Verify authentication
+    let _auth = match extract_auth_context(&state, &headers).await {
+        Ok(auth) => auth,
+        Err(error_response) => return error_response.into_response(),
+    };
+
+    // Gather real system information
+    let sys = sysinfo::System::new_all();
+    let cpu_count = num_cpus::get();
+    let uptime = sys.uptime();
+
+    let system_info = serde_json::json!({
+        "version": env!("CARGO_PKG_VERSION"),
+        "build_date": option_env!("VERGEN_BUILD_DATE").unwrap_or("unknown"),
+        "git_commit": option_env!("VERGEN_GIT_SHA").unwrap_or("unknown"),
+        "platform": {
+            "os": std::env::consts::OS,
+            "arch": std::env::consts::ARCH,
+            "name": sys.name().unwrap_or_else(|| "Unknown".to_string()),
+            "kernel_version": sys.kernel_version().unwrap_or_else(|| "Unknown".to_string()),
+            "os_version": sys.os_version().unwrap_or_else(|| "Unknown".to_string()),
+            "host_name": sys.host_name().unwrap_or_else(|| "Unknown".to_string())
+        },
+        "hardware": {
+            "cpu_count": cpu_count,
+            "total_memory_gb": sys.total_memory() as f64 / (1024.0 * 1024.0 * 1024.0),
+            "available_memory_gb": sys.available_memory() as f64 / (1024.0 * 1024.0 * 1024.0),
+            "total_swap_gb": sys.total_swap() as f64 / (1024.0 * 1024.0 * 1024.0),
+            "used_swap_gb": sys.used_swap() as f64 / (1024.0 * 1024.0 * 1024.0)
+        },
+        "runtime": {
+            "uptime_seconds": uptime,
+            "uptime_formatted": format_duration(uptime),
+            "models_loaded": state.models.read().await.len(),
+            "config_source": "config.toml",
+            "log_level": std::env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string())
+        },
+        "features": {
+            "gguf_backend": cfg!(feature = "gguf"),
+            "onnx_backend": cfg!(feature = "onnx"),
+            "gpu_metal": cfg!(feature = "gpu-metal"),
+            "gpu_vulkan": cfg!(feature = "gpu-vulkan"),
+            "tauri_app": cfg!(feature = "tauri-app"),
+            "download_support": cfg!(feature = "download")
+        },
+        "endpoints": {
+            "dashboard": format!("http://{}:{}", state.config.host, state.config.port),
+            "api": format!("http://{}:{}/api", state.config.host, state.config.port),
+            "websocket": format!("ws://{}:{}/ws", state.config.host, state.config.port)
+        }
+    });
+
+    (StatusCode::OK, Json(system_info)).into_response()
 }
-async fn api_create_user() -> impl IntoResponse {
-    Json(serde_json::json!({"message": "Not implemented"}))
+
+fn format_duration(seconds: u64) -> String {
+    let days = seconds / 86400;
+    let hours = (seconds % 86400) / 3600;
+    let minutes = (seconds % 3600) / 60;
+    let secs = seconds % 60;
+
+    if days > 0 {
+        format!("{}d {}h {}m {}s", days, hours, minutes, secs)
+    } else if hours > 0 {
+        format!("{}h {}m {}s", hours, minutes, secs)
+    } else if minutes > 0 {
+        format!("{}m {}s", minutes, secs)
+    } else {
+        format!("{}s", secs)
+    }
 }
-async fn api_get_user() -> impl IntoResponse {
-    Json(serde_json::json!({"message": "Not implemented"}))
+async fn api_get_config(
+    State(state): State<DashboardState>,
+    headers: axum::http::HeaderMap,
+) -> impl IntoResponse {
+    // Verify authentication and admin access
+    let auth = match extract_auth_context(&state, &headers).await {
+        Ok(auth) => auth,
+        Err(error_response) => return error_response.into_response(),
+    };
+
+    if let Err(error_response) = require_admin(&auth) {
+        return error_response.into_response();
+    }
+
+    // Build configuration response from current state
+    let config = &state.config;
+
+    let response = SystemConfigResponse {
+        dashboard: DashboardConfigSummary {
+            enabled: config.enabled,
+            port: config.port,
+            bind_address: config.bind_address.clone(),
+            auth_enabled: config.auth.enabled,
+            theme: config.ui.theme.default_theme.clone(),
+            title: config.ui.title.clone(),
+        },
+        security: SecurityConfigSummary {
+            auth_enabled: config.auth.enabled,
+            rate_limiting_enabled: config.security.rate_limit.enabled,
+            max_requests_per_minute: config.security.rate_limit.requests_per_minute,
+            token_expiry_hours: config.auth.session_timeout_minutes as i64 / 60, // Convert to hours
+            tls_required: config.security.https_enabled,
+        },
+        server: ServerConfigSummary {
+            max_concurrent_requests: 1000, // Default value - would come from server config
+            request_timeout_seconds: 30,   // Default value - would come from server config
+            enable_cors: true,             // Default value - would come from server config
+        },
+        features: FeatureConfigSummary {
+            model_management: config.ui.features.model_management,
+            metrics: config.ui.features.metrics,
+            marketplace: config.ui.features.marketplace,
+            deployment: config.ui.features.deployment,
+            user_management: config.ui.features.user_management,
+            monitoring: config.ui.features.monitoring,
+        },
+    };
+
+    (StatusCode::OK, Json(response)).into_response()
 }
-async fn api_update_user() -> impl IntoResponse {
-    Json(serde_json::json!({"message": "Not implemented"}))
+async fn api_update_config(
+    State(state): State<DashboardState>,
+    headers: axum::http::HeaderMap,
+    Json(request): Json<SystemConfigUpdateRequest>,
+) -> impl IntoResponse {
+    // Verify authentication and admin access
+    let auth = match extract_auth_context(&state, &headers).await {
+        Ok(auth) => auth,
+        Err(error_response) => return error_response.into_response(),
+    };
+
+    if let Err(error_response) = require_admin(&auth) {
+        return error_response.into_response();
+    }
+
+    // Note: In a real implementation, you would update persistent configuration storage
+    // For this demo, we'll simulate config updates and return success
+
+    // Validate inputs
+    if let Some(ref dashboard) = request.dashboard {
+        if let Some(port) = dashboard.port {
+            if port < 1024 || port > 65535 {
+                let error = ApiError {
+                    error: "Port must be between 1024 and 65535".to_string(),
+                    details: None,
+                };
+                return (StatusCode::BAD_REQUEST, Json(error)).into_response();
+            }
+        }
+
+        if let Some(ref bind_address) = dashboard.bind_address {
+            if bind_address.trim().is_empty() {
+                let error = ApiError {
+                    error: "Bind address cannot be empty".to_string(),
+                    details: None,
+                };
+                return (StatusCode::BAD_REQUEST, Json(error)).into_response();
+            }
+        }
+
+        if let Some(ref theme) = dashboard.theme {
+            if !["light", "dark", "auto"].contains(&theme.as_str()) {
+                let error = ApiError {
+                    error: "Theme must be one of: light, dark, auto".to_string(),
+                    details: None,
+                };
+                return (StatusCode::BAD_REQUEST, Json(error)).into_response();
+            }
+        }
+    }
+
+    if let Some(ref security) = request.security {
+        if let Some(max_requests) = security.max_requests_per_minute {
+            if max_requests == 0 || max_requests > 10000 {
+                let error = ApiError {
+                    error: "Max requests per minute must be between 1 and 10000".to_string(),
+                    details: None,
+                };
+                return (StatusCode::BAD_REQUEST, Json(error)).into_response();
+            }
+        }
+
+        if let Some(token_expiry) = security.token_expiry_hours {
+            if token_expiry < 1 || token_expiry > 168 { // 1 hour to 1 week
+                let error = ApiError {
+                    error: "Token expiry must be between 1 and 168 hours".to_string(),
+                    details: None,
+                };
+                return (StatusCode::BAD_REQUEST, Json(error)).into_response();
+            }
+        }
+    }
+
+    if let Some(ref server) = request.server {
+        if let Some(max_requests) = server.max_concurrent_requests {
+            if max_requests == 0 || max_requests > 100000 {
+                let error = ApiError {
+                    error: "Max concurrent requests must be between 1 and 100000".to_string(),
+                    details: None,
+                };
+                return (StatusCode::BAD_REQUEST, Json(error)).into_response();
+            }
+        }
+
+        if let Some(timeout) = server.request_timeout_seconds {
+            if timeout == 0 || timeout > 300 { // 5 minutes max
+                let error = ApiError {
+                    error: "Request timeout must be between 1 and 300 seconds".to_string(),
+                    details: None,
+                };
+                return (StatusCode::BAD_REQUEST, Json(error)).into_response();
+            }
+        }
+    }
+
+    // In a real implementation, you would:
+    // 1. Update the configuration in persistent storage (file, database, etc.)
+    // 2. Apply the changes to the running system
+    // 3. Potentially restart services if needed
+
+    // For now, simulate successful configuration update
+    info!("Configuration updated by admin user: {}", auth.username);
+
+    // Return the updated configuration (in a real impl, re-read from storage)
+    let config = &state.config;
+    let response = SystemConfigResponse {
+        dashboard: DashboardConfigSummary {
+            enabled: request.dashboard.as_ref()
+                .and_then(|d| d.enabled)
+                .unwrap_or(config.enabled),
+            port: request.dashboard.as_ref()
+                .and_then(|d| d.port)
+                .unwrap_or(config.port),
+            bind_address: request.dashboard.as_ref()
+                .and_then(|d| d.bind_address.clone())
+                .unwrap_or_else(|| config.bind_address.clone()),
+            auth_enabled: config.auth.enabled,
+            theme: request.dashboard.as_ref()
+                .and_then(|d| d.theme.clone())
+                .unwrap_or_else(|| config.ui.theme.default_theme.clone()),
+            title: request.dashboard.as_ref()
+                .and_then(|d| d.title.clone())
+                .unwrap_or_else(|| config.ui.title.clone()),
+        },
+        security: SecurityConfigSummary {
+            auth_enabled: config.auth.enabled,
+            rate_limiting_enabled: request.security.as_ref()
+                .and_then(|s| s.rate_limiting_enabled)
+                .unwrap_or(config.security.rate_limit.enabled),
+            max_requests_per_minute: request.security.as_ref()
+                .and_then(|s| s.max_requests_per_minute)
+                .unwrap_or(config.security.rate_limit.requests_per_minute),
+            token_expiry_hours: request.security.as_ref()
+                .and_then(|s| s.token_expiry_hours)
+                .unwrap_or(config.auth.session_timeout_minutes as i64 / 60),
+            tls_required: request.security.as_ref()
+                .and_then(|s| s.tls_required)
+                .unwrap_or(config.security.https_enabled),
+        },
+        server: ServerConfigSummary {
+            max_concurrent_requests: request.server.as_ref()
+                .and_then(|s| s.max_concurrent_requests)
+                .unwrap_or(1000),
+            request_timeout_seconds: request.server.as_ref()
+                .and_then(|s| s.request_timeout_seconds)
+                .unwrap_or(30),
+            enable_cors: request.server.as_ref()
+                .and_then(|s| s.enable_cors)
+                .unwrap_or(true),
+        },
+        features: FeatureConfigSummary {
+            model_management: request.features.as_ref()
+                .and_then(|f| f.model_management)
+                .unwrap_or(config.ui.features.model_management),
+            metrics: request.features.as_ref()
+                .and_then(|f| f.metrics)
+                .unwrap_or(config.ui.features.metrics),
+            marketplace: request.features.as_ref()
+                .and_then(|f| f.marketplace)
+                .unwrap_or(config.ui.features.marketplace),
+            deployment: request.features.as_ref()
+                .and_then(|f| f.deployment)
+                .unwrap_or(config.ui.features.deployment),
+            user_management: request.features.as_ref()
+                .and_then(|f| f.user_management)
+                .unwrap_or(config.ui.features.user_management),
+            monitoring: request.features.as_ref()
+                .and_then(|f| f.monitoring)
+                .unwrap_or(config.ui.features.monitoring),
+        },
+    };
+
+    (StatusCode::OK, Json(response)).into_response()
 }
-async fn api_delete_user() -> impl IntoResponse {
-    Json(serde_json::json!({"message": "Not implemented"}))
+async fn api_list_users(
+    State(state): State<DashboardState>,
+    headers: axum::http::HeaderMap,
+) -> impl IntoResponse {
+    // Verify authentication and admin access
+    let auth = match extract_auth_context(&state, &headers).await {
+        Ok(auth) => auth,
+        Err(error_response) => return error_response.into_response(),
+    };
+
+    if let Err(error_response) = require_admin(&auth) {
+        return error_response.into_response();
+    }
+
+    // Get all users from security manager
+    let users = state.security_manager.users.read().await;
+    let user_summaries: Vec<UserSummary> = users
+        .values()
+        .map(|user| UserSummary {
+            id: user.id.clone(),
+            username: user.username.clone(),
+            email: user.email.clone(),
+            role: format!("{:?}", user.role),
+            is_active: user.is_active,
+            created_at: user.created_at,
+            last_login: user.last_login,
+        })
+        .collect();
+
+    let response = UserListResponse {
+        total: user_summaries.len(),
+        users: user_summaries,
+    };
+
+    (StatusCode::OK, Json(response)).into_response()
 }
-async fn api_login() -> impl IntoResponse {
-    Json(serde_json::json!({"message": "Not implemented"}))
+async fn api_create_user(
+    State(state): State<DashboardState>,
+    headers: axum::http::HeaderMap,
+    Json(request): Json<CreateUserRequest>,
+) -> impl IntoResponse {
+    // Verify authentication and admin access
+    let auth = match extract_auth_context(&state, &headers).await {
+        Ok(auth) => auth,
+        Err(error_response) => return error_response.into_response(),
+    };
+
+    if let Err(error_response) = require_admin(&auth) {
+        return error_response.into_response();
+    }
+
+    // Validate input
+    if request.username.trim().is_empty() {
+        let error = ApiError {
+            error: "Username cannot be empty".to_string(),
+            details: None,
+        };
+        return (StatusCode::BAD_REQUEST, Json(error)).into_response();
+    }
+
+    if request.password.len() < 8 {
+        let error = ApiError {
+            error: "Password must be at least 8 characters".to_string(),
+            details: None,
+        };
+        return (StatusCode::BAD_REQUEST, Json(error)).into_response();
+    }
+
+    // Parse role
+    let role = match request.role.to_lowercase().as_str() {
+        "admin" => crate::security::UserRole::Admin,
+        "user" => crate::security::UserRole::User,
+        "guest" => crate::security::UserRole::Guest,
+        "service" => crate::security::UserRole::Service,
+        _ => {
+            let error = ApiError {
+                error: "Invalid role. Must be one of: admin, user, guest, service".to_string(),
+                details: None,
+            };
+            return (StatusCode::BAD_REQUEST, Json(error)).into_response();
+        }
+    };
+
+    // Hash password
+    let password_hash = match state.security_manager.hash_password(&request.password) {
+        Ok(hash) => hash,
+        Err(e) => {
+            let error = ApiError {
+                error: "Failed to hash password".to_string(),
+                details: Some(e.to_string()),
+            };
+            return (StatusCode::INTERNAL_SERVER_ERROR, Json(error)).into_response();
+        }
+    };
+
+    // Create user
+    let user_id = uuid::Uuid::new_v4().to_string();
+    let new_user = crate::security::User {
+        id: user_id.clone(),
+        username: request.username.trim().to_string(),
+        email: request.email,
+        password_hash: Some(password_hash),
+        role,
+        api_keys: vec![],
+        created_at: chrono::Utc::now(),
+        last_login: None,
+        is_active: true,
+        permissions: std::collections::HashSet::new(),
+        rate_limit_override: None,
+    };
+
+    // Add user to security manager
+    match state.security_manager.create_user(new_user.clone()).await {
+        Ok(_) => {
+            let response = UserDetailResponse {
+                id: new_user.id,
+                username: new_user.username,
+                email: new_user.email,
+                role: format!("{:?}", new_user.role),
+                is_active: new_user.is_active,
+                created_at: new_user.created_at,
+                last_login: new_user.last_login,
+                permissions: vec![], // TODO: Convert permissions to strings
+            };
+            (StatusCode::CREATED, Json(response)).into_response()
+        }
+        Err(e) => {
+            let error = ApiError {
+                error: "Failed to create user".to_string(),
+                details: Some(e.to_string()),
+            };
+            (StatusCode::INTERNAL_SERVER_ERROR, Json(error)).into_response()
+        }
+    }
 }
-async fn api_logout() -> impl IntoResponse {
-    Json(serde_json::json!({"message": "Not implemented"}))
+async fn api_get_user(
+    State(state): State<DashboardState>,
+    Path(user_id): Path<String>,
+    headers: axum::http::HeaderMap,
+) -> impl IntoResponse {
+    // Verify authentication and admin access
+    let auth = match extract_auth_context(&state, &headers).await {
+        Ok(auth) => auth,
+        Err(error_response) => return error_response.into_response(),
+    };
+
+    if let Err(error_response) = require_admin(&auth) {
+        return error_response.into_response();
+    }
+
+    // Get user from security manager
+    let users = state.security_manager.users.read().await;
+    let user = match users.get(&user_id) {
+        Some(user) => user,
+        None => {
+            let error = ApiError {
+                error: "User not found".to_string(),
+                details: None,
+            };
+            return (StatusCode::NOT_FOUND, Json(error)).into_response();
+        }
+    };
+
+    let permissions: Vec<String> = user
+        .permissions
+        .iter()
+        .map(|p| format!("{:?}", p))
+        .collect();
+
+    let response = UserDetailResponse {
+        id: user.id.clone(),
+        username: user.username.clone(),
+        email: user.email.clone(),
+        role: format!("{:?}", user.role),
+        is_active: user.is_active,
+        created_at: user.created_at,
+        last_login: user.last_login,
+        permissions,
+    };
+
+    (StatusCode::OK, Json(response)).into_response()
 }
-async fn api_profile() -> impl IntoResponse {
-    Json(serde_json::json!({"message": "Not implemented"}))
+async fn api_update_user(
+    State(state): State<DashboardState>,
+    Path(user_id): Path<String>,
+    headers: axum::http::HeaderMap,
+    Json(request): Json<UpdateUserRequest>,
+) -> impl IntoResponse {
+    // Verify authentication and admin access
+    let auth = match extract_auth_context(&state, &headers).await {
+        Ok(auth) => auth,
+        Err(error_response) => return error_response.into_response(),
+    };
+
+    if let Err(error_response) = require_admin(&auth) {
+        return error_response.into_response();
+    }
+
+    // Get and update user
+    let mut users = state.security_manager.users.write().await;
+    let user = match users.get_mut(&user_id) {
+        Some(user) => user,
+        None => {
+            let error = ApiError {
+                error: "User not found".to_string(),
+                details: None,
+            };
+            return (StatusCode::NOT_FOUND, Json(error)).into_response();
+        }
+    };
+
+    // Prevent self-deactivation for admins
+    if user_id == auth.user_id && request.is_active == Some(false) {
+        let error = ApiError {
+            error: "Cannot deactivate your own account".to_string(),
+            details: None,
+        };
+        return (StatusCode::BAD_REQUEST, Json(error)).into_response();
+    }
+
+    // Update fields if provided
+    if let Some(username) = &request.username {
+        if username.trim().is_empty() {
+            let error = ApiError {
+                error: "Username cannot be empty".to_string(),
+                details: None,
+            };
+            return (StatusCode::BAD_REQUEST, Json(error)).into_response();
+        }
+        user.username = username.trim().to_string();
+    }
+
+    if let Some(email) = &request.email {
+        user.email = Some(email.clone());
+    }
+
+    if let Some(role_str) = &request.role {
+        let role = match role_str.to_lowercase().as_str() {
+            "admin" => crate::security::UserRole::Admin,
+            "user" => crate::security::UserRole::User,
+            "guest" => crate::security::UserRole::Guest,
+            "service" => crate::security::UserRole::Service,
+            _ => {
+                let error = ApiError {
+                    error: "Invalid role. Must be one of: admin, user, guest, service".to_string(),
+                    details: None,
+                };
+                return (StatusCode::BAD_REQUEST, Json(error)).into_response();
+            }
+        };
+
+        // Prevent removing admin role from yourself
+        if user_id == auth.user_id && !matches!(role, crate::security::UserRole::Admin) {
+            let error = ApiError {
+                error: "Cannot remove admin role from your own account".to_string(),
+                details: None,
+            };
+            return (StatusCode::BAD_REQUEST, Json(error)).into_response();
+        }
+
+        user.role = role;
+    }
+
+    if let Some(is_active) = request.is_active {
+        user.is_active = is_active;
+    }
+
+    let permissions: Vec<String> = user
+        .permissions
+        .iter()
+        .map(|p| format!("{:?}", p))
+        .collect();
+
+    let response = UserDetailResponse {
+        id: user.id.clone(),
+        username: user.username.clone(),
+        email: user.email.clone(),
+        role: format!("{:?}", user.role),
+        is_active: user.is_active,
+        created_at: user.created_at,
+        last_login: user.last_login,
+        permissions,
+    };
+
+    (StatusCode::OK, Json(response)).into_response()
+}
+async fn api_delete_user(
+    State(state): State<DashboardState>,
+    Path(user_id): Path<String>,
+    headers: axum::http::HeaderMap,
+) -> impl IntoResponse {
+    // Verify authentication and admin access
+    let auth = match extract_auth_context(&state, &headers).await {
+        Ok(auth) => auth,
+        Err(error_response) => return error_response.into_response(),
+    };
+
+    if let Err(error_response) = require_admin(&auth) {
+        return error_response.into_response();
+    }
+
+    // Prevent self-deletion
+    if user_id == auth.user_id {
+        let error = ApiError {
+            error: "Cannot delete your own account".to_string(),
+            details: None,
+        };
+        return (StatusCode::BAD_REQUEST, Json(error)).into_response();
+    }
+
+    // Delete user from security manager
+    match state.security_manager.delete_user(&user_id).await {
+        Ok(_) => {
+            let response = serde_json::json!({
+                "message": "User deleted successfully",
+                "user_id": user_id
+            });
+            (StatusCode::OK, Json(response)).into_response()
+        }
+        Err(e) => {
+            // Check if it's a "user not found" error
+            let error = if e.to_string().contains("not found") {
+                ApiError {
+                    error: "User not found".to_string(),
+                    details: None,
+                }
+            } else {
+                ApiError {
+                    error: "Failed to delete user".to_string(),
+                    details: Some(e.to_string()),
+                }
+            };
+
+            let status = if e.to_string().contains("not found") {
+                StatusCode::NOT_FOUND
+            } else {
+                StatusCode::INTERNAL_SERVER_ERROR
+            };
+
+            (status, Json(error)).into_response()
+        }
+    }
+}
+async fn api_login(
+    State(state): State<DashboardState>,
+    Json(request): Json<LoginRequest>,
+) -> impl IntoResponse {
+    // Authenticate user
+    match state.security_manager.authenticate_user(&request.username, &request.password).await {
+        Ok(Some(user)) => {
+            // Generate JWT token
+            match state.security_manager.generate_jwt_token(&user).await {
+                Ok(token) => {
+                    let profile = UserProfile {
+                        id: user.id,
+                        username: user.username,
+                        email: user.email,
+                        role: format!("{:?}", user.role),
+                        last_login: user.last_login,
+                    };
+
+                    let response = LoginResponse {
+                        token,
+                        user: profile,
+                    };
+
+                    (StatusCode::OK, Json(response)).into_response()
+                }
+                Err(e) => {
+                    let error = ApiError {
+                        error: "Token generation failed".to_string(),
+                        details: Some(e.to_string()),
+                    };
+                    (StatusCode::INTERNAL_SERVER_ERROR, Json(error)).into_response()
+                }
+            }
+        }
+        Ok(None) => {
+            let error = ApiError {
+                error: "Invalid credentials".to_string(),
+                details: None,
+            };
+            (StatusCode::UNAUTHORIZED, Json(error)).into_response()
+        }
+        Err(e) => {
+            let error = ApiError {
+                error: "Authentication failed".to_string(),
+                details: Some(e.to_string()),
+            };
+            (StatusCode::INTERNAL_SERVER_ERROR, Json(error)).into_response()
+        }
+    }
+}
+
+async fn api_logout(
+    State(state): State<DashboardState>,
+    headers: axum::http::HeaderMap,
+) -> impl IntoResponse {
+    // Extract JWT from Authorization header
+    if let Some(auth_header) = headers.get("Authorization") {
+        if let Ok(auth_str) = auth_header.to_str() {
+            if let Some(token) = auth_str.strip_prefix("Bearer ") {
+                // Verify token and get claims to extract JTI
+                if let Ok(claims) = state.security_manager.verify_jwt_token(token).await {
+                    // Revoke the token
+                    if let Err(e) = state.security_manager.revoke_token(claims.jti).await {
+                        warn!("Failed to revoke token: {}", e);
+                    }
+                }
+            }
+        }
+    }
+
+    // Return success regardless - logout should always succeed from client perspective
+    Json(serde_json::json!({"message": "Logged out successfully"}))
+}
+
+async fn api_profile(
+    State(state): State<DashboardState>,
+    headers: axum::http::HeaderMap,
+) -> impl IntoResponse {
+    // Extract JWT from Authorization header
+    if let Some(auth_header) = headers.get("Authorization") {
+        if let Ok(auth_str) = auth_header.to_str() {
+            if let Some(token) = auth_str.strip_prefix("Bearer ") {
+                // Verify token
+                match state.security_manager.verify_jwt_token(token).await {
+                    Ok(claims) => {
+                        // Get user details
+                        let users = state.security_manager.users.read().await;
+                        if let Some(user) = users.get(&claims.sub) {
+                            let profile = UserProfile {
+                                id: user.id.clone(),
+                                username: user.username.clone(),
+                                email: user.email.clone(),
+                                role: format!("{:?}", user.role),
+                                last_login: user.last_login,
+                            };
+                            return (StatusCode::OK, Json(profile)).into_response();
+                        }
+                    }
+                    Err(e) => {
+                        let error = ApiError {
+                            error: "Invalid token".to_string(),
+                            details: Some(e.to_string()),
+                        };
+                        return (StatusCode::UNAUTHORIZED, Json(error)).into_response();
+                    }
+                }
+            }
+        }
+    }
+
+    let error = ApiError {
+        error: "Authorization header missing or invalid".to_string(),
+        details: None,
+    };
+    (StatusCode::UNAUTHORIZED, Json(error)).into_response()
+}
+
+/// Extract authentication context from request headers
+async fn extract_auth_context(
+    state: &DashboardState,
+    headers: &axum::http::HeaderMap,
+) -> Result<AuthContext, (StatusCode, Json<ApiError>)> {
+    // Extract JWT from Authorization header
+    let auth_header = headers
+        .get("Authorization")
+        .ok_or_else(|| {
+            let error = ApiError {
+                error: "Authorization header missing".to_string(),
+                details: None,
+            };
+            (StatusCode::UNAUTHORIZED, Json(error))
+        })?;
+
+    let auth_str = auth_header
+        .to_str()
+        .map_err(|_| {
+            let error = ApiError {
+                error: "Invalid Authorization header".to_string(),
+                details: None,
+            };
+            (StatusCode::UNAUTHORIZED, Json(error))
+        })?;
+
+    let token = auth_str
+        .strip_prefix("Bearer ")
+        .ok_or_else(|| {
+            let error = ApiError {
+                error: "Authorization header must be Bearer token".to_string(),
+                details: None,
+            };
+            (StatusCode::UNAUTHORIZED, Json(error))
+        })?;
+
+    // Verify token
+    let claims = state
+        .security_manager
+        .verify_jwt_token(token)
+        .await
+        .map_err(|e| {
+            let error = ApiError {
+                error: "Invalid token".to_string(),
+                details: Some(e.to_string()),
+            };
+            (StatusCode::UNAUTHORIZED, Json(error))
+        })?;
+
+    Ok(AuthContext {
+        user_id: claims.sub,
+        username: claims.username,
+        role: claims.role,
+    })
+}
+
+/// Check if user has admin role
+fn require_admin(auth: &AuthContext) -> Result<(), (StatusCode, Json<ApiError>)> {
+    match auth.role {
+        crate::security::UserRole::Admin => Ok(()),
+        _ => {
+            let error = ApiError {
+                error: "Admin access required".to_string(),
+                details: None,
+            };
+            Err((StatusCode::FORBIDDEN, Json(error)))
+        }
+    }
 }
 
 // Static file handlers
