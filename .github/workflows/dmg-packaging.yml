@@ -275,50 +275,10 @@ jobs:
           </plist>
           EOF
 
-      - name: Install Pillow for icon creation
+      - name: Skip icon creation (optional enhancement for later)
         run: |
-          pip3 install Pillow
-
-      - name: Create app icon (placeholder)
-        run: |
-          # Create a simple placeholder icon using iconutil
-          # In production, you'd want to include proper app icons
-          mkdir -p "Inferno.iconset"
-
-          # Create a simple 1024x1024 PNG (we'll use a solid color for now)
-          # You could replace this with actual icon files
-          python3 -c "
-          from PIL import Image
-          import os
-
-          # Create a gradient icon
-          size = 1024
-          img = Image.new('RGB', (size, size), '#FF6B35')
-
-          # Add some simple design elements
-          from PIL import ImageDraw, ImageFont
-          draw = ImageDraw.Draw(img)
-
-          # Draw a flame-like shape
-          draw.ellipse([200, 300, 824, 924], fill='#FF4500')
-          draw.ellipse([300, 200, 724, 624], fill='#FF6347')
-          draw.ellipse([400, 100, 624, 424], fill='#FFD700')
-
-          # Save icon
-          img.save('Inferno.iconset/icon_1024x1024.png')
-
-          # Create other required sizes
-          sizes = [16, 32, 64, 128, 256, 512]
-          for s in sizes:
-              resized = img.resize((s, s), Image.Resampling.LANCZOS)
-              resized.save(f'Inferno.iconset/icon_{s}x{s}.png')
-              if s <= 512:  # Also create @2x versions
-                  resized.save(f'Inferno.iconset/icon_{s//2}x{s//2}@2x.png')
-          "
-
-          # Convert to icns format
-          iconutil -c icns Inferno.iconset
-          cp Inferno.icns "Inferno.app/Contents/Resources/"
+          echo "Skipping icon creation for now - DMG will work without custom app icon"
+          # We can add proper icon creation later, focusing on core functionality first
 
       - name: Install create-dmg
         run: |
@@ -335,10 +295,9 @@ jobs:
           # Create symlink to Applications folder
           ln -s /Applications dmg-contents/Applications
 
-          # Create custom DMG with proper settings
+          # Create custom DMG with proper settings (without custom icon for now)
           create-dmg \
             --volname "Inferno ${{ steps.get_tag.outputs.tag }}" \
-            --volicon "Inferno.app/Contents/Resources/Inferno.icns" \
             --window-pos 200 120 \
             --window-size 800 450 \
             --icon-size 100 \
