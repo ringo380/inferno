@@ -295,7 +295,7 @@ jobs:
           # Create symlink to Applications folder
           ln -s /Applications dmg-contents/Applications
 
-          # Create custom DMG with proper settings (without custom icon for now)
+          # Create DMG with working options only (removed unsupported flags)
           create-dmg \
             --volname "Inferno ${{ steps.get_tag.outputs.tag }}" \
             --window-pos 200 120 \
@@ -304,9 +304,6 @@ jobs:
             --icon "Inferno.app" 200 190 \
             --hide-extension "Inferno.app" \
             --app-drop-link 600 185 \
-            --background-color "#2E3440" \
-            --text-size 16 \
-            --icon-text-size 14 \
             --format UDZO \
             --hdiutil-quiet \
             "inferno-universal-${{ steps.get_tag.outputs.tag }}.dmg" \
