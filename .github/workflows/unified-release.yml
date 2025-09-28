@@ -1,0 +1,211 @@
+name: Unified Release Pipeline
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., v0.3.0)'
+        required: true
+        type: string
+      release_type:
+        description: 'Release type'
+        required: true
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+          - prerelease
+
+jobs:
+  create-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    outputs:
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+      version: ${{ steps.version.outputs.version }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Determine version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            VERSION=${GITHUB_REF#refs/tags/}
+          else
+            VERSION=${{ github.event.inputs.version }}
+          fi
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "version_number=${VERSION#v}" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ steps.version.outputs.version }}
+          release_name: Release ${{ steps.version.outputs.version }}
+          body: |
+            ## 🔥 Inferno ${{ steps.version.outputs.version }}
+
+            ### Installation Options
+
+            #### 🍎 macOS
+            - **DMG Package**: `inferno-universal-${{ steps.version.outputs.version }}.dmg`
+            - **Homebrew**: `brew install ringo380/tap/inferno`
+            - **Direct Download**: Platform-specific binaries below
+
+            #### 🐳 Docker
+            ```bash
+            docker pull ghcr.io/ringo380/inferno:${{ steps.version.outputs.version_number }}
+            ```
+
+            #### 📦 Package Managers
+            - **Cargo**: `cargo install inferno`
+            - **NPM**: `npm install @ringo380/inferno-desktop`
+            - **GitHub Packages**: Available in Packages tab
+
+            ### What's New
+            - Enhanced upgrade system with automatic updates
+            - Improved performance and stability
+            - Bug fixes and improvements
+
+            ### Checksums
+            Checksums for all artifacts are available in `checksums.txt`
+
+          draft: false
+          prerelease: ${{ contains(steps.version.outputs.version, 'beta') || contains(steps.version.outputs.version, 'alpha') || contains(steps.version.outputs.version, 'rc') }}
+
+  # Trigger all package workflows
+  trigger-packages:
+    name: Trigger Package Builds
+    needs: create-release
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        workflow:
+          - dmg-packaging.yml
+          - docker-publish.yml
+          - cargo-publish.yml
+          - npm-publish.yml
+          - homebrew-update.yml
+
+    steps:
+      - name: Trigger ${{ matrix.workflow }}
+        uses: peter-evans/repository-dispatch@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          event-type: release-triggered
+          client-payload: '{"version": "${{ needs.create-release.outputs.version }}"}'
+
+  build-binaries:
+    name: Build Release Binaries
+    needs: create-release
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            artifact: inferno-linux-x86_64
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            artifact: inferno-linux-aarch64
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact: inferno-windows-x86_64.exe
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            artifact: inferno-macos-x86_64
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            artifact: inferno-macos-aarch64
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          target: ${{ matrix.target }}
+
+      - name: Build binary
+        run: |
+          cargo build --release --target ${{ matrix.target }}
+
+      - name: Package binary
+        run: |
+          if [ "${{ matrix.os }}" = "windows-latest" ]; then
+            cp target/${{ matrix.target }}/release/inferno.exe ${{ matrix.artifact }}
+          else
+            cp target/${{ matrix.target }}/release/inferno ${{ matrix.artifact }}
+            chmod +x ${{ matrix.artifact }}
+          fi
+        shell: bash
+
+      - name: Upload to release
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./${{ matrix.artifact }}
+          asset_name: ${{ matrix.artifact }}
+          asset_content_type: application/octet-stream
+
+  generate-checksums:
+    name: Generate Checksums
+    needs: [create-release, build-binaries]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download all artifacts
+        run: |
+          VERSION=${{ needs.create-release.outputs.version }}
+          REPO=${{ github.repository }}
+
+          # Download all release assets
+          gh release download ${VERSION} -R ${REPO} || true
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Generate checksums
+        run: |
+          sha256sum inferno-* > checksums.txt
+          cat checksums.txt
+
+      - name: Upload checksums
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./checksums.txt
+          asset_name: checksums.txt
+          asset_content_type: text/plain
+
+  notification:
+    name: Send Release Notifications
+    needs: [create-release, build-binaries, generate-checksums]
+    runs-on: ubuntu-latest
+    if: always()
+
+    steps:
+      - name: Notify success
+        if: success()
+        run: |
+          echo "✅ Release ${{ needs.create-release.outputs.version }} completed successfully!"
+          echo "📦 All packages have been published to their respective registries"
+
+      - name: Notify failure
+        if: failure()
+        run: |
+          echo "❌ Release ${{ needs.create-release.outputs.version }} failed!"
+          echo "Please check the workflow logs for details"

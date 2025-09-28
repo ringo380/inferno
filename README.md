@@ -37,35 +37,167 @@ Inferno is a **production-ready AI inference server** that runs entirely on your
 
 ## 📦 Installation
 
-### macOS (Recommended)
+Choose your preferred installation method:
 
-#### Option 1: Download DMG Package
+### 🍎 macOS
+
+#### DMG Package (Easiest)
 1. Visit [Releases](https://github.com/ringo380/inferno/releases/latest)
-2. Download `inferno-universal-vX.X.X.dmg` (supports both Intel and Apple Silicon)
-3. Open the DMG file
-4. Drag Inferno.app to your Applications folder
-5. Launch Inferno from Applications or use `inferno` command in Terminal
+2. Download `inferno-universal-vX.X.X.dmg` (universal binary for Intel & Apple Silicon)
+3. Open the DMG file and drag Inferno to Applications
+4. Launch from Applications or use `inferno` command in Terminal
 
-#### Option 2: Install Script
+#### Homebrew
+```bash
+# Add tap and install
+brew tap ringo380/tap
+brew install inferno
+
+# Or directly
+brew install ringo380/tap/inferno
+
+# Start as service
+brew services start inferno
+```
+
+#### Quick Install Script
 ```bash
 curl -sSL https://github.com/ringo380/inferno/releases/latest/download/install-inferno.sh | bash
 ```
 
-#### Option 3: Build from Source
+### 🐳 Docker
+
+#### GitHub Container Registry
 ```bash
-git clone https://github.com/ringo380/inferno.git
-cd inferno
-cargo build --release
+# Pull the latest image
+docker pull ghcr.io/ringo380/inferno:latest
+
+# Run with GPU support
+docker run --gpus all -p 8080:8080 ghcr.io/ringo380/inferno:latest
+
+# With custom models directory
+docker run -v /path/to/models:/home/inferno/.inferno/models \
+           -p 8080:8080 ghcr.io/ringo380/inferno:latest
 ```
 
-### Upgrading
+#### Docker Compose
+```yaml
+version: '3.8'
+services:
+  inferno:
+    image: ghcr.io/ringo380/inferno:latest
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./models:/home/inferno/.inferno/models
+      - ./config:/home/inferno/.inferno/config
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+```
 
-**From DMG**: The application automatically detects existing installations and preserves your settings during upgrade.
+### 📦 Package Managers
 
-**From Terminal**:
+#### Cargo (Rust)
+```bash
+# From crates.io
+cargo install inferno
+
+# From GitHub Packages
+cargo install --registry github inferno
+```
+
+#### NPM (Desktop App)
+```bash
+# From GitHub Packages
+npm install @ringo380/inferno-desktop
+
+# From npm registry
+npm install inferno-desktop
+```
+
+### 🐧 Linux
+
+#### Binary Download
+```bash
+# Download for your architecture
+wget https://github.com/ringo380/inferno/releases/latest/download/inferno-linux-x86_64
+# or
+wget https://github.com/ringo380/inferno/releases/latest/download/inferno-linux-aarch64
+
+# Make executable and move to PATH
+chmod +x inferno-linux-*
+sudo mv inferno-linux-* /usr/local/bin/inferno
+```
+
+### 🪟 Windows
+
+#### Binary Download
+1. Download `inferno-windows-x86_64.exe` from [Releases](https://github.com/ringo380/inferno/releases/latest)
+2. Add to your PATH or run directly
+
+#### Via Cargo
+```powershell
+cargo install inferno
+```
+
+### 🔨 Build from Source
+
+```bash
+# Clone the repository
+git clone https://github.com/ringo380/inferno.git
+cd inferno
+
+# Build release binary
+cargo build --release
+
+# Install globally (optional)
+cargo install --path .
+
+# Build desktop app (optional)
+cd desktop-app && npm install && npm run build
+```
+
+### ⬆️ Upgrading
+
+#### Automatic Updates (Built-in)
 ```bash
 inferno upgrade check     # Check for updates
 inferno upgrade install   # Install latest version
+```
+
+#### Package Managers
+```bash
+# Homebrew
+brew upgrade inferno
+
+# Docker
+docker pull ghcr.io/ringo380/inferno:latest
+
+# Cargo
+cargo install inferno --force
+
+# NPM
+npm update @ringo380/inferno-desktop
+```
+
+**Note**: DMG and installer packages automatically detect existing installations and preserve your settings during upgrade.
+
+### 🔐 Verify Installation
+
+```bash
+# Check version
+inferno --version
+
+# Verify GPU support
+inferno gpu status
+
+# Run health check
+inferno doctor
 ```
 
 ## 🚀 Quick Start

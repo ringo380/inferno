@@ -1,0 +1,57 @@
+{
+  "name": "@ringo380/inferno-desktop",
+  "version": "0.3.0",
+  "description": "Inferno Desktop - Enterprise AI/ML model runner with GUI",
+  "author": "Inferno Developers",
+  "license": "MIT OR Apache-2.0",
+  "main": "dist/index.js",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ringo380/inferno.git"
+  },
+  "homepage": "https://github.com/ringo380/inferno#readme",
+  "bugs": {
+    "url": "https://github.com/ringo380/inferno/issues"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com",
+    "access": "public"
+  },
+  "keywords": [
+    "ai",
+    "ml",
+    "gguf",
+    "onnx",
+    "inference",
+    "desktop",
+    "tauri"
+  ],
+  "files": [
+    "dist",
+    "src-tauri",
+    "public",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "dev": "npm run tauri dev",
+    "build": "npm run tauri build",
+    "tauri": "tauri",
+    "prepublishOnly": "npm run build"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^1.5.0",
+    "@tauri-apps/api": "^1.5.0",
+    "@vitejs/plugin-react": "^4.0.0",
+    "vite": "^5.0.0"
+  },
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
+  }
+}
