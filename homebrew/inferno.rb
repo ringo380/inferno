@@ -8,16 +8,16 @@ class Inferno < Formula
   # Platform-specific downloads
   if OS.mac?
     if Hardware::CPU.arm?
-      url "https://github.com/ringo380/inferno/releases/download/v#{version}/inferno-macos-aarch64"
-      sha256 "AARCH64_SHA256_PLACEHOLDER"
+      url "https://github.com/ringo380/inferno/releases/download/v#{version}/inferno-macos-arm64"
+      sha256 "ARM64_SHA256_PLACEHOLDER"
     else
       url "https://github.com/ringo380/inferno/releases/download/v#{version}/inferno-macos-x86_64"
       sha256 "X86_64_SHA256_PLACEHOLDER"
     end
   elsif OS.linux?
     if Hardware::CPU.arm?
-      url "https://github.com/ringo380/inferno/releases/download/v#{version}/inferno-linux-aarch64"
-      sha256 "LINUX_AARCH64_SHA256_PLACEHOLDER"
+      url "https://github.com/ringo380/inferno/releases/download/v#{version}/inferno-linux-arm64"
+      sha256 "LINUX_ARM64_SHA256_PLACEHOLDER"
     else
       url "https://github.com/ringo380/inferno/releases/download/v#{version}/inferno-linux-x86_64"
       sha256 "LINUX_X86_64_SHA256_PLACEHOLDER"
