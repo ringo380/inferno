@@ -175,10 +175,16 @@ jobs:
           # Upload individual binaries as release assets
           if [ "${{ github.event_name }}" = "release" ]; then
             echo "Uploading individual architecture binaries to release..."
+
+            # Rename binaries to proper names for upload
+            cp binaries/x86_64/inferno inferno-macos-x86_64
+            cp binaries/aarch64/inferno inferno-macos-aarch64
+
+            # Upload to release
             gh release upload ${{ steps.get_tag.outputs.tag }} \
-              binaries/x86_64/inferno#inferno-macos-x86_64 \
-              binaries/aarch64/inferno#inferno-macos-aarch64 \
-              --clobber
+              inferno-macos-x86_64 \
+              inferno-macos-aarch64 \
+              --clobber || echo "Failed to upload binaries, continuing..."
           fi
         env:
           GH_TOKEN: ${{ github.token }}
@@ -323,34 +329,17 @@ jobs:
 
       - name: Upload DMG to release
         if: github.event_name == 'release'
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ github.event.release.upload_url }}
-          asset_path: ./inferno-universal-${{ steps.get_tag.outputs.tag }}.dmg
-          asset_name: inferno-universal-${{ steps.get_tag.outputs.tag }}.dmg
-          asset_content_type: application/octet-stream
-
-      - name: Upload to GitHub Packages Registry
-        if: github.event_name == 'release'
         run: |
-          # Upload DMG as a generic package
-          VERSION=${{ steps.get_tag.outputs.tag }}
-          DMG_FILE="inferno-universal-${VERSION}.dmg"
+          DMG_FILE="inferno-universal-${{ steps.get_tag.outputs.tag }}.dmg"
 
-          # Create package metadata
-          PACKAGE_URL="https://github.com/${{ github.repository }}/packages"
+          echo "Uploading DMG to release..."
+          gh release upload ${{ steps.get_tag.outputs.tag }} \
+            "${DMG_FILE}" \
+            --clobber
 
-          # Upload to GitHub Packages using API
-          curl -X PUT \
-            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-            -H "Content-Type: application/octet-stream" \
-            -T "${DMG_FILE}" \
-            "https://uploads.github.com/repos/${{ github.repository }}/releases/assets?name=${DMG_FILE}"
-
-          echo "DMG package uploaded to GitHub Packages"
-          echo "Package URL: ${PACKAGE_URL}"
+          echo "DMG successfully uploaded to release!"
+        env:
+          GH_TOKEN: ${{ github.token }}
 
       - name: Upload DMG as artifact (workflow_dispatch)
         if: github.event_name == 'workflow_dispatch'
