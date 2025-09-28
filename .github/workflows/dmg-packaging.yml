@@ -55,21 +55,23 @@ jobs:
 
       - name: Build macOS binaries
         run: |
-          # Allow warnings for now to get builds working
+          # Optimize build settings for faster compilation
           export RUSTFLAGS="-A warnings"
+          export CARGO_INCREMENTAL=1
+          export CARGO_NET_RETRY=10
 
           # Create directories for binaries
           mkdir -p binaries/x86_64
           mkdir -p binaries/aarch64
 
-          # Build for x86_64
+          # Build for x86_64 first (most common architecture)
           echo "Building for x86_64-apple-darwin..."
-          cargo build --release --target x86_64-apple-darwin --bin inferno
+          timeout 10m cargo build --release --target x86_64-apple-darwin --bin inferno
           cp target/x86_64-apple-darwin/release/inferno binaries/x86_64/
 
-          # Build for aarch64 (ARM64)
+          # Build for aarch64 (ARM64) with timeout to prevent hanging
           echo "Building for aarch64-apple-darwin..."
-          cargo build --release --target aarch64-apple-darwin --bin inferno
+          timeout 10m cargo build --release --target aarch64-apple-darwin --bin inferno
           cp target/aarch64-apple-darwin/release/inferno binaries/aarch64/
 
           # Make binaries executable
