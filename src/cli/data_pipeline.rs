@@ -1,5 +1,5 @@
 use anyhow::Result;
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use clap::{Args, Subcommand};
 use serde::Serialize;
 use serde_json::{json, Value};
@@ -3135,14 +3135,10 @@ fn validate_pipeline_config(config: &DataPipelineConfig) -> Result<()> {
     }
 
     // Validate stages if present
-    if let Some(ref stages) = config.stages {
-        if stages.is_empty() {
-            return Err(anyhow::anyhow!("Pipeline must have at least one stage"));
-        }
-
+    if !config.stages.is_empty() {
         // Check for duplicate stage names
         let mut stage_names = std::collections::HashSet::new();
-        for stage in stages {
+        for stage in &config.stages {
             if !stage_names.insert(&stage.name) {
                 return Err(anyhow::anyhow!(
                     "Duplicate stage name: '{}'",
@@ -3150,63 +3146,31 @@ fn validate_pipeline_config(config: &DataPipelineConfig) -> Result<()> {
                 ));
             }
 
-            // Validate individual stage
-            validate_stage_config(stage)?;
+            // Validate individual stage (convert PipelineTask to basic validation)
+            validate_pipeline_task_config(stage)?;
         }
 
         // Validate stage dependencies
-        for stage in stages {
-            if let Some(ref depends_on) = stage.depends_on {
-                for dependency in depends_on {
-                    if !stage_names.contains(dependency) {
-                        return Err(anyhow::anyhow!(
-                            "Stage '{}' depends on non-existent stage '{}'",
-                            stage.name,
-                            dependency
-                        ));
-                    }
+        for stage in &config.stages {
+            for dependency in &stage.dependencies {
+                if !stage_names.contains(dependency) {
+                    return Err(anyhow::anyhow!(
+                        "Stage '{}' depends on non-existent stage '{}'",
+                        stage.name,
+                        dependency
+                    ));
                 }
             }
         }
 
         // Check for circular dependencies
-        validate_no_circular_dependencies(stages)?;
+        validate_no_circular_dependencies_tasks(&config.stages)?;
     }
 
-    // Validate schedule if it's a batch pipeline with schedule
+    // Validate orchestration schedule for batch pipelines
     if config.pipeline_type == PipelineType::Batch {
-        if let Some(ref schedule) = config.schedule {
-            validate_cron_expression(schedule)?;
-        }
-    }
-
-    // Validate resource constraints
-    if let Some(ref resources) = config.resource_constraints {
-        if let Some(memory_mb) = resources.memory_mb {
-            if memory_mb == 0 {
-                return Err(anyhow::anyhow!("Memory constraint must be greater than 0"));
-            }
-            if memory_mb > 32768 { // 32GB limit
-                return Err(anyhow::anyhow!("Memory constraint too high. Maximum is 32GB"));
-            }
-        }
-
-        if let Some(cpu_cores) = resources.cpu_cores {
-            if cpu_cores == 0.0 {
-                return Err(anyhow::anyhow!("CPU constraint must be greater than 0"));
-            }
-            if cpu_cores > 64.0 {
-                return Err(anyhow::anyhow!("CPU constraint too high. Maximum is 64 cores"));
-            }
-        }
-
-        if let Some(timeout_seconds) = resources.timeout_seconds {
-            if timeout_seconds == 0 {
-                return Err(anyhow::anyhow!("Timeout must be greater than 0"));
-            }
-            if timeout_seconds > 86400 { // 24 hours
-                return Err(anyhow::anyhow!("Timeout too high. Maximum is 24 hours"));
-            }
+        if let Some(ref cron_expr) = config.orchestration.scheduler.cron_expression {
+            validate_cron_expression(cron_expr)?;
         }
     }
 
@@ -3233,19 +3197,15 @@ fn validate_stage_config(stage: &crate::data_pipeline::Stage) -> Result<()> {
         ));
     }
 
-    // Validate stage type
-    if stage.stage_type.trim().is_empty() {
-        return Err(anyhow::anyhow!("Stage type cannot be empty"));
-    }
-
-    // Validate known stage types
-    let valid_types = ["extract", "transform", "load", "validate", "filter", "aggregate", "enrich", "split", "deduplicate"];
-    let stage_type_lower = stage.stage_type.to_lowercase();
-    if !valid_types.contains(&stage_type_lower.as_str()) && !stage_type_lower.starts_with("custom_") {
-        println!("Warning: Unknown stage type '{}'. Consider using one of: {}",
-            stage.stage_type,
-            valid_types.join(", ")
-        );
+    // Validate stage type (stage_type is an enum, no need to check if empty)
+    match stage.stage_type {
+        crate::data_pipeline::StageType::Source => {},
+        crate::data_pipeline::StageType::Transform => {},
+        crate::data_pipeline::StageType::Filter => {},
+        crate::data_pipeline::StageType::Aggregate => {},
+        crate::data_pipeline::StageType::Join => {},
+        crate::data_pipeline::StageType::Sink => {},
+        crate::data_pipeline::StageType::Custom => {},
     }
 
     Ok(())
@@ -3258,7 +3218,7 @@ fn validate_no_circular_dependencies(stages: &[crate::data_pipeline::Stage]) -> 
 
     // Build dependency graph
     for stage in stages {
-        let deps = stage.depends_on.as_ref().map(|d| d.iter().collect()).unwrap_or_else(Vec::new);
+        let deps: Vec<&String> = stage.dependencies.iter().collect();
         graph.insert(&stage.name, deps);
     }
 
@@ -3536,4 +3496,76 @@ impl ValidationSeverity {
     const HIGH: Self = Self;
     const MEDIUM: Self = Self;
     const LOW: Self = Self;
+}
+
+fn validate_pipeline_task_config(task: &crate::data_pipeline::PipelineTask) -> Result<()> {
+    // Validate task name
+    if task.name.trim().is_empty() {
+        return Err(anyhow::anyhow!("Task name cannot be empty"));
+    }
+
+    if task.name.len() > 64 {
+        return Err(anyhow::anyhow!(
+            "Task name '{}' is too long. Maximum length is 64 characters",
+            task.name
+        ));
+    }
+
+    // Validate task ID
+    if task.id.trim().is_empty() {
+        return Err(anyhow::anyhow!("Task ID cannot be empty"));
+    }
+
+    Ok(())
+}
+
+fn validate_no_circular_dependencies_tasks(tasks: &[crate::data_pipeline::PipelineTask]) -> Result<()> {
+    use std::collections::{HashMap, HashSet};
+
+    let mut graph: HashMap<&String, Vec<&String>> = HashMap::new();
+
+    // Build dependency graph
+    for task in tasks {
+        let deps: Vec<&String> = task.dependencies.iter().collect();
+        graph.insert(&task.name, deps);
+    }
+
+    // Check for cycles using DFS
+    fn has_cycle(
+        node: &String,
+        graph: &HashMap<&String, Vec<&String>>,
+        visited: &mut HashSet<String>,
+        rec_stack: &mut HashSet<String>,
+    ) -> bool {
+        visited.insert(node.clone());
+        rec_stack.insert(node.clone());
+
+        if let Some(neighbors) = graph.get(node) {
+            for neighbor in neighbors {
+                if !visited.contains(*neighbor) {
+                    if has_cycle(neighbor, graph, visited, rec_stack) {
+                        return true;
+                    }
+                } else if rec_stack.contains(*neighbor) {
+                    return true;
+                }
+            }
+        }
+
+        rec_stack.remove(node);
+        false
+    }
+
+    let mut visited = HashSet::new();
+    let mut rec_stack = HashSet::new();
+
+    for task in tasks {
+        if !visited.contains(&task.name) {
+            if has_cycle(&task.name, &graph, &mut visited, &mut rec_stack) {
+                return Err(anyhow::anyhow!("Circular dependency detected in pipeline tasks"));
+            }
+        }
+    }
+
+    Ok(())
 }

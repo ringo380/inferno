@@ -886,8 +886,8 @@ async fn stress_test(
                 // Monitor memory usage periodically
                 if client_requests % 10 == 0 {
                     let memory_usage = get_current_memory_usage();
-                    if memory_usage > peak_memory {
-                        peak_memory = memory_usage;
+                    if memory_usage.rss > peak_memory {
+                        peak_memory = memory_usage.rss;
                     }
                 }
             }
@@ -943,10 +943,11 @@ async fn stress_test(
 
     // Calculate response time statistics
     response_times.sort_by(|a, b| a.partial_cmp(b).unwrap());
-    let avg_response_time = response_times.iter().sum::<f64>() / response_times.len() as f64;
-    let p50 = percentile(&response_times, 0.5);
-    let p95 = percentile(&response_times, 0.95);
-    let p99 = percentile(&response_times, 0.99);
+    let response_times_secs: Vec<f64> = response_times.iter().map(|d| d.as_secs_f64()).collect();
+    let avg_response_time = response_times_secs.iter().sum::<f64>() / response_times_secs.len() as f64;
+    let p50 = percentile(&response_times_secs, 50.0);
+    let p95 = percentile(&response_times_secs, 95.0);
+    let p99 = percentile(&response_times_secs, 99.0);
 
     // Display results
     println!("\n{}", "=".repeat(60));
@@ -1021,17 +1022,25 @@ async fn memory_profile(
              baseline_memory.heap_used as f64 / 1024.0 / 1024.0);
 
     // Load backend for testing
-    let backend_type = BackendType::GGUF; // Default for memory profiling
-    let mut backend = Backend::new(backend_type);
+    #[cfg(feature = "gguf")]
+    let backend_type = BackendType::Gguf; // Default for memory profiling
+    #[cfg(not(feature = "gguf"))]
+    let backend_type = BackendType::None; // Default when no features enabled
+    let backend_config = BackendConfig::default();
+    let mut backend = Backend::new(backend_type, &backend_config)?;
 
     // Profile model loading
     if let Some(ref model) = model_name {
         let model_info = ModelInfo {
             name: model.clone(),
-            backend_type,
+            path: std::path::PathBuf::from(format!("models/{}", model)),
             file_path: std::path::PathBuf::from(format!("models/{}", model)),
+            size: 0,
             size_bytes: 0,
+            modified: chrono::Utc::now(),
+            backend_type: "gguf".to_string(),
             format: "gguf".to_string(),
+            checksum: None,
             metadata: std::collections::HashMap::new(),
         };
 
@@ -1057,10 +1066,11 @@ async fn memory_profile(
     // Run inference cycles with memory tracking
     let test_prompt = "What is artificial intelligence?";
     let params = InferenceParams {
-        max_tokens: Some(50),
-        temperature: Some(0.7),
-        top_p: Some(0.9),
-        stop_sequences: None,
+        max_tokens: 50,
+        temperature: 0.7,
+        top_p: 0.9,
+        stream: false,
+        stop_sequences: vec![],
         seed: Some(42),
     };
 
@@ -1186,17 +1196,20 @@ async fn get_memory_usage() -> Result<MemoryUsage> {
     #[cfg(not(target_os = "linux"))]
     {
         // Fallback for other platforms using sysinfo
-        let process = system.processes().values().find(|p| p.pid().as_u32() == std::process::id());
+        use sysinfo::PidExt;
+        let current_pid = sysinfo::Pid::from_u32(std::process::id());
+        let process = system.processes().get(&current_pid);
 
         if let Some(process) = process {
-            let memory = process.memory(); // Already in bytes in newer sysinfo
-            let virtual_memory = process.virtual_memory(); // Already in bytes in newer sysinfo
+            use sysinfo::ProcessExt;
+            let memory = process.memory(); // In KB, convert to bytes
+            let virtual_memory = process.virtual_memory(); // In KB, convert to bytes
 
             Ok(MemoryUsage {
-                heap_used: memory,
-                heap_total: virtual_memory,
-                rss: memory,
-                vms: virtual_memory,
+                heap_used: memory * 1024,
+                heap_total: virtual_memory * 1024,
+                rss: memory * 1024,
+                vms: virtual_memory * 1024,
             })
         } else {
             // Fallback values if process not found
@@ -1394,5 +1407,30 @@ fn percentile(sorted_data: &[f64], percentile: f64) -> f64 {
     } else {
         let weight = index - lower as f64;
         sorted_data[lower] * (1.0 - weight) + sorted_data[upper] * weight
+    }
+}
+
+async fn simulate_inference_request(
+    model: &str,
+    input: &str,
+) -> Result<Duration> {
+    let start = Instant::now();
+
+    // Simulate processing time based on input length
+    let processing_time_ms = (input.len() as u64 * 10).max(50);
+    tokio::time::sleep(Duration::from_millis(processing_time_ms)).await;
+
+    Ok(start.elapsed())
+}
+
+fn get_current_memory_usage() -> MemoryUsage {
+    let mut system = System::new_all();
+    system.refresh_memory();
+
+    MemoryUsage {
+        heap_used: system.used_memory(),
+        heap_total: system.total_memory(),
+        rss: system.used_memory(),
+        vms: system.total_memory(),
     }
 }

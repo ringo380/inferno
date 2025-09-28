@@ -1,6 +1,6 @@
 use crate::{
     config::Config,
-    gpu::{ComputeCapability, GpuConfiguration, GpuManager, GpuPowerState, GpuStatus, GpuVendor},
+    gpu::{GpuConfiguration, GpuManager, GpuStatus, GpuVendor},
 };
 use anyhow::Result;
 use clap::{Args, Subcommand, ValueEnum};
@@ -253,6 +253,17 @@ pub enum PowerState {
     Performance,
     Balanced,
     PowerSaver,
+}
+
+impl From<PowerState> for crate::gpu::GpuPowerState {
+    fn from(state: PowerState) -> Self {
+        match state {
+            PowerState::Auto => crate::gpu::GpuPowerState::Balanced,
+            PowerState::Performance => crate::gpu::GpuPowerState::Performance,
+            PowerState::Balanced => crate::gpu::GpuPowerState::Balanced,
+            PowerState::PowerSaver => crate::gpu::GpuPowerState::PowerSaver,
+        }
+    }
 }
 
 pub async fn execute(args: GpuArgs, _config: &Config) -> Result<()> {
@@ -615,11 +626,8 @@ pub async fn execute(args: GpuArgs, _config: &Config) -> Result<()> {
                 "Setting power management for GPU {} to {:?}...",
                 gpu_id, state
             );
-            if manager.set_gpu_power_state(gpu_id, state).await? {
-                println!("Successfully updated power state for GPU {}", gpu_id);
-            } else {
-                println!("Failed to update power state for GPU {} (not supported or unavailable)", gpu_id);
-            }
+            manager.set_gpu_power_state(gpu_id, state.into()).await?;
+            println!("Successfully updated power state for GPU {}", gpu_id);
         }
 
         GpuCommand::Reset { gpu_id, force } => {
@@ -634,11 +642,8 @@ pub async fn execute(args: GpuArgs, _config: &Config) -> Result<()> {
             }
 
             println!("Resetting GPU {}...", gpu_id);
-            if manager.reset_gpu(gpu_id).await? {
-                println!("Successfully reset GPU {}", gpu_id);
-            } else {
-                println!("Failed to reset GPU {} (not supported or unavailable)", gpu_id);
-            }
+            manager.reset_gpu(gpu_id).await?;
+            println!("Successfully reset GPU {}", gpu_id);
         }
     }
 

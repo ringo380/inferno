@@ -316,10 +316,14 @@ async fn deep_validate_model(path: &PathBuf, config: &Config) -> Result<bool> {
     let model_info = ModelInfo {
         name: path.file_name().unwrap().to_string_lossy().to_string(),
         path: path.clone(),
+        file_path: path.clone(),
         size: tokio::fs::metadata(path).await?.len(),
+        size_bytes: tokio::fs::metadata(path).await?.len(),
         modified: chrono::DateTime::from(tokio::fs::metadata(path).await?.modified()?),
         backend_type: backend_type.to_string(),
+        format: path.extension().and_then(|ext| ext.to_str()).unwrap_or("unknown").to_string(),
         checksum: None,
+        metadata: std::collections::HashMap::new(),
     };
 
     match backend.load_model(&model_info).await {
@@ -333,6 +337,8 @@ async fn deep_validate_model(path: &PathBuf, config: &Config) -> Result<bool> {
                 temperature: 0.7,
                 top_p: 0.9,
                 stream: false,
+                stop_sequences: vec![],
+                seed: None,
             };
 
             match backend.infer(test_input, &inference_params).await {

@@ -40,6 +40,7 @@ pub mod run;
 pub mod security;
 pub mod serve;
 pub mod streaming;
+pub mod upgrade;
 pub mod validate;
 pub mod versioning;
 
@@ -194,6 +195,9 @@ pub enum Commands {
 
     #[command(about = "Performance benchmarking and baseline establishment")]
     PerformanceBenchmark(performance_benchmark::PerformanceBenchmarkArgs),
+
+    #[command(about = "Application upgrade and update management")]
+    Upgrade(upgrade::UpgradeArgs),
 
     #[command(about = "Launch terminal user interface")]
     Tui,

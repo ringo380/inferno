@@ -85,6 +85,7 @@ pub enum GpuPowerState {
     Balanced,
     PowerSaver,
     Minimal,
+    Auto,  // Added missing variant
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -698,6 +699,7 @@ impl GpuManager {
                 allocated_at: SystemTime::now(),
                 process_id: None,
                 model_name: model_name.clone(),
+                estimated_duration: None,
             };
 
             // Add allocation
@@ -784,9 +786,11 @@ impl GpuManager {
     // Helper methods for vendor-specific power management
     async fn set_nvidia_power_state(&self, gpu_id: u32, power_state: &GpuPowerState) -> Result<()> {
         let power_limit = match power_state {
-            GpuPowerState::PowerSaver => "150", // Lower power limit
-            GpuPowerState::Balanced => "250",   // Default power limit
+            GpuPowerState::Maximum => "400",     // Maximum power limit
             GpuPowerState::Performance => "350", // Higher power limit
+            GpuPowerState::Balanced => "250",   // Default power limit
+            GpuPowerState::PowerSaver => "150", // Lower power limit
+            GpuPowerState::Minimal => "100",    // Minimal power limit
             GpuPowerState::Auto => return Ok(()), // Let driver decide
         };
 
@@ -813,9 +817,11 @@ impl GpuManager {
     async fn set_amd_power_state(&self, gpu_id: u32, power_state: &GpuPowerState) -> Result<()> {
         // AMD GPU power management using rocm-smi
         let power_profile = match power_state {
-            GpuPowerState::PowerSaver => "1", // Power saving profile
-            GpuPowerState::Balanced => "0",   // Default profile
+            GpuPowerState::Maximum => "3",     // Maximum profile
             GpuPowerState::Performance => "2", // Performance profile
+            GpuPowerState::Balanced => "0",   // Default profile
+            GpuPowerState::PowerSaver => "1", // Power saving profile
+            GpuPowerState::Minimal => "4",    // Minimal profile
             GpuPowerState::Auto => return Ok(()), // Let driver decide
         };
 

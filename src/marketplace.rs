@@ -101,6 +101,7 @@ pub struct InstalledPackage {
 pub struct DependencyResolver {
     package_db: PackageDatabase,
     repositories: Vec<Repository>,
+    registry_client: RegistryClient,
 }
 
 #[derive(Debug, Clone)]
@@ -133,7 +134,18 @@ pub struct ModelListing {
     pub rating: Option<f32>,
     pub tags: Vec<String>,
     pub dependencies: Vec<ModelDependency>,
+    pub pricing: PricingInfo,
+    pub ratings: RatingInfo,
+    pub created_at: DateTime<Utc>,
+    pub visibility: ModelVisibility,
+    pub verified: bool,
+    pub documentation_url: Option<String>,
+    pub demo_url: Option<String>,
+    pub paper_url: Option<String>,
+    pub source_url: Option<String>,
 }
+
+// Removed duplicate definitions - using the original ones below
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ModelCategory {
@@ -145,6 +157,10 @@ pub enum ModelCategory {
     ClassificationModel,
     GenerativeModel,
     ReinforcementLearning,
+    Language,
+    Vision,
+    Audio,
+    TextGeneration,
     Other(String),
 }
 
@@ -182,6 +198,7 @@ pub struct PerformanceMetrics {
     pub latency_ms: Option<f64>,
     pub benchmark_scores: HashMap<String, f64>,
     pub energy_efficiency: Option<f64>,
+    pub energy_efficiency_tokens_per_joule: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -217,7 +234,7 @@ pub struct SearchResult {
     pub facets: SearchFacets,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct SearchFacets {
     pub categories: HashMap<String, usize>,
     pub publishers: HashMap<String, usize>,
@@ -478,7 +495,7 @@ impl ModelMarketplace {
         };
 
         let dependency_resolver =
-            DependencyResolver::new(package_db.clone(), config.repositories.clone());
+            DependencyResolver::new(package_db.clone(), config.repositories.clone(), (*registry_client).clone());
 
         Ok(Self {
             config,
@@ -1328,9 +1345,11 @@ struct SystemInfo {
     cpu_features: Vec<String>,
 }
 
+#[derive(Debug, Clone)]
 pub struct RegistryClient {
     base_url: String,
     auth_config: AuthenticationConfig,
+    repositories: Vec<Repository>,
     #[cfg(feature = "download")]
     client: reqwest::Client,
 }
@@ -1347,6 +1366,7 @@ impl RegistryClient {
         Ok(Self {
             base_url: config.registry_url.clone(),
             auth_config: config.authentication.clone(),
+            repositories: config.repositories.clone(),
             #[cfg(feature = "download")]
             client,
         })
@@ -1546,14 +1566,18 @@ impl RegistryClient {
             performance: PerformanceMetrics {
                 inference_speed_tokens_per_sec: Some(50.0),
                 memory_usage_gb: Some(4.0),
-                energy_efficiency_tokens_per_joule: None,
-                latency_ms: Some(100.0),
                 throughput_requests_per_sec: Some(10.0),
+                latency_ms: Some(100.0),
+                benchmark_scores: std::collections::HashMap::new(),
+                energy_efficiency: None,
+                energy_efficiency_tokens_per_joule: None,
             },
             pricing: PricingInfo {
                 free: true,
+                price_per_download: None,
                 price_per_token: None,
                 subscription_tiers: vec![],
+                usage_based: None,
                 usage_limits: None,
             },
             ratings: RatingInfo {
@@ -1572,6 +1596,8 @@ impl RegistryClient {
             demo_url: None,
             paper_url: None,
             source_url: Some(repo_url.to_string()),
+            published_at: chrono::Utc::now(),
+            rating: None,
         };
 
         Ok(vec![model])
@@ -1635,7 +1661,7 @@ impl RegistryClient {
             }
 
             if let Some(min_rating) = filters.min_rating {
-                if model.ratings.average_rating < min_rating {
+                if model.ratings.average_rating < min_rating as f64 {
                     return false;
                 }
             }
@@ -1830,21 +1856,21 @@ impl RegistryClient {
             category: request.metadata.category.clone(),
             license: request.metadata.license.clone(),
             size_bytes: request.metadata.size_bytes,
-            download_url: request.file_path.to_string_lossy().to_string(),
-            checksum: self.calculate_file_checksum(&request.file_path)?,
+            download_url: request.model_path.to_string_lossy().to_string(),
+            checksum: self.calculate_file_checksum(&request.model_path)?,
             signature: None,
             metadata: ModelMetadata {
-                framework: request.metadata.framework.clone(),
-                format: request.metadata.format.clone(),
-                precision: request.metadata.precision.clone(),
-                quantization: request.metadata.quantization.clone(),
-                context_length: request.metadata.context_length,
-                parameters: request.metadata.parameters,
-                vocab_size: request.metadata.vocab_size,
-                input_types: request.metadata.input_types.clone(),
-                output_types: request.metadata.output_types.clone(),
-                languages: request.metadata.languages.clone(),
-                domains: request.metadata.domains.clone(),
+                framework: request.metadata.metadata.framework.clone(),
+                format: request.metadata.metadata.format.clone(),
+                precision: request.metadata.metadata.precision.clone(),
+                quantization: request.metadata.metadata.quantization.clone(),
+                context_length: request.metadata.metadata.context_length,
+                parameters: request.metadata.metadata.parameters.clone(),
+                vocab_size: request.metadata.metadata.vocab_size,
+                input_types: request.metadata.metadata.input_types.clone(),
+                output_types: request.metadata.metadata.output_types.clone(),
+                languages: request.metadata.metadata.languages.clone(),
+                domains: request.metadata.metadata.domains.clone(),
             },
             compatibility: request.metadata.compatibility.clone(),
             performance: request.metadata.performance.clone(),
@@ -1865,6 +1891,8 @@ impl RegistryClient {
             demo_url: request.metadata.demo_url.clone(),
             paper_url: request.metadata.paper_url.clone(),
             source_url: request.metadata.source_url.clone(),
+            published_at: chrono::Utc::now(),
+            rating: None,
         };
 
         // Store in local registry (in real implementation, this would be a database)
@@ -1886,12 +1914,12 @@ impl RegistryClient {
             return Err(anyhow::anyhow!("Publisher name cannot be empty"));
         }
 
-        if !request.file_path.exists() {
-            return Err(anyhow::anyhow!("Model file does not exist: {}", request.file_path.display()));
+        if !request.model_path.exists() {
+            return Err(anyhow::anyhow!("Model file does not exist: {}", request.model_path.display()));
         }
 
         // Validate file size
-        let metadata = std::fs::metadata(&request.file_path)?;
+        let metadata = std::fs::metadata(&request.model_path)?;
         let file_size = metadata.len();
         if file_size > 50 * 1024 * 1024 * 1024 { // 50GB limit
             return Err(anyhow::anyhow!("Model file too large. Maximum size is 50GB"));
@@ -2036,8 +2064,8 @@ impl RegistryClient {
 
         // Sort by a combination of rating and downloads
         recommendations.sort_by(|a, b| {
-            let score_a = a.ratings.average_rating * (1.0 + (a.downloads as f32).ln());
-            let score_b = b.ratings.average_rating * (1.0 + (b.downloads as f32).ln());
+            let score_a = a.ratings.average_rating * (1.0 + (a.downloads as f64).ln());
+            let score_b = b.ratings.average_rating * (1.0 + (b.downloads as f64).ln());
             score_b.partial_cmp(&score_a).unwrap_or(std::cmp::Ordering::Equal)
         });
 
@@ -2061,14 +2089,14 @@ impl RegistryClient {
         // Sort by popularity and recency
         recommendations.sort_by(|a, b| {
             // Weight recent models higher
-            let days_since_a = (chrono::Utc::now() - a.updated_at).num_days() as f32;
-            let days_since_b = (chrono::Utc::now() - b.updated_at).num_days() as f32;
+            let days_since_a = (chrono::Utc::now() - a.updated_at).num_days() as f64;
+            let days_since_b = (chrono::Utc::now() - b.updated_at).num_days() as f64;
 
             let freshness_a = 1.0 / (1.0 + days_since_a / 30.0); // Decay over 30 days
             let freshness_b = 1.0 / (1.0 + days_since_b / 30.0);
 
-            let score_a = a.ratings.average_rating * (1.0 + (a.downloads as f32).ln()) * freshness_a;
-            let score_b = b.ratings.average_rating * (1.0 + (b.downloads as f32).ln()) * freshness_b;
+            let score_a = a.ratings.average_rating * (1.0 + (a.downloads as f64).ln()) * freshness_a;
+            let score_b = b.ratings.average_rating * (1.0 + (b.downloads as f64).ln()) * freshness_b;
 
             score_b.partial_cmp(&score_a).unwrap_or(std::cmp::Ordering::Equal)
         });
@@ -2257,7 +2285,7 @@ impl VerificationEngine {
         let file_content = tokio::fs::read(path).await.context("Failed to read file for content scanning")?;
 
         // Scan for embedded executables or suspicious patterns
-        let suspicious_patterns = [
+        let suspicious_patterns: &[&[u8]] = &[
             b"\x4d\x5a",        // PE header (Windows executable)
             b"\x7f\x45\x4c\x46", // ELF header (Linux executable)
             b"\xfe\xed\xfa",   // Mach-O header (macOS executable)
@@ -2266,7 +2294,7 @@ impl VerificationEngine {
             b"data:text/html",  // HTML data URL
         ];
 
-        for pattern in &suspicious_patterns {
+        for pattern in suspicious_patterns {
             if file_content.windows(pattern.len()).any(|window| window == *pattern) {
                 return Err(anyhow::anyhow!("Suspicious content pattern detected in model file"));
             }
@@ -2431,18 +2459,33 @@ impl PackageDatabase {
 }
 
 impl DependencyResolver {
-    pub fn new(package_db: PackageDatabase, repositories: Vec<Repository>) -> Self {
+    pub fn new(package_db: PackageDatabase, repositories: Vec<Repository>, registry_client: RegistryClient) -> Self {
         Self {
             package_db,
             repositories,
+            registry_client,
         }
+    }
+
+    async fn fetch_repository_models(&self, repository_url: &str) -> Result<Vec<ModelListing>> {
+        // TODO: Implement actual HTTP client to fetch models from repository
+        // This is a placeholder implementation
+        tracing::debug!("Fetching models from repository: {}", repository_url);
+
+        // For now, return empty list
+        // In a full implementation, this would:
+        // 1. Make HTTP request to repository API
+        // 2. Parse JSON response into Vec<ModelListing>
+        // 3. Handle authentication if required
+        // 4. Cache results for performance
+        Ok(Vec::new())
     }
 
     pub async fn create_install_plan(&self, model_id: &str) -> Result<InstallPlan> {
         let mut to_install = Vec::new();
         let to_upgrade = Vec::new();
         let to_remove = Vec::new();
-        let conflicts = Vec::new();
+        let mut conflicts = Vec::new();
 
         // For now, create a simple plan without dependency resolution
         // In a full implementation, this would:
@@ -2544,6 +2587,7 @@ impl DependencyResolver {
                         latency_ms: None,
                         benchmark_scores: HashMap::new(),
                         energy_efficiency: None,
+                        energy_efficiency_tokens_per_joule: None,
                     },
                     published_at: Utc::now(),
                     updated_at: Utc::now(),
@@ -2551,6 +2595,26 @@ impl DependencyResolver {
                     rating: None,
                     tags: vec!["unknown".to_string(), "dependency".to_string()],
                     dependencies: vec![],
+                    pricing: PricingInfo {
+                        free: true,
+                        price_per_download: None,
+                        price_per_token: None,
+                        subscription_tiers: vec![],
+                        usage_based: None,
+                        usage_limits: None,
+                    },
+                    ratings: RatingInfo {
+                        average_rating: 0.0,
+                        total_ratings: 0,
+                        rating_distribution: [0, 0, 0, 0, 0],
+                    },
+                    created_at: Utc::now(),
+                    visibility: ModelVisibility::Public,
+                    verified: false,
+                    documentation_url: None,
+                    demo_url: None,
+                    paper_url: None,
+                    source_url: None,
                 })
             }
         }

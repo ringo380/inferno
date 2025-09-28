@@ -1207,6 +1207,22 @@ pub struct JobResult {
     pub partial_results: Vec<String>,
 }
 
+impl JobQueueManager {
+    /// Save a specific queue after changes
+    pub async fn save_queue(&self, queue_id: &str) -> Result<()> {
+        let queues = self.queues.read().await;
+        if let Some(queue) = queues.get(queue_id) {
+            let queue_file = self.data_dir.join(format!("{}.json", queue_id));
+            let serializable_queue = queue.to_serializable().await;
+            let json_data = serde_json::to_string_pretty(&serializable_queue)?;
+
+            fs::write(&queue_file, json_data).await?;
+            debug!("Saved queue '{}' to persistent storage", queue_id);
+        }
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct JobInfo {
     pub id: String,
@@ -1506,111 +1522,12 @@ impl Worker {
         self.running.store(false, Ordering::SeqCst);
     }
 
-    /// Save all queues to persistent storage
-    pub async fn save_queues(&self) -> Result<()> {
-        // Create data directory if it doesn't exist
-        fs::create_dir_all(&self.data_dir).await?;
-
-        let queues = self.queues.read().await;
-        for (queue_id, queue) in queues.iter() {
-            let queue_file = self.data_dir.join(format!("{}.json", queue_id));
-
-            // Convert queue to serializable format
-            let serializable_queue = queue.to_serializable().await;
-            let json_data = serde_json::to_string_pretty(&serializable_queue)?;
-
-            fs::write(&queue_file, json_data).await?;
-            debug!("Saved queue '{}' to {}", queue_id, queue_file.display());
-        }
-
-        info!("Saved {} queues to persistent storage", queues.len());
-        Ok(())
-    }
-
-    /// Load all queues from persistent storage
-    pub async fn load_queues(&self) -> Result<()> {
-        if !self.data_dir.exists() {
-            debug!("Queue data directory does not exist, starting with empty state");
-            return Ok(());
-        }
-
-        let mut dir_entries = fs::read_dir(&self.data_dir).await?;
-        let mut loaded_count = 0;
-
-        while let Some(entry) = dir_entries.next_entry().await? {
-            let path = entry.path();
-            if path.extension().and_then(|s| s.to_str()) == Some("json") {
-                if let Some(queue_id) = path.file_stem().and_then(|s| s.to_str()) {
-                    match self.load_queue_from_file(&path, queue_id).await {
-                        Ok(_) => {
-                            loaded_count += 1;
-                            debug!("Loaded queue '{}' from {}", queue_id, path.display());
-                        }
-                        Err(e) => {
-                            warn!("Failed to load queue from {}: {}", path.display(), e);
-                        }
-                    }
-                }
-            }
-        }
-
-        info!("Loaded {} queues from persistent storage", loaded_count);
-        Ok(())
-    }
-
-    /// Load a specific queue from a file
-    async fn load_queue_from_file(&self, path: &Path, queue_id: &str) -> Result<()> {
-        let content = fs::read_to_string(path).await?;
-        let serializable_queue: SerializableJobQueue = serde_json::from_str(&content)?;
-
-        // Reconstruct the JobQueue from serializable data
-        let job_queue = JobQueue {
-            id: serializable_queue.id,
-            name: serializable_queue.name,
-            description: serializable_queue.description,
-            config: serializable_queue.config,
-            status: serializable_queue.status,
-            created_at: serializable_queue.created_at,
-            last_activity: serializable_queue.last_activity,
-            metrics: serializable_queue.metrics,
-            jobs: Arc::new(RwLock::new(VecDeque::new())), // Start with empty job queue
-            active_jobs: Arc::new(RwLock::new(HashMap::new())),
-            completed_jobs: Arc::new(RwLock::new(Vec::new())),
-            failed_jobs: Arc::new(RwLock::new(Vec::new())),
-        };
-
-        // Add the reconstructed queue to the manager
-        let mut queues = self.queues.write().await;
-        queues.insert(queue_id.to_string(), job_queue);
-
-        Ok(())
-    }
-
-    /// Initialize the queue manager with persistence
-    pub async fn initialize(&self) -> Result<()> {
-        // Load existing queues from storage
-        if let Err(e) = self.load_queues().await {
-            warn!("Failed to load queues from storage: {}. Starting with empty state.", e);
-        }
-
-        info!("JobQueueManager initialized with persistent storage");
-        Ok(())
-    }
-
-    /// Save a specific queue after changes
-    async fn save_queue(&self, queue_id: &str) -> Result<()> {
-        let queues = self.queues.read().await;
-        if let Some(queue) = queues.get(queue_id) {
-            let queue_file = self.data_dir.join(format!("{}.json", queue_id));
-            let serializable_queue = queue.to_serializable().await;
-            let json_data = serde_json::to_string_pretty(&serializable_queue)?;
-
-            fs::write(&queue_file, json_data).await?;
-            debug!("Saved queue '{}' to persistent storage", queue_id);
-        }
-        Ok(())
-    }
+    // Removed save_queues, load_queues and load_queue_from_file methods
+    // These belong to JobQueueManager, not Worker
 }
+
+// This initialize method should be part of JobQueueManager
+// Moving it to the correct location
 
 #[derive(Debug)]
 struct ResourceMonitor {

@@ -3,6 +3,7 @@ use crate::{
     config::Config,
     models::{ModelInfo, ModelManager},
     tui::components::ProgressBar,
+    upgrade::{UpgradeManager, UpgradeStatus, UpgradeConfig, UpgradeEvent},
 };
 use anyhow::Result;
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
@@ -15,7 +16,7 @@ use ratatui::{
 use std::collections::VecDeque;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::{mpsc, Mutex, broadcast};
 use tracing::{info, warn};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -27,6 +28,7 @@ pub enum AppState {
     ViewingOutput,
     #[allow(dead_code)]
     Help,
+    UpgradeManagement,
 }
 
 #[derive(Debug, Clone)]
@@ -67,6 +69,13 @@ pub struct App {
     // Streaming channels
     stream_receiver: Option<mpsc::UnboundedReceiver<StreamMessage>>,
     inference_start_time: Option<std::time::Instant>,
+
+    // Upgrade management
+    upgrade_manager: Option<Arc<UpgradeManager>>,
+    upgrade_status: UpgradeStatus,
+    upgrade_events: VecDeque<UpgradeEvent>,
+    upgrade_event_receiver: Option<broadcast::Receiver<UpgradeEvent>>,
+    show_upgrade_notification: bool,
 }
 
 #[derive(Debug, Default)]
@@ -103,6 +112,13 @@ impl App {
 
             stream_receiver: None,
             inference_start_time: None,
+
+            // Initialize upgrade system
+            upgrade_manager: None,
+            upgrade_status: UpgradeStatus::UpToDate,
+            upgrade_events: VecDeque::with_capacity(50),
+            upgrade_event_receiver: None,
+            show_upgrade_notification: false,
         };
 
         if !app.models.is_empty() {
@@ -111,6 +127,10 @@ impl App {
         }
 
         app.add_log("info", "Inferno TUI initialized");
+
+        // Initialize upgrade system
+        app.initialize_upgrade_system().await;
+
         Ok(app)
     }
 
@@ -149,20 +169,50 @@ impl App {
         if self.show_help {
             self.draw_help_overlay(f);
         }
+
+        // Upgrade notification overlay
+        if self.show_upgrade_notification {
+            self.draw_upgrade_notification(f);
+        }
     }
 
     fn draw_header(&self, f: &mut Frame, area: Rect) {
-        let title = format!(
+        let mut title = format!(
             " Inferno AI/ML Runner v{} ",
             std::env::var("CARGO_PKG_VERSION").unwrap_or_else(|_| "0.1.0".to_string())
         );
 
-        let header = Paragraph::new(title)
-            .style(
-                Style::default()
-                    .fg(Color::Cyan)
-                    .add_modifier(Modifier::BOLD),
-            )
+        // Add upgrade status to header
+        let (header_style, status_text) = match &self.upgrade_status {
+            UpgradeStatus::Available(_) => {
+                title.push_str("🔄 Update Available! Press 'u' to manage");
+                (Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD), title)
+            },
+            UpgradeStatus::Downloading { progress, .. } => {
+                title.push_str(&format!(" 📥 Downloading: {:.1}%", progress * 100.0));
+                (Style::default().fg(Color::Blue).add_modifier(Modifier::BOLD), title)
+            },
+            UpgradeStatus::Installing { .. } => {
+                title.push_str(" ⚙️  Installing Update...");
+                (Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD), title)
+            },
+            UpgradeStatus::Completed { restart_required, .. } => {
+                if *restart_required {
+                    title.push_str(" ✅ Update Complete - Restart Required");
+                } else {
+                    title.push_str(" ✅ Update Complete");
+                }
+                (Style::default().fg(Color::Green).add_modifier(Modifier::BOLD), title)
+            },
+            UpgradeStatus::Failed { .. } => {
+                title.push_str(" ❌ Update Failed - Press 'u' for details");
+                (Style::default().fg(Color::Red).add_modifier(Modifier::BOLD), title)
+            },
+            _ => (Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD), title),
+        };
+
+        let header = Paragraph::new(status_text)
+            .style(header_style)
             .block(Block::default().borders(Borders::ALL));
 
         f.render_widget(header, area);
@@ -507,12 +557,40 @@ impl App {
                 self.show_help = !self.show_help;
                 return Ok(false);
             }
+            KeyCode::Char('u') => {
+                self.show_upgrade_notification = !self.show_upgrade_notification;
+                // If showing for the first time, check for updates
+                if self.show_upgrade_notification && matches!(self.upgrade_status, UpgradeStatus::UpToDate) {
+                    self.check_for_updates().await?;
+                }
+                return Ok(false);
+            }
             _ => {}
         }
 
         if self.show_help {
             if matches!(key, KeyCode::Esc | KeyCode::Char('h')) {
                 self.show_help = false;
+            }
+            return Ok(false);
+        }
+
+        if self.show_upgrade_notification {
+            match key {
+                KeyCode::Esc => {
+                    self.show_upgrade_notification = false;
+                }
+                KeyCode::Enter => {
+                    if matches!(self.upgrade_status, UpgradeStatus::Available(_)) {
+                        self.start_upgrade().await?;
+                    }
+                }
+                KeyCode::Char('r') => {
+                    if matches!(self.upgrade_status, UpgradeStatus::Failed { .. }) {
+                        self.check_for_updates().await?;
+                    }
+                }
+                _ => {}
             }
             return Ok(false);
         }
@@ -524,6 +602,7 @@ impl App {
             AppState::Running => self.handle_running_keys(key).await,
             AppState::ViewingOutput => self.handle_output_keys(key).await,
             AppState::Help => Ok(false),
+            AppState::UpgradeManagement => Ok(false), // Handled above
         }
     }
 
@@ -670,6 +749,9 @@ impl App {
             }
         }
 
+        // Handle upgrade events
+        self.handle_upgrade_events().await;
+
         Ok(())
     }
 
@@ -769,6 +851,8 @@ impl App {
             temperature: 0.7,
             top_p: 0.9,
             stream: true,
+            seed: None,
+            stop_sequences: vec![],
         };
 
         // Create channel for streaming
@@ -842,6 +926,164 @@ impl App {
             "info" => info!("{}", message),
             _ => info!("{}", message),
         }
+    }
+
+    // Upgrade system methods
+    async fn initialize_upgrade_system(&mut self) {
+        match UpgradeConfig::from_config(&self.config) {
+            Ok(upgrade_config) => {
+                match UpgradeManager::new(upgrade_config).await {
+                    Ok(manager) => {
+                        // Subscribe to upgrade events
+                        let event_receiver = manager.subscribe_to_events();
+                        self.upgrade_event_receiver = Some(event_receiver);
+                        self.upgrade_manager = Some(Arc::new(manager));
+                        self.add_log("info", "Upgrade system initialized");
+                    }
+                    Err(e) => {
+                        self.add_log("error", &format!("Failed to initialize upgrade system: {}", e));
+                    }
+                }
+            }
+            Err(e) => {
+                self.add_log("error", &format!("Failed to load upgrade config: {}", e));
+            }
+        }
+    }
+
+    pub async fn handle_upgrade_events(&mut self) {
+        if let Some(receiver) = &mut self.upgrade_event_receiver {
+            while let Ok(event) = receiver.try_recv() {
+                self.upgrade_events.push_back(event.clone());
+
+                // Trigger notification for important events
+                match event.event_type {
+                    crate::upgrade::UpgradeEventType::UpdateAvailable => {
+                        self.show_upgrade_notification = true;
+                        self.add_log("info", "🔄 Update available!");
+                    }
+                    crate::upgrade::UpgradeEventType::DownloadCompleted => {
+                        self.add_log("info", "📥 Update downloaded successfully");
+                    }
+                    crate::upgrade::UpgradeEventType::InstallationCompleted => {
+                        self.add_log("info", "✅ Update installed successfully");
+                    }
+                    crate::upgrade::UpgradeEventType::InstallationFailed => {
+                        self.add_log("error", "❌ Update installation failed");
+                    }
+                    _ => {}
+                }
+
+                // Keep only the last 50 events
+                if self.upgrade_events.len() > 50 {
+                    self.upgrade_events.pop_front();
+                }
+            }
+        }
+    }
+
+    pub async fn check_for_updates(&mut self) {
+        if let Some(manager) = &self.upgrade_manager {
+            self.add_log("info", "Checking for updates...");
+            match manager.check_for_updates().await {
+                Ok(Some(update_info)) => {
+                    self.upgrade_status = UpgradeStatus::Available(update_info.clone());
+                    self.show_upgrade_notification = true;
+                    self.add_log("info", &format!("Update available: {}", update_info.version.to_string()));
+                }
+                Ok(None) => {
+                    self.upgrade_status = UpgradeStatus::UpToDate;
+                    self.add_log("info", "Application is up to date");
+                }
+                Err(e) => {
+                    self.add_log("error", &format!("Failed to check for updates: {}", e));
+                }
+            }
+        }
+    }
+
+    pub async fn start_upgrade(&mut self) {
+        if let (Some(manager), UpgradeStatus::Available(update_info)) = (&self.upgrade_manager, &self.upgrade_status.clone()) {
+            self.add_log("info", "Starting upgrade installation...");
+            match manager.install_update(update_info).await {
+                Ok(_) => {
+                    self.add_log("info", "Upgrade completed successfully");
+                }
+                Err(e) => {
+                    self.add_log("error", &format!("Upgrade failed: {}", e));
+                }
+            }
+        }
+    }
+
+    fn draw_upgrade_notification(&self, f: &mut Frame) {
+        let area = centered_rect(60, 40, f.size());
+
+        // Clear the background
+        f.render_widget(Clear, area);
+
+        // Create the notification content based on upgrade status
+        let (title, content, style) = match &self.upgrade_status {
+            UpgradeStatus::Available(update_info) => {
+                let content = format!(
+                    "🔄 Update Available\n\n\
+                    Current Version: {}\n\
+                    New Version: {}\n\
+                    Release Date: {}\n\n\
+                    {} update\n\n\
+                    Changelog:\n{}\n\n\
+                    Press 'Enter' to install, 'Esc' to dismiss",
+                    crate::upgrade::ApplicationVersion::current().to_string(),
+                    update_info.version.to_string(),
+                    update_info.release_date.format("%Y-%m-%d %H:%M UTC"),
+                    if update_info.is_critical { "🚨 Critical" } else if update_info.is_security_update { "🔒 Security" } else { "✨ Feature" },
+                    update_info.changelog.lines().take(3).collect::<Vec<_>>().join("\n")
+                );
+                ("Update Available", content, Style::default().fg(Color::Yellow))
+            }
+            UpgradeStatus::Downloading { progress, .. } => {
+                let content = format!(
+                    "📥 Downloading Update\n\n\
+                    Progress: {:.1}%\n\n\
+                    Please wait...",
+                    progress * 100.0
+                );
+                ("Downloading", content, Style::default().fg(Color::Blue))
+            }
+            UpgradeStatus::Installing { stage, progress } => {
+                let content = format!(
+                    "⚙️ Installing Update\n\n\
+                    Stage: {}\n\
+                    Progress: {:.1}%\n\n\
+                    Please wait...",
+                    stage.description(),
+                    progress * 100.0
+                );
+                ("Installing", content, Style::default().fg(Color::Magenta))
+            }
+            UpgradeStatus::Failed { error, .. } => {
+                let content = format!(
+                    "❌ Update Failed\n\n\
+                    Error: {}\n\n\
+                    Press 'r' to retry, 'Esc' to dismiss",
+                    error
+                );
+                ("Update Failed", content, Style::default().fg(Color::Red))
+            }
+            _ => return, // Don't show notification for other states
+        };
+
+        let block = Block::default()
+            .title(title)
+            .borders(Borders::ALL)
+            .style(style);
+
+        let notification = Paragraph::new(content)
+            .block(block)
+            .wrap(Wrap { trim: true })
+            .style(Style::default().fg(Color::White));
+
+        f.render_widget(notification, area);
     }
 }
 

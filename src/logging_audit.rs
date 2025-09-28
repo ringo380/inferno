@@ -22,6 +22,24 @@ pub struct LoggingAuditConfig {
     pub compliance_standards: Vec<String>,
     pub real_time_alerts: bool,
     pub settings: HashMap<String, String>,
+    pub audit: AuditConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AuditConfig {
+    pub storage_path: String,
+    pub max_file_size: u64,
+    pub rotation_interval: String,
+}
+
+impl Default for AuditConfig {
+    fn default() -> Self {
+        Self {
+            storage_path: "logs/audit".to_string(),
+            max_file_size: 100 * 1024 * 1024, // 100MB
+            rotation_interval: "daily".to_string(),
+        }
+    }
 }
 
 // Additional types needed for CLI compatibility

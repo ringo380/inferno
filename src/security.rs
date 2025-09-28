@@ -305,9 +305,10 @@ impl RateLimiter {
 }
 
 /// Security manager for the application
+#[derive(Debug)]
 pub struct SecurityManager {
     config: SecurityConfig,
-    users: Arc<RwLock<HashMap<String, User>>>,
+    pub users: Arc<RwLock<HashMap<String, User>>>,
     api_keys: Arc<RwLock<HashMap<String, String>>>, // key_hash -> user_id
     rate_limiters: Arc<RwLock<HashMap<String, RateLimiter>>>, // user_id/ip -> limiter
     ip_rate_limiters: Arc<RwLock<HashMap<IpAddr, RateLimiter>>>,
@@ -328,8 +329,8 @@ impl SecurityManager {
         }
     }
 
-    /// Initialize with default users and API keys
-    pub async fn initialize(&self) -> Result<()> {
+    /// Initialize with default users and API keys (legacy method)
+    pub async fn initialize_default_users(&self) -> Result<()> {
         info!("Initializing security manager");
 
         // Create default admin user
@@ -930,11 +931,60 @@ impl SecurityManager {
 
         if users_count == 0 {
             info!("No users found, creating default admin user");
-            self.create_default_users().await?;
+            let default_user = User {
+                id: "admin".to_string(),
+                username: "admin".to_string(),
+                email: Some("admin@localhost".to_string()),
+                password_hash: Some("admin123".to_string()), // Simplified for now
+                role: UserRole::Admin,
+                api_keys: vec![],
+                created_at: chrono::Utc::now(),
+                last_login: None,
+                is_active: true,
+                permissions: [
+                    Permission::ReadModels,
+                    Permission::WriteModels,
+                    Permission::DeleteModels,
+                    Permission::RunInference,
+                    Permission::ManageCache,
+                    Permission::ReadMetrics,
+                    Permission::WriteConfig,
+                    Permission::ManageUsers,
+                    Permission::ViewAuditLogs,
+                    Permission::UseStreaming,
+                    Permission::UseDistributed,
+                    Permission::ManageQueue,
+                ].into_iter().collect(),
+                rate_limit_override: None,
+            };
+            self.create_user(default_user).await?;
             self.save_users().await?;
         }
 
         Ok(())
+    }
+
+    /// Get all users for admin purposes
+    pub async fn get_all_users(&self) -> Vec<User> {
+        let users = self.users.read().await;
+        users.values().cloned().collect()
+    }
+
+    /// Get a specific user by ID
+    pub async fn get_user_by_id(&self, user_id: &str) -> Option<User> {
+        let users = self.users.read().await;
+        users.get(user_id).cloned()
+    }
+
+    /// Update a user
+    pub async fn update_user(&self, user_id: &str, updated_user: User) -> Result<()> {
+        let mut users = self.users.write().await;
+        if users.contains_key(user_id) {
+            users.insert(user_id.to_string(), updated_user);
+            Ok(())
+        } else {
+            Err(anyhow::anyhow!("User not found"))
+        }
     }
 }
 

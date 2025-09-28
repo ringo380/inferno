@@ -95,6 +95,8 @@ pub struct SchedulerConfig {
     pub retry: RetryConfig,
     /// Schedule types
     pub schedule_types: Vec<ScheduleType>,
+    /// Cron expression for scheduling
+    pub cron_expression: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1441,6 +1443,7 @@ impl Default for SchedulerConfig {
             timezone: "UTC".to_string(),
             retry: RetryConfig::default(),
             schedule_types: vec![ScheduleType::Cron, ScheduleType::Interval],
+            cron_expression: None,
         }
     }
 }

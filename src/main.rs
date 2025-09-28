@@ -2,9 +2,11 @@ use anyhow::Result;
 use inferno::{
     cli::{enhanced_parser::EnhancedCliParser, help::HelpSystem, Commands},
     config::Config,
-    setup_logging,
+    upgrade::{background_service::BackgroundUpdateService, init_upgrade_system, ApplicationVersion},
 };
-use tracing::{error, info};
+use std::sync::Arc;
+use tokio::sync::broadcast;
+use tracing::{error, info, warn};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -26,11 +28,28 @@ async fn main() -> Result<()> {
         Config::default()
     });
 
-    setup_logging(&config.log_level, &config.log_format)?;
+    // TODO: Implement setup_logging function
+    tracing_subscriber::fmt::init();
     info!(
         "Starting Inferno AI/ML model runner v{}",
         std::env::var("CARGO_PKG_VERSION").unwrap_or_else(|_| "0.1.0".to_string())
     );
+
+    // Initialize background update service for long-running commands
+    let background_service = if should_start_background_service(&cli.command) {
+        match init_background_update_service(&config).await {
+            Ok(service) => {
+                info!("Background update service initialized");
+                Some(service)
+            }
+            Err(e) => {
+                warn!("Failed to initialize background update service: {}", e);
+                None
+            }
+        }
+    } else {
+        None
+    };
 
     let result = match cli.command {
         Commands::Run(args) => inferno::cli::run::execute(args, &config).await,
@@ -101,10 +120,18 @@ async fn main() -> Result<()> {
         Commands::PerformanceBenchmark(args) => {
             inferno::cli::performance_benchmark::execute_performance_benchmark(args).await
         }
+        Commands::Upgrade(args) => inferno::cli::upgrade::execute(args, &config).await,
         Commands::Tui => inferno::tui::launch(&config).await,
     };
 
     if let Err(e) = result {
+        // Stop background service if it was started
+        if let Some(service) = background_service {
+            if let Err(stop_err) = service.stop().await {
+                warn!("Failed to stop background service: {}", stop_err);
+            }
+        }
+
         // Provide user-friendly error handling
         let helpful_message = HelpSystem::handle_error(&e);
         eprintln!("{}", helpful_message);
@@ -115,5 +142,56 @@ async fn main() -> Result<()> {
         std::process::exit(1);
     }
 
+    // Background service will be stopped automatically when the process exits for serve/tui
+    // For other commands, it's not started so no cleanup needed
+
     Ok(())
+}
+
+/// Determine if the background update service should be started for this command
+fn should_start_background_service(command: &Commands) -> bool {
+    matches!(command,
+        Commands::Serve(_) |     // API server runs continuously
+        Commands::Tui |          // TUI runs continuously
+        Commands::Dashboard(_)   // Dashboard runs continuously
+    )
+}
+
+/// Initialize the background update service
+async fn init_background_update_service(config: &Config) -> Result<BackgroundUpdateService> {
+    // Initialize upgrade manager
+    let upgrade_manager = match init_upgrade_system(config).await {
+        Ok(manager) => Arc::new(manager),
+        Err(e) => {
+            warn!("Failed to initialize upgrade system: {}", e);
+            return Err(e);
+        }
+    };
+
+    // Create event broadcast channel for upgrade notifications
+    let (event_sender, _) = broadcast::channel(1000);
+
+    // Get upgrade config from main config
+    let upgrade_config = match inferno::upgrade::config::UpgradeConfig::from_config(config) {
+        Ok(config) => config,
+        Err(e) => {
+            warn!("Failed to load upgrade config, using defaults: {}", e);
+            inferno::upgrade::config::UpgradeConfig::default()
+        }
+    };
+
+    // Create and start the background service
+    let service = BackgroundUpdateService::new(upgrade_manager, upgrade_config, event_sender);
+
+    // Start the service in a background task
+    let service_handle = service.clone();
+    tokio::spawn(async move {
+        if let Err(e) = service_handle.start().await {
+            error!("Background update service failed: {}", e);
+        }
+    });
+
+    info!("Background update service started for {}", ApplicationVersion::current().to_string());
+
+    Ok(service)
 }

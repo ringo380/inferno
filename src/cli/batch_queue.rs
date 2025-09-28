@@ -2,7 +2,7 @@ use crate::{
     backends::InferenceParams,
     batch::queue::{
         BatchJob, JobPriority, JobQueueConfig, JobQueueManager, JobSchedule, JobStatus,
-        ResourceRequirements, ScheduleType,
+        ResourceRequirements, RetryConfig, ScheduleType,
     },
     batch::{BatchConfig, BatchInput},
     config::Config,
@@ -407,6 +407,7 @@ pub async fn execute(args: BatchQueueArgs, _config: &Config) -> Result<()> {
                 timeout_minutes: Some(timeout),
                 retry_count: 0,
                 max_retries,
+                retry_config: RetryConfig::default(),
                 created_at: SystemTime::now(),
                 scheduled_at: None,
                 tags: HashMap::new(),

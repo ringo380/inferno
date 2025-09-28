@@ -699,12 +699,13 @@ pub async fn execute(args: AuditArgs, config: &Config) -> Result<()> {
 
                                         // Check if timestamp is in the future
                                         let now = Utc::now();
-                                        if event.timestamp > now {
+                                        let event_time = DateTime::<Utc>::from(event.timestamp);
+                                        if event_time > now {
                                             validation_errors.push(format!(
                                                 "{}:{} - Future timestamp detected: {}",
                                                 log_file.display(),
                                                 line_num + 1,
-                                                event.timestamp
+                                                event_time
                                             ));
                                         }
                                     }
@@ -729,7 +730,7 @@ pub async fn execute(args: AuditArgs, config: &Config) -> Result<()> {
                 }
             }
 
-            if *check_gaps {
+            if check_gaps {
                 // Check for gaps in audit event sequence
                 // This is a simplified check - in a real implementation you might
                 // check for missing sequence numbers or large time gaps
@@ -743,10 +744,11 @@ pub async fn execute(args: AuditArgs, config: &Config) -> Result<()> {
                     // Check if we have recent events (within last 24 hours)
                     let yesterday = Utc::now() - chrono::Duration::hours(24);
                     if let Some(last_ts) = previous_timestamp {
-                        if last_ts < yesterday {
+                        let last_time = DateTime::<Utc>::from(last_ts);
+                        if last_time < yesterday {
                             validation_errors.push(format!(
                                 "No recent audit events - last event was at {}",
-                                last_ts
+                                last_time
                             ));
                         }
                     }
@@ -787,7 +789,7 @@ pub async fn execute(args: AuditArgs, config: &Config) -> Result<()> {
                 println!("Created destination directory: {}", destination.display());
             }
 
-            let cutoff_date = Utc::now() - chrono::Duration::days(*older_than_days as i64);
+            let cutoff_date = Utc::now() - chrono::Duration::days(older_than_days as i64);
             let mut archived_files = Vec::new();
             let mut total_size_bytes = 0u64;
 
@@ -878,7 +880,7 @@ pub async fn execute(args: AuditArgs, config: &Config) -> Result<()> {
                     );
 
                     // If remove_originals is true, delete the original file
-                    if *remove_originals {
+                    if remove_originals {
                         std::fs::remove_file(&log_file)?;
                         println!("  Removed original file: {}", log_file.display());
                     }
@@ -914,7 +916,7 @@ pub async fn execute(args: AuditArgs, config: &Config) -> Result<()> {
                 println!("  - Destination: {}", destination.display());
                 println!("  - Compression format: {:?}", compression);
 
-                if *remove_originals {
+                if remove_originals {
                     println!("  - Original files removed");
                 } else {
                     println!("  - Original files preserved");
