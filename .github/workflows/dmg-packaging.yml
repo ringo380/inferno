@@ -14,12 +14,14 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  create-dmg:
-    name: Create macOS DMG
+  build-x86_64:
+    name: Build x86_64 Binary
     runs-on: macos-latest
-    timeout-minutes: 30  # Prevent hanging builds
+    timeout-minutes: 25
     permissions:
-      contents: write  # Need write permission to upload release assets
+      contents: write
+    outputs:
+      binary-uploaded: ${{ steps.upload.outputs.uploaded }}
 
     steps:
       - name: Checkout code
@@ -38,75 +40,139 @@ jobs:
         uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           toolchain: stable
-          target: x86_64-apple-darwin,aarch64-apple-darwin
+          target: x86_64-apple-darwin
           cache: true
 
-      - name: Cache cargo registry
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-
+      - name: Build x86_64 binary
+        run: |
+          export RUSTFLAGS="-A warnings"
+          export CARGO_INCREMENTAL=1
+          echo "Building for x86_64-apple-darwin..."
+          cargo build --release --target x86_64-apple-darwin --bin inferno
 
-      - name: Download or build macOS binaries
+      - name: Upload x86_64 binary
+        id: upload
+        run: |
+          cp target/x86_64-apple-darwin/release/inferno inferno-macos-x86_64
+          chmod +x inferno-macos-x86_64
+          file inferno-macos-x86_64
+
+          # Upload as artifact for DMG creation
+          echo "uploaded=true" >> $GITHUB_OUTPUT
+
+      - name: Upload x86_64 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: inferno-x86_64
+          path: inferno-macos-x86_64
+          retention-days: 1
+
+  build-aarch64:
+    name: Build ARM64 Binary
+    runs-on: macos-latest
+    timeout-minutes: 25
+    permissions:
+      contents: write
+    outputs:
+      binary-uploaded: ${{ steps.upload.outputs.uploaded }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Get release tag
+        id: get_tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "tag=${{ github.event.inputs.tag }}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=${{ github.event.release.tag_name }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Setup Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          target: aarch64-apple-darwin
+          cache: true
+
+      - name: Build aarch64 binary
+        run: |
+          export RUSTFLAGS="-A warnings"
+          export CARGO_INCREMENTAL=1
+          echo "Building for aarch64-apple-darwin..."
+          cargo build --release --target aarch64-apple-darwin --bin inferno
+
+      - name: Upload aarch64 binary
+        id: upload
+        run: |
+          cp target/aarch64-apple-darwin/release/inferno inferno-macos-aarch64
+          chmod +x inferno-macos-aarch64
+          file inferno-macos-aarch64
+          echo "uploaded=true" >> $GITHUB_OUTPUT
+
+      - name: Upload aarch64 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: inferno-aarch64
+          path: inferno-macos-aarch64
+          retention-days: 1
+
+  create-dmg:
+    name: Create macOS DMG
+    runs-on: macos-latest
+    needs: [build-x86_64, build-aarch64]
+    timeout-minutes: 15  # DMG creation should be fast
+    permissions:
+      contents: write  # Need write permission to upload release assets
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Get release tag
+        id: get_tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "tag=${{ github.event.inputs.tag }}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=${{ github.event.release.tag_name }}" >> $GITHUB_OUTPUT
+          fi
+
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: inferno-*
+          path: artifacts/
+          merge-multiple: false
+
+      - name: Prepare binaries from artifacts
         run: |
           # Create directories for binaries
           mkdir -p binaries/x86_64
           mkdir -p binaries/aarch64
 
-          # Try to download existing release binaries first (much faster)
-          echo "Attempting to download pre-built binaries..."
-          if gh release view ${{ steps.get_tag.outputs.tag }} >/dev/null 2>&1; then
-            echo "Release exists, checking for pre-built binaries..."
+          # Copy downloaded artifacts to proper locations
+          echo "Setting up binaries from build artifacts..."
+          cp artifacts/inferno-x86_64/inferno-macos-x86_64 binaries/x86_64/inferno
+          cp artifacts/inferno-aarch64/inferno-macos-aarch64 binaries/aarch64/inferno
 
-            # Download x86_64 binary if available
-            if gh release download ${{ steps.get_tag.outputs.tag }} -p "*x86_64*" -D /tmp/ 2>/dev/null; then
-              mv /tmp/*x86_64* binaries/x86_64/inferno
-              chmod +x binaries/x86_64/inferno
-              echo "Downloaded x86_64 binary"
-            else
-              echo "No x86_64 binary found, will build from source"
-              export RUSTFLAGS="-A warnings"
-              cargo build --release --target x86_64-apple-darwin --bin inferno
-              cp target/x86_64-apple-darwin/release/inferno binaries/x86_64/
-              chmod +x binaries/x86_64/inferno
-            fi
-
-            # Download ARM64 binary if available
-            if gh release download ${{ steps.get_tag.outputs.tag }} -p "*aarch64*" -D /tmp/ 2>/dev/null; then
-              mv /tmp/*aarch64* binaries/aarch64/inferno
-              chmod +x binaries/aarch64/inferno
-              echo "Downloaded aarch64 binary"
-            else
-              echo "No aarch64 binary found, will build from source"
-              export RUSTFLAGS="-A warnings"
-              cargo build --release --target aarch64-apple-darwin --bin inferno
-              cp target/aarch64-apple-darwin/release/inferno binaries/aarch64/
-              chmod +x binaries/aarch64/inferno
-            fi
-          else
-            echo "Release doesn't exist, building from source..."
-            export RUSTFLAGS="-A warnings"
-            cargo build --release --target x86_64-apple-darwin --bin inferno
-            cp target/x86_64-apple-darwin/release/inferno binaries/x86_64/
-            cargo build --release --target aarch64-apple-darwin --bin inferno
-            cp target/aarch64-apple-darwin/release/inferno binaries/aarch64/
-            chmod +x binaries/x86_64/inferno
-            chmod +x binaries/aarch64/inferno
-          fi
+          # Make binaries executable
+          chmod +x binaries/x86_64/inferno
+          chmod +x binaries/aarch64/inferno
 
           # Verify builds
           echo "Verifying binaries:"
           file binaries/x86_64/inferno
           file binaries/aarch64/inferno
 
-          # Also upload individual binaries as release assets
+          # Test that they work
+          echo "Testing binaries:"
+          binaries/x86_64/inferno --version || echo "x86_64 binary test failed"
+          binaries/aarch64/inferno --version || echo "aarch64 binary test failed"
+
+          # Upload individual binaries as release assets
           if [ "${{ github.event_name }}" = "release" ]; then
             echo "Uploading individual architecture binaries to release..."
             gh release upload ${{ steps.get_tag.outputs.tag }} \
