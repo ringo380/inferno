@@ -103,19 +103,19 @@ jobs:
           echo "Building for aarch64-apple-darwin..."
           cargo build --release --target aarch64-apple-darwin --bin inferno
 
-      - name: Upload aarch64 binary
+      - name: Upload arm64 binary
         id: upload
         run: |
-          cp target/aarch64-apple-darwin/release/inferno inferno-macos-aarch64
-          chmod +x inferno-macos-aarch64
-          file inferno-macos-aarch64
+          cp target/aarch64-apple-darwin/release/inferno inferno-macos-arm64
+          chmod +x inferno-macos-arm64
+          file inferno-macos-arm64
           echo "uploaded=true" >> $GITHUB_OUTPUT
 
-      - name: Upload aarch64 artifact
+      - name: Upload arm64 artifact
         uses: actions/upload-artifact@v4
         with:
-          name: inferno-aarch64
-          path: inferno-macos-aarch64
+          name: inferno-arm64
+          path: inferno-macos-arm64
           retention-days: 1
 
   create-dmg:
@@ -151,26 +151,26 @@ jobs:
         run: |
           # Create directories for binaries
           mkdir -p binaries/x86_64
-          mkdir -p binaries/aarch64
+          mkdir -p binaries/arm64
 
           # Copy downloaded artifacts to proper locations
           echo "Setting up binaries from build artifacts..."
           cp artifacts/inferno-x86_64/inferno-macos-x86_64 binaries/x86_64/inferno
-          cp artifacts/inferno-aarch64/inferno-macos-aarch64 binaries/aarch64/inferno
+          cp artifacts/inferno-arm64/inferno-macos-arm64 binaries/arm64/inferno
 
           # Make binaries executable
           chmod +x binaries/x86_64/inferno
-          chmod +x binaries/aarch64/inferno
+          chmod +x binaries/arm64/inferno
 
           # Verify builds
           echo "Verifying binaries:"
           file binaries/x86_64/inferno
-          file binaries/aarch64/inferno
+          file binaries/arm64/inferno
 
           # Test that they work
           echo "Testing binaries:"
           binaries/x86_64/inferno --version || echo "x86_64 binary test failed"
-          binaries/aarch64/inferno --version || echo "aarch64 binary test failed"
+          binaries/arm64/inferno --version || echo "arm64 binary test failed"
 
           # Upload individual binaries as release assets
           if [ "${{ github.event_name }}" = "release" ]; then
@@ -178,12 +178,12 @@ jobs:
 
             # Rename binaries to proper names for upload
             cp binaries/x86_64/inferno inferno-macos-x86_64
-            cp binaries/aarch64/inferno inferno-macos-aarch64
+            cp binaries/arm64/inferno inferno-macos-arm64
 
             # Upload to release
             gh release upload ${{ steps.get_tag.outputs.tag }} \
               inferno-macos-x86_64 \
-              inferno-macos-aarch64 \
+              inferno-macos-arm64 \
               --clobber || echo "Failed to upload binaries, continuing..."
           fi
         env:
@@ -194,7 +194,7 @@ jobs:
           mkdir -p universal
           lipo -create \
             binaries/x86_64/inferno \
-            binaries/aarch64/inferno \
+            binaries/arm64/inferno \
             -output universal/inferno
 
           # Verify universal binary
@@ -367,7 +367,7 @@ jobs:
           if [[ "$ARCH" == "x86_64" ]]; then
               BINARY_NAME="inferno-macos-x86_64"
           elif [[ "$ARCH" == "arm64" ]]; then
-              BINARY_NAME="inferno-macos-aarch64"
+              BINARY_NAME="inferno-macos-arm64"
           else
               echo "❌ Unsupported architecture: $ARCH"
               exit 1
