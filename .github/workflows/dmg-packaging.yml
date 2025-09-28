@@ -54,32 +54,55 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-
 
-      - name: Build macOS binaries
+      - name: Download or build macOS binaries
         run: |
-          # Optimize build settings for faster compilation
-          export RUSTFLAGS="-A warnings"
-          export CARGO_INCREMENTAL=1
-          export CARGO_NET_RETRY=10
-
           # Create directories for binaries
           mkdir -p binaries/x86_64
           mkdir -p binaries/aarch64
 
-          # Build for x86_64 first (most common architecture)
-          echo "Building for x86_64-apple-darwin..."
-          cargo build --release --target x86_64-apple-darwin --bin inferno
-          cp target/x86_64-apple-darwin/release/inferno binaries/x86_64/
+          # Try to download existing release binaries first (much faster)
+          echo "Attempting to download pre-built binaries..."
+          if gh release view ${{ steps.get_tag.outputs.tag }} >/dev/null 2>&1; then
+            echo "Release exists, checking for pre-built binaries..."
 
-          # Build for aarch64 (ARM64)
-          echo "Building for aarch64-apple-darwin..."
-          cargo build --release --target aarch64-apple-darwin --bin inferno
-          cp target/aarch64-apple-darwin/release/inferno binaries/aarch64/
+            # Download x86_64 binary if available
+            if gh release download ${{ steps.get_tag.outputs.tag }} -p "*x86_64*" -D /tmp/ 2>/dev/null; then
+              mv /tmp/*x86_64* binaries/x86_64/inferno
+              chmod +x binaries/x86_64/inferno
+              echo "Downloaded x86_64 binary"
+            else
+              echo "No x86_64 binary found, will build from source"
+              export RUSTFLAGS="-A warnings"
+              cargo build --release --target x86_64-apple-darwin --bin inferno
+              cp target/x86_64-apple-darwin/release/inferno binaries/x86_64/
+              chmod +x binaries/x86_64/inferno
+            fi
 
-          # Make binaries executable
-          chmod +x binaries/x86_64/inferno
-          chmod +x binaries/aarch64/inferno
+            # Download ARM64 binary if available
+            if gh release download ${{ steps.get_tag.outputs.tag }} -p "*aarch64*" -D /tmp/ 2>/dev/null; then
+              mv /tmp/*aarch64* binaries/aarch64/inferno
+              chmod +x binaries/aarch64/inferno
+              echo "Downloaded aarch64 binary"
+            else
+              echo "No aarch64 binary found, will build from source"
+              export RUSTFLAGS="-A warnings"
+              cargo build --release --target aarch64-apple-darwin --bin inferno
+              cp target/aarch64-apple-darwin/release/inferno binaries/aarch64/
+              chmod +x binaries/aarch64/inferno
+            fi
+          else
+            echo "Release doesn't exist, building from source..."
+            export RUSTFLAGS="-A warnings"
+            cargo build --release --target x86_64-apple-darwin --bin inferno
+            cp target/x86_64-apple-darwin/release/inferno binaries/x86_64/
+            cargo build --release --target aarch64-apple-darwin --bin inferno
+            cp target/aarch64-apple-darwin/release/inferno binaries/aarch64/
+            chmod +x binaries/x86_64/inferno
+            chmod +x binaries/aarch64/inferno
+          fi
 
           # Verify builds
+          echo "Verifying binaries:"
           file binaries/x86_64/inferno
           file binaries/aarch64/inferno
 
