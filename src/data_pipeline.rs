@@ -2106,6 +2106,32 @@ pub enum PipelineStatus {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Stage {
+    pub id: String,
+    pub name: String,
+    pub stage_type: StageType,
+    pub description: Option<String>,
+    pub inputs: Vec<String>,
+    pub outputs: Vec<String>,
+    pub configuration: HashMap<String, serde_json::Value>,
+    pub dependencies: Vec<String>,
+    pub retry_policy: Option<RetryConfig>,
+    pub timeout_seconds: Option<u64>,
+    pub enabled: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum StageType {
+    Source,
+    Transform,
+    Filter,
+    Aggregate,
+    Join,
+    Sink,
+    Custom,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PipelineTask {
     /// Task ID
     pub id: String,

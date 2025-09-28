@@ -383,6 +383,7 @@ async fn execute_user_command(
                 id: id.clone(),
                 username,
                 email,
+                password_hash: None, // Will be set via separate password command
                 role: role.into(),
                 api_keys: vec![],
                 created_at: Utc::now(),

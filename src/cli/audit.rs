@@ -2,6 +2,7 @@ use crate::{
     audit::{
         Actor, ActorType, AuditConfiguration, AuditEvent, AuditLogger, AuditQuery, EventType,
         ExportFormat, LogLevel, Resource, ResourceType, Severity, SortField, SortOrder,
+        CompressionMethod, AlertConfiguration,
     },
     config::Config,
 };
@@ -383,7 +384,7 @@ pub enum ReportFormat {
     Csv,
 }
 
-pub async fn execute(args: AuditArgs, _config: &Config) -> Result<()> {
+pub async fn execute(args: AuditArgs, config: &Config) -> Result<()> {
     let audit_config = AuditConfiguration::default();
     let logger = AuditLogger::new(audit_config).await?;
 
@@ -599,7 +600,31 @@ pub async fn execute(args: AuditArgs, _config: &Config) -> Result<()> {
         } => {
             println!("Validating audit log integrity...");
 
-            let audit_logger = AuditLogger::new(&config.audit)?;
+            // Create AuditConfiguration from LoggingAuditConfig
+            let audit_config = AuditConfiguration {
+                enabled: config.logging_audit.enabled,
+                log_level: LogLevel::All,
+                storage_path: PathBuf::from("./audit_logs"),
+                max_file_size_mb: 100,
+                max_files: 10,
+                compression_enabled: false,
+                compression_method: CompressionMethod::Gzip,
+                compression_level: 6,
+                encryption_enabled: false,
+                encryption_key_env: "INFERNO_AUDIT_KEY".to_string(),
+                encryption_sensitive_fields_only: true,
+                retention_days: config.logging_audit.retention_days,
+                batch_size: 100,
+                flush_interval_seconds: 5,
+                include_request_body: false,
+                include_response_body: false,
+                exclude_patterns: vec![],
+                alert_on_critical: true,
+                alerting: AlertConfiguration::default(),
+                export_format: ExportFormat::Json,
+            };
+
+            let audit_logger = AuditLogger::new(audit_config).await?;
             let mut validation_errors = Vec::new();
 
             // Determine which files to validate
@@ -612,7 +637,7 @@ pub async fn execute(args: AuditArgs, _config: &Config) -> Result<()> {
                 }
             } else {
                 // Get all audit log files from the audit directory
-                let audit_dir = std::path::Path::new(&config.audit.storage_path);
+                let audit_dir = std::path::Path::new("./audit_logs");
                 if !audit_dir.exists() {
                     println!("Error: Audit directory does not exist: {}", audit_dir.display());
                     return Ok(());
@@ -639,7 +664,7 @@ pub async fn execute(args: AuditArgs, _config: &Config) -> Result<()> {
             println!("Validating {} log file(s)...", log_files.len());
 
             let mut total_events = 0;
-            let mut previous_timestamp: Option<DateTime<Utc>> = None;
+            let mut previous_timestamp: Option<SystemTime> = None;
 
             for log_file in &log_files {
                 println!("Validating file: {}", log_file.display());
@@ -657,12 +682,12 @@ pub async fn execute(args: AuditArgs, _config: &Config) -> Result<()> {
                             // Try to parse the line as JSON audit event
                             match serde_json::from_str::<AuditEvent>(line) {
                                 Ok(event) => {
-                                    if *verify_timestamps {
+                                    if verify_timestamps {
                                         // Check timestamp order
                                         if let Some(prev_ts) = previous_timestamp {
                                             if event.timestamp < prev_ts {
                                                 validation_errors.push(format!(
-                                                    "{}:{} - Timestamp out of order: {} < {}",
+                                                    "{}:{} - Timestamp out of order: {:?} < {:?}",
                                                     log_file.display(),
                                                     line_num + 1,
                                                     event.timestamp,
@@ -750,7 +775,7 @@ pub async fn execute(args: AuditArgs, _config: &Config) -> Result<()> {
         } => {
             println!("Archiving old audit logs...");
 
-            let audit_dir = std::path::Path::new(&config.audit.storage_path);
+            let audit_dir = std::path::Path::new(&config.logging_audit.audit.storage_path);
             if !audit_dir.exists() {
                 println!("Error: Audit directory does not exist: {}", audit_dir.display());
                 return Ok(());

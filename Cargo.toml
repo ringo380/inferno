@@ -1,6 +1,6 @@
 [package]
 name = "inferno"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 authors = ["Inferno Developers"]
 description = "An offline AI/ML model runner for GGUF and ONNX models"
@@ -121,6 +121,9 @@ cron = "0.12"  # Cron expression parsing
 # CSV processing for batch operations
 csv = "1.3"
 
+# ZIP file handling for audit exports
+zip = "0.6"
+
 # Random number generation for resilience patterns
 rand = "0.8"
 
@@ -151,6 +154,8 @@ base64 = "0.21"
 regex = "1.10"
 aes-gcm = "0.10"
 ring = "0.17"
+jsonwebtoken = "9.2"
+argon2 = "0.5"
 
 # Email support for alerting
 lettre = { version = "0.11", features = ["tokio1", "smtp-transport", "tokio1-native-tls"] }
