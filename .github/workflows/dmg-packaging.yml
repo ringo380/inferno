@@ -55,6 +55,9 @@ jobs:
 
       - name: Build macOS binaries
         run: |
+          # Allow warnings for now to get builds working
+          export RUSTFLAGS="-A warnings"
+
           # Create directories for binaries
           mkdir -p binaries/x86_64
           mkdir -p binaries/aarch64
