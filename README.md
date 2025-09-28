@@ -35,25 +35,56 @@ Inferno is a **production-ready AI inference server** that runs entirely on your
 - **Docker Ready**: One-command deployment
 - **Smart CLI**: Typo detection, helpful error messages, setup guidance
 
-## 🚀 Quick Start
+## 📦 Installation
 
+### macOS (Recommended)
+
+#### Option 1: Download DMG Package
+1. Visit [Releases](https://github.com/ringo380/inferno/releases/latest)
+2. Download `inferno-universal-vX.X.X.dmg` (supports both Intel and Apple Silicon)
+3. Open the DMG file
+4. Drag Inferno.app to your Applications folder
+5. Launch Inferno from Applications or use `inferno` command in Terminal
+
+#### Option 2: Install Script
 ```bash
-# Build from source
+curl -sSL https://github.com/ringo380/inferno/releases/latest/download/install-inferno.sh | bash
+```
+
+#### Option 3: Build from Source
+```bash
 git clone https://github.com/ringo380/inferno.git
 cd inferno
 cargo build --release
+```
 
+### Upgrading
+
+**From DMG**: The application automatically detects existing installations and preserves your settings during upgrade.
+
+**From Terminal**:
+```bash
+inferno upgrade check     # Check for updates
+inferno upgrade install   # Install latest version
+```
+
+## 🚀 Quick Start
+
+```bash
 # List available models
-./target/release/inferno models list
+inferno models list
 
 # Run inference
-./target/release/inferno run --model MODEL_NAME --prompt "Your prompt here"
+inferno run --model MODEL_NAME --prompt "Your prompt here"
 
 # Start HTTP API server
-./target/release/inferno serve
+inferno serve
 
-# Launch desktop app
-npm run tauri dev
+# Launch terminal UI
+inferno tui
+
+# Launch desktop app (if installed from DMG)
+open /Applications/Inferno.app
 ```
 
 ## ✨ Key Features
