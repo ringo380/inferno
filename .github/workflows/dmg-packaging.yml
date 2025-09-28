@@ -1,0 +1,321 @@
+name: DMG Packaging
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to create DMG for'
+        required: true
+        type: string
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  create-dmg:
+    name: Create macOS DMG
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Get release tag
+        id: get_tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "tag=${{ github.event.inputs.tag }}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=${{ github.event.release.tag_name }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Download macOS binaries from release
+        run: |
+          # Create directories for binaries
+          mkdir -p binaries/x86_64
+          mkdir -p binaries/aarch64
+
+          # Download x86_64 binary
+          curl -L -o binaries/x86_64/inferno \
+            "https://github.com/${{ github.repository }}/releases/download/${{ steps.get_tag.outputs.tag }}/inferno-macos-x86_64"
+
+          # Download aarch64 binary
+          curl -L -o binaries/aarch64/inferno \
+            "https://github.com/${{ github.repository }}/releases/download/${{ steps.get_tag.outputs.tag }}/inferno-macos-aarch64"
+
+          # Make binaries executable
+          chmod +x binaries/x86_64/inferno
+          chmod +x binaries/aarch64/inferno
+
+          # Verify downloads
+          file binaries/x86_64/inferno
+          file binaries/aarch64/inferno
+
+      - name: Create universal binary
+        run: |
+          mkdir -p universal
+          lipo -create \
+            binaries/x86_64/inferno \
+            binaries/aarch64/inferno \
+            -output universal/inferno
+
+          # Verify universal binary
+          file universal/inferno
+          lipo -info universal/inferno
+
+      - name: Create app bundle
+        run: |
+          # Create app bundle structure
+          mkdir -p "Inferno.app/Contents/MacOS"
+          mkdir -p "Inferno.app/Contents/Resources"
+
+          # Copy universal binary
+          cp universal/inferno "Inferno.app/Contents/MacOS/"
+
+          # Make binary executable
+          chmod +x "Inferno.app/Contents/MacOS/inferno"
+
+          # Create Info.plist
+          cat > "Inferno.app/Contents/Info.plist" << 'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>CFBundleExecutable</key>
+              <string>inferno</string>
+              <key>CFBundleIdentifier</key>
+              <string>com.inferno.ai.runner</string>
+              <key>CFBundleName</key>
+              <string>Inferno</string>
+              <key>CFBundleDisplayName</key>
+              <string>Inferno AI/ML Runner</string>
+              <key>CFBundleVersion</key>
+              <string>${{ steps.get_tag.outputs.tag }}</string>
+              <key>CFBundleShortVersionString</key>
+              <string>${{ steps.get_tag.outputs.tag }}</string>
+              <key>CFBundlePackageType</key>
+              <string>APPL</string>
+              <key>LSMinimumSystemVersion</key>
+              <string>10.15</string>
+              <key>LSApplicationCategoryType</key>
+              <string>public.app-category.developer-tools</string>
+              <key>NSHighResolutionCapable</key>
+              <true/>
+              <key>NSRequiresAquaSystemAppearance</key>
+              <false/>
+              <key>LSArchitecturePriority</key>
+              <array>
+                  <string>arm64</string>
+                  <string>x86_64</string>
+              </array>
+              <key>NSHumanReadableCopyright</key>
+              <string>Copyright © 2024 Inferno Developers. All rights reserved.</string>
+              <key>LSApplicationSecondaryCategoryType</key>
+              <string>public.app-category.utilities</string>
+              <key>CFBundleDocumentTypes</key>
+              <array>
+                  <dict>
+                      <key>CFBundleTypeExtensions</key>
+                      <array>
+                          <string>gguf</string>
+                      </array>
+                      <key>CFBundleTypeName</key>
+                      <string>GGUF Model File</string>
+                      <key>CFBundleTypeRole</key>
+                      <string>Viewer</string>
+                      <key>LSTypeIsPackage</key>
+                      <false/>
+                  </dict>
+                  <dict>
+                      <key>CFBundleTypeExtensions</key>
+                      <array>
+                          <string>onnx</string>
+                      </array>
+                      <key>CFBundleTypeName</key>
+                      <string>ONNX Model File</string>
+                      <key>CFBundleTypeRole</key>
+                      <string>Viewer</string>
+                      <key>LSTypeIsPackage</key>
+                      <false/>
+                  </dict>
+              </array>
+          </dict>
+          </plist>
+          EOF
+
+      - name: Create app icon (placeholder)
+        run: |
+          # Create a simple placeholder icon using iconutil
+          # In production, you'd want to include proper app icons
+          mkdir -p "Inferno.iconset"
+
+          # Create a simple 1024x1024 PNG (we'll use a solid color for now)
+          # You could replace this with actual icon files
+          python3 -c "
+          from PIL import Image
+          import os
+
+          # Create a gradient icon
+          size = 1024
+          img = Image.new('RGB', (size, size), '#FF6B35')
+
+          # Add some simple design elements
+          from PIL import ImageDraw, ImageFont
+          draw = ImageDraw.Draw(img)
+
+          # Draw a flame-like shape
+          draw.ellipse([200, 300, 824, 924], fill='#FF4500')
+          draw.ellipse([300, 200, 724, 624], fill='#FF6347')
+          draw.ellipse([400, 100, 624, 424], fill='#FFD700')
+
+          # Save icon
+          img.save('Inferno.iconset/icon_1024x1024.png')
+
+          # Create other required sizes
+          sizes = [16, 32, 64, 128, 256, 512]
+          for s in sizes:
+              resized = img.resize((s, s), Image.Resampling.LANCZOS)
+              resized.save(f'Inferno.iconset/icon_{s}x{s}.png')
+              if s <= 512:  # Also create @2x versions
+                  resized.save(f'Inferno.iconset/icon_{s//2}x{s//2}@2x.png')
+          "
+
+          # Convert to icns format
+          iconutil -c icns Inferno.iconset
+          cp Inferno.icns "Inferno.app/Contents/Resources/"
+        env:
+          # Install Pillow if not available
+          PYTHONPATH: /usr/local/lib/python3.9/site-packages
+
+      - name: Install Pillow for icon creation
+        run: |
+          pip3 install Pillow
+
+      - name: Install create-dmg
+        run: |
+          brew install create-dmg
+
+      - name: Create DMG
+        run: |
+          # Create directory for DMG contents
+          mkdir -p dmg-contents
+
+          # Copy app bundle
+          cp -R "Inferno.app" dmg-contents/
+
+          # Create symlink to Applications folder
+          ln -s /Applications dmg-contents/Applications
+
+          # Create custom DMG with proper settings
+          create-dmg \
+            --volname "Inferno ${{ steps.get_tag.outputs.tag }}" \
+            --volicon "Inferno.app/Contents/Resources/Inferno.icns" \
+            --window-pos 200 120 \
+            --window-size 800 450 \
+            --icon-size 100 \
+            --icon "Inferno.app" 200 190 \
+            --hide-extension "Inferno.app" \
+            --app-drop-link 600 185 \
+            --background-color "#2E3440" \
+            --text-size 16 \
+            --icon-text-size 14 \
+            --format UDZO \
+            --hdiutil-quiet \
+            "inferno-universal-${{ steps.get_tag.outputs.tag }}.dmg" \
+            "dmg-contents/"
+
+      - name: Verify DMG
+        run: |
+          # Verify the DMG was created successfully
+          ls -la *.dmg
+          file "inferno-universal-${{ steps.get_tag.outputs.tag }}.dmg"
+
+          # Test mounting the DMG
+          hdiutil attach "inferno-universal-${{ steps.get_tag.outputs.tag }}.dmg" -readonly -mountpoint /tmp/inferno_test
+          ls -la /tmp/inferno_test/
+          /tmp/inferno_test/Inferno.app/Contents/MacOS/inferno --version || true
+          hdiutil detach /tmp/inferno_test
+
+      - name: Upload DMG to release
+        if: github.event_name == 'release'
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: ./inferno-universal-${{ steps.get_tag.outputs.tag }}.dmg
+          asset_name: inferno-universal-${{ steps.get_tag.outputs.tag }}.dmg
+          asset_content_type: application/octet-stream
+
+      - name: Upload DMG as artifact (workflow_dispatch)
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v3
+        with:
+          name: inferno-dmg-${{ steps.get_tag.outputs.tag }}
+          path: ./inferno-universal-${{ steps.get_tag.outputs.tag }}.dmg
+          retention-days: 30
+
+      - name: Create installation script
+        run: |
+          cat > install-inferno.sh << 'EOF'
+          #!/bin/bash
+          # Inferno Installation Script for macOS
+
+          set -e
+
+          REPO="ringo380/inferno"
+          INSTALL_DIR="/usr/local/bin"
+
+          echo "🔥 Installing Inferno AI/ML Runner..."
+
+          # Detect architecture
+          ARCH=$(uname -m)
+          if [[ "$ARCH" == "x86_64" ]]; then
+              BINARY_NAME="inferno-macos-x86_64"
+          elif [[ "$ARCH" == "arm64" ]]; then
+              BINARY_NAME="inferno-macos-aarch64"
+          else
+              echo "❌ Unsupported architecture: $ARCH"
+              exit 1
+          fi
+
+          # Get latest release info
+          LATEST_RELEASE=$(curl -s "https://api.github.com/repos/$REPO/releases/latest")
+          TAG_NAME=$(echo "$LATEST_RELEASE" | grep '"tag_name":' | sed -E 's/.*"tag_name": "([^"]+)".*/\1/')
+          DOWNLOAD_URL="https://github.com/$REPO/releases/download/$TAG_NAME/$BINARY_NAME"
+
+          echo "📥 Downloading Inferno $TAG_NAME for $ARCH..."
+
+          # Download binary
+          curl -L "$DOWNLOAD_URL" -o "/tmp/inferno"
+
+          # Make executable
+          chmod +x "/tmp/inferno"
+
+          # Install to system directory
+          echo "📁 Installing to $INSTALL_DIR..."
+          sudo mv "/tmp/inferno" "$INSTALL_DIR/inferno"
+
+          # Verify installation
+          echo "✅ Installation complete!"
+          echo "🔥 Inferno version: $($INSTALL_DIR/inferno --version)"
+          echo ""
+          echo "Quick start:"
+          echo "  inferno --help        # Show help"
+          echo "  inferno models list   # List available models"
+          echo "  inferno serve         # Start HTTP API server"
+          echo "  inferno tui           # Launch terminal UI"
+          echo ""
+          echo "For more information, visit: https://github.com/$REPO"
+          EOF
+
+          chmod +x install-inferno.sh
+
+      - name: Upload installation script
+        uses: actions/upload-artifact@v3
+        with:
+          name: inferno-installer-${{ steps.get_tag.outputs.tag }}
+          path: ./install-inferno.sh
+          retention-days: 90
