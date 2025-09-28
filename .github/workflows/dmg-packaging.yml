@@ -275,6 +275,10 @@ jobs:
           </plist>
           EOF
 
+      - name: Install Pillow for icon creation
+        run: |
+          pip3 install Pillow
+
       - name: Create app icon (placeholder)
         run: |
           # Create a simple placeholder icon using iconutil
@@ -315,13 +319,6 @@ jobs:
           # Convert to icns format
           iconutil -c icns Inferno.iconset
           cp Inferno.icns "Inferno.app/Contents/Resources/"
-        env:
-          # Install Pillow if not available
-          PYTHONPATH: /usr/local/lib/python3.9/site-packages
-
-      - name: Install Pillow for icon creation
-        run: |
-          pip3 install Pillow
 
       - name: Install create-dmg
         run: |
