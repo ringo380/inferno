@@ -84,6 +84,7 @@ num-traits = "0.2"       # for numeric trait abstractions
 
 # System info and platform detection
 sysinfo = "0.29"
+dirs = "5.0"
 
 # Hashing for model verification and response caching
 sha2 = "0.10"
