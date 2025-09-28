@@ -1,0 +1,14 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 💬 Ask a Question
+    url: https://github.com/ringo380/inferno/discussions
+    about: Ask questions about using Inferno or discuss ideas with the community
+  - name: 🚀 Feature Discussions
+    url: https://github.com/ringo380/inferno/discussions/categories/ideas
+    about: Discuss feature ideas and get community feedback before creating an issue
+  - name: 📖 Documentation
+    url: https://github.com/ringo380/inferno#readme
+    about: Check our documentation, guides, and examples
+  - name: 🔧 Troubleshooting
+    url: https://github.com/ringo380/inferno/blob/main/TROUBLESHOOTING_GUIDE.md
+    about: Common issues and solutions for Inferno setup and usage
