@@ -79,7 +79,7 @@ impl ApplicationVersion {
         Self {
             major: 0,
             minor: 3,
-            patch: 0,
+            patch: 1,
             pre_release: None,
             build_metadata: None,
             build_date: Some(Utc::now()),
