@@ -1,0 +1,216 @@
+name: Performance Issue
+description: Performance optimization, caching improvements, and resource efficiency
+title: "[Performance]: "
+labels: ["area/performance", "type/performance", "status/needs-triage"]
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for submitting a performance-related issue! This template is for performance optimization, caching improvements, and resource efficiency issues.
+
+  - type: dropdown
+    id: performance-type
+    attributes:
+      label: Performance Issue Type
+      description: What type of performance issue are you reporting?
+      options:
+        - Slow inference speed
+        - High memory usage
+        - CPU usage optimization
+        - GPU utilization issue
+        - Caching inefficiency
+        - Startup time issue
+        - Model loading performance
+        - API response time
+        - Batch processing efficiency
+        - Resource leak
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Affected Component
+      description: Which component has the performance issue?
+      options:
+        - Backend - GGUF
+        - Backend - ONNX
+        - Model loading and management
+        - Caching system
+        - API server
+        - CLI interface
+        - TUI interface
+        - Batch processing
+        - Metrics collection
+        - Configuration parsing
+        - Memory management
+        - Overall system
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Performance Impact
+      description: How severe is the performance impact?
+      options:
+        - Low - Minor performance improvement opportunity
+        - Medium - Noticeable performance impact
+        - High - Significant performance degradation
+        - Critical - Performance makes system unusable
+    validations:
+      required: true
+
+  - type: textarea
+    id: performance-description
+    attributes:
+      label: Performance Issue Description
+      description: Describe the performance problem you're experiencing
+      placeholder: |
+        I noticed that [specific operation] takes much longer than expected...
+        The system uses too much [memory/CPU/GPU] when...
+        Compared to [alternative/baseline], this operation is slow because...
+    validations:
+      required: true
+
+  - type: textarea
+    id: benchmarks
+    attributes:
+      label: Performance Measurements
+      description: Provide specific performance measurements if available
+      placeholder: |
+        Current performance:
+        - Operation X takes: 10 seconds
+        - Memory usage: 2GB
+        - CPU usage: 80%
+        - GPU utilization: 30%
+
+        Expected performance:
+        - Operation X should take: ~3 seconds
+        - Memory usage should be: <1GB
+        - CPU usage should be: <50%
+        - GPU utilization should be: >70%
+
+  - type: textarea
+    id: reproduction-steps
+    attributes:
+      label: Steps to Reproduce Performance Issue
+      description: How can we reproduce this performance issue?
+      placeholder: |
+        1. Start inferno with configuration...
+        2. Load model...
+        3. Run command/operation...
+        4. Observe slow performance in...
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment Details
+      description: Provide details about your system environment
+      placeholder: |
+        OS:
+        CPU:
+        Memory:
+        GPU:
+        Inferno version:
+        Model used:
+        Configuration:
+    validations:
+      required: true
+
+  - type: textarea
+    id: profiling-data
+    attributes:
+      label: Profiling Data
+      description: If you have profiling data, please share it here
+      render: text
+      placeholder: |
+        // Profiling output from tools like:
+        // - cargo bench
+        // - flamegraph
+        // - perf
+        // - Activity Monitor / Task Manager
+        // - htop/top output
+
+  - type: dropdown
+    id: optimization-areas
+    attributes:
+      label: Potential Optimization Areas
+      description: What areas do you think could be optimized?
+      multiple: true
+      options:
+        - Algorithm efficiency
+        - Memory allocation patterns
+        - Caching strategy
+        - GPU compute utilization
+        - Parallel processing
+        - I/O operations
+        - Model loading strategy
+        - Data serialization/deserialization
+        - Network operations
+        - Configuration parsing
+        - Compilation optimization
+
+  - type: textarea
+    id: proposed-solution
+    attributes:
+      label: Proposed Optimization
+      description: If you have ideas for optimization, please describe them
+      placeholder: |
+        I think this could be optimized by...
+        The bottleneck appears to be...
+        A potential solution would be to...
+
+  - type: checkboxes
+    id: impact-areas
+    attributes:
+      label: Performance Impact Areas
+      description: Check all areas where this performance issue has impact
+      options:
+        - label: User experience - noticeable delay
+        - label: Resource usage - high CPU/memory/GPU consumption
+        - label: Scalability - affects ability to handle larger workloads
+        - label: Battery life - significant power consumption
+        - label: Cost - affects operational costs in cloud environments
+        - label: Throughput - reduces overall system throughput
+        - label: Latency - increases response times
+
+  - type: textarea
+    id: workarounds
+    attributes:
+      label: Current Workarounds
+      description: Are there any workarounds you're currently using?
+      placeholder: |
+        I'm currently working around this by...
+        Alternative approach that's faster: ...
+
+  - type: checkboxes
+    id: testing-willingness
+    attributes:
+      label: Testing Commitment
+      description: How can you help with performance optimization?
+      options:
+        - label: I can test performance improvements
+        - label: I can provide benchmark data
+        - label: I can help with profiling
+        - label: I can test on different hardware configurations
+        - label: I can help implement optimizations
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist
+      description: Please confirm the following
+      options:
+        - label: I have searched existing issues for similar performance problems
+          required: true
+        - label: I have provided specific performance measurements where possible
+          required: true
+        - label: I have included environment details that might affect performance
+          required: true
+        - label: I understand that performance optimization may take time to implement
+          required: true

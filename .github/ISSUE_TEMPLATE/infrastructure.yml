@@ -1,0 +1,179 @@
+name: Infrastructure Issue
+description: Infrastructure improvements, backend enhancements, and foundational features
+title: "[Infrastructure]: "
+labels: ["area/infrastructure", "status/needs-triage"]
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for submitting an infrastructure-related issue! This template is for core infrastructure improvements, backend enhancements, and foundational features.
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      description: Which component does this infrastructure issue relate to?
+      options:
+        - Backend - GGUF implementation
+        - Backend - ONNX implementation
+        - Backend - Generic/trait system
+        - Model management and discovery
+        - Configuration system
+        - Build system and compilation
+        - Dependencies and third-party integration
+        - Core architecture
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: issue-type
+    attributes:
+      label: Issue Type
+      description: What type of infrastructure issue is this?
+      options:
+        - Enhancement - Improve existing infrastructure
+        - Bug - Infrastructure not working as expected
+        - Refactor - Restructure without changing functionality
+        - New Feature - Add new infrastructure capability
+        - Performance - Infrastructure performance issue
+        - Compatibility - Platform or dependency compatibility
+        - Architecture - Architectural improvements
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      description: What's the priority of this infrastructure change?
+      options:
+        - Low - Nice to have improvement
+        - Medium - Moderate infrastructure improvement
+        - High - Important for system stability/performance
+        - Critical - Blocking or causing system instability
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: Describe the infrastructure issue or improvement needed
+      placeholder: |
+        Current state: ...
+        Problem: ...
+        Proposed change: ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: current-behavior
+    attributes:
+      label: Current Behavior
+      description: How does the current infrastructure behave?
+      placeholder: |
+        Currently, the system...
+
+  - type: textarea
+    id: expected-behavior
+    attributes:
+      label: Expected Behavior
+      description: How should the infrastructure behave after this change?
+      placeholder: |
+        After this change, the system should...
+    validations:
+      required: true
+
+  - type: textarea
+    id: technical-details
+    attributes:
+      label: Technical Implementation Details
+      description: Provide technical details about the proposed infrastructure changes
+      render: rust
+      placeholder: |
+        // Example code changes needed
+        pub trait NewInfrastructureFeature {
+            fn enhanced_method(&self) -> Result<()>;
+        }
+
+        // Configuration changes
+        [infrastructure]
+        new_setting = "value"
+
+  - type: dropdown
+    id: platforms
+    attributes:
+      label: Affected Platforms
+      description: Which platforms are affected by this infrastructure change?
+      multiple: true
+      options:
+        - Linux
+        - macOS
+        - Windows
+        - Docker containers
+        - All platforms
+        - Platform agnostic
+
+  - type: checkboxes
+    id: impact
+    attributes:
+      label: Impact Assessment
+      description: Check all areas that this infrastructure change will impact
+      options:
+        - label: Breaking changes to public API
+        - label: Changes to configuration format
+        - label: New dependencies required
+        - label: Performance implications
+        - label: Memory usage changes
+        - label: Build system changes
+        - label: Testing infrastructure updates needed
+        - label: Documentation updates required
+
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Dependencies and Prerequisites
+      description: List any dependencies or prerequisites for this infrastructure change
+      placeholder: |
+        - Requires upgrade to dependency X
+        - Needs platform feature Y
+        - Depends on completion of issue #123
+
+  - type: textarea
+    id: testing-approach
+    attributes:
+      label: Testing Approach
+      description: How should this infrastructure change be tested?
+      placeholder: |
+        Unit tests: ...
+        Integration tests: ...
+        Performance tests: ...
+        Platform-specific tests: ...
+
+  - type: textarea
+    id: rollout-plan
+    attributes:
+      label: Rollout Plan
+      description: How should this infrastructure change be rolled out?
+      placeholder: |
+        Phase 1: ...
+        Phase 2: ...
+        Backwards compatibility: ...
+        Migration path: ...
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist
+      description: Please confirm the following
+      options:
+        - label: I have searched existing issues to avoid duplicates
+          required: true
+        - label: I have considered the impact on existing functionality
+          required: true
+        - label: I have provided sufficient technical detail for implementation
+          required: true
+        - label: I understand this may require significant development effort
+          required: true
