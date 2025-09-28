@@ -17,6 +17,8 @@ jobs:
   create-dmg:
     name: Create macOS DMG
     runs-on: macos-latest
+    permissions:
+      contents: write  # Need write permission to upload release assets
 
     steps:
       - name: Checkout code
@@ -31,27 +33,60 @@ jobs:
             echo "tag=${{ github.event.release.tag_name }}" >> $GITHUB_OUTPUT
           fi
 
-      - name: Download macOS binaries from release
+      - name: Setup Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          target: x86_64-apple-darwin,aarch64-apple-darwin
+          cache: true
+
+      - name: Cache cargo registry
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Build macOS binaries
         run: |
           # Create directories for binaries
           mkdir -p binaries/x86_64
           mkdir -p binaries/aarch64
 
-          # Download x86_64 binary
-          curl -L -o binaries/x86_64/inferno \
-            "https://github.com/${{ github.repository }}/releases/download/${{ steps.get_tag.outputs.tag }}/inferno-macos-x86_64"
+          # Build for x86_64
+          echo "Building for x86_64-apple-darwin..."
+          cargo build --release --target x86_64-apple-darwin --bin inferno
+          cp target/x86_64-apple-darwin/release/inferno binaries/x86_64/
 
-          # Download aarch64 binary
-          curl -L -o binaries/aarch64/inferno \
-            "https://github.com/${{ github.repository }}/releases/download/${{ steps.get_tag.outputs.tag }}/inferno-macos-aarch64"
+          # Build for aarch64 (ARM64)
+          echo "Building for aarch64-apple-darwin..."
+          cargo build --release --target aarch64-apple-darwin --bin inferno
+          cp target/aarch64-apple-darwin/release/inferno binaries/aarch64/
 
           # Make binaries executable
           chmod +x binaries/x86_64/inferno
           chmod +x binaries/aarch64/inferno
 
-          # Verify downloads
+          # Verify builds
           file binaries/x86_64/inferno
           file binaries/aarch64/inferno
+
+          # Also upload individual binaries as release assets
+          if [ "${{ github.event_name }}" = "release" ]; then
+            echo "Uploading individual architecture binaries to release..."
+            gh release upload ${{ steps.get_tag.outputs.tag }} \
+              binaries/x86_64/inferno#inferno-macos-x86_64 \
+              binaries/aarch64/inferno#inferno-macos-aarch64 \
+              --clobber
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
 
       - name: Create universal binary
         run: |
