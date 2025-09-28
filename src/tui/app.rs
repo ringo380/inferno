@@ -326,6 +326,9 @@ impl App {
             AppState::Help => {
                 // Help is drawn as overlay
             }
+            AppState::UpgradeManagement => {
+                // Upgrade management UI would be drawn here
+            }
         }
     }
 
@@ -952,38 +955,44 @@ impl App {
     }
 
     pub async fn handle_upgrade_events(&mut self) {
+        let mut events_to_process = Vec::new();
+
         if let Some(receiver) = &mut self.upgrade_event_receiver {
             while let Ok(event) = receiver.try_recv() {
-                self.upgrade_events.push_back(event.clone());
+                events_to_process.push(event);
+            }
+        }
 
-                // Trigger notification for important events
-                match event.event_type {
-                    crate::upgrade::UpgradeEventType::UpdateAvailable => {
-                        self.show_upgrade_notification = true;
-                        self.add_log("info", "🔄 Update available!");
-                    }
-                    crate::upgrade::UpgradeEventType::DownloadCompleted => {
-                        self.add_log("info", "📥 Update downloaded successfully");
-                    }
-                    crate::upgrade::UpgradeEventType::InstallationCompleted => {
-                        self.add_log("info", "✅ Update installed successfully");
-                    }
-                    crate::upgrade::UpgradeEventType::InstallationFailed => {
-                        self.add_log("error", "❌ Update installation failed");
-                    }
-                    _ => {}
-                }
+        for event in events_to_process {
+            self.upgrade_events.push_back(event.clone());
 
-                // Keep only the last 50 events
-                if self.upgrade_events.len() > 50 {
-                    self.upgrade_events.pop_front();
+            // Trigger notification for important events
+            match event.event_type {
+                crate::upgrade::UpgradeEventType::UpdateAvailable => {
+                    self.show_upgrade_notification = true;
+                    self.add_log("info", "🔄 Update available!");
                 }
+                crate::upgrade::UpgradeEventType::DownloadCompleted => {
+                    self.add_log("info", "📥 Update downloaded successfully");
+                }
+                crate::upgrade::UpgradeEventType::InstallationCompleted => {
+                    self.add_log("info", "✅ Update installed successfully");
+                }
+                crate::upgrade::UpgradeEventType::InstallationFailed => {
+                    self.add_log("error", "❌ Update installation failed");
+                }
+                _ => {}
+            }
+
+            // Keep only the last 50 events
+            if self.upgrade_events.len() > 50 {
+                self.upgrade_events.pop_front();
             }
         }
     }
 
-    pub async fn check_for_updates(&mut self) {
-        if let Some(manager) = &self.upgrade_manager {
+    pub async fn check_for_updates(&mut self) -> Result<()> {
+        if let Some(manager) = self.upgrade_manager.clone() {
             self.add_log("info", "Checking for updates...");
             match manager.check_for_updates().await {
                 Ok(Some(update_info)) => {
@@ -1000,10 +1009,11 @@ impl App {
                 }
             }
         }
+        Ok(())
     }
 
-    pub async fn start_upgrade(&mut self) {
-        if let (Some(manager), UpgradeStatus::Available(update_info)) = (&self.upgrade_manager, &self.upgrade_status.clone()) {
+    pub async fn start_upgrade(&mut self) -> Result<()> {
+        if let (Some(manager), UpgradeStatus::Available(update_info)) = (self.upgrade_manager.clone(), &self.upgrade_status.clone()) {
             self.add_log("info", "Starting upgrade installation...");
             match manager.install_update(update_info).await {
                 Ok(_) => {
@@ -1014,6 +1024,7 @@ impl App {
                 }
             }
         }
+        Ok(())
     }
 
     fn draw_upgrade_notification(&self, f: &mut Frame) {

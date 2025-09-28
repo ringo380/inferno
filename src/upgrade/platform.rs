@@ -325,9 +325,12 @@ impl BasePlatformHandler {
 
         // Platform-specific service starting
         match self.platform_info.os.as_str() {
-            "macos" => self.start_macos_services(stopped_services).await?,
-            "linux" => self.start_linux_services(stopped_services).await?,
-            "windows" => self.start_windows_services(stopped_services).await?,
+            "macos" => self.start_macos_services(stopped_services).await
+                .map_err(|e| UpgradeError::Internal(e.to_string()))?,
+            "linux" => self.start_linux_services(stopped_services).await
+                .map_err(|e| UpgradeError::Internal(e.to_string()))?,
+            "windows" => self.start_windows_services(stopped_services).await
+                .map_err(|e| UpgradeError::Internal(e.to_string()))?,
             _ => {}
         }
 

@@ -586,11 +586,11 @@ fn status_to_string(status: &UpgradeStatus) -> String {
         UpgradeStatus::UpToDate => "Up to date".to_string(),
         UpgradeStatus::Available(_) => "Update available".to_string(),
         UpgradeStatus::Checking => "Checking for updates".to_string(),
-        UpgradeStatus::Downloading { progress, .. } => format!("Downloading ({}%)", progress as u32),
-        UpgradeStatus::Installing { stage, progress } => format!("Installing: {} ({}%)", stage.description(), progress as u32),
+        UpgradeStatus::Downloading { progress, .. } => format!("Downloading ({}%)", *progress as u32),
+        UpgradeStatus::Installing { stage, progress } => format!("Installing: {} ({}%)", stage.description(), *progress as u32),
         UpgradeStatus::Completed { .. } => "Installation completed".to_string(),
         UpgradeStatus::Failed { .. } => "Installation failed".to_string(),
-        UpgradeStatus::RollingBack { progress, .. } => format!("Rolling back ({}%)", progress as u32),
+        UpgradeStatus::RollingBack { progress, .. } => format!("Rolling back ({}%)", *progress as u32),
     }
 }
 

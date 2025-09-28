@@ -339,15 +339,19 @@ impl BackupManager {
         sorted_backups.sort_by(|a, b| a.created_at.cmp(&b.created_at));
 
         // Keep only the most recent max_backups
-        let to_delete = sorted_backups
-            .into_iter()
-            .take(sorted_backups.len() - self.config.max_backups as usize);
+        let total_backups = sorted_backups.len();
+        if total_backups > self.config.max_backups as usize {
+            let to_delete: Vec<_> = sorted_backups
+                .into_iter()
+                .take(total_backups - self.config.max_backups as usize)
+                .collect();
 
-        for backup in to_delete {
+            for backup in to_delete {
             info!("Cleaning up old backup: {} ({})", backup.id, backup.created_at);
             if let Err(e) = self.delete_backup(&backup.id).await {
                 warn!("Failed to delete old backup {}: {}", backup.id, e);
             }
+        }
         }
 
         Ok(())
