@@ -38,73 +38,71 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Architecture Overview
 
-Inferno is an enterprise-grade offline AI/ML model runner built with a comprehensive, modular architecture supporting production deployment:
+Inferno is an enterprise-grade offline AI/ML model runner built with a comprehensive, modular architecture supporting production deployment.
+
+### New Modular Structure (v0.4.0+)
+
+**As of v0.4.0**, the codebase has been reorganized into logical feature groups for better maintainability and scalability. The new structure organizes code into 6 main categories:
 
 ```
 src/
-├── main.rs           # CLI entry point with clap argument parsing
-├── lib.rs            # Library exports and comprehensive error types
-├── config.rs         # Hierarchical configuration (TOML + env vars)
-├── backends/         # Trait-based model execution backends
-│   ├── mod.rs        # InferenceBackend trait definition
-│   ├── gguf.rs       # GGUF backend (ready for llama.cpp integration)
-│   └── onnx.rs       # ONNX backend (ready for ort crate integration)
-├── cli/              # Comprehensive command-line interface modules
-│   ├── run.rs        # Inference execution
-│   ├── serve.rs      # HTTP API server
-│   ├── models.rs     # Model management
-│   ├── bench.rs      # Performance benchmarking
-│   ├── validate.rs   # Model validation
-│   ├── batch.rs      # Batch processing
-│   ├── metrics.rs    # Metrics management
-│   ├── config.rs     # Configuration management
-│   ├── cache.rs      # Model caching
-│   ├── convert.rs    # Model format conversion
-│   ├── response_cache.rs # Response caching
-│   ├── monitoring.rs # Performance monitoring
-│   ├── distributed.rs # Distributed inference
-│   ├── ab_testing.rs # A/B testing framework
-│   ├── audit.rs      # Audit logging
-│   ├── batch_queue.rs # Batch queue management
-│   ├── versioning.rs # Model versioning
-│   ├── gpu.rs        # GPU management
-│   ├── resilience.rs # Resilience patterns
-│   ├── streaming.rs  # Real-time streaming
-│   ├── security.rs   # Security management
-│   ├── observability.rs # Observability stack
-│   ├── optimization.rs # Performance optimization
-│   ├── multimodal.rs # Multimodal support
-│   ├── deployment.rs # Deployment automation
-│   ├── marketplace.rs # Model marketplace
-│   ├── federated.rs  # Federated learning
-│   ├── dashboard.rs  # Web dashboard
-│   ├── advanced_monitoring.rs # Advanced monitoring
-│   ├── api_gateway.rs # API gateway
-│   ├── model_versioning.rs # Model version control
-│   ├── data_pipeline.rs # Data pipeline management
-│   ├── backup_recovery.rs # Backup and recovery
-│   ├── logging_audit.rs # Enhanced logging
-│   ├── performance_optimization.rs # Performance tuning
-│   ├── multi_tenancy.rs # Multi-tenant support
-│   ├── advanced_cache.rs # Advanced caching
-│   └── qa_framework.rs # Quality assurance
-├── tui/              # Terminal user interface
-│   ├── app.rs        # Main TUI application state
-│   ├── components.rs # Reusable UI components
-│   └── events.rs     # Event handling system
-├── api/              # HTTP API modules
-│   ├── mod.rs        # API module exports
-│   ├── openai.rs     # OpenAI-compatible API
-│   └── websocket.rs  # WebSocket real-time API
-├── batch/            # Batch processing system
-│   ├── mod.rs        # Batch processing core
-│   ├── queue.rs      # Job queue management
-│   └── scheduler.rs  # Task scheduling
-├── models/           # Model discovery and metadata
-├── io/               # I/O format handling (text, image, audio, JSON)
-├── metrics/          # Performance monitoring with async event processing
-└── [Enterprise Modules] # Advanced features for production deployment
+├── main.rs                   # CLI entry point
+├── lib.rs                    # Library exports
+│
+├── core/                     # 🔹 Core Platform Functionality
+│   ├── config/               # Configuration system
+│   ├── backends/             # Model execution backends (GGUF, ONNX)
+│   ├── models/               # Model discovery & metadata
+│   ├── io/                   # I/O format handling
+│   └── security/             # Security & sandboxing
+│
+├── infrastructure/           # 🔹 Infrastructure & Observability
+│   ├── cache/                # Unified caching (model + response + advanced)
+│   ├── monitoring/           # Unified monitoring (basic + advanced APM)
+│   ├── observability/        # Tracing & telemetry
+│   ├── metrics/              # Metrics collection
+│   └── audit/                # Unified audit & compliance
+│
+├── operations/               # 🔹 DevOps & Operations
+│   ├── batch/                # Batch processing & job queue
+│   ├── deployment/           # Deployment automation
+│   ├── backup/               # Backup & recovery
+│   ├── upgrade/              # Auto-update system
+│   ├── resilience/           # Resilience patterns (retry, circuit breaker)
+│   └── versioning/           # Version management (app + model)
+│
+├── ai_features/              # 🔹 AI/ML Specialized Features
+│   ├── conversion/           # Model format conversion
+│   ├── optimization/         # Unified optimization & profiling
+│   ├── multimodal/           # Multimodal support (vision, audio)
+│   ├── streaming/            # Real-time streaming
+│   └── gpu/                  # GPU management
+│
+├── enterprise/               # 🔹 Enterprise Features
+│   ├── distributed/          # Distributed inference
+│   ├── multi_tenancy/        # Multi-tenant isolation
+│   ├── federated/            # Federated learning
+│   ├── marketplace/          # Model marketplace
+│   ├── api_gateway/          # API gateway & rate limiting
+│   ├── data_pipeline/        # ETL data pipeline
+│   └── qa_framework/         # Quality assurance
+│
+└── interfaces/               # 🔹 User Interfaces
+    ├── cli/                  # Command-line interface (46 commands)
+    ├── api/                  # HTTP API (OpenAI-compatible)
+    ├── tui/                  # Terminal UI
+    ├── dashboard/            # Web dashboard
+    └── desktop/              # Desktop app (Tauri)
 ```
+
+**Backward Compatibility**: Old module paths (e.g., `inferno::cache`, `inferno::monitoring`) are still available via re-exports in `lib.rs`. New code should use organized paths (e.g., `inferno::infrastructure::cache`).
+
+**Key Improvements**:
+- **Reduced complexity**: 40+ root modules → 6 main categories
+- **Clear boundaries**: Related features grouped together
+- **Better navigation**: Easier to find relevant code
+- **Consolidated duplicates**: cache/response_cache/advanced_cache → infrastructure/cache
+- **Scalability**: Easy to add new features in the right place
 
 ### Key Design Patterns
 - **Backend Trait**: `InferenceBackend` trait allows pluggable model execution engines
