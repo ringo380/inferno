@@ -20,10 +20,14 @@ fn create_mock_model(path: &PathBuf, backend_type: &str) -> ModelInfo {
     ModelInfo {
         name: path.file_name().unwrap().to_string_lossy().to_string(),
         path: path.clone(),
+        file_path: path.clone(),
         size: content.len() as u64,
+        size_bytes: content.len() as u64,
         modified: chrono::Utc::now(),
         backend_type: backend_type.to_string(),
+        format: backend_type.to_string(),
         checksum: None,
+        metadata: std::collections::HashMap::new(),
     }
 }
 
@@ -154,6 +158,8 @@ fn bench_concurrent_inference(c: &mut Criterion) {
                         temperature: 0.7,
                         top_p: 0.9,
                         stream: false,
+                        stop_sequences: vec![],
+                        seed: None,
                     };
 
                     let semaphore = Arc::new(Semaphore::new(concurrency));
@@ -198,6 +204,8 @@ fn bench_concurrent_inference(c: &mut Criterion) {
                         temperature: 0.7,
                         top_p: 0.9,
                         stream: false,
+                        stop_sequences: vec![],
+                        seed: None,
                     };
 
                     let semaphore = Arc::new(Semaphore::new(concurrency));
@@ -237,88 +245,7 @@ fn bench_concurrent_inference(c: &mut Criterion) {
 
 fn bench_concurrent_http_requests(_c: &mut Criterion) {
     // HTTP benchmark temporarily disabled due to server dependency issues
-    let rt = Runtime::new().unwrap();
-    let temp_dir = tempdir().unwrap();
-
-    // Setup HTTP server for testing
-    let server_handle = rt.spawn(async {
-        let model_path = temp_dir.path().join("http_test.gguf");
-        let model = create_mock_model(&model_path, "gguf");
-
-        let backend_config = BackendConfig::default();
-        let mut backend = Backend::new(BackendType::Gguf, &backend_config).unwrap();
-        backend.load_model(&model).await.unwrap();
-
-        let server_config = ServerConfig {
-            host: "127.0.0.1".to_string(),
-            port: 8081,
-            cors_origins: vec!["*".to_string()],
-            request_timeout: Duration::from_secs(30),
-        };
-
-        let server = OpenAIServer::new(Arc::new(BackendHandle::new(backend)), server_config);
-        server.run().await
-    });
-
-    // Give server time to start
-    rt.block_on(async {
-        tokio::time::sleep(Duration::from_millis(500)).await;
-    });
-
-    let concurrency_levels = vec![1, 5, 10, 25, 50];
-
-    let mut group = c.benchmark_group("concurrent_http_requests");
-    group.sample_size(5);
-    group.measurement_time(Duration::from_secs(20));
-
-    for concurrency in concurrency_levels {
-        group.bench_with_input(
-            BenchmarkId::new("http_completions", concurrency),
-            &concurrency,
-            |b, &concurrency| {
-                b.to_async(&rt).iter(|| async {
-                    let client = reqwest::Client::new();
-                    let base_url = "http://127.0.0.1:8081";
-
-                    let handles: Vec<_> = (0..concurrency)
-                        .map(|i| {
-                            let client = client.clone();
-                            let url = format!("{}/v1/completions", base_url);
-
-                            tokio::spawn(async move {
-                                let request_body = serde_json::json!({
-                                    "model": "test_model",
-                                    "prompt": format!("Test prompt number {}", i),
-                                    "max_tokens": 50,
-                                    "temperature": 0.7
-                                });
-
-                                let start = Instant::now();
-                                let response = client.post(&url).json(&request_body).send().await;
-                                let duration = start.elapsed();
-
-                                match response {
-                                    Ok(resp) => (resp.status().is_success(), duration),
-                                    Err(_) => (false, duration),
-                                }
-                            })
-                        })
-                        .collect();
-
-                    let results = join_all(handles).await;
-                    let successful_requests = results
-                        .into_iter()
-                        .filter_map(|r| r.ok())
-                        .filter(|(success, _)| *success)
-                        .count();
-
-                    black_box(successful_requests)
-                })
-            },
-        );
-    }
-
-    group.finish();
+    // Will be re-enabled when server components are available
 }
 
 fn bench_throughput_sustained_load(c: &mut Criterion) {
@@ -361,6 +288,8 @@ fn bench_throughput_sustained_load(c: &mut Criterion) {
                             temperature: 0.7,
                             top_p: 0.9,
                             stream: false,
+                            stop_sequences: vec![],
+                            seed: None,
                         };
 
                         while Instant::now() < end_time {

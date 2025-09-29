@@ -141,7 +141,7 @@ impl GgufBackend {
         let response = tokio::task::spawn_blocking(move || {
             // Tokenize the input text
             let tokens = model_clone
-                .tokenize(&input_str, AddBos::Always, Special::Tokenize)
+                .str_to_token(&input_str, AddBos::Always)
                 .map_err(|e| InfernoError::Backend(format!("Failed to tokenize input: {}", e)))?;
 
             debug!("Tokenized input: {} tokens", tokens.len());
@@ -460,10 +460,14 @@ mod tests {
         let model_info = ModelInfo {
             path: PathBuf::from("/non/existent/file.gguf"),
             name: "test".to_string(),
+            file_path: PathBuf::from("/non/existent/file.gguf"),
             backend_type: "gguf".to_string(),
+            format: "gguf".to_string(),
             size: 0,
+            size_bytes: 0,
             checksum: None,
             modified: Utc::now(),
+            metadata: std::collections::HashMap::new(),
         };
 
         let result = backend.load_model(&model_info).await;
@@ -482,12 +486,16 @@ mod tests {
             .expect("Failed to write fake model file for test");
 
         let model_info = ModelInfo {
-            path: model_path,
+            path: model_path.clone(),
             name: "fake".to_string(),
+            file_path: model_path,
             backend_type: "gguf".to_string(),
+            format: "gguf".to_string(),
             size: 24,
+            size_bytes: 24,
             checksum: None,
             modified: Utc::now(),
+            metadata: std::collections::HashMap::new(),
         };
 
         let result = backend.load_model(&model_info).await;
@@ -508,12 +516,16 @@ mod tests {
         std::fs::write(&model_path, &content).expect("Failed to write valid model file for test");
 
         let model_info = ModelInfo {
-            path: model_path,
+            path: model_path.clone(),
             name: "valid".to_string(),
+            file_path: model_path,
             backend_type: "gguf".to_string(),
+            format: "gguf".to_string(),
             size: content.len() as u64,
+            size_bytes: content.len() as u64,
             checksum: None,
             modified: Utc::now(),
+            metadata: std::collections::HashMap::new(),
         };
 
         let result = backend.load_model(&model_info).await;

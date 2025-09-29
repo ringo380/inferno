@@ -76,7 +76,7 @@ jobs:
         }
         EOF
 
-        echo "matrix=$(cat matrix.json)" >> $GITHUB_OUTPUT
+        echo "matrix=$(jq -c . matrix.json)" >> $GITHUB_OUTPUT
 
   # Create optimized Dockerfiles if they don't exist
   prepare-dockerfiles:
