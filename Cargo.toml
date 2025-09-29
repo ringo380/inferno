@@ -1,13 +1,13 @@
 [package]
 name = "inferno"
-version = "0.3.2"
+version = "0.4.0"
 edition = "2021"
 authors = ["Inferno Developers"]
 description = "Enterprise AI/ML model runner with automatic updates, real-time monitoring, and multi-interface support"
 readme = "README.md"
 homepage = "https://github.com/inferno-ai/inferno"
 repository = "https://github.com/inferno-ai/inferno"
-license = "MIT OR Apache-2.0"
+license = "MIT"
 keywords = ["ai", "ml", "gguf", "onnx", "inference"]
 categories = ["command-line-utilities", "science"]
 exclude = [

@@ -25,48 +25,56 @@
 
 use std::fmt;
 
-// Re-export main components
-pub mod backends;
+// === Core Foundation Modules ===
 pub mod config;
+pub mod backends;
+pub mod models;
+pub mod io;
+pub mod security;
+
+// === User Interface Modules ===
 pub mod cli;
 pub mod api;
 pub mod tui;
-pub mod models;
-pub mod io;
-pub mod metrics;
-pub mod batch;
-pub mod security;
-pub mod model_versioning;
-
-// Additional modules
-pub mod audit;
-pub mod cache;
 pub mod dashboard;
-pub mod distributed;
-pub mod monitoring;
-pub mod observability;
+
+// === Infrastructure & Operations ===
+pub mod batch;
+pub mod cache;
 pub mod response_cache;
 pub mod advanced_cache;
+pub mod monitoring;
 pub mod advanced_monitoring;
-pub mod backup_recovery;
-pub mod data_pipeline;
-pub mod deployment;
-pub mod federated;
-pub mod gpu;
+pub mod observability;
+pub mod metrics;
+pub mod audit;
 pub mod logging_audit;
-pub mod marketplace;
+
+// === Enterprise & Management ===
+pub mod deployment;
+pub mod distributed;
 pub mod multi_tenancy;
-pub mod multimodal;
-pub mod streaming;
+pub mod resilience;
+pub mod backup_recovery;
 pub mod upgrade;
 pub mod versioning;
-pub mod resilience;
+pub mod model_versioning;
+
+// === AI/ML Specialized Features ===
 pub mod optimization;
-pub mod conversion;
-pub mod api_gateway;
-pub mod qa_framework;
 pub mod performance_optimization;
 pub mod performance_baseline;
+pub mod conversion;
+pub mod multimodal;
+pub mod streaming;
+pub mod federated;
+pub mod gpu;
+
+// === External Integrations ===
+pub mod marketplace;
+pub mod api_gateway;
+pub mod data_pipeline;
+pub mod qa_framework;
 
 // Conditional Tauri app support
 #[cfg(feature = "tauri-app")]
