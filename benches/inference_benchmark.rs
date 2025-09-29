@@ -18,10 +18,14 @@ fn create_mock_gguf_model(path: &PathBuf) -> ModelInfo {
     ModelInfo {
         name: path.file_name().unwrap().to_string_lossy().to_string(),
         path: path.clone(),
+        file_path: path.clone(),
         size: 1024 * 1024, // 1MB
+        size_bytes: 1024 * 1024,
         modified: chrono::Utc::now(),
         backend_type: "gguf".to_string(),
+        format: "gguf".to_string(),
         checksum: None,
+        metadata: std::collections::HashMap::new(),
     }
 }
 
@@ -31,10 +35,14 @@ fn create_mock_onnx_model(path: &PathBuf) -> ModelInfo {
     ModelInfo {
         name: path.file_name().unwrap().to_string_lossy().to_string(),
         path: path.clone(),
+        file_path: path.clone(),
         size: 2 * 1024 * 1024, // 2MB
+        size_bytes: 2 * 1024 * 1024,
         modified: chrono::Utc::now(),
         backend_type: "onnx".to_string(),
+        format: "onnx".to_string(),
         checksum: None,
+        metadata: std::collections::HashMap::new(),
     }
 }
 
@@ -115,6 +123,8 @@ fn bench_inference(c: &mut Criterion) {
         temperature: 0.7,
         top_p: 0.9,
         stream: false,
+        stop_sequences: vec![],
+        seed: None,
     };
 
     let test_prompts = vec![

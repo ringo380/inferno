@@ -355,6 +355,8 @@ impl DataFixtures {
             temperature: 0.7,
             top_p: 0.9,
             stream: false,
+            stop_sequences: vec![],
+            seed: None,
         }
     }
 

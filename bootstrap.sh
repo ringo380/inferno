@@ -73,10 +73,14 @@ async fn main() -> anyhow::Result<()> {
     let model_info = ModelInfo {
         name: "example_model.gguf".to_string(),
         path: PathBuf::from("models/example_model.gguf"),
+        file_path: PathBuf::from("models/example_model.gguf"),
         size: 1024 * 1024,
+        size_bytes: 1024 * 1024,
         modified: chrono::Utc::now(),
         backend_type: "gguf".to_string(),
+        format: "gguf".to_string(),
         checksum: None,
+        metadata: std::collections::HashMap::new(),
     };
 
     // Load model
@@ -89,6 +93,8 @@ async fn main() -> anyhow::Result<()> {
         temperature: 0.7,
         top_p: 0.9,
         stream: false,
+        stop_sequences: vec![],
+        seed: None,
     };
 
     let prompt = "Hello, world!";

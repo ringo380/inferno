@@ -1195,6 +1195,8 @@ mod tests {
             temperature: 0.7,
             top_p: 0.9,
             stream: false,
+            stop_sequences: vec![],
+            seed: None,
         };
 
         let result = processor.process_input("test-model", input, params).await;

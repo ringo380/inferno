@@ -30,9 +30,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let model_path = PathBuf::from("test_models/test_models/test-model.gguf");
     let model_info = ModelInfo {
         path: model_path.clone(),
+        file_path: model_path.clone(),
         name: "test-model".to_string(),
         size: std::fs::metadata(&model_path)?.len(),
-        backend_type: BackendType::Gguf,
+        size_bytes: std::fs::metadata(&model_path)?.len(),
+        modified: chrono::Utc::now(),
+        backend_type: "gguf".to_string(),
+        format: "gguf".to_string(),
+        checksum: None,
         metadata: std::collections::HashMap::new(),
     };
 
@@ -51,6 +56,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         temperature: 0.7,
         top_p: 0.9,
         stream: false,
+        stop_sequences: vec![],
+        seed: None,
     };
 
     println!("Running inference...");

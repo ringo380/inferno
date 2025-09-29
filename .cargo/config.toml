@@ -1,7 +1,13 @@
 # Cargo configuration for universal macOS builds
 
 [target.aarch64-apple-darwin]
-rustflags = ["-C", "target-cpu=apple-a14"]
+rustflags = [
+    "-C", "target-cpu=apple-m1",
+    "-C", "link-arg=-framework", "-C", "link-arg=Metal",
+    "-C", "link-arg=-framework", "-C", "link-arg=MetalPerformanceShaders",
+    "-C", "opt-level=3",
+    "-C", "lto=thin"
+]
 
 [target.x86_64-apple-darwin]
 rustflags = ["-C", "target-cpu=native"]
