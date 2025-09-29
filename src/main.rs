@@ -7,6 +7,7 @@ use inferno::{
 use std::sync::Arc;
 use tokio::sync::broadcast;
 use tracing::{error, info, warn};
+use tracing_subscriber::{fmt, EnvFilter};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -28,8 +29,7 @@ async fn main() -> Result<()> {
         Config::default()
     });
 
-    // TODO: Implement setup_logging function
-    tracing_subscriber::fmt::init();
+    setup_logging();
     info!(
         "Starting Inferno AI/ML model runner v{}",
         std::env::var("CARGO_PKG_VERSION").unwrap_or_else(|_| "0.1.0".to_string())
@@ -194,4 +194,23 @@ async fn init_background_update_service(config: &Config) -> Result<BackgroundUpd
     info!("Background update service started for {}", ApplicationVersion::current().to_string());
 
     Ok(service)
+}
+
+/// Set up comprehensive logging and tracing
+fn setup_logging() {
+    // Create a subscriber with environment filter support
+    let subscriber = fmt::Subscriber::builder()
+        .with_env_filter(
+            EnvFilter::from_default_env()
+                .add_directive("inferno=info".parse().unwrap())
+                .add_directive("warn".parse().unwrap())
+        )
+        .with_target(false)
+        .with_thread_ids(true)
+        .with_file(true)
+        .with_line_number(true)
+        .finish();
+
+    tracing::subscriber::set_global_default(subscriber)
+        .expect("Failed to initialize tracing subscriber");
 }
