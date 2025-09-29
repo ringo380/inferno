@@ -172,20 +172,8 @@ jobs:
           binaries/x86_64/inferno --version || echo "x86_64 binary test failed"
           binaries/arm64/inferno --version || echo "arm64 binary test failed"
 
-          # Upload individual binaries as release assets
-          if [ "${{ github.event_name }}" = "release" ]; then
-            echo "Uploading individual architecture binaries to release..."
-
-            # Rename binaries to proper names for upload
-            cp binaries/x86_64/inferno inferno-macos-x86_64
-            cp binaries/arm64/inferno inferno-macos-arm64
-
-            # Upload to release
-            gh release upload ${{ steps.get_tag.outputs.tag }} \
-              inferno-macos-x86_64 \
-              inferno-macos-arm64 \
-              --clobber || echo "Failed to upload binaries, continuing..."
-          fi
+          # Note: Individual binaries are NOT uploaded to release
+          # Only the universal DMG will be provided to users
         env:
           GH_TOKEN: ${{ github.token }}
 
@@ -201,7 +189,7 @@ jobs:
           file universal/inferno
           lipo -info universal/inferno
 
-      - name: Create app bundle
+      - name: Create app bundle with icon
         run: |
           # Create app bundle structure
           mkdir -p "Inferno.app/Contents/MacOS"
@@ -213,7 +201,19 @@ jobs:
           # Make binary executable
           chmod +x "Inferno.app/Contents/MacOS/inferno"
 
-          # Create Info.plist
+          # Copy the icon FIRST before creating Info.plist
+          echo "Copying Inferno icon to app bundle..."
+          if [ -f "icons/icon.icns" ]; then
+            cp icons/icon.icns "Inferno.app/Contents/Resources/icon.icns"
+            echo "Icon copied successfully to Resources/icon.icns"
+            ls -la "Inferno.app/Contents/Resources/"
+          else
+            echo "ERROR: icon.icns not found in icons/ directory"
+            ls -la icons/
+            exit 1
+          fi
+
+          # Create Info.plist with CFBundleIconFile already included
           cat > "Inferno.app/Contents/Info.plist" << 'EOF'
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -221,6 +221,8 @@ jobs:
           <dict>
               <key>CFBundleExecutable</key>
               <string>inferno</string>
+              <key>CFBundleIconFile</key>
+              <string>icon</string>
               <key>CFBundleIdentifier</key>
               <string>com.inferno.ai.runner</string>
               <key>CFBundleName</key>
@@ -281,20 +283,14 @@ jobs:
           </plist>
           EOF
 
-      - name: Copy app icon to bundle
-        run: |
-          echo "Copying Inferno icon to app bundle..."
-          # Copy the .icns file to the app bundle Resources folder
-          if [ -f "icons/icon.icns" ]; then
-            cp icons/icon.icns "Inferno.app/Contents/Resources/"
-            echo "Icon copied successfully"
-          else
-            echo "Warning: icon.icns not found in icons/ directory"
-          fi
+          # Verify the app bundle structure
+          echo "Verifying app bundle structure:"
+          ls -la "Inferno.app/Contents/"
+          ls -la "Inferno.app/Contents/Resources/"
 
-          # Update Info.plist to reference the icon
-          /usr/libexec/PlistBuddy -c "Add :CFBundleIconFile string icon" "Inferno.app/Contents/Info.plist" 2>/dev/null || \
-          /usr/libexec/PlistBuddy -c "Set :CFBundleIconFile icon" "Inferno.app/Contents/Info.plist"
+          # Verify Info.plist has the icon reference
+          echo "Verifying CFBundleIconFile in Info.plist:"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleIconFile" "Inferno.app/Contents/Info.plist"
 
       - name: Install create-dmg
         run: |
@@ -311,19 +307,37 @@ jobs:
           # Create symlink to Applications folder
           ln -s /Applications dmg-contents/Applications
 
-          # Create DMG with working options only (removed unsupported flags)
-          create-dmg \
-            --volname "Inferno ${{ steps.get_tag.outputs.tag }}" \
-            --window-pos 200 120 \
-            --window-size 800 450 \
-            --icon-size 100 \
-            --icon "Inferno.app" 200 190 \
-            --hide-extension "Inferno.app" \
-            --app-drop-link 600 185 \
-            --format UDZO \
-            --hdiutil-quiet \
-            "inferno-universal-${{ steps.get_tag.outputs.tag }}.dmg" \
-            "dmg-contents/"
+          # Create DMG with icon support
+          if [ -f "icons/icon.icns" ]; then
+            echo "Creating DMG with custom volume icon..."
+            create-dmg \
+              --volname "Inferno ${{ steps.get_tag.outputs.tag }}" \
+              --volicon "icons/icon.icns" \
+              --window-pos 200 120 \
+              --window-size 800 450 \
+              --icon-size 100 \
+              --icon "Inferno.app" 200 190 \
+              --hide-extension "Inferno.app" \
+              --app-drop-link 600 185 \
+              --format UDZO \
+              --hdiutil-quiet \
+              "inferno-universal-${{ steps.get_tag.outputs.tag }}.dmg" \
+              "dmg-contents/"
+          else
+            echo "WARNING: Creating DMG without custom volume icon (icon.icns not found)"
+            create-dmg \
+              --volname "Inferno ${{ steps.get_tag.outputs.tag }}" \
+              --window-pos 200 120 \
+              --window-size 800 450 \
+              --icon-size 100 \
+              --icon "Inferno.app" 200 190 \
+              --hide-extension "Inferno.app" \
+              --app-drop-link 600 185 \
+              --format UDZO \
+              --hdiutil-quiet \
+              "inferno-universal-${{ steps.get_tag.outputs.tag }}.dmg" \
+              "dmg-contents/"
+          fi
 
       - name: Verify DMG
         run: |
@@ -359,65 +373,3 @@ jobs:
           path: ./inferno-universal-${{ steps.get_tag.outputs.tag }}.dmg
           retention-days: 30
 
-      - name: Create installation script
-        run: |
-          cat > install-inferno.sh << 'EOF'
-          #!/bin/bash
-          # Inferno Installation Script for macOS
-
-          set -e
-
-          REPO="ringo380/inferno"
-          INSTALL_DIR="/usr/local/bin"
-
-          echo "🔥 Installing Inferno AI/ML Runner..."
-
-          # Detect architecture
-          ARCH=$(uname -m)
-          if [[ "$ARCH" == "x86_64" ]]; then
-              BINARY_NAME="inferno-macos-x86_64"
-          elif [[ "$ARCH" == "arm64" ]]; then
-              BINARY_NAME="inferno-macos-arm64"
-          else
-              echo "❌ Unsupported architecture: $ARCH"
-              exit 1
-          fi
-
-          # Get latest release info
-          LATEST_RELEASE=$(curl -s "https://api.github.com/repos/$REPO/releases/latest")
-          TAG_NAME=$(echo "$LATEST_RELEASE" | grep '"tag_name":' | sed -E 's/.*"tag_name": "([^"]+)".*/\1/')
-          DOWNLOAD_URL="https://github.com/$REPO/releases/download/$TAG_NAME/$BINARY_NAME"
-
-          echo "📥 Downloading Inferno $TAG_NAME for $ARCH..."
-
-          # Download binary
-          curl -L "$DOWNLOAD_URL" -o "/tmp/inferno"
-
-          # Make executable
-          chmod +x "/tmp/inferno"
-
-          # Install to system directory
-          echo "📁 Installing to $INSTALL_DIR..."
-          sudo mv "/tmp/inferno" "$INSTALL_DIR/inferno"
-
-          # Verify installation
-          echo "✅ Installation complete!"
-          echo "🔥 Inferno version: $($INSTALL_DIR/inferno --version)"
-          echo ""
-          echo "Quick start:"
-          echo "  inferno --help        # Show help"
-          echo "  inferno models list   # List available models"
-          echo "  inferno serve         # Start HTTP API server"
-          echo "  inferno tui           # Launch terminal UI"
-          echo ""
-          echo "For more information, visit: https://github.com/$REPO"
-          EOF
-
-          chmod +x install-inferno.sh
-
-      - name: Upload installation script
-        uses: actions/upload-artifact@v4
-        with:
-          name: inferno-installer-${{ steps.get_tag.outputs.tag }}
-          path: ./install-inferno.sh
-          retention-days: 90
