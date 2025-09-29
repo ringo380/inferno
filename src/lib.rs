@@ -25,20 +25,51 @@
 
 use std::fmt;
 
-// === Core Foundation Modules ===
+// ============================================================================
+// NEW MODULAR ARCHITECTURE (v0.4.0+)
+// ============================================================================
+// The codebase has been reorganized into logical feature groups for better
+// maintainability and scalability. Old module paths are re-exported below
+// for backward compatibility.
+
+/// Core platform functionality (backends, models, config, security)
+pub mod core;
+
+/// Infrastructure & observability (cache, monitoring, metrics, audit)
+pub mod infrastructure;
+
+/// Operations & DevOps (batch, deployment, backup, resilience)
+pub mod operations;
+
+/// AI/ML specialized features (conversion, optimization, multimodal, GPU)
+pub mod ai_features;
+
+/// Enterprise features (distributed, multi-tenancy, marketplace, data pipeline)
+pub mod enterprise;
+
+/// User interfaces (CLI, API, TUI, dashboard)
+pub mod interfaces;
+
+// ============================================================================
+// BACKWARD COMPATIBILITY RE-EXPORTS
+// ============================================================================
+// These re-exports maintain compatibility with existing code that uses the
+// old flat module structure. New code should use the organized paths above.
+
+// === Core Foundation Modules (kept at root for now) ===
 pub mod config;
 pub mod backends;
 pub mod models;
 pub mod io;
 pub mod security;
 
-// === User Interface Modules ===
+// === User Interface Modules (kept at root for now) ===
 pub mod cli;
 pub mod api;
 pub mod tui;
 pub mod dashboard;
 
-// === Infrastructure & Operations ===
+// === Infrastructure & Operations (kept at root for now) ===
 pub mod batch;
 pub mod cache;
 pub mod response_cache;
@@ -50,7 +81,7 @@ pub mod metrics;
 pub mod audit;
 pub mod logging_audit;
 
-// === Enterprise & Management ===
+// === Enterprise & Management (kept at root for now) ===
 pub mod deployment;
 pub mod distributed;
 pub mod multi_tenancy;
@@ -60,7 +91,7 @@ pub mod upgrade;
 pub mod versioning;
 pub mod model_versioning;
 
-// === AI/ML Specialized Features ===
+// === AI/ML Specialized Features (kept at root for now) ===
 pub mod optimization;
 pub mod performance_optimization;
 pub mod performance_baseline;
@@ -70,7 +101,7 @@ pub mod streaming;
 pub mod federated;
 pub mod gpu;
 
-// === External Integrations ===
+// === External Integrations (kept at root for now) ===
 pub mod marketplace;
 pub mod api_gateway;
 pub mod data_pipeline;
