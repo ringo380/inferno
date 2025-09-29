@@ -70,7 +70,7 @@ jobs:
   build-aarch64:
     name: Build ARM64 Binary
     runs-on: macos-latest
-    timeout-minutes: 25
+    timeout-minutes: 35
     permissions:
       contents: write
     outputs:
