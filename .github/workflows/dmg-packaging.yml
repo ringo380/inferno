@@ -281,10 +281,20 @@ jobs:
           </plist>
           EOF
 
-      - name: Skip icon creation (optional enhancement for later)
+      - name: Copy app icon to bundle
         run: |
-          echo "Skipping icon creation for now - DMG will work without custom app icon"
-          # We can add proper icon creation later, focusing on core functionality first
+          echo "Copying Inferno icon to app bundle..."
+          # Copy the .icns file to the app bundle Resources folder
+          if [ -f "icons/icon.icns" ]; then
+            cp icons/icon.icns "Inferno.app/Contents/Resources/"
+            echo "Icon copied successfully"
+          else
+            echo "Warning: icon.icns not found in icons/ directory"
+          fi
+
+          # Update Info.plist to reference the icon
+          /usr/libexec/PlistBuddy -c "Add :CFBundleIconFile string icon" "Inferno.app/Contents/Info.plist" 2>/dev/null || \
+          /usr/libexec/PlistBuddy -c "Set :CFBundleIconFile icon" "Inferno.app/Contents/Info.plist"
 
       - name: Install create-dmg
         run: |
