@@ -43,6 +43,7 @@ pub mod monitoring_v2;  // New architecture implementation
 pub mod multi_tenancy;
 pub mod multimodal;
 pub mod observability;
+pub mod observability_v2;  // New architecture implementation
 pub mod optimization;
 pub mod package;
 pub mod performance_benchmark;
