@@ -1,6 +1,6 @@
 [package]
 name = "inferno"
-version = "0.4.0"
+version = "0.5.0"
 edition = "2021"
 authors = ["Inferno Developers"]
 description = "Enterprise AI/ML model runner with automatic updates, real-time monitoring, and multi-interface support"
@@ -168,9 +168,19 @@ zstd = "0.13"
 # Temporary file handling
 tempfile = "3.8"
 
-# Tauri native app support
-tauri = { version = "1.5", features = ["api-all", "macos-private-api"], optional = true }
-tauri-build = { version = "1.5", optional = true }
+# Desktop support with Tauri v2
+# Note: We're removing Tauri v1 dependencies to avoid conflicts.
+# The old inferno_app binary (Tauri v1) will be deprecated.
+tauri = { version = "2.8", features = ["macos-private-api", "tray-icon", "image-ico", "image-png"], optional = true }
+tauri-plugin-dialog = { version = "2.0", optional = true }
+tauri-plugin-fs = { version = "2.0", optional = true }
+tauri-plugin-shell = { version = "2.0", optional = true }
+tauri-plugin-notification = { version = "2.0", optional = true }
+tauri-plugin-os = { version = "2.0", optional = true }
+urlencoding = { version = "2.1", optional = true }
+rusqlite = { version = "0.31", features = ["bundled", "chrono", "serde_json"], optional = true }
+r2d2 = { version = "0.8", optional = true }
+r2d2_sqlite = { version = "0.24", optional = true }
 
 [dev-dependencies]
 tempfile = "3.8"
@@ -190,7 +200,19 @@ gpu-directml = []
 cuda = []      # NVIDIA CUDA support
 rocm = []      # AMD ROCm support
 pytorch = []  # Enable PyTorch support - temporarily disabled (deps commented out)
-tauri-app = ["tauri", "tauri-build"]  # Enable Tauri native app
+desktop = [  # Tauri v2 desktop app with full features
+    "tauri",
+    "tauri-plugin-dialog",
+    "tauri-plugin-fs",
+    "tauri-plugin-shell",
+    "tauri-plugin-notification",
+    "tauri-plugin-os",
+    "urlencoding",
+    "rusqlite",
+    "r2d2",
+    "r2d2_sqlite",
+    "gguf",  # Include GGUF support for desktop
+]
 
 [profile.release]
 lto = true
