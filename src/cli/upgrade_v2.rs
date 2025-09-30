@@ -5,7 +5,7 @@
 use crate::{
     config::Config,
     interfaces::cli::{Command, CommandContext, CommandOutput},
-    upgrade::{UpgradeConfig, UpgradeManager, UpgradeStatus},
+    upgrade::{UpgradeConfig, UpgradeManager},
 };
 use anyhow::Result;
 use async_trait::async_trait;

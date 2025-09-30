@@ -212,9 +212,9 @@ pub struct PlatformInfo {
 
 impl PlatformInfo {
     pub fn new() -> Self {
-        let mut backends = Vec::new();
-        let mut features = Vec::new();
-        let mut interfaces = vec!["CLI".to_string(), "TUI".to_string(), "HTTP API".to_string()];
+        let backends = Vec::new();
+        let features = Vec::new();
+        let interfaces = vec!["CLI".to_string(), "TUI".to_string(), "HTTP API".to_string()];
 
         // Check available backends
         #[cfg(feature = "gguf")]

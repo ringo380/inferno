@@ -6,14 +6,13 @@
 use crate::{
     config::Config,
     upgrade::{
-        ApplicationVersion, BackgroundUpdateService, ServiceStatistics, UpdateInfo, UpgradeConfig,
+        ApplicationVersion, UpdateInfo, UpgradeConfig,
         UpgradeManager, UpgradeStatus,
     },
 };
 use anyhow::Result;
 use clap::{Args, Subcommand};
 use serde_json;
-use std::sync::Arc;
 use tracing::{info, warn};
 
 #[derive(Args)]

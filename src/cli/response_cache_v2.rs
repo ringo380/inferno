@@ -6,7 +6,7 @@ use crate::{
     config::Config,
     interfaces::cli::{Command, CommandContext, CommandOutput},
     metrics::MetricsCollector,
-    response_cache::{CacheKey, HashAlgorithm, ResponseCache, ResponseMetadata},
+    response_cache::{CacheKey, ResponseCache, ResponseMetadata},
 };
 use anyhow::Result;
 use async_trait::async_trait;

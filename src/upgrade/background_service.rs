@@ -5,7 +5,7 @@
 
 use super::{
     ApplicationVersion, UpdateInfo, UpgradeConfig, UpgradeError, UpgradeEvent, UpgradeEventType,
-    UpgradeManager, UpgradeResult, UpgradeStatus,
+    UpgradeManager, UpgradeResult,
 };
 use anyhow::Result;
 use chrono::{DateTime, Utc};

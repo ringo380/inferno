@@ -4,8 +4,7 @@
 //! sufficient resources, and safe upgrade conditions.
 
 use super::{UpdateInfo, UpgradeConfig, UpgradeError, UpgradeResult};
-use anyhow::Result;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::Command;
 use sysinfo::{DiskExt, ProcessExt, System, SystemExt};
 use tracing::{debug, info, warn};

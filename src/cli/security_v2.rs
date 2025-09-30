@@ -6,12 +6,11 @@
 use crate::{
     config::Config,
     interfaces::cli::{Command, CommandContext, CommandOutput},
-    security::{Permission, SecurityManager, User, UserRole},
+    security::SecurityManager,
 };
 use anyhow::Result;
 use async_trait::async_trait;
 use serde_json::json;
-use std::collections::HashSet;
 use std::net::IpAddr;
 use tracing::info;
 

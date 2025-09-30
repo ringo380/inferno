@@ -11,7 +11,6 @@ use crate::interfaces::cli::{Command, CommandContext, CommandOutput};
 use crate::models::ModelManager;
 use anyhow::Result;
 use async_trait::async_trait;
-use chrono::DateTime;
 use serde_json::json;
 use std::path::PathBuf;
 

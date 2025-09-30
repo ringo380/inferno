@@ -54,7 +54,7 @@ impl Command for GpuList {
         info!("Listing available GPUs");
 
         let gpu_config = GpuConfiguration::default();
-        let mut manager = GpuManager::new(gpu_config);
+        let manager = GpuManager::new(gpu_config);
         manager.initialize().await?;
 
         let mut available_gpus = manager.get_available_gpus().await;
@@ -159,7 +159,7 @@ impl Command for GpuInfo {
         info!("Getting GPU {} information", self.gpu_id);
 
         let gpu_config = GpuConfiguration::default();
-        let mut manager = GpuManager::new(gpu_config);
+        let manager = GpuManager::new(gpu_config);
         manager.initialize().await?;
 
         let gpu = manager
@@ -286,7 +286,7 @@ impl Command for GpuAllocate {
         );
 
         let gpu_config = GpuConfiguration::default();
-        let mut manager = GpuManager::new(gpu_config);
+        let manager = GpuManager::new(gpu_config);
         manager.initialize().await?;
 
         let allocated_gpu = if let Some(id) = self.gpu_id {
@@ -375,7 +375,7 @@ impl Command for GpuHealth {
         info!("Checking GPU health");
 
         let gpu_config = GpuConfiguration::default();
-        let mut manager = GpuManager::new(gpu_config);
+        let manager = GpuManager::new(gpu_config);
         manager.initialize().await?;
 
         let health_status = manager.check_gpu_health().await?;

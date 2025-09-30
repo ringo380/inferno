@@ -6,7 +6,7 @@
 use crate::{
     config::Config,
     interfaces::cli::{Command, CommandContext, CommandOutput},
-    resilience::{CircuitBreakerConfig, HealthStatus, ResilienceManager, RetryConfig},
+    resilience::ResilienceManager,
 };
 use anyhow::Result;
 use async_trait::async_trait;
