@@ -62,6 +62,7 @@ pub mod upgrade;
 pub mod validate;
 pub mod validate_v2;  // New architecture implementation
 pub mod versioning;
+pub mod versioning_v2;  // New architecture implementation
 
 use clap::{Parser, Subcommand};
 
