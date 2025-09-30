@@ -2,6 +2,8 @@
 mod gguf;
 #[cfg(feature = "onnx")]
 mod onnx;
+#[cfg(all(feature = "gpu-metal", target_os = "macos"))]
+mod metal;
 
 use crate::{models::ModelInfo, InfernoError};
 use anyhow::{anyhow, Result};
@@ -19,7 +21,10 @@ pub enum BackendType {
     #[cfg(feature = "onnx")]
     #[value(name = "onnx")]
     Onnx,
-    #[cfg(not(any(feature = "gguf", feature = "onnx")))]
+    #[cfg(all(feature = "gpu-metal", target_os = "macos"))]
+    #[value(name = "metal")]
+    Metal,
+    #[cfg(not(any(feature = "gguf", feature = "onnx", all(feature = "gpu-metal", target_os = "macos"))))]
     #[value(name = "none")]
     None,
 }
@@ -66,7 +71,9 @@ impl std::fmt::Display for BackendType {
             BackendType::Gguf => write!(f, "gguf"),
             #[cfg(feature = "onnx")]
             BackendType::Onnx => write!(f, "onnx"),
-            #[cfg(not(any(feature = "gguf", feature = "onnx")))]
+            #[cfg(all(feature = "gpu-metal", target_os = "macos"))]
+            BackendType::Metal => write!(f, "metal"),
+            #[cfg(not(any(feature = "gguf", feature = "onnx", all(feature = "gpu-metal", target_os = "macos"))))]
             BackendType::None => write!(f, "none"),
         }
     }
@@ -157,8 +164,10 @@ impl Backend {
             BackendType::Gguf => Box::new(gguf::GgufBackend::new(config.clone())?),
             #[cfg(feature = "onnx")]
             BackendType::Onnx => Box::new(onnx::OnnxBackend::new(config.clone())?),
-            #[cfg(not(any(feature = "gguf", feature = "onnx")))]
-            BackendType::None => return Err(anyhow!("No backend available. Enable 'gguf' or 'onnx' features.")),
+            #[cfg(all(feature = "gpu-metal", target_os = "macos"))]
+            BackendType::Metal => Box::new(metal::MetalBackend::new()?),
+            #[cfg(not(any(feature = "gguf", feature = "onnx", all(feature = "gpu-metal", target_os = "macos"))))]
+            BackendType::None => return Err(anyhow!("No backend available. Enable 'gguf', 'onnx', or 'gpu-metal' features.")),
         };
 
         Ok(Self { backend_impl })
