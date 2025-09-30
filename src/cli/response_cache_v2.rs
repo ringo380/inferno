@@ -75,7 +75,10 @@ impl Command for CacheStats {
             println!("\n=== Configuration ===");
             println!("Enabled: {}", self.config.response_cache.enabled);
             println!("Max Entries: {}", self.config.response_cache.max_entries);
-            println!("Max Memory: {} MB", self.config.response_cache.max_memory_mb);
+            println!(
+                "Max Memory: {} MB",
+                self.config.response_cache.max_memory_mb
+            );
             println!("TTL: {} seconds", self.config.response_cache.ttl_seconds);
             println!(
                 "Deduplication: {}",
@@ -281,12 +284,18 @@ impl Command for CacheTest {
             println!("✓ Cache test completed");
             println!("  Total requests: {}", self.requests);
             println!("  Cache hits: {}", hits);
-            println!("  Hit rate: {:.2}%", (hits as f64 / unique_requests as f64) * 100.0);
+            println!(
+                "  Hit rate: {:.2}%",
+                (hits as f64 / unique_requests as f64) * 100.0
+            );
             println!("  Duration: {:.2}s", duration.as_secs_f64());
             println!("  Memory usage: {:.2} MB", stats.memory_usage_mb);
 
             if self.test_dedup {
-                println!("  Deduplication savings: {} bytes", stats.deduplication_savings);
+                println!(
+                    "  Deduplication savings: {} bytes",
+                    stats.deduplication_savings
+                );
             }
 
             if self.test_compression {

@@ -1,9 +1,9 @@
 use crate::InfernoError;
 use anyhow::Result;
-use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier};
 use argon2::password_hash::{rand_core::OsRng, SaltString};
+use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier};
 use chrono::{DateTime, Duration, Utc};
-use jsonwebtoken::{encode, decode, Header, Algorithm, Validation, EncodingKey, DecodingKey};
+use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -387,11 +387,7 @@ impl SecurityManager {
         let mut users = self.users.write().await;
 
         if users.contains_key(&user.id) {
-            return Err(InfernoError::Security(format!(
-                "User {} already exists",
-                user.id
-            ))
-            .into());
+            return Err(InfernoError::Security(format!("User {} already exists", user.id)).into());
         }
 
         info!("Creating user: {} with role {:?}", user.username, user.role);
@@ -422,9 +418,9 @@ impl SecurityManager {
     pub async fn delete_user(&self, user_id: &str) -> Result<()> {
         let mut users = self.users.write().await;
 
-        let user = users.remove(user_id).ok_or_else(|| {
-            InfernoError::Security(format!("User {} not found", user_id))
-        })?;
+        let user = users
+            .remove(user_id)
+            .ok_or_else(|| InfernoError::Security(format!("User {} not found", user_id)))?;
 
         info!("Deleting user: {} ({})", user.username, user_id);
 
@@ -468,9 +464,9 @@ impl SecurityManager {
     ) -> Result<String> {
         let mut users = self.users.write().await;
 
-        let user = users.get_mut(user_id).ok_or_else(|| {
-            InfernoError::Security(format!("User {} not found", user_id))
-        })?;
+        let user = users
+            .get_mut(user_id)
+            .ok_or_else(|| InfernoError::Security(format!("User {} not found", user_id)))?;
 
         // Generate random API key
         let api_key = Self::generate_random_key();
@@ -525,9 +521,7 @@ impl SecurityManager {
 
         // Check if user is active
         if !user.is_active {
-            return Err(
-                InfernoError::Security("User account is disabled".to_string()).into(),
-            );
+            return Err(InfernoError::Security("User account is disabled".to_string()).into());
         }
 
         // Find and update the API key
@@ -535,19 +529,15 @@ impl SecurityManager {
             if api_key_info.key_hash == key_hash {
                 // Check if key is active
                 if !api_key_info.is_active {
-                    return Err(InfernoError::Security(
-                        "API key is disabled".to_string(),
-                    )
-                    .into());
+                    return Err(InfernoError::Security("API key is disabled".to_string()).into());
                 }
 
                 // Check expiration
                 if let Some(expires_at) = api_key_info.expires_at {
                     if expires_at < Utc::now() {
-                        return Err(InfernoError::Security(
-                            "API key has expired".to_string(),
-                        )
-                        .into());
+                        return Err(
+                            InfernoError::Security("API key has expired".to_string()).into()
+                        );
                     }
                 }
 
@@ -595,9 +585,7 @@ impl SecurityManager {
         // Check if token is revoked
         let blocked_tokens = self.blocked_tokens.read().await;
         if blocked_tokens.contains(&claims.jti) {
-            return Err(
-                InfernoError::Security("Token has been revoked".to_string()).into(),
-            );
+            return Err(InfernoError::Security("Token has been revoked".to_string()).into());
         }
 
         // Check expiration
@@ -638,7 +626,9 @@ impl SecurityManager {
         let users = self.users.read().await;
 
         // Find user by username
-        let user = users.values().find(|u| u.username == username && u.is_active);
+        let user = users
+            .values()
+            .find(|u| u.username == username && u.is_active);
 
         if let Some(user) = user {
             if let Some(ref stored_hash) = user.password_hash {
@@ -920,7 +910,10 @@ impl SecurityManager {
     pub async fn initialize(&self) -> Result<()> {
         // Load existing users
         if let Err(e) = self.load_users().await {
-            warn!("Failed to load users from storage: {}. Creating default admin user.", e);
+            warn!(
+                "Failed to load users from storage: {}. Creating default admin user.",
+                e
+            );
         }
 
         // Create default admin user if no users exist
@@ -954,7 +947,9 @@ impl SecurityManager {
                     Permission::UseStreaming,
                     Permission::UseDistributed,
                     Permission::ManageQueue,
-                ].into_iter().collect(),
+                ]
+                .into_iter()
+                .collect(),
                 rate_limit_override: None,
             };
             self.create_user(default_user).await?;
@@ -1083,12 +1078,12 @@ impl Default for ThreatSignatureDatabase {
     fn default() -> Self {
         Self {
             executable_patterns: vec![
-                b"\x4d\x5a".to_vec(),           // PE header (Windows executable)
-                b"\x7f\x45\x4c\x46".to_vec(),  // ELF header (Linux executable)
-                b"\xfe\xed\xfa\xce".to_vec(),  // Mach-O header (macOS executable)
-                b"\xfe\xed\xfa\xcf".to_vec(),  // Mach-O header (macOS executable)
-                b"\xca\xfe\xba\xbe".to_vec(),  // Java class file
-                b"\x50\x4b\x03\x04".to_vec(),  // ZIP file header
+                b"\x4d\x5a".to_vec(),         // PE header (Windows executable)
+                b"\x7f\x45\x4c\x46".to_vec(), // ELF header (Linux executable)
+                b"\xfe\xed\xfa\xce".to_vec(), // Mach-O header (macOS executable)
+                b"\xfe\xed\xfa\xcf".to_vec(), // Mach-O header (macOS executable)
+                b"\xca\xfe\xba\xbe".to_vec(), // Java class file
+                b"\x50\x4b\x03\x04".to_vec(), // ZIP file header
             ],
             script_patterns: vec![
                 b"#!/bin/sh".to_vec(),
@@ -1207,15 +1202,17 @@ impl SecurityScanner {
         info!("Starting security scan for: {}", file_path.display());
 
         // Log audit event
-        self.audit_logger.log_audit_event(AuditLogEntry {
-            timestamp: scan_timestamp,
-            user_id: None,
-            action: AuditAction::SecurityScanStarted,
-            resource: Some(file_path.to_string_lossy().to_string()),
-            ip_address: None,
-            success: true,
-            details: None,
-        }).await;
+        self.audit_logger
+            .log_audit_event(AuditLogEntry {
+                timestamp: scan_timestamp,
+                user_id: None,
+                action: AuditAction::SecurityScanStarted,
+                resource: Some(file_path.to_string_lossy().to_string()),
+                ip_address: None,
+                success: true,
+                details: None,
+            })
+            .await;
 
         let mut threats = Vec::new();
         let mut scan_success = true;
@@ -1268,7 +1265,8 @@ impl SecurityScanner {
                 severity: ThreatSeverity::Medium,
                 description: format!("File size ({} bytes) exceeds maximum scan size", file_size),
                 location: None,
-                mitigation_advice: "Consider scanning with specialized tools for large files".to_string(),
+                mitigation_advice: "Consider scanning with specialized tools for large files"
+                    .to_string(),
             });
         } else {
             // Perform detailed scans
@@ -1296,28 +1294,43 @@ impl SecurityScanner {
 
         // Quarantine file if necessary
         let mut file_quarantined = false;
-        if self.config.quarantine_enabled && matches!(overall_risk_level, RiskLevel::Critical | RiskLevel::High) {
+        if self.config.quarantine_enabled
+            && matches!(overall_risk_level, RiskLevel::Critical | RiskLevel::High)
+        {
             if let Err(e) = self.quarantine_file(file_path).await {
                 warn!("Failed to quarantine file: {}", e);
             } else {
                 file_quarantined = true;
-                info!("File quarantined due to security threats: {}", file_path.display());
+                info!(
+                    "File quarantined due to security threats: {}",
+                    file_path.display()
+                );
             }
         }
 
         let scan_duration_ms = start_time.elapsed().as_millis() as u64;
 
         // Log completion
-        self.audit_logger.log_audit_event(AuditLogEntry {
-            timestamp: Utc::now(),
-            user_id: None,
-            action: if scan_success { AuditAction::SecurityScanCompleted } else { AuditAction::SecurityScanFailed },
-            resource: Some(file_path.to_string_lossy().to_string()),
-            ip_address: None,
-            success: scan_success,
-            details: Some(format!("Threats: {}, Risk: {:?}, Duration: {}ms",
-                threats.len(), overall_risk_level, scan_duration_ms)),
-        }).await;
+        self.audit_logger
+            .log_audit_event(AuditLogEntry {
+                timestamp: Utc::now(),
+                user_id: None,
+                action: if scan_success {
+                    AuditAction::SecurityScanCompleted
+                } else {
+                    AuditAction::SecurityScanFailed
+                },
+                resource: Some(file_path.to_string_lossy().to_string()),
+                ip_address: None,
+                success: scan_success,
+                details: Some(format!(
+                    "Threats: {}, Risk: {:?}, Duration: {}ms",
+                    threats.len(),
+                    overall_risk_level,
+                    scan_duration_ms
+                )),
+            })
+            .await;
 
         Ok(SecurityScanResult {
             file_path: file_path.to_path_buf(),
@@ -1331,8 +1344,13 @@ impl SecurityScanner {
         })
     }
 
-    async fn scan_file_structure(&self, file_path: &Path, threats: &mut Vec<ThreatDetection>) -> Result<()> {
-        let extension = file_path.extension()
+    async fn scan_file_structure(
+        &self,
+        file_path: &Path,
+        threats: &mut Vec<ThreatDetection>,
+    ) -> Result<()> {
+        let extension = file_path
+            .extension()
             .and_then(|ext| ext.to_str())
             .unwrap_or("");
 
@@ -1347,7 +1365,8 @@ impl SecurityScanner {
                     severity: ThreatSeverity::Low,
                     description: format!("Unknown file format: {}", extension),
                     location: None,
-                    mitigation_advice: "Verify file type and ensure it's a valid model format".to_string(),
+                    mitigation_advice: "Verify file type and ensure it's a valid model format"
+                        .to_string(),
                 });
             }
         }
@@ -1355,7 +1374,11 @@ impl SecurityScanner {
         Ok(())
     }
 
-    async fn scan_embedded_content(&self, file_path: &Path, threats: &mut Vec<ThreatDetection>) -> Result<()> {
+    async fn scan_embedded_content(
+        &self,
+        file_path: &Path,
+        threats: &mut Vec<ThreatDetection>,
+    ) -> Result<()> {
         let file_content = tokio::fs::read(file_path).await?;
 
         // Scan for executable patterns
@@ -1385,7 +1408,8 @@ impl SecurityScanner {
         }
 
         // Check for excessive printable characters (potential data exfiltration)
-        let printable_count = file_content.iter()
+        let printable_count = file_content
+            .iter()
             .filter(|&b| *b >= 32 && *b <= 126)
             .count();
         let printable_ratio = printable_count as f64 / file_content.len() as f64;
@@ -1394,7 +1418,10 @@ impl SecurityScanner {
             threats.push(ThreatDetection {
                 threat_type: ThreatType::DataExfiltration,
                 severity: ThreatSeverity::Medium,
-                description: format!("High ratio of printable characters: {:.1}%", printable_ratio * 100.0),
+                description: format!(
+                    "High ratio of printable characters: {:.1}%",
+                    printable_ratio * 100.0
+                ),
                 location: None,
                 mitigation_advice: "Review file content for hidden data or text".to_string(),
             });
@@ -1409,7 +1436,8 @@ impl SecurityScanner {
                     severity: ThreatSeverity::Medium,
                     description: format!("Suspicious string found: {}", suspicious_string),
                     location: None,
-                    mitigation_advice: "Review file for embedded credentials or sensitive data".to_string(),
+                    mitigation_advice: "Review file for embedded credentials or sensitive data"
+                        .to_string(),
                 });
             }
         }
@@ -1417,7 +1445,11 @@ impl SecurityScanner {
         Ok(())
     }
 
-    async fn scan_metadata_threats(&self, file_path: &Path, threats: &mut Vec<ThreatDetection>) -> Result<()> {
+    async fn scan_metadata_threats(
+        &self,
+        file_path: &Path,
+        threats: &mut Vec<ThreatDetection>,
+    ) -> Result<()> {
         let file_content = tokio::fs::read(file_path).await?;
         let content_str = String::from_utf8_lossy(&file_content).to_lowercase();
 
@@ -1436,7 +1468,11 @@ impl SecurityScanner {
         Ok(())
     }
 
-    async fn validate_gguf_file(&self, file_path: &Path, threats: &mut Vec<ThreatDetection>) -> Result<()> {
+    async fn validate_gguf_file(
+        &self,
+        file_path: &Path,
+        threats: &mut Vec<ThreatDetection>,
+    ) -> Result<()> {
         let file_content = tokio::fs::read(file_path).await?;
 
         if file_content.len() < 8 {
@@ -1461,7 +1497,10 @@ impl SecurityScanner {
         }
 
         let version = u32::from_le_bytes([
-            file_content[4], file_content[5], file_content[6], file_content[7]
+            file_content[4],
+            file_content[5],
+            file_content[6],
+            file_content[7],
         ]);
 
         if version < 1 || version > 3 {
@@ -1477,7 +1516,11 @@ impl SecurityScanner {
         Ok(())
     }
 
-    async fn validate_onnx_file(&self, file_path: &Path, _threats: &mut Vec<ThreatDetection>) -> Result<()> {
+    async fn validate_onnx_file(
+        &self,
+        file_path: &Path,
+        _threats: &mut Vec<ThreatDetection>,
+    ) -> Result<()> {
         let file_content = tokio::fs::read(file_path).await?;
 
         if file_content.len() < 16 {
@@ -1490,7 +1533,11 @@ impl SecurityScanner {
         Ok(())
     }
 
-    async fn validate_safetensors_file(&self, file_path: &Path, threats: &mut Vec<ThreatDetection>) -> Result<()> {
+    async fn validate_safetensors_file(
+        &self,
+        file_path: &Path,
+        threats: &mut Vec<ThreatDetection>,
+    ) -> Result<()> {
         let file_content = tokio::fs::read(file_path).await?;
 
         if file_content.len() < 8 {
@@ -1505,8 +1552,14 @@ impl SecurityScanner {
         }
 
         let header_length = u64::from_le_bytes([
-            file_content[0], file_content[1], file_content[2], file_content[3],
-            file_content[4], file_content[5], file_content[6], file_content[7]
+            file_content[0],
+            file_content[1],
+            file_content[2],
+            file_content[3],
+            file_content[4],
+            file_content[5],
+            file_content[6],
+            file_content[7],
         ]);
 
         if header_length > file_content.len() as u64 - 8 {
@@ -1522,7 +1575,11 @@ impl SecurityScanner {
         Ok(())
     }
 
-    async fn validate_pytorch_file(&self, file_path: &Path, threats: &mut Vec<ThreatDetection>) -> Result<()> {
+    async fn validate_pytorch_file(
+        &self,
+        file_path: &Path,
+        threats: &mut Vec<ThreatDetection>,
+    ) -> Result<()> {
         let file_content = tokio::fs::read(file_path).await?;
 
         // PyTorch files often start with a ZIP magic number or pickle protocol
@@ -1538,9 +1595,11 @@ impl SecurityScanner {
                 threats.push(ThreatDetection {
                     threat_type: ThreatType::SuspiciousScript,
                     severity: ThreatSeverity::High,
-                    description: "PyTorch pickle file detected - can execute arbitrary code".to_string(),
+                    description: "PyTorch pickle file detected - can execute arbitrary code"
+                        .to_string(),
                     location: None,
-                    mitigation_advice: "Use SafeTensors format instead of pickle for security".to_string(),
+                    mitigation_advice: "Use SafeTensors format instead of pickle for security"
+                        .to_string(),
                 });
             }
         }
@@ -1549,7 +1608,9 @@ impl SecurityScanner {
     }
 
     fn find_pattern(&self, haystack: &[u8], needle: &[u8]) -> Option<usize> {
-        haystack.windows(needle.len()).position(|window| window == needle)
+        haystack
+            .windows(needle.len())
+            .position(|window| window == needle)
     }
 
     fn assess_risk_level(&self, threats: &[ThreatDetection]) -> RiskLevel {
@@ -1557,9 +1618,16 @@ impl SecurityScanner {
             return RiskLevel::Safe;
         }
 
-        let has_critical = threats.iter().any(|t| matches!(t.severity, ThreatSeverity::Critical));
-        let has_high = threats.iter().any(|t| matches!(t.severity, ThreatSeverity::High));
-        let medium_count = threats.iter().filter(|t| matches!(t.severity, ThreatSeverity::Medium)).count();
+        let has_critical = threats
+            .iter()
+            .any(|t| matches!(t.severity, ThreatSeverity::Critical));
+        let has_high = threats
+            .iter()
+            .any(|t| matches!(t.severity, ThreatSeverity::High));
+        let medium_count = threats
+            .iter()
+            .filter(|t| matches!(t.severity, ThreatSeverity::Medium))
+            .count();
 
         if has_critical {
             RiskLevel::Critical
@@ -1578,7 +1646,8 @@ impl SecurityScanner {
 
         // Generate unique quarantine filename
         let timestamp = Utc::now().format("%Y%m%d_%H%M%S").to_string();
-        let original_name = file_path.file_name()
+        let original_name = file_path
+            .file_name()
             .and_then(|name| name.to_str())
             .unwrap_or("unknown");
 
@@ -1598,7 +1667,11 @@ impl SecurityScanner {
 
         tokio::fs::write(&metadata_path, serde_json::to_string_pretty(&metadata)?).await?;
 
-        info!("File quarantined: {} -> {}", file_path.display(), quarantine_path.display());
+        info!(
+            "File quarantined: {} -> {}",
+            file_path.display(),
+            quarantine_path.display()
+        );
 
         Ok(())
     }

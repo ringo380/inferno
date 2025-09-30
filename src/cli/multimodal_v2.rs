@@ -24,12 +24,7 @@ pub struct MultimodalVision {
 }
 
 impl MultimodalVision {
-    pub fn new(
-        config: Config,
-        model: String,
-        input_path: String,
-        prompt: Option<String>,
-    ) -> Self {
+    pub fn new(config: Config, model: String, input_path: String, prompt: Option<String>) -> Self {
         Self {
             config,
             model,
@@ -135,9 +130,7 @@ impl Command for MultimodalAudio {
         if self.input_path.is_empty() {
             anyhow::bail!("Input path cannot be empty");
         }
-        if !["transcribe", "translate", "classify", "generate"]
-            .contains(&self.task.as_str())
-        {
+        if !["transcribe", "translate", "classify", "generate"].contains(&self.task.as_str()) {
             anyhow::bail!("Task must be one of: transcribe, translate, classify, generate");
         }
 
@@ -145,7 +138,10 @@ impl Command for MultimodalAudio {
     }
 
     async fn execute(&self, ctx: &mut CommandContext) -> Result<CommandOutput> {
-        info!("Processing audio input: {} ({})", self.input_path, self.task);
+        info!(
+            "Processing audio input: {} ({})",
+            self.input_path, self.task
+        );
 
         // Stub implementation
         let response = "Hello world, this is a test transcription";
@@ -313,7 +309,10 @@ impl Command for MultimodalBatch {
     }
 
     async fn execute(&self, ctx: &mut CommandContext) -> Result<CommandOutput> {
-        info!("Batch processing: {} -> {}", self.input_dir, self.output_dir);
+        info!(
+            "Batch processing: {} -> {}",
+            self.input_dir, self.output_dir
+        );
 
         // Stub implementation
         let files_processed = 15;
@@ -437,7 +436,10 @@ mod tests {
 
         let result = cmd.validate(&ctx).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Model name cannot be empty"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Model name cannot be empty"));
     }
 
     #[tokio::test]
@@ -453,7 +455,10 @@ mod tests {
 
         let result = cmd.validate(&ctx).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Task must be one of"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Task must be one of"));
     }
 
     #[tokio::test]

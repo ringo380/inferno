@@ -185,10 +185,7 @@ impl Command for ConfigValidate {
 
         // Validate path exists
         if !config_path.exists() {
-            anyhow::bail!(
-                "Configuration file not found: {}",
-                config_path.display()
-            );
+            anyhow::bail!("Configuration file not found: {}", config_path.display());
         }
 
         Ok(())

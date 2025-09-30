@@ -178,8 +178,7 @@ mod tests {
 
     #[test]
     fn test_default_builder() {
-        let config = ConfigBuilder::new()
-            .build_unchecked();
+        let config = ConfigBuilder::new().build_unchecked();
 
         assert_eq!(config.log_level, LogLevel::Info);
         assert_eq!(config.log_format, LogFormat::Pretty);

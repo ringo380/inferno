@@ -96,7 +96,11 @@ impl ActivityLogger {
             ),
             (ActivityType::ModelLoad, ActivityStatus::Error) => (
                 "Model load failed".to_string(),
-                format!("Failed to load model '{}': {}", model_name, details.unwrap_or("Unknown error")),
+                format!(
+                    "Failed to load model '{}': {}",
+                    model_name,
+                    details.unwrap_or("Unknown error")
+                ),
             ),
             (ActivityType::ModelLoad, ActivityStatus::InProgress) => (
                 "Loading model".to_string(),
@@ -112,7 +116,11 @@ impl ActivityLogger {
             ),
             (ActivityType::ModelValidation, ActivityStatus::Error) => (
                 "Model validation failed".to_string(),
-                format!("Model '{}' failed validation: {}", model_name, details.unwrap_or("Unknown error")),
+                format!(
+                    "Model '{}' failed validation: {}",
+                    model_name,
+                    details.unwrap_or("Unknown error")
+                ),
             ),
             _ => (
                 format!("{:?} operation", activity_type),
@@ -180,16 +188,21 @@ impl ActivityLogger {
 
     pub fn get_recent_activities(&self, limit: usize) -> Vec<ActivityLog> {
         let activities = self.activities.lock().unwrap();
-        activities.iter()
-            .take(limit)
-            .cloned()
-            .collect()
+        activities.iter().take(limit).cloned().collect()
     }
 
-    pub fn get_activities_by_type(&self, activity_type: ActivityType, limit: usize) -> Vec<ActivityLog> {
+    pub fn get_activities_by_type(
+        &self,
+        activity_type: ActivityType,
+        limit: usize,
+    ) -> Vec<ActivityLog> {
         let activities = self.activities.lock().unwrap();
-        activities.iter()
-            .filter(|activity| std::mem::discriminant(&activity.activity_type) == std::mem::discriminant(&activity_type))
+        activities
+            .iter()
+            .filter(|activity| {
+                std::mem::discriminant(&activity.activity_type)
+                    == std::mem::discriminant(&activity_type)
+            })
             .take(limit)
             .cloned()
             .collect()

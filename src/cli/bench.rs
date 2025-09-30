@@ -39,7 +39,12 @@ pub async fn execute(args: BenchArgs, config: &Config) -> Result<()> {
     let backend_type = args
         .backend
         .or_else(|| BackendType::from_model_path(&model_info.path))
-        .ok_or_else(|| anyhow::anyhow!("No suitable backend found for model: {}", model_info.path.display()))?;
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "No suitable backend found for model: {}",
+                model_info.path.display()
+            )
+        })?;
 
     let mut backend = Backend::new(backend_type, &config.backend_config)?;
 

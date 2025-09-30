@@ -8,9 +8,9 @@
 //! Previously split across: cache.rs, response_cache.rs, advanced_cache.rs
 
 // Re-export existing cache modules during transition
+pub use crate::advanced_cache;
 pub use crate::cache::*;
 pub use crate::response_cache;
-pub use crate::advanced_cache;
 
 // Future: Will consolidate into unified API
 // pub mod model_cache;

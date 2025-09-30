@@ -1,5 +1,5 @@
 // Minimal test binary to validate core compilation fixes
-use inferno::{config::Config, backends::BackendType};
+use inferno::{backends::BackendType, config::Config};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

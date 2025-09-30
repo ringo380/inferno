@@ -2948,133 +2948,241 @@ fn create_default_stage_config(stage_type: &str) -> Result<Option<HashMap<String
         "extract" => {
             config.insert("type".to_string(), Value::String("extract".to_string()));
             config.insert("source_type".to_string(), Value::String("file".to_string()));
-            config.insert("source_path".to_string(), Value::String("/data/input".to_string()));
+            config.insert(
+                "source_path".to_string(),
+                Value::String("/data/input".to_string()),
+            );
             config.insert("format".to_string(), Value::String("json".to_string()));
-            config.insert("batch_size".to_string(), Value::Number(serde_json::Number::from(1000)));
-            config.insert("parallel_workers".to_string(), Value::Number(serde_json::Number::from(4)));
-            config.insert("retry_attempts".to_string(), Value::Number(serde_json::Number::from(3)));
-            config.insert("timeout_seconds".to_string(), Value::Number(serde_json::Number::from(300)));
-        },
+            config.insert(
+                "batch_size".to_string(),
+                Value::Number(serde_json::Number::from(1000)),
+            );
+            config.insert(
+                "parallel_workers".to_string(),
+                Value::Number(serde_json::Number::from(4)),
+            );
+            config.insert(
+                "retry_attempts".to_string(),
+                Value::Number(serde_json::Number::from(3)),
+            );
+            config.insert(
+                "timeout_seconds".to_string(),
+                Value::Number(serde_json::Number::from(300)),
+            );
+        }
         "transform" => {
             config.insert("type".to_string(), Value::String("transform".to_string()));
-            config.insert("transformation_type".to_string(), Value::String("map".to_string()));
-            config.insert("operations".to_string(), Value::Array(vec![
-                Value::Object({
+            config.insert(
+                "transformation_type".to_string(),
+                Value::String("map".to_string()),
+            );
+            config.insert(
+                "operations".to_string(),
+                Value::Array(vec![Value::Object({
                     let mut op = serde_json::Map::new();
                     op.insert("name".to_string(), Value::String("normalize".to_string()));
                     op.insert("enabled".to_string(), Value::Bool(true));
                     op
-                })
-            ]));
-            config.insert("error_handling".to_string(), Value::String("skip".to_string()));
+                })]),
+            );
+            config.insert(
+                "error_handling".to_string(),
+                Value::String("skip".to_string()),
+            );
             config.insert("validation_enabled".to_string(), Value::Bool(true));
-            config.insert("memory_limit_mb".to_string(), Value::Number(serde_json::Number::from(512)));
-        },
+            config.insert(
+                "memory_limit_mb".to_string(),
+                Value::Number(serde_json::Number::from(512)),
+            );
+        }
         "load" => {
             config.insert("type".to_string(), Value::String("load".to_string()));
-            config.insert("destination_type".to_string(), Value::String("database".to_string()));
-            config.insert("destination_path".to_string(), Value::String("/data/output".to_string()));
-            config.insert("table_name".to_string(), Value::String("processed_data".to_string()));
-            config.insert("write_mode".to_string(), Value::String("append".to_string()));
-            config.insert("batch_commit_size".to_string(), Value::Number(serde_json::Number::from(1000)));
+            config.insert(
+                "destination_type".to_string(),
+                Value::String("database".to_string()),
+            );
+            config.insert(
+                "destination_path".to_string(),
+                Value::String("/data/output".to_string()),
+            );
+            config.insert(
+                "table_name".to_string(),
+                Value::String("processed_data".to_string()),
+            );
+            config.insert(
+                "write_mode".to_string(),
+                Value::String("append".to_string()),
+            );
+            config.insert(
+                "batch_commit_size".to_string(),
+                Value::Number(serde_json::Number::from(1000)),
+            );
             config.insert("create_indexes".to_string(), Value::Bool(true));
             config.insert("backup_enabled".to_string(), Value::Bool(true));
-        },
+        }
         "validate" => {
             config.insert("type".to_string(), Value::String("validate".to_string()));
-            config.insert("validation_rules".to_string(), Value::Array(vec![
-                Value::Object({
+            config.insert(
+                "validation_rules".to_string(),
+                Value::Array(vec![Value::Object({
                     let mut rule = serde_json::Map::new();
                     rule.insert("field".to_string(), Value::String("id".to_string()));
-                    rule.insert("rule_type".to_string(), Value::String("required".to_string()));
+                    rule.insert(
+                        "rule_type".to_string(),
+                        Value::String("required".to_string()),
+                    );
                     rule.insert("enabled".to_string(), Value::Bool(true));
                     rule
-                })
-            ]));
+                })]),
+            );
             config.insert("strict_mode".to_string(), Value::Bool(false));
-            config.insert("error_threshold_percent".to_string(), Value::Number(serde_json::Number::from(5)));
+            config.insert(
+                "error_threshold_percent".to_string(),
+                Value::Number(serde_json::Number::from(5)),
+            );
             config.insert("report_validation_errors".to_string(), Value::Bool(true));
-        },
+        }
         "filter" => {
             config.insert("type".to_string(), Value::String("filter".to_string()));
-            config.insert("filter_conditions".to_string(), Value::Array(vec![
-                Value::Object({
+            config.insert(
+                "filter_conditions".to_string(),
+                Value::Array(vec![Value::Object({
                     let mut condition = serde_json::Map::new();
                     condition.insert("field".to_string(), Value::String("status".to_string()));
                     condition.insert("operator".to_string(), Value::String("equals".to_string()));
                     condition.insert("value".to_string(), Value::String("active".to_string()));
                     condition
-                })
-            ]));
-            config.insert("filter_mode".to_string(), Value::String("include".to_string()));
+                })]),
+            );
+            config.insert(
+                "filter_mode".to_string(),
+                Value::String("include".to_string()),
+            );
             config.insert("case_sensitive".to_string(), Value::Bool(false));
-        },
+        }
         "aggregate" => {
             config.insert("type".to_string(), Value::String("aggregate".to_string()));
-            config.insert("group_by_fields".to_string(), Value::Array(vec![
-                Value::String("category".to_string())
-            ]));
-            config.insert("aggregations".to_string(), Value::Array(vec![
-                Value::Object({
+            config.insert(
+                "group_by_fields".to_string(),
+                Value::Array(vec![Value::String("category".to_string())]),
+            );
+            config.insert(
+                "aggregations".to_string(),
+                Value::Array(vec![Value::Object({
                     let mut agg = serde_json::Map::new();
                     agg.insert("field".to_string(), Value::String("amount".to_string()));
                     agg.insert("function".to_string(), Value::String("sum".to_string()));
-                    agg.insert("alias".to_string(), Value::String("total_amount".to_string()));
+                    agg.insert(
+                        "alias".to_string(),
+                        Value::String("total_amount".to_string()),
+                    );
                     agg
-                })
-            ]));
-            config.insert("window_size".to_string(), Value::Number(serde_json::Number::from(3600)));
+                })]),
+            );
+            config.insert(
+                "window_size".to_string(),
+                Value::Number(serde_json::Number::from(3600)),
+            );
             config.insert("emit_partial_results".to_string(), Value::Bool(false));
-        },
+        }
         "enrich" => {
             config.insert("type".to_string(), Value::String("enrich".to_string()));
-            config.insert("enrichment_source".to_string(), Value::String("lookup_table".to_string()));
+            config.insert(
+                "enrichment_source".to_string(),
+                Value::String("lookup_table".to_string()),
+            );
             config.insert("lookup_key".to_string(), Value::String("id".to_string()));
-            config.insert("enrichment_fields".to_string(), Value::Array(vec![
-                Value::String("description".to_string()),
-                Value::String("metadata".to_string())
-            ]));
+            config.insert(
+                "enrichment_fields".to_string(),
+                Value::Array(vec![
+                    Value::String("description".to_string()),
+                    Value::String("metadata".to_string()),
+                ]),
+            );
             config.insert("cache_enabled".to_string(), Value::Bool(true));
-            config.insert("cache_ttl_seconds".to_string(), Value::Number(serde_json::Number::from(3600)));
-            config.insert("missing_value_strategy".to_string(), Value::String("null".to_string()));
-        },
+            config.insert(
+                "cache_ttl_seconds".to_string(),
+                Value::Number(serde_json::Number::from(3600)),
+            );
+            config.insert(
+                "missing_value_strategy".to_string(),
+                Value::String("null".to_string()),
+            );
+        }
         "split" => {
             config.insert("type".to_string(), Value::String("split".to_string()));
-            config.insert("split_strategy".to_string(), Value::String("round_robin".to_string()));
-            config.insert("output_branches".to_string(), Value::Number(serde_json::Number::from(2)));
-            config.insert("split_condition".to_string(), Value::String("${record.type}".to_string()));
+            config.insert(
+                "split_strategy".to_string(),
+                Value::String("round_robin".to_string()),
+            );
+            config.insert(
+                "output_branches".to_string(),
+                Value::Number(serde_json::Number::from(2)),
+            );
+            config.insert(
+                "split_condition".to_string(),
+                Value::String("${record.type}".to_string()),
+            );
             config.insert("preserve_order".to_string(), Value::Bool(true));
-        },
+        }
         "deduplicate" => {
             config.insert("type".to_string(), Value::String("deduplicate".to_string()));
-            config.insert("dedup_keys".to_string(), Value::Array(vec![
-                Value::String("id".to_string())
-            ]));
-            config.insert("dedup_strategy".to_string(), Value::String("first".to_string()));
-            config.insert("window_size".to_string(), Value::Number(serde_json::Number::from(10000)));
+            config.insert(
+                "dedup_keys".to_string(),
+                Value::Array(vec![Value::String("id".to_string())]),
+            );
+            config.insert(
+                "dedup_strategy".to_string(),
+                Value::String("first".to_string()),
+            );
+            config.insert(
+                "window_size".to_string(),
+                Value::Number(serde_json::Number::from(10000)),
+            );
             config.insert("memory_efficient".to_string(), Value::Bool(true));
-        },
+        }
         _ => {
             // Default generic stage configuration
             config.insert("type".to_string(), Value::String(stage_type.to_string()));
             config.insert("enabled".to_string(), Value::Bool(true));
-            config.insert("description".to_string(), Value::String(format!("Default {} stage", stage_type)));
-            config.insert("timeout_seconds".to_string(), Value::Number(serde_json::Number::from(300)));
-            config.insert("retry_attempts".to_string(), Value::Number(serde_json::Number::from(3)));
+            config.insert(
+                "description".to_string(),
+                Value::String(format!("Default {} stage", stage_type)),
+            );
+            config.insert(
+                "timeout_seconds".to_string(),
+                Value::Number(serde_json::Number::from(300)),
+            );
+            config.insert(
+                "retry_attempts".to_string(),
+                Value::Number(serde_json::Number::from(3)),
+            );
             config.insert("parallel_processing".to_string(), Value::Bool(false));
         }
     }
 
     // Add common configuration for all stages
-    config.insert("stage_name".to_string(), Value::String(stage_type.to_string()));
-    config.insert("created_at".to_string(), Value::String(Utc::now().to_rfc3339()));
+    config.insert(
+        "stage_name".to_string(),
+        Value::String(stage_type.to_string()),
+    );
+    config.insert(
+        "created_at".to_string(),
+        Value::String(Utc::now().to_rfc3339()),
+    );
     config.insert("version".to_string(), Value::String("1.0".to_string()));
-    config.insert("metadata".to_string(), Value::Object({
-        let mut meta = serde_json::Map::new();
-        meta.insert("generated".to_string(), Value::Bool(true));
-        meta.insert("stage_type".to_string(), Value::String(stage_type.to_string()));
-        meta
-    }));
+    config.insert(
+        "metadata".to_string(),
+        Value::Object({
+            let mut meta = serde_json::Map::new();
+            meta.insert("generated".to_string(), Value::Bool(true));
+            meta.insert(
+                "stage_type".to_string(),
+                Value::String(stage_type.to_string()),
+            );
+            meta
+        }),
+    );
 
     Ok(Some(config))
 }
@@ -3086,7 +3194,11 @@ fn validate_pipeline_config(config: &DataPipelineConfig) -> Result<()> {
     }
 
     // Validate pipeline name format (alphanumeric, hyphens, underscores only)
-    if !config.name.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_') {
+    if !config
+        .name
+        .chars()
+        .all(|c| c.is_alphanumeric() || c == '-' || c == '_')
+    {
         return Err(anyhow::anyhow!(
             "Pipeline name '{}' contains invalid characters. Only alphanumeric, hyphens, and underscores are allowed",
             config.name
@@ -3112,7 +3224,7 @@ fn validate_pipeline_config(config: &DataPipelineConfig) -> Result<()> {
 
     // Validate pipeline type
     match config.pipeline_type {
-        PipelineType::Batch | PipelineType::Streaming | PipelineType::Hybrid => {},
+        PipelineType::Batch | PipelineType::Streaming | PipelineType::Hybrid => {}
         _ => {
             return Err(anyhow::anyhow!(
                 "Invalid pipeline type: {:?}. Must be Batch, Streaming, or Hybrid",
@@ -3140,10 +3252,7 @@ fn validate_pipeline_config(config: &DataPipelineConfig) -> Result<()> {
         let mut stage_names = std::collections::HashSet::new();
         for stage in &config.stages {
             if !stage_names.insert(&stage.name) {
-                return Err(anyhow::anyhow!(
-                    "Duplicate stage name: '{}'",
-                    stage.name
-                ));
+                return Err(anyhow::anyhow!("Duplicate stage name: '{}'", stage.name));
             }
 
             // Validate individual stage (convert PipelineTask to basic validation)
@@ -3183,7 +3292,11 @@ fn validate_stage_config(stage: &crate::data_pipeline::Stage) -> Result<()> {
         return Err(anyhow::anyhow!("Stage name cannot be empty"));
     }
 
-    if !stage.name.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_') {
+    if !stage
+        .name
+        .chars()
+        .all(|c| c.is_alphanumeric() || c == '-' || c == '_')
+    {
         return Err(anyhow::anyhow!(
             "Stage name '{}' contains invalid characters. Only alphanumeric, hyphens, and underscores are allowed",
             stage.name
@@ -3199,13 +3312,13 @@ fn validate_stage_config(stage: &crate::data_pipeline::Stage) -> Result<()> {
 
     // Validate stage type (stage_type is an enum, no need to check if empty)
     match stage.stage_type {
-        crate::data_pipeline::StageType::Source => {},
-        crate::data_pipeline::StageType::Transform => {},
-        crate::data_pipeline::StageType::Filter => {},
-        crate::data_pipeline::StageType::Aggregate => {},
-        crate::data_pipeline::StageType::Join => {},
-        crate::data_pipeline::StageType::Sink => {},
-        crate::data_pipeline::StageType::Custom => {},
+        crate::data_pipeline::StageType::Source => {}
+        crate::data_pipeline::StageType::Transform => {}
+        crate::data_pipeline::StageType::Filter => {}
+        crate::data_pipeline::StageType::Aggregate => {}
+        crate::data_pipeline::StageType::Join => {}
+        crate::data_pipeline::StageType::Sink => {}
+        crate::data_pipeline::StageType::Custom => {}
     }
 
     Ok(())
@@ -3279,15 +3392,20 @@ fn validate_cron_expression(cron_expr: &str) -> Result<()> {
         if part.is_empty() {
             return Err(anyhow::anyhow!(
                 "Invalid cron expression '{}'. Field {} is empty",
-                cron_expr, i + 1
+                cron_expr,
+                i + 1
             ));
         }
 
         // Check for valid characters (numbers, *, -, /, ,)
-        if !part.chars().all(|c| c.is_ascii_digit() || "*/,-".contains(c)) {
+        if !part
+            .chars()
+            .all(|c| c.is_ascii_digit() || "*/,-".contains(c))
+        {
             return Err(anyhow::anyhow!(
                 "Invalid cron expression '{}'. Field {} contains invalid characters",
-                cron_expr, i + 1
+                cron_expr,
+                i + 1
             ));
         }
     }
@@ -3519,7 +3637,9 @@ fn validate_pipeline_task_config(task: &crate::data_pipeline::PipelineTask) -> R
     Ok(())
 }
 
-fn validate_no_circular_dependencies_tasks(tasks: &[crate::data_pipeline::PipelineTask]) -> Result<()> {
+fn validate_no_circular_dependencies_tasks(
+    tasks: &[crate::data_pipeline::PipelineTask],
+) -> Result<()> {
     use std::collections::{HashMap, HashSet};
 
     let mut graph: HashMap<&String, Vec<&String>> = HashMap::new();
@@ -3562,7 +3682,9 @@ fn validate_no_circular_dependencies_tasks(tasks: &[crate::data_pipeline::Pipeli
     for task in tasks {
         if !visited.contains(&task.name) {
             if has_cycle(&task.name, &graph, &mut visited, &mut rec_stack) {
-                return Err(anyhow::anyhow!("Circular dependency detected in pipeline tasks"));
+                return Err(anyhow::anyhow!(
+                    "Circular dependency detected in pipeline tasks"
+                ));
             }
         }
     }

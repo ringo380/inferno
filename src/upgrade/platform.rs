@@ -38,9 +38,7 @@ impl PlatformInfo {
     fn get_os_version() -> Result<String> {
         #[cfg(target_os = "macos")]
         {
-            let output = Command::new("sw_vers")
-                .arg("-productVersion")
-                .output()?;
+            let output = Command::new("sw_vers").arg("-productVersion").output()?;
 
             if output.status.success() {
                 Ok(String::from_utf8(output.stdout)?.trim().to_string())
@@ -52,9 +50,7 @@ impl PlatformInfo {
         #[cfg(target_os = "linux")]
         {
             // Try to get kernel version
-            let output = Command::new("uname")
-                .arg("-r")
-                .output()?;
+            let output = Command::new("uname").arg("-r").output()?;
 
             if output.status.success() {
                 Ok(String::from_utf8(output.stdout)?.trim().to_string())
@@ -67,7 +63,10 @@ impl PlatformInfo {
         {
             // Use PowerShell to get Windows version
             let output = Command::new("powershell")
-                .args(&["-Command", "(Get-CimInstance Win32_OperatingSystem).Version"])
+                .args(&[
+                    "-Command",
+                    "(Get-CimInstance Win32_OperatingSystem).Version",
+                ])
                 .output()?;
 
             if output.status.success() {
@@ -120,17 +119,18 @@ impl PlatformInfo {
             InstallationMethod::AppBundle => self.os == "macos",
             InstallationMethod::MSI => self.os == "windows",
             InstallationMethod::DEB => {
-                self.os == "linux" &&
-                self.distribution.as_ref().map_or(false, |d|
-                    d.contains("ubuntu") || d.contains("debian")
-                )
-            },
+                self.os == "linux"
+                    && self
+                        .distribution
+                        .as_ref()
+                        .map_or(false, |d| d.contains("ubuntu") || d.contains("debian"))
+            }
             InstallationMethod::RPM => {
-                self.os == "linux" &&
-                self.distribution.as_ref().map_or(false, |d|
-                    d.contains("fedora") || d.contains("centos") || d.contains("rhel")
-                )
-            },
+                self.os == "linux"
+                    && self.distribution.as_ref().map_or(false, |d| {
+                        d.contains("fedora") || d.contains("centos") || d.contains("rhel")
+                    })
+            }
             InstallationMethod::Snap => self.os == "linux",
             InstallationMethod::Flatpak => self.os == "linux",
             InstallationMethod::Homebrew => self.os == "macos" || self.os == "linux",
@@ -199,7 +199,10 @@ impl BasePlatformHandler {
                 if let Some(distro) = &platform_info.distribution {
                     if distro.contains("ubuntu") || distro.contains("debian") {
                         methods.push(InstallationMethod::DEB);
-                    } else if distro.contains("fedora") || distro.contains("centos") || distro.contains("rhel") {
+                    } else if distro.contains("fedora")
+                        || distro.contains("centos")
+                        || distro.contains("rhel")
+                    {
                         methods.push(InstallationMethod::RPM);
                     }
                 }
@@ -325,11 +328,17 @@ impl BasePlatformHandler {
 
         // Platform-specific service starting
         match self.platform_info.os.as_str() {
-            "macos" => self.start_macos_services(stopped_services).await
+            "macos" => self
+                .start_macos_services(stopped_services)
+                .await
                 .map_err(|e| UpgradeError::Internal(e.to_string()))?,
-            "linux" => self.start_linux_services(stopped_services).await
+            "linux" => self
+                .start_linux_services(stopped_services)
+                .await
                 .map_err(|e| UpgradeError::Internal(e.to_string()))?,
-            "windows" => self.start_windows_services(stopped_services).await
+            "windows" => self
+                .start_windows_services(stopped_services)
+                .await
                 .map_err(|e| UpgradeError::Internal(e.to_string()))?,
             _ => {}
         }
@@ -379,10 +388,7 @@ impl BasePlatformHandler {
         let mut stopped = vec![];
 
         // Check for launchd services
-        if let Ok(output) = Command::new("launchctl")
-            .args(&["list"])
-            .output()
-        {
+        if let Ok(output) = Command::new("launchctl").args(&["list"]).output() {
             let output_str = String::from_utf8_lossy(&output.stdout);
             for line in output_str.lines() {
                 if line.contains("inferno") {
@@ -460,9 +466,7 @@ impl BasePlatformHandler {
                         let service_name = service_name.trim();
                         debug!("Stopping Windows service: {}", service_name);
 
-                        let _ = Command::new("sc")
-                            .args(&["stop", service_name])
-                            .output();
+                        let _ = Command::new("sc").args(&["stop", service_name]).output();
 
                         stopped.push(service_name.to_string());
                     }
@@ -483,9 +487,7 @@ impl BasePlatformHandler {
         for service in stopped_services {
             if service != "inferno-instances" {
                 debug!("Starting macOS service: {}", service);
-                let _ = Command::new("launchctl")
-                    .args(&["load", service])
-                    .output();
+                let _ = Command::new("launchctl").args(&["load", service]).output();
             }
         }
         Ok(())
@@ -501,9 +503,7 @@ impl BasePlatformHandler {
         for service in stopped_services {
             if service != "inferno-instances" {
                 debug!("Starting Linux service: {}", service);
-                let _ = Command::new("systemctl")
-                    .args(&["start", service])
-                    .output();
+                let _ = Command::new("systemctl").args(&["start", service]).output();
             }
         }
         Ok(())
@@ -519,9 +519,7 @@ impl BasePlatformHandler {
         for service in stopped_services {
             if service != "inferno-instances" {
                 debug!("Starting Windows service: {}", service);
-                let _ = Command::new("sc")
-                    .args(&["start", service])
-                    .output();
+                let _ = Command::new("sc").args(&["start", service]).output();
             }
         }
         Ok(())
@@ -534,7 +532,10 @@ impl BasePlatformHandler {
 
     /// Extract and install from a self-extracting archive
     pub async fn install_self_extractor(&self, package_path: &PathBuf) -> UpgradeResult<()> {
-        info!("Installing from self-extracting archive: {:?}", package_path);
+        info!(
+            "Installing from self-extracting archive: {:?}",
+            package_path
+        );
 
         // Extract to temporary directory
         let temp_dir = tempfile::TempDir::new()
@@ -553,18 +554,23 @@ impl BasePlatformHandler {
     }
 
     /// Extract archive to destination
-    async fn extract_archive(&self, archive_path: &PathBuf, dest_dir: &std::path::Path) -> UpgradeResult<()> {
+    async fn extract_archive(
+        &self,
+        archive_path: &PathBuf,
+        dest_dir: &std::path::Path,
+    ) -> UpgradeResult<()> {
         use flate2::read::GzDecoder;
         use std::fs::File;
         use tar::Archive;
 
-        let file = File::open(archive_path)
-            .map_err(|e| UpgradeError::InvalidPackage(e.to_string()))?;
+        let file =
+            File::open(archive_path).map_err(|e| UpgradeError::InvalidPackage(e.to_string()))?;
 
         let decoder = GzDecoder::new(file);
         let mut archive = Archive::new(decoder);
 
-        archive.unpack(dest_dir)
+        archive
+            .unpack(dest_dir)
             .map_err(|e| UpgradeError::InstallationFailed(e.to_string()))?;
 
         Ok(())
@@ -572,16 +578,14 @@ impl BasePlatformHandler {
 
     /// Find the main executable in extracted content
     fn find_main_executable(&self, dir: &std::path::Path) -> UpgradeResult<PathBuf> {
-        for entry in std::fs::read_dir(dir)
-            .map_err(|e| UpgradeError::InstallationFailed(e.to_string()))?
+        for entry in
+            std::fs::read_dir(dir).map_err(|e| UpgradeError::InstallationFailed(e.to_string()))?
         {
             let entry = entry.map_err(|e| UpgradeError::InstallationFailed(e.to_string()))?;
             let path = entry.path();
 
             if path.is_file() {
-                let filename = path.file_name()
-                    .and_then(|n| n.to_str())
-                    .unwrap_or("");
+                let filename = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
 
                 if filename.starts_with("inferno") {
                     return Ok(path);
@@ -589,13 +593,15 @@ impl BasePlatformHandler {
             }
         }
 
-        Err(UpgradeError::InstallationFailed("Main executable not found in package".to_string()))
+        Err(UpgradeError::InstallationFailed(
+            "Main executable not found in package".to_string(),
+        ))
     }
 
     /// Install executable to the appropriate location
     async fn install_executable(&self, source_exe: &PathBuf) -> UpgradeResult<()> {
-        let current_exe = std::env::current_exe()
-            .map_err(|e| UpgradeError::InstallationFailed(e.to_string()))?;
+        let current_exe =
+            std::env::current_exe().map_err(|e| UpgradeError::InstallationFailed(e.to_string()))?;
 
         // Create backup of current executable
         let backup_exe = current_exe.with_extension("exe.backup");
@@ -623,8 +629,8 @@ impl BasePlatformHandler {
 
     /// Verify installation by checking executable
     pub async fn verify_installation(&self) -> UpgradeResult<bool> {
-        let current_exe = std::env::current_exe()
-            .map_err(|e| UpgradeError::InstallationFailed(e.to_string()))?;
+        let current_exe =
+            std::env::current_exe().map_err(|e| UpgradeError::InstallationFailed(e.to_string()))?;
 
         // Try to run the executable with --version
         let output = Command::new(&current_exe)
@@ -640,8 +646,8 @@ impl BasePlatformHandler {
         info!("Cleaning up after upgrade");
 
         // Remove backup executable if it exists
-        let current_exe = std::env::current_exe()
-            .map_err(|e| UpgradeError::InstallationFailed(e.to_string()))?;
+        let current_exe =
+            std::env::current_exe().map_err(|e| UpgradeError::InstallationFailed(e.to_string()))?;
 
         let backup_exe = current_exe.with_extension("exe.backup");
         if backup_exe.exists() {

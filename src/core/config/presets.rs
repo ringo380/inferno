@@ -48,12 +48,8 @@ impl Preset {
     /// Get a human-readable description of this preset
     pub fn description(&self) -> &'static str {
         match self {
-            Self::Development => {
-                "Development: Verbose logging, minimal features, fast startup"
-            }
-            Self::Production => {
-                "Production: Optimized settings, full monitoring, security enabled"
-            }
+            Self::Development => "Development: Verbose logging, minimal features, fast startup",
+            Self::Production => "Production: Optimized settings, full monitoring, security enabled",
             Self::Testing => {
                 "Testing: Minimal logging, deterministic behavior, all features disabled"
             }
@@ -122,10 +118,10 @@ impl Preset {
     /// Get recommended request timeout for this preset
     pub fn request_timeout_seconds(&self) -> u64 {
         match self {
-            Self::Development => 600,    // 10 minutes for debugging
-            Self::Production => 300,     // 5 minutes
-            Self::Testing => 10,         // 10 seconds
-            Self::Benchmark => 3600,     // 1 hour for long benchmarks
+            Self::Development => 600, // 10 minutes for debugging
+            Self::Production => 300,  // 5 minutes
+            Self::Testing => 10,      // 10 seconds
+            Self::Benchmark => 3600,  // 1 hour for long benchmarks
         }
     }
 }

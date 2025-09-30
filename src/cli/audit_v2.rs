@@ -8,8 +8,8 @@
 
 use crate::{
     audit::{
-        AuditConfiguration, AuditEvent, AuditLogger, AuditQuery, EventType, ExportFormat,
-        Severity, SortField, SortOrder,
+        AuditConfiguration, AuditEvent, AuditLogger, AuditQuery, EventType, ExportFormat, Severity,
+        SortField, SortOrder,
     },
     config::Config,
     interfaces::cli::{Command, CommandContext, CommandOutput},
@@ -143,7 +143,8 @@ impl Command for AuditQueryCmd {
 
                 for event in &events {
                     // Format SystemTime for display
-                    let timestamp = event.timestamp
+                    let timestamp = event
+                        .timestamp
                         .duration_since(SystemTime::UNIX_EPOCH)
                         .map(|d| {
                             chrono::DateTime::<Utc>::from_timestamp(d.as_secs() as i64, 0)
@@ -241,7 +242,10 @@ impl Command for AuditStats {
     }
 
     async fn execute(&self, ctx: &mut CommandContext) -> Result<CommandOutput> {
-        info!("Generating audit statistics for last {} hours", self.range_hours);
+        info!(
+            "Generating audit statistics for last {} hours",
+            self.range_hours
+        );
 
         let audit_config = AuditConfiguration::default();
         let logger = AuditLogger::new(audit_config).await?;
@@ -386,7 +390,9 @@ impl Command for AuditExport {
             ..Default::default()
         };
 
-        logger.export_events(query, &self.output, self.format.clone()).await?;
+        logger
+            .export_events(query, &self.output, self.format.clone())
+            .await?;
 
         // Re-query to get count for output
         let count_query = AuditQuery {
@@ -400,7 +406,11 @@ impl Command for AuditExport {
 
         // Human-readable output
         if !ctx.json_output {
-            println!("✓ Exported {} events to {}", events.len(), self.output.display());
+            println!(
+                "✓ Exported {} events to {}",
+                events.len(),
+                self.output.display()
+            );
             println!("Format: {:?}", self.format);
         }
 

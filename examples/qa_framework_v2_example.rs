@@ -74,12 +74,7 @@ async fn main() -> Result<()> {
 
     // Example 7: Detailed coverage
     println!("Example 7: Detailed coverage");
-    let cmd = QACoverage::new(
-        config.clone(),
-        Some("core".to_string()),
-        None,
-        true,
-    );
+    let cmd = QACoverage::new(config.clone(), Some("core".to_string()), None, true);
     let mut ctx = CommandContext::new(config.clone());
     let result = cmd.execute(&mut ctx).await?;
     println!("Result: {}\n", result.message);
@@ -98,12 +93,7 @@ async fn main() -> Result<()> {
 
     // Example 9: List test suites
     println!("Example 9: List test suites");
-    let cmd = QASuite::new(
-        config.clone(),
-        "list".to_string(),
-        "".to_string(),
-        None,
-    );
+    let cmd = QASuite::new(config.clone(), "list".to_string(), "".to_string(), None);
     let mut ctx = CommandContext::new(config.clone());
     let result = cmd.execute(&mut ctx).await?;
     println!("Result: {}\n", result.message);

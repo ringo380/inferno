@@ -1,10 +1,10 @@
+use chrono::{DateTime, Utc};
+use rand::Rng;
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use uuid::Uuid;
-use chrono::{DateTime, Utc};
-use sha2::{Sha256, Digest};
-use rand::Rng;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct ApiKey {
@@ -93,15 +93,18 @@ impl SecurityManager {
         }
     }
 
-    pub fn generate_api_key(&self, request: CreateApiKeyRequest) -> Result<CreateApiKeyResponse, String> {
+    pub fn generate_api_key(
+        &self,
+        request: CreateApiKeyRequest,
+    ) -> Result<CreateApiKeyResponse, String> {
         // Generate a secure random API key
         let raw_key = self.generate_secure_key();
         let key_hash = self.hash_key(&raw_key);
         let key_prefix = raw_key.chars().take(8).collect::<String>();
 
-        let expires_at = request.expires_in_days.map(|days| {
-            Utc::now() + chrono::Duration::days(days as i64)
-        });
+        let expires_at = request
+            .expires_in_days
+            .map(|days| Utc::now() + chrono::Duration::days(days as i64));
 
         let api_key = ApiKey {
             id: Uuid::new_v4().to_string(),
@@ -134,10 +137,7 @@ impl SecurityManager {
             metadata: HashMap::new(),
         });
 
-        Ok(CreateApiKeyResponse {
-            api_key,
-            raw_key,
-        })
+        Ok(CreateApiKeyResponse { api_key, raw_key })
     }
 
     pub fn get_api_keys(&self) -> Result<Vec<ApiKey>, String> {
@@ -199,7 +199,10 @@ impl SecurityManager {
         let key_hash = self.hash_key(&raw_key);
         let mut keys = self.api_keys.lock().map_err(|e| e.to_string())?;
 
-        if let Some(key) = keys.iter_mut().find(|k| k.key_hash == key_hash && k.is_active) {
+        if let Some(key) = keys
+            .iter_mut()
+            .find(|k| k.key_hash == key_hash && k.is_active)
+        {
             // Check if key is expired
             if let Some(expires_at) = key.expires_at {
                 if Utc::now() > expires_at {
@@ -262,30 +265,36 @@ impl SecurityManager {
 
         let total_api_keys = keys.len() as u32;
         let active_api_keys = keys.iter().filter(|k| k.is_active).count() as u32;
-        let expired_api_keys = keys.iter().filter(|k| {
-            if let Some(expires_at) = k.expires_at {
-                Utc::now() > expires_at
-            } else {
-                false
-            }
-        }).count() as u32;
-
-        let twenty_four_hours_ago = Utc::now() - chrono::Duration::hours(24);
-        let security_events_24h = events.iter()
-            .filter(|e| e.timestamp > twenty_four_hours_ago)
-            .count() as u32;
-
-        let failed_auth_attempts_24h = events.iter()
-            .filter(|e| {
-                e.timestamp > twenty_four_hours_ago &&
-                matches!(e.event_type, SecurityEventType::AuthenticationFailed)
+        let expired_api_keys = keys
+            .iter()
+            .filter(|k| {
+                if let Some(expires_at) = k.expires_at {
+                    Utc::now() > expires_at
+                } else {
+                    false
+                }
             })
             .count() as u32;
 
-        let suspicious_activities_24h = events.iter()
+        let twenty_four_hours_ago = Utc::now() - chrono::Duration::hours(24);
+        let security_events_24h = events
+            .iter()
+            .filter(|e| e.timestamp > twenty_four_hours_ago)
+            .count() as u32;
+
+        let failed_auth_attempts_24h = events
+            .iter()
             .filter(|e| {
-                e.timestamp > twenty_four_hours_ago &&
-                matches!(e.event_type, SecurityEventType::SuspiciousActivity)
+                e.timestamp > twenty_four_hours_ago
+                    && matches!(e.event_type, SecurityEventType::AuthenticationFailed)
+            })
+            .count() as u32;
+
+        let suspicious_activities_24h = events
+            .iter()
+            .filter(|e| {
+                e.timestamp > twenty_four_hours_ago
+                    && matches!(e.event_type, SecurityEventType::SuspiciousActivity)
             })
             .count() as u32;
 

@@ -230,8 +230,7 @@ async fn main() -> Result<()> {
 
     println!();
 
-    let invalid_failure_rate =
-        ResilienceTest::new(config.clone(), "retry".to_string(), 100, 1.5);
+    let invalid_failure_rate = ResilienceTest::new(config.clone(), "retry".to_string(), 100, 1.5);
 
     match pipeline
         .execute(Box::new(invalid_failure_rate), &mut ctx_invalid.clone())

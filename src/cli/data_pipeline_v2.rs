@@ -624,7 +624,10 @@ impl Command for DataPipelineMetrics {
             println!("  Total: {}", total_executions);
             println!("  Successful: {}", successful);
             println!("  Failed: {}", failed);
-            println!("  Success Rate: {:.1}%", (successful as f64 / total_executions as f64) * 100.0);
+            println!(
+                "  Success Rate: {:.1}%",
+                (successful as f64 / total_executions as f64) * 100.0
+            );
             println!();
             println!("Performance:");
             println!("  Average Duration: 12.5 minutes");
@@ -692,12 +695,7 @@ mod tests {
     #[tokio::test]
     async fn test_data_pipeline_list_validation_invalid_status() {
         let config = Config::default();
-        let cmd = DataPipelineList::new(
-            config.clone(),
-            Some("invalid".to_string()),
-            None,
-            false,
-        );
+        let cmd = DataPipelineList::new(config.clone(), Some("invalid".to_string()), None, false);
         let ctx = CommandContext::new(config);
 
         let result = cmd.validate(&ctx).await;

@@ -8,8 +8,8 @@
 //! Previously split across: monitoring.rs, advanced_monitoring.rs
 
 // Re-export existing monitoring modules during transition
-pub use crate::monitoring::*;
 pub use crate::advanced_monitoring;
+pub use crate::monitoring::*;
 
 // Future: Will consolidate into unified API
 // pub mod metrics;

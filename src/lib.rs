@@ -57,54 +57,54 @@ pub mod interfaces;
 // old flat module structure. New code should use the organized paths above.
 
 // === Core Foundation Modules (kept at root for now) ===
-pub mod config;
 pub mod backends;
-pub mod models;
+pub mod config;
 pub mod io;
+pub mod models;
 pub mod security;
 
 // === User Interface Modules (kept at root for now) ===
-pub mod cli;
 pub mod api;
-pub mod tui;
+pub mod cli;
 pub mod dashboard;
+pub mod tui;
 
 // === Infrastructure & Operations (kept at root for now) ===
+pub mod advanced_cache;
+pub mod advanced_monitoring;
+pub mod audit;
 pub mod batch;
 pub mod cache;
-pub mod response_cache;
-pub mod advanced_cache;
-pub mod monitoring;
-pub mod advanced_monitoring;
-pub mod observability;
-pub mod metrics;
-pub mod audit;
 pub mod logging_audit;
+pub mod metrics;
+pub mod monitoring;
+pub mod observability;
+pub mod response_cache;
 
 // === Enterprise & Management (kept at root for now) ===
+pub mod backup_recovery;
 pub mod deployment;
 pub mod distributed;
+pub mod model_versioning;
 pub mod multi_tenancy;
 pub mod resilience;
-pub mod backup_recovery;
 pub mod upgrade;
 pub mod versioning;
-pub mod model_versioning;
 
 // === AI/ML Specialized Features (kept at root for now) ===
-pub mod optimization;
-pub mod performance_optimization;
-pub mod performance_baseline;
 pub mod conversion;
-pub mod multimodal;
-pub mod streaming;
 pub mod federated;
 pub mod gpu;
+pub mod multimodal;
+pub mod optimization;
+pub mod performance_baseline;
+pub mod performance_optimization;
+pub mod streaming;
 
 // === External Integrations (kept at root for now) ===
-pub mod marketplace;
 pub mod api_gateway;
 pub mod data_pipeline;
+pub mod marketplace;
 pub mod qa_framework;
 
 // Conditional Tauri app support
@@ -116,10 +116,10 @@ pub mod tauri_app;
 pub enum InfernoError {
     #[error("Configuration error: {0}")]
     Config(#[from] figment::Error),
-    
+
     #[error("Backend error: {0}")]
     Backend(String),
-    
+
     #[error("Model error: {0}")]
     Model(String),
 
@@ -128,31 +128,31 @@ pub enum InfernoError {
 
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
-    
+
     #[error("Serialization error: {0}")]
     Serialization(#[from] serde_json::Error),
-    
+
     #[error("Network error: {0}")]
     Network(String),
-    
+
     #[error("Authentication error: {0}")]
     Auth(String),
-    
+
     #[error("Validation error: {0}")]
     Validation(String),
-    
+
     #[error("Resource error: {0}")]
     Resource(String),
-    
+
     #[error("Timeout error: {0}")]
     Timeout(String),
-    
+
     #[error("Concurrency error: {0}")]
     Concurrency(String),
-    
+
     #[error("Cache error: {0}")]
     Cache(String),
-    
+
     #[error("Security error: {0}")]
     Security(String),
 
@@ -164,10 +164,10 @@ pub enum InfernoError {
 
     #[error("Distributed error: {0}")]
     Distributed(String),
-    
+
     #[error("Performance error: {0}")]
     Performance(String),
-    
+
     #[error("Unknown error: {0}")]
     Unknown(String),
 
@@ -194,10 +194,10 @@ pub fn init_platform() -> Result<()> {
         .with_file(true)
         .with_line_number(true)
         .finish();
-    
+
     tracing::subscriber::set_global_default(subscriber)
         .map_err(|e| InfernoError::Unknown(format!("Failed to initialize tracing: {}", e)))?;
-    
+
     tracing::info!("🔥 Inferno platform initialized");
     Ok(())
 }
@@ -215,30 +215,30 @@ impl PlatformInfo {
         let mut backends = Vec::new();
         let mut features = Vec::new();
         let mut interfaces = vec!["CLI".to_string(), "TUI".to_string(), "HTTP API".to_string()];
-        
+
         // Check available backends
         #[cfg(feature = "gguf")]
         backends.push("GGUF".to_string());
-        
+
         #[cfg(feature = "onnx")]
         backends.push("ONNX".to_string());
-        
+
         // Check available features
         #[cfg(feature = "gpu-metal")]
         features.push("Metal GPU".to_string());
-        
+
         #[cfg(feature = "gpu-vulkan")]
         features.push("Vulkan GPU".to_string());
-        
+
         #[cfg(feature = "tauri-app")]
         {
             features.push("Desktop App".to_string());
             interfaces.push("Desktop GUI".to_string());
         }
-        
+
         #[cfg(feature = "download")]
         features.push("Model Download".to_string());
-        
+
         Self {
             version: env!("CARGO_PKG_VERSION"),
             backends,
@@ -261,14 +261,14 @@ impl fmt::Display for PlatformInfo {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_platform_info() {
         let info = PlatformInfo::new();
         assert_eq!(info.version, env!("CARGO_PKG_VERSION"));
         assert!(!info.interfaces.is_empty());
     }
-    
+
     #[test]
     fn test_error_types() {
         let error = InfernoError::Backend("test error".to_string());

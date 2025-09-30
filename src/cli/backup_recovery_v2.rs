@@ -430,7 +430,10 @@ impl Command for BackupVerify {
             println!();
             println!("Verification Results:");
             println!("  Files Checked: {}", files_checked);
-            println!("  Integrity: {}", if integrity_ok { "✓ OK" } else { "✗ FAILED" });
+            println!(
+                "  Integrity: {}",
+                if integrity_ok { "✓ OK" } else { "✗ FAILED" }
+            );
             println!();
             println!("⚠️  Full verification not yet fully implemented");
         }
@@ -504,7 +507,14 @@ impl Command for BackupTest {
             }
             println!();
             println!("Test Results:");
-            println!("  Status: {}", if test_passed { "✓ PASSED" } else { "✗ FAILED" });
+            println!(
+                "  Status: {}",
+                if test_passed {
+                    "✓ PASSED"
+                } else {
+                    "✗ FAILED"
+                }
+            );
             println!("  Duration: {}s", duration_seconds);
             println!();
             println!("⚠️  Full disaster recovery testing not yet fully implemented");
@@ -537,12 +547,7 @@ pub struct BackupExport {
 }
 
 impl BackupExport {
-    pub fn new(
-        config: Config,
-        output_path: String,
-        format: String,
-        include_config: bool,
-    ) -> Self {
+    pub fn new(config: Config, output_path: String, format: String, include_config: bool) -> Self {
         Self {
             config,
             output_path,
@@ -619,7 +624,10 @@ mod tests {
 
         let result = cmd.validate(&ctx).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Backup type must be one of"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Backup type must be one of"));
     }
 
     #[tokio::test]
@@ -636,37 +644,37 @@ mod tests {
 
         let result = cmd.validate(&ctx).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Schedule name is required"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Schedule name is required"));
     }
 
     #[tokio::test]
     async fn test_list_validation_invalid_time_range() {
         let config = Config::default();
-        let cmd = BackupList::new(
-            config.clone(),
-            None,
-            Some("invalid".to_string()),
-            false,
-        );
+        let cmd = BackupList::new(config.clone(), None, Some("invalid".to_string()), false);
         let ctx = CommandContext::new(config);
 
         let result = cmd.validate(&ctx).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Time range must be one of"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Time range must be one of"));
     }
 
     #[tokio::test]
     async fn test_test_validation_invalid_type() {
         let config = Config::default();
-        let cmd = BackupTest::new(
-            config.clone(),
-            "invalid".to_string(),
-            None,
-        );
+        let cmd = BackupTest::new(config.clone(), "invalid".to_string(), None);
         let ctx = CommandContext::new(config);
 
         let result = cmd.validate(&ctx).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Test type must be one of"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Test type must be one of"));
     }
 }

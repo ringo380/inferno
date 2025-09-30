@@ -12,10 +12,10 @@
 //! Enterprise modules provide advanced capabilities for production deployments.
 
 // Re-export from existing locations for now
-pub use crate::distributed;
-pub use crate::multi_tenancy;
-pub use crate::federated;
-pub use crate::marketplace;
 pub use crate::api_gateway;
 pub use crate::data_pipeline;
+pub use crate::distributed;
+pub use crate::federated;
+pub use crate::marketplace;
+pub use crate::multi_tenancy;
 pub use crate::qa_framework;

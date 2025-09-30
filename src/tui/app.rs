@@ -3,7 +3,7 @@ use crate::{
     config::Config,
     models::{ModelInfo, ModelManager},
     tui::components::ProgressBar,
-    upgrade::{UpgradeManager, UpgradeStatus, UpgradeConfig, UpgradeEvent},
+    upgrade::{UpgradeConfig, UpgradeEvent, UpgradeManager, UpgradeStatus},
 };
 use anyhow::Result;
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
@@ -16,7 +16,7 @@ use ratatui::{
 use std::collections::VecDeque;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::{mpsc, Mutex, broadcast};
+use tokio::sync::{broadcast, mpsc, Mutex};
 use tracing::{info, warn};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -186,29 +186,59 @@ impl App {
         let (header_style, status_text) = match &self.upgrade_status {
             UpgradeStatus::Available(_) => {
                 title.push_str("🔄 Update Available! Press 'u' to manage");
-                (Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD), title)
-            },
+                (
+                    Style::default()
+                        .fg(Color::Yellow)
+                        .add_modifier(Modifier::BOLD),
+                    title,
+                )
+            }
             UpgradeStatus::Downloading { progress, .. } => {
                 title.push_str(&format!(" 📥 Downloading: {:.1}%", progress * 100.0));
-                (Style::default().fg(Color::Blue).add_modifier(Modifier::BOLD), title)
-            },
+                (
+                    Style::default()
+                        .fg(Color::Blue)
+                        .add_modifier(Modifier::BOLD),
+                    title,
+                )
+            }
             UpgradeStatus::Installing { .. } => {
                 title.push_str(" ⚙️  Installing Update...");
-                (Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD), title)
-            },
-            UpgradeStatus::Completed { restart_required, .. } => {
+                (
+                    Style::default()
+                        .fg(Color::Magenta)
+                        .add_modifier(Modifier::BOLD),
+                    title,
+                )
+            }
+            UpgradeStatus::Completed {
+                restart_required, ..
+            } => {
                 if *restart_required {
                     title.push_str(" ✅ Update Complete - Restart Required");
                 } else {
                     title.push_str(" ✅ Update Complete");
                 }
-                (Style::default().fg(Color::Green).add_modifier(Modifier::BOLD), title)
-            },
+                (
+                    Style::default()
+                        .fg(Color::Green)
+                        .add_modifier(Modifier::BOLD),
+                    title,
+                )
+            }
             UpgradeStatus::Failed { .. } => {
                 title.push_str(" ❌ Update Failed - Press 'u' for details");
-                (Style::default().fg(Color::Red).add_modifier(Modifier::BOLD), title)
-            },
-            _ => (Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD), title),
+                (
+                    Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
+                    title,
+                )
+            }
+            _ => (
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+                title,
+            ),
         };
 
         let header = Paragraph::new(status_text)
@@ -563,7 +593,9 @@ impl App {
             KeyCode::Char('u') => {
                 self.show_upgrade_notification = !self.show_upgrade_notification;
                 // If showing for the first time, check for updates
-                if self.show_upgrade_notification && matches!(self.upgrade_status, UpgradeStatus::UpToDate) {
+                if self.show_upgrade_notification
+                    && matches!(self.upgrade_status, UpgradeStatus::UpToDate)
+                {
                     self.check_for_updates().await?;
                 }
                 return Ok(false);
@@ -800,7 +832,13 @@ impl App {
             let backend_type = match BackendType::from_model_path(&model.path) {
                 Some(bt) => bt,
                 None => {
-                    self.add_log("error", &format!("No suitable backend found for model: {}", model.path.display()));
+                    self.add_log(
+                        "error",
+                        &format!(
+                            "No suitable backend found for model: {}",
+                            model.path.display()
+                        ),
+                    );
                     self.state = AppState::ModelSelection;
                     return Ok(());
                 }
@@ -944,7 +982,10 @@ impl App {
                         self.add_log("info", "Upgrade system initialized");
                     }
                     Err(e) => {
-                        self.add_log("error", &format!("Failed to initialize upgrade system: {}", e));
+                        self.add_log(
+                            "error",
+                            &format!("Failed to initialize upgrade system: {}", e),
+                        );
                     }
                 }
             }
@@ -998,7 +1039,10 @@ impl App {
                 Ok(Some(update_info)) => {
                     self.upgrade_status = UpgradeStatus::Available(update_info.clone());
                     self.show_upgrade_notification = true;
-                    self.add_log("info", &format!("Update available: {}", update_info.version.to_string()));
+                    self.add_log(
+                        "info",
+                        &format!("Update available: {}", update_info.version.to_string()),
+                    );
                 }
                 Ok(None) => {
                     self.upgrade_status = UpgradeStatus::UpToDate;
@@ -1013,7 +1057,9 @@ impl App {
     }
 
     pub async fn start_upgrade(&mut self) -> Result<()> {
-        if let (Some(manager), UpgradeStatus::Available(update_info)) = (self.upgrade_manager.clone(), &self.upgrade_status.clone()) {
+        if let (Some(manager), UpgradeStatus::Available(update_info)) =
+            (self.upgrade_manager.clone(), &self.upgrade_status.clone())
+        {
             self.add_log("info", "Starting upgrade installation...");
             match manager.install_update(update_info).await {
                 Ok(_) => {
@@ -1047,10 +1093,25 @@ impl App {
                     crate::upgrade::ApplicationVersion::current().to_string(),
                     update_info.version.to_string(),
                     update_info.release_date.format("%Y-%m-%d %H:%M UTC"),
-                    if update_info.is_critical { "🚨 Critical" } else if update_info.is_security_update { "🔒 Security" } else { "✨ Feature" },
-                    update_info.changelog.lines().take(3).collect::<Vec<_>>().join("\n")
+                    if update_info.is_critical {
+                        "🚨 Critical"
+                    } else if update_info.is_security_update {
+                        "🔒 Security"
+                    } else {
+                        "✨ Feature"
+                    },
+                    update_info
+                        .changelog
+                        .lines()
+                        .take(3)
+                        .collect::<Vec<_>>()
+                        .join("\n")
                 );
-                ("Update Available", content, Style::default().fg(Color::Yellow))
+                (
+                    "Update Available",
+                    content,
+                    Style::default().fg(Color::Yellow),
+                )
             }
             UpgradeStatus::Downloading { progress, .. } => {
                 let content = format!(

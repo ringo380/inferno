@@ -96,7 +96,9 @@ impl UpdateDownloader {
         }
 
         // Perform the download with retry logic
-        let final_path = self.download_with_retry(&mut session, progress_callback).await?;
+        let final_path = self
+            .download_with_retry(&mut session, progress_callback)
+            .await?;
 
         // Verify the downloaded file
         self.verify_download(&final_path, expected_checksum).await?;
@@ -126,7 +128,10 @@ impl UpdateDownloader {
                         return Err(e);
                     }
 
-                    warn!("Download failed (attempt {}/{}): {}", retry_count, max_retries, e);
+                    warn!(
+                        "Download failed (attempt {}/{}): {}",
+                        retry_count, max_retries, e
+                    );
 
                     // Exponential backoff
                     let delay = Duration::from_secs(2_u64.pow(retry_count as u32));
@@ -232,7 +237,11 @@ impl UpdateDownloader {
     }
 
     /// Verify downloaded file integrity
-    async fn verify_download(&self, file_path: &Path, expected_checksum: &str) -> UpgradeResult<()> {
+    async fn verify_download(
+        &self,
+        file_path: &Path,
+        expected_checksum: &str,
+    ) -> UpgradeResult<()> {
         info!("Verifying download integrity");
 
         if expected_checksum.is_empty() {
@@ -264,8 +273,8 @@ impl UpdateDownloader {
 
         // Use blocking task for file I/O
         tokio::task::spawn_blocking(move || {
-            let mut file = File::open(&file_path)
-                .map_err(|e| UpgradeError::InvalidPackage(e.to_string()))?;
+            let mut file =
+                File::open(&file_path).map_err(|e| UpgradeError::InvalidPackage(e.to_string()))?;
 
             let mut hasher = Sha256::new();
             let mut buffer = [0; 8192];
@@ -318,7 +327,10 @@ impl UpdateDownloader {
     pub fn cancel_download(&self, session_id: &str) {
         // In a real implementation, you'd track sessions by ID
         // For now, this is a placeholder for the cancellation mechanism
-        debug!("Download cancellation requested for session: {}", session_id);
+        debug!(
+            "Download cancellation requested for session: {}",
+            session_id
+        );
     }
 
     /// Clean up temporary download files
@@ -336,7 +348,8 @@ impl UpdateDownloader {
                 // Remove files older than 24 hours
                 if let Ok(metadata) = entry.metadata() {
                     if let Ok(modified) = metadata.modified() {
-                        if modified.elapsed().unwrap_or(Duration::ZERO) > Duration::from_secs(86400) {
+                        if modified.elapsed().unwrap_or(Duration::ZERO) > Duration::from_secs(86400)
+                        {
                             if let Err(e) = std::fs::remove_file(&path) {
                                 warn!("Failed to remove old download file {:?}: {}", path, e);
                             } else {
@@ -434,7 +447,10 @@ mod tests {
         let test_file = config.download_dir.join("test.txt");
         std::fs::write(&test_file, test_content).unwrap();
 
-        let checksum = downloader.calculate_file_checksum(&test_file).await.unwrap();
+        let checksum = downloader
+            .calculate_file_checksum(&test_file)
+            .await
+            .unwrap();
 
         // Expected SHA256 of "Hello, world!"
         let expected = "315f5bdb76d078c43b8ac0064e4a0164612b1fce77c869345bfc94c75894edd3";

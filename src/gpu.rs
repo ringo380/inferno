@@ -85,7 +85,7 @@ pub enum GpuPowerState {
     Balanced,
     PowerSaver,
     Minimal,
-    Auto,  // Added missing variant
+    Auto, // Added missing variant
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -687,8 +687,10 @@ impl GpuManager {
 
             // Check memory requirement
             if gpu.memory_free_mb < memory_required_mb {
-                warn!("GPU {} has insufficient memory: {} MB required, {} MB available",
-                      gpu_id, memory_required_mb, gpu.memory_free_mb);
+                warn!(
+                    "GPU {} has insufficient memory: {} MB required, {} MB available",
+                    gpu_id, memory_required_mb, gpu.memory_free_mb
+                );
                 return Ok(false);
             }
 
@@ -703,10 +705,15 @@ impl GpuManager {
             };
 
             // Add allocation
-            allocations.entry(gpu_id).or_insert_with(Vec::new).push(allocation);
+            allocations
+                .entry(gpu_id)
+                .or_insert_with(Vec::new)
+                .push(allocation);
 
-            info!("Successfully allocated GPU {} for model '{}' with {} MB",
-                  gpu_id, model_name, memory_required_mb);
+            info!(
+                "Successfully allocated GPU {} for model '{}' with {} MB",
+                gpu_id, model_name, memory_required_mb
+            );
             return Ok(true);
         }
 
@@ -715,11 +722,7 @@ impl GpuManager {
     }
 
     /// Set power management state for a GPU
-    pub async fn set_gpu_power_state(
-        &self,
-        gpu_id: u32,
-        power_state: GpuPowerState,
-    ) -> Result<()> {
+    pub async fn set_gpu_power_state(&self, gpu_id: u32, power_state: GpuPowerState) -> Result<()> {
         let gpus = self.gpus.read().await;
 
         if let Some(gpu) = gpus.get(&gpu_id) {
@@ -731,7 +734,10 @@ impl GpuManager {
                     self.set_amd_power_state(gpu_id, &power_state).await?;
                 }
                 _ => {
-                    warn!("Power management not supported for GPU vendor: {:?}", gpu.vendor);
+                    warn!(
+                        "Power management not supported for GPU vendor: {:?}",
+                        gpu.vendor
+                    );
                     return Err(anyhow::anyhow!(
                         "Power management not supported for this GPU vendor"
                     ));
@@ -757,7 +763,11 @@ impl GpuManager {
             {
                 let mut allocations = self.allocations.write().await;
                 if let Some(gpu_allocations) = allocations.remove(&gpu_id) {
-                    info!("Cleared {} allocations from GPU {}", gpu_allocations.len(), gpu_id);
+                    info!(
+                        "Cleared {} allocations from GPU {}",
+                        gpu_allocations.len(),
+                        gpu_id
+                    );
                 }
             }
 
@@ -786,11 +796,11 @@ impl GpuManager {
     // Helper methods for vendor-specific power management
     async fn set_nvidia_power_state(&self, gpu_id: u32, power_state: &GpuPowerState) -> Result<()> {
         let power_limit = match power_state {
-            GpuPowerState::Maximum => "400",     // Maximum power limit
-            GpuPowerState::Performance => "350", // Higher power limit
-            GpuPowerState::Balanced => "250",   // Default power limit
-            GpuPowerState::PowerSaver => "150", // Lower power limit
-            GpuPowerState::Minimal => "100",    // Minimal power limit
+            GpuPowerState::Maximum => "400",      // Maximum power limit
+            GpuPowerState::Performance => "350",  // Higher power limit
+            GpuPowerState::Balanced => "250",     // Default power limit
+            GpuPowerState::PowerSaver => "150",   // Lower power limit
+            GpuPowerState::Minimal => "100",      // Minimal power limit
             GpuPowerState::Auto => return Ok(()), // Let driver decide
         };
 
@@ -801,32 +811,41 @@ impl GpuManager {
 
         match output {
             Ok(result) if result.status.success() => {
-                debug!("NVIDIA GPU {} power limit set to {} watts", gpu_id, power_limit);
+                debug!(
+                    "NVIDIA GPU {} power limit set to {} watts",
+                    gpu_id, power_limit
+                );
                 Ok(())
             }
             Ok(result) => {
                 let stderr = String::from_utf8_lossy(&result.stderr);
-                Err(anyhow::anyhow!("nvidia-smi power command failed: {}", stderr))
+                Err(anyhow::anyhow!(
+                    "nvidia-smi power command failed: {}",
+                    stderr
+                ))
             }
-            Err(e) => {
-                Err(anyhow::anyhow!("Failed to execute nvidia-smi: {}", e))
-            }
+            Err(e) => Err(anyhow::anyhow!("Failed to execute nvidia-smi: {}", e)),
         }
     }
 
     async fn set_amd_power_state(&self, gpu_id: u32, power_state: &GpuPowerState) -> Result<()> {
         // AMD GPU power management using rocm-smi
         let power_profile = match power_state {
-            GpuPowerState::Maximum => "3",     // Maximum profile
-            GpuPowerState::Performance => "2", // Performance profile
-            GpuPowerState::Balanced => "0",   // Default profile
-            GpuPowerState::PowerSaver => "1", // Power saving profile
-            GpuPowerState::Minimal => "4",    // Minimal profile
+            GpuPowerState::Maximum => "3",        // Maximum profile
+            GpuPowerState::Performance => "2",    // Performance profile
+            GpuPowerState::Balanced => "0",       // Default profile
+            GpuPowerState::PowerSaver => "1",     // Power saving profile
+            GpuPowerState::Minimal => "4",        // Minimal profile
             GpuPowerState::Auto => return Ok(()), // Let driver decide
         };
 
         let output = Command::new("rocm-smi")
-            .args(&["-d", &gpu_id.to_string(), "--setpowerprofile", power_profile])
+            .args(&[
+                "-d",
+                &gpu_id.to_string(),
+                "--setpowerprofile",
+                power_profile,
+            ])
             .output();
 
         match output {
@@ -838,9 +857,7 @@ impl GpuManager {
                 let stderr = String::from_utf8_lossy(&result.stderr);
                 Err(anyhow::anyhow!("rocm-smi power command failed: {}", stderr))
             }
-            Err(e) => {
-                Err(anyhow::anyhow!("Failed to execute rocm-smi: {}", e))
-            }
+            Err(e) => Err(anyhow::anyhow!("Failed to execute rocm-smi: {}", e)),
         }
     }
 

@@ -488,7 +488,10 @@ mod tests {
 
         let result = cmd.validate(&ctx).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Strategy must be one of"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Strategy must be one of"));
     }
 
     #[tokio::test]
@@ -499,7 +502,10 @@ mod tests {
 
         let result = cmd.validate(&ctx).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Target size is required"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Target size is required"));
     }
 
     #[tokio::test]
@@ -524,6 +530,9 @@ mod tests {
 
         let result = cmd.validate(&ctx).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Mode must be one of"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Mode must be one of"));
     }
 }

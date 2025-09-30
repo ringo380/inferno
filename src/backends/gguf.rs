@@ -10,13 +10,10 @@ use anyhow::Result;
 use async_stream::stream;
 use llama_cpp_2::{
     llama_backend::LlamaBackend,
-    model::{LlamaModel, params::LlamaModelParams, AddBos, Special},
+    model::{params::LlamaModelParams, AddBos, LlamaModel, Special},
     token::LlamaToken,
 };
-use std::{
-    sync::Arc,
-    time::Instant,
-};
+use std::{sync::Arc, time::Instant};
 use tracing::{debug, info, warn};
 
 // Real GGUF implementation using llama-cpp-2
@@ -57,16 +54,22 @@ impl GgufBackend {
     }
 
     async fn real_tokenize(&self, text: &str) -> Result<Vec<i32>> {
-        let model = self.model.as_ref()
+        let model = self
+            .model
+            .as_ref()
             .ok_or_else(|| InfernoError::Backend("Model not loaded".to_string()))?;
 
-        debug!("Tokenizing text of length: {} with real llama.cpp", text.len());
+        debug!(
+            "Tokenizing text of length: {} with real llama.cpp",
+            text.len()
+        );
 
         let tokens = tokio::task::spawn_blocking({
             let model = model.clone();
             let text = text.to_string();
             move || {
-                model.str_to_token(&text, AddBos::Always)
+                model
+                    .str_to_token(&text, AddBos::Always)
                     .map_err(|e| InfernoError::Backend(format!("Tokenization failed: {}", e)))
             }
         })
@@ -80,7 +83,9 @@ impl GgufBackend {
     }
 
     async fn real_detokenize(&self, tokens: &[i32]) -> Result<String> {
-        let model = self.model.as_ref()
+        let model = self
+            .model
+            .as_ref()
             .ok_or_else(|| InfernoError::Backend("Model not loaded".to_string()))?;
 
         debug!("Detokenizing {} tokens with real llama.cpp", tokens.len());
@@ -124,9 +129,14 @@ impl GgufBackend {
     }
 
     async fn generate_response(&mut self, input: &str, params: &InferenceParams) -> Result<String> {
-        debug!("Generating response for input of length: {} with llama.cpp", input.len());
+        debug!(
+            "Generating response for input of length: {} with llama.cpp",
+            input.len()
+        );
 
-        let model = self.model.as_ref()
+        let model = self
+            .model
+            .as_ref()
             .ok_or_else(|| InfernoError::Backend("Model not loaded".to_string()))?;
 
         // Use spawn_blocking for CPU-intensive inference
@@ -267,12 +277,16 @@ impl InferenceBackend for GgufBackend {
         );
 
         // Real llama.cpp model loading
-        info!("Initializing llama.cpp model from: {}", model_info.path.display());
+        info!(
+            "Initializing llama.cpp model from: {}",
+            model_info.path.display()
+        );
 
         // Initialize the llama backend
         let backend = tokio::task::spawn_blocking(|| {
-            LlamaBackend::init()
-                .map_err(|e| InfernoError::Backend(format!("Failed to initialize llama backend: {}", e)))
+            LlamaBackend::init().map_err(|e| {
+                InfernoError::Backend(format!("Failed to initialize llama backend: {}", e))
+            })
         })
         .await
         .map_err(|e| InfernoError::Backend(format!("Backend initialization task failed: {}", e)))?

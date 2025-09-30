@@ -322,7 +322,10 @@ impl Command for OptimizeBenchmark {
         }
         for technique in &self.techniques {
             if !["quantize", "prune", "distill", "all"].contains(&technique.as_str()) {
-                anyhow::bail!("Invalid technique: {}. Must be one of: quantize, prune, distill, all", technique);
+                anyhow::bail!(
+                    "Invalid technique: {}. Must be one of: quantize, prune, distill, all",
+                    technique
+                );
             }
         }
 
@@ -462,7 +465,10 @@ mod tests {
 
         let result = cmd.validate(&ctx).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Precision must be one of"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Precision must be one of"));
     }
 
     #[tokio::test]
@@ -478,7 +484,10 @@ mod tests {
 
         let result = cmd.validate(&ctx).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Sparsity must be between"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Sparsity must be between"));
     }
 
     #[tokio::test]
@@ -495,7 +504,10 @@ mod tests {
 
         let result = cmd.validate(&ctx).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Temperature must be greater than 0"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Temperature must be greater than 0"));
     }
 
     #[tokio::test]
@@ -510,6 +522,9 @@ mod tests {
 
         let result = cmd.validate(&ctx).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Invalid technique"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid technique"));
     }
 }

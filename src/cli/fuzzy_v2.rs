@@ -129,10 +129,7 @@ impl Command for FuzzyMultiMatch {
     }
 
     async fn execute(&self, ctx: &mut CommandContext) -> Result<CommandOutput> {
-        info!(
-            "Finding {} fuzzy matches for: {}",
-            self.limit, self.input
-        );
+        info!("Finding {} fuzzy matches for: {}", self.limit, self.input);
 
         let matcher = FuzzyMatcher::new();
         let suggestions = matcher.suggest_multiple(&self.input, self.limit);

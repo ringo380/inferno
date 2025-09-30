@@ -348,7 +348,7 @@ pub async fn detect_metal_gpu() -> Result<MetalInfo, String> {
                             // For Apple Silicon, use unified memory (estimate from total RAM)
                             if chipset_model.contains("Apple") {
                                 if let Ok(sysinfo) = get_total_memory() {
-                                    sysinfo / 1024.0 / 1024.0 / 1024.0  // Convert to GB
+                                    sysinfo / 1024.0 / 1024.0 / 1024.0 // Convert to GB
                                 } else {
                                     0.0
                                 }
@@ -358,8 +358,8 @@ pub async fn detect_metal_gpu() -> Result<MetalInfo, String> {
                         };
 
                         // Check for Metal 3 support (macOS 13+ with Apple Silicon or AMD GPUs)
-                        let supports_metal_3 = chipset_model.contains("Apple M")
-                            || chipset_model.contains("AMD");
+                        let supports_metal_3 =
+                            chipset_model.contains("Apple M") || chipset_model.contains("AMD");
 
                         return Ok(MetalInfo {
                             available,
@@ -404,7 +404,8 @@ fn get_total_memory() -> Result<f64, String> {
         .map_err(|e| format!("Failed to get memory size: {}", e))?;
 
     let mem_str = String::from_utf8_lossy(&output.stdout);
-    mem_str.trim()
+    mem_str
+        .trim()
         .parse::<f64>()
         .map_err(|e| format!("Failed to parse memory size: {}", e))
 }
@@ -541,11 +542,7 @@ pub async fn detect_apple_silicon() -> Result<ChipInfo, String> {
             .arg("machdep.cpu.brand_string")
             .output()
             .ok()
-            .map(|out| {
-                String::from_utf8_lossy(&out.stdout)
-                    .trim()
-                    .to_string()
-            })
+            .map(|out| String::from_utf8_lossy(&out.stdout).trim().to_string())
             .unwrap_or_else(|| "Intel x86_64".to_string());
 
         #[cfg(not(target_os = "macos"))]

@@ -456,8 +456,12 @@ async fn get_or_load_backend(
     // For now, if the model doesn't match, we load a new one
     // In a more sophisticated implementation, we'd cache multiple backends
     let model_info = state.model_manager.resolve_model(model_name).await?;
-    let backend_type = BackendType::from_model_path(&model_info.path)
-        .ok_or_else(|| anyhow::anyhow!("No suitable backend found for model: {}", model_info.path.display()))?;
+    let backend_type = BackendType::from_model_path(&model_info.path).ok_or_else(|| {
+        anyhow::anyhow!(
+            "No suitable backend found for model: {}",
+            model_info.path.display()
+        )
+    })?;
     let backend_handle = BackendHandle::new_shared(backend_type, &state.config.backend_config)?;
     backend_handle.load_model(&model_info).await?;
 

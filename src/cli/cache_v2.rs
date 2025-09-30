@@ -558,10 +558,7 @@ mod tests {
 
         let result = cmd.validate(&ctx).await;
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("always-warm"));
+        assert!(result.unwrap_err().to_string().contains("always-warm"));
     }
 
     #[tokio::test]

@@ -107,18 +107,16 @@ pub async fn execute(args: ServeArgs, config: &Config) -> Result<()> {
 
     // Initialize upgrade manager
     let upgrade_manager = match crate::upgrade::UpgradeConfig::from_config(config) {
-        Ok(upgrade_config) => {
-            match UpgradeManager::new(upgrade_config).await {
-                Ok(manager) => {
-                    info!("Upgrade system initialized for HTTP server");
-                    Some(Arc::new(manager))
-                }
-                Err(e) => {
-                    warn!("Failed to initialize upgrade system: {}", e);
-                    None
-                }
+        Ok(upgrade_config) => match UpgradeManager::new(upgrade_config).await {
+            Ok(manager) => {
+                info!("Upgrade system initialized for HTTP server");
+                Some(Arc::new(manager))
             }
-        }
+            Err(e) => {
+                warn!("Failed to initialize upgrade system: {}", e);
+                None
+            }
+        },
         Err(e) => {
             warn!("Failed to load upgrade config: {}", e);
             None
@@ -209,8 +207,12 @@ async fn load_model_on_startup(
     config: &Config,
 ) -> Result<(BackendHandle, String)> {
     let model_info = model_manager.resolve_model(model_name).await?;
-    let backend_type = BackendType::from_model_path(&model_info.path)
-        .ok_or_else(|| anyhow::anyhow!("No suitable backend found for model: {}", model_info.path.display()))?;
+    let backend_type = BackendType::from_model_path(&model_info.path).ok_or_else(|| {
+        anyhow::anyhow!(
+            "No suitable backend found for model: {}",
+            model_info.path.display()
+        )
+    })?;
     let backend_handle = BackendHandle::new_shared(backend_type, &config.backend_config)?;
     backend_handle.load_model(&model_info).await?;
     Ok((backend_handle, model_info.name.clone()))

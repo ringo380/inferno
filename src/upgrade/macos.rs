@@ -3,7 +3,10 @@
 //! Handles macOS-specific upgrade operations including App Bundle management,
 //! code signing verification, and system integration.
 
-use super::{platform::BasePlatformHandler, PlatformUpgradeHandler, UpgradeConfig, UpgradeError, UpgradeResult};
+use super::{
+    platform::BasePlatformHandler, PlatformUpgradeHandler, UpgradeConfig, UpgradeError,
+    UpgradeResult,
+};
 use anyhow::Result;
 use std::path::PathBuf;
 use std::process::Command;
@@ -28,7 +31,9 @@ impl MacOSUpgradeHandler {
 
         // Verify it's a valid App Bundle
         if !self.is_valid_app_bundle(package_path)? {
-            return Err(UpgradeError::InvalidPackage("Invalid macOS App Bundle".to_string()));
+            return Err(UpgradeError::InvalidPackage(
+                "Invalid macOS App Bundle".to_string(),
+            ));
         }
 
         // Verify code signature if enabled
@@ -68,7 +73,9 @@ impl MacOSUpgradeHandler {
 
         // Check if Homebrew is installed
         if !self.is_homebrew_installed() {
-            return Err(UpgradeError::InstallationFailed("Homebrew not installed".to_string()));
+            return Err(UpgradeError::InstallationFailed(
+                "Homebrew not installed".to_string(),
+            ));
         }
 
         // Update Homebrew
@@ -78,7 +85,10 @@ impl MacOSUpgradeHandler {
             .map_err(|e| UpgradeError::InstallationFailed(e.to_string()))?;
 
         if !output.status.success() {
-            warn!("Homebrew update failed: {}", String::from_utf8_lossy(&output.stderr));
+            warn!(
+                "Homebrew update failed: {}",
+                String::from_utf8_lossy(&output.stderr)
+            );
         }
 
         // Install or upgrade the package
@@ -95,9 +105,10 @@ impl MacOSUpgradeHandler {
                 .map_err(|e| UpgradeError::InstallationFailed(e.to_string()))?;
 
             if !output.status.success() {
-                return Err(UpgradeError::InstallationFailed(
-                    format!("Homebrew installation failed: {}", String::from_utf8_lossy(&output.stderr))
-                ));
+                return Err(UpgradeError::InstallationFailed(format!(
+                    "Homebrew installation failed: {}",
+                    String::from_utf8_lossy(&output.stderr)
+                )));
             }
         }
 
@@ -116,9 +127,10 @@ impl MacOSUpgradeHandler {
             .map_err(|e| UpgradeError::VerificationFailed(e.to_string()))?;
 
         if !output.status.success() {
-            return Err(UpgradeError::VerificationFailed(
-                format!("Code signature verification failed: {}", String::from_utf8_lossy(&output.stderr))
-            ));
+            return Err(UpgradeError::VerificationFailed(format!(
+                "Code signature verification failed: {}",
+                String::from_utf8_lossy(&output.stderr)
+            )));
         }
 
         // Check if the signature is from a trusted developer
@@ -132,11 +144,15 @@ impl MacOSUpgradeHandler {
         debug!("Code signature info: {}", signature_info);
 
         // In a production system, you would check against known developer certificates
-        if signature_info.contains("Developer ID Application") || signature_info.contains("Mac App Store") {
+        if signature_info.contains("Developer ID Application")
+            || signature_info.contains("Mac App Store")
+        {
             debug!("Code signature verification passed");
             Ok(())
         } else {
-            Err(UpgradeError::VerificationFailed("Untrusted code signature".to_string()))
+            Err(UpgradeError::VerificationFailed(
+                "Untrusted code signature".to_string(),
+            ))
         }
     }
 
@@ -146,8 +162,7 @@ impl MacOSUpgradeHandler {
             return Ok(false);
         }
 
-        let extension = path.extension()
-            .and_then(|ext| ext.to_str());
+        let extension = path.extension().and_then(|ext| ext.to_str());
 
         if extension != Some("app") {
             return Ok(false);
@@ -179,9 +194,7 @@ impl MacOSUpgradeHandler {
         }
 
         // Fallback to force quit
-        let output = Command::new("pkill")
-            .args(&["-f", "Inferno"])
-            .output();
+        let output = Command::new("pkill").args(&["-f", "Inferno"]).output();
 
         if let Ok(output) = output {
             if output.status.success() {
@@ -203,9 +216,10 @@ impl MacOSUpgradeHandler {
             .map_err(|e| UpgradeError::InstallationFailed(e.to_string()))?;
 
         if !output.status.success() {
-            return Err(UpgradeError::InstallationFailed(
-                format!("Failed to remove existing app bundle: {}", String::from_utf8_lossy(&output.stderr))
-            ));
+            return Err(UpgradeError::InstallationFailed(format!(
+                "Failed to remove existing app bundle: {}",
+                String::from_utf8_lossy(&output.stderr)
+            )));
         }
 
         Ok(())
@@ -221,9 +235,10 @@ impl MacOSUpgradeHandler {
             .map_err(|e| UpgradeError::InstallationFailed(e.to_string()))?;
 
         if !output.status.success() {
-            return Err(UpgradeError::InstallationFailed(
-                format!("Failed to copy app bundle: {}", String::from_utf8_lossy(&output.stderr))
-            ));
+            return Err(UpgradeError::InstallationFailed(format!(
+                "Failed to copy app bundle: {}",
+                String::from_utf8_lossy(&output.stderr)
+            )));
         }
 
         Ok(())
@@ -239,7 +254,10 @@ impl MacOSUpgradeHandler {
 
         if let Ok(output) = output {
             if !output.status.success() {
-                warn!("Launch Services update failed: {}", String::from_utf8_lossy(&output.stderr));
+                warn!(
+                    "Launch Services update failed: {}",
+                    String::from_utf8_lossy(&output.stderr)
+                );
             }
         } else {
             warn!("Could not update Launch Services database");
@@ -268,7 +286,9 @@ impl MacOSUpgradeHandler {
             .map_err(|e| UpgradeError::InvalidPackage(e.to_string()))?;
 
         if !output.status.success() {
-            return Err(UpgradeError::InvalidPackage("Failed to read Info.plist".to_string()));
+            return Err(UpgradeError::InvalidPackage(
+                "Failed to read Info.plist".to_string(),
+            ));
         }
 
         let json_str = String::from_utf8(output.stdout)
@@ -322,7 +342,10 @@ impl MacOSUpgradeHandler {
 
             if let Ok(output) = output {
                 if !output.status.success() {
-                    warn!("Failed to disable Gatekeeper: {}", String::from_utf8_lossy(&output.stderr));
+                    warn!(
+                        "Failed to disable Gatekeeper: {}",
+                        String::from_utf8_lossy(&output.stderr)
+                    );
                 }
             }
         } else {
@@ -333,7 +356,10 @@ impl MacOSUpgradeHandler {
 
             if let Ok(output) = output {
                 if !output.status.success() {
-                    warn!("Failed to re-enable Gatekeeper: {}", String::from_utf8_lossy(&output.stderr));
+                    warn!(
+                        "Failed to re-enable Gatekeeper: {}",
+                        String::from_utf8_lossy(&output.stderr)
+                    );
                 }
             }
         }
@@ -366,7 +392,8 @@ impl PlatformUpgradeHandler for MacOSUpgradeHandler {
     }
 
     async fn install_update(&self, package_path: &PathBuf) -> Result<()> {
-        let extension = package_path.extension()
+        let extension = package_path
+            .extension()
             .and_then(|ext| ext.to_str())
             .unwrap_or("");
 
@@ -392,7 +419,10 @@ impl PlatformUpgradeHandler for MacOSUpgradeHandler {
                 self.base.install_self_extractor(package_path).await?;
             }
             _ => {
-                return Err(anyhow::anyhow!("Unsupported package format for macOS: {}", extension));
+                return Err(anyhow::anyhow!(
+                    "Unsupported package format for macOS: {}",
+                    extension
+                ));
             }
         }
 

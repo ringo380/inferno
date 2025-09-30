@@ -504,14 +504,8 @@ async fn main() -> Result<()> {
     println!("Example 17: Input Validation");
     println!("{}", "─".repeat(80));
 
-    let empty_query = MarketplaceSearch::new(
-        config.clone(),
-        "".to_string(),
-        None,
-        false,
-        false,
-        20,
-    );
+    let empty_query =
+        MarketplaceSearch::new(config.clone(), "".to_string(), None, false, false, 20);
     let ctx_invalid = CommandContext::new(config.clone());
 
     match pipeline
@@ -527,14 +521,8 @@ async fn main() -> Result<()> {
 
     println!();
 
-    let invalid_limit = MarketplaceSearch::new(
-        config.clone(),
-        "llama".to_string(),
-        None,
-        false,
-        false,
-        150,
-    );
+    let invalid_limit =
+        MarketplaceSearch::new(config.clone(), "llama".to_string(), None, false, false, 150);
 
     match pipeline
         .execute(Box::new(invalid_limit), &mut ctx_invalid.clone())
@@ -549,11 +537,7 @@ async fn main() -> Result<()> {
 
     println!();
 
-    let no_confirm = MarketplaceUnpublish::new(
-        config.clone(),
-        "model-123".to_string(),
-        false,
-    );
+    let no_confirm = MarketplaceUnpublish::new(config.clone(), "model-123".to_string(), false);
 
     match pipeline
         .execute(Box::new(no_confirm), &mut ctx_invalid.clone())

@@ -443,10 +443,16 @@ pub async fn execute(args: GpuArgs, _config: &Config) -> Result<()> {
                     "Allocating {}MB on GPU {} for model '{}'...",
                     memory_mb, id, model_name
                 );
-                if manager.allocate_specific_gpu(id, memory_mb, model_name).await? {
+                if manager
+                    .allocate_specific_gpu(id, memory_mb, model_name)
+                    .await?
+                {
                     println!("Successfully allocated GPU {}", id);
                 } else {
-                    println!("Failed to allocate GPU {} (insufficient memory or unavailable)", id);
+                    println!(
+                        "Failed to allocate GPU {} (insufficient memory or unavailable)",
+                        id
+                    );
                 }
             } else {
                 // Auto-select best GPU

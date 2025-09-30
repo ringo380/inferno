@@ -13,7 +13,9 @@ fn main() -> anyhow::Result<()> {
     // Example 1: Simple configuration
     println!("Example 1: Simple Configuration");
     println!("═══════════════════════════════");
-    let simple_config = ConfigBuilder::new().models_dir("./models").build_unchecked();
+    let simple_config = ConfigBuilder::new()
+        .models_dir("./models")
+        .build_unchecked();
 
     println!("Models directory: {}", simple_config.models_dir.display());
     println!("Cache directory: {}", simple_config.cache_dir.display());
@@ -29,12 +31,12 @@ fn main() -> anyhow::Result<()> {
         .build_unchecked();
 
     println!("Preset: Development");
-    println!("Log level: {} (verbose for debugging)", dev_config.log_level);
-    println!("Log format: {} (human-readable)", dev_config.log_format);
     println!(
-        "Description: {}\n",
-        Preset::Development.description()
+        "Log level: {} (verbose for debugging)",
+        dev_config.log_level
     );
+    println!("Log format: {} (human-readable)", dev_config.log_format);
+    println!("Description: {}\n", Preset::Development.description());
 
     // Example 3: Production preset
     println!("Example 3: Production Preset");
@@ -59,10 +61,7 @@ fn main() -> anyhow::Result<()> {
         "Max concurrent requests: {}",
         Preset::Production.max_concurrent_requests()
     );
-    println!(
-        "Description: {}\n",
-        Preset::Production.description()
-    );
+    println!("Description: {}\n", Preset::Production.description());
 
     // Example 4: Testing preset
     println!("Example 4: Testing Preset");
@@ -73,10 +72,7 @@ fn main() -> anyhow::Result<()> {
         .build_unchecked();
 
     println!("Preset: Testing");
-    println!(
-        "Log level: {} (minimal output)",
-        test_config.log_level
-    );
+    println!("Log level: {} (minimal output)", test_config.log_level);
     println!("Log format: {} (compact)", test_config.log_format);
     println!("Cache enabled: {}", Preset::Testing.cache_enabled());
     println!("Description: {}\n", Preset::Testing.description());
@@ -90,10 +86,7 @@ fn main() -> anyhow::Result<()> {
         .build_unchecked();
 
     println!("Preset: Benchmark");
-    println!(
-        "Log level: {} (minimal overhead)",
-        bench_config.log_level
-    );
+    println!("Log level: {} (minimal overhead)", bench_config.log_level);
     println!(
         "Monitoring enabled: {} (no overhead)",
         Preset::Benchmark.monitoring_enabled()

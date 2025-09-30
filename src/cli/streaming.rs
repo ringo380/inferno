@@ -150,8 +150,12 @@ async fn execute_interactive(
     // Load model
     let model_manager = ModelManager::new(&config.models_dir);
     let model_info = model_manager.resolve_model(&model_name).await?;
-    let backend_type = BackendType::from_model_path(&model_info.path)
-        .ok_or_else(|| anyhow::anyhow!("No suitable backend found for model: {}", model_info.path.display()))?;
+    let backend_type = BackendType::from_model_path(&model_info.path).ok_or_else(|| {
+        anyhow::anyhow!(
+            "No suitable backend found for model: {}",
+            model_info.path.display()
+        )
+    })?;
     let mut backend = Backend::new(backend_type, &config.backend_config)?;
     backend.load_model(&model_info).await?;
 
@@ -296,7 +300,8 @@ async fn execute_benchmark(
 
         let handle = tokio::spawn(async move {
             let result: Result<(usize, u64, u64)> = async move {
-                let backend_type = backend_type.ok_or_else(|| anyhow::anyhow!("No suitable backend found"))?;
+                let backend_type =
+                    backend_type.ok_or_else(|| anyhow::anyhow!("No suitable backend found"))?;
                 let mut backend = Backend::new(backend_type, &backend_config)?;
                 backend.load_model(&model_info).await?;
 
@@ -331,7 +336,8 @@ async fn execute_benchmark(
                 }
 
                 Ok((i, total_streams, total_tokens))
-            }.await;
+            }
+            .await;
             result.unwrap_or((i, 0, 0))
         });
 

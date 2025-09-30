@@ -114,10 +114,7 @@ impl Command for BatchProcess {
         if let Some(ref output) = self.output {
             if let Some(parent) = output.parent() {
                 if !parent.exists() {
-                    anyhow::bail!(
-                        "Output directory does not exist: {}",
-                        parent.display()
-                    );
+                    anyhow::bail!("Output directory does not exist: {}", parent.display());
                 }
             }
         }
@@ -276,10 +273,7 @@ impl Command for BatchProcess {
 
         // Determine output path
         let default_output = self.input.with_extension("batch.jsonl");
-        let output_path = self
-            .output
-            .as_deref()
-            .unwrap_or(default_output.as_path());
+        let output_path = self.output.as_deref().unwrap_or(default_output.as_path());
 
         if !ctx.json_output {
             info!("Output will be saved to: {}", output_path.display());
@@ -287,7 +281,12 @@ impl Command for BatchProcess {
 
         // Process the batch
         let progress = processor
-            .process_file(&mut backend, &self.input, Some(output_path), &inference_params)
+            .process_file(
+                &mut backend,
+                &self.input,
+                Some(output_path),
+                &inference_params,
+            )
             .await?;
 
         // Human-readable summary
@@ -452,9 +451,7 @@ impl BatchProcess {
             let duration = completion_time - progress.start_time;
             println!(
                 "Processing time: {}",
-                humantime::format_duration(
-                    duration.to_std().unwrap_or(std::time::Duration::ZERO)
-                )
+                humantime::format_duration(duration.to_std().unwrap_or(std::time::Duration::ZERO))
             );
         }
 

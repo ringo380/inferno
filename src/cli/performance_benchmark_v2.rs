@@ -165,10 +165,7 @@ impl Command for BenchmarkCompare {
             println!();
             println!("Results:");
             println!("  Improvement: {:.1}%", improvement_pct);
-            println!(
-                "  Threshold Met: {}",
-                if threshold_met { "✓" } else { "✗" }
-            );
+            println!("  Threshold Met: {}", if threshold_met { "✓" } else { "✗" });
             println!();
             println!("⚠️  Full comparison not yet fully implemented");
         }
@@ -201,12 +198,7 @@ pub struct BenchmarkBaseline {
 }
 
 impl BenchmarkBaseline {
-    pub fn new(
-        config: Config,
-        output_path: String,
-        backends: Vec<String>,
-        duration: u64,
-    ) -> Self {
+    pub fn new(config: Config, output_path: String, backends: Vec<String>, duration: u64) -> Self {
         Self {
             config,
             output_path,
@@ -488,6 +480,9 @@ mod tests {
 
         let result = cmd.validate(&ctx).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Format must be one of"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Format must be one of"));
     }
 }

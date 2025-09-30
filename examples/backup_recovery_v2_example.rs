@@ -66,13 +66,7 @@ async fn main() -> Result<()> {
 
     // Example 5: List schedules
     println!("Example 5: List schedules");
-    let cmd = BackupSchedule::new(
-        config.clone(),
-        "list".to_string(),
-        None,
-        None,
-        None,
-    );
+    let cmd = BackupSchedule::new(config.clone(), "list".to_string(), None, None, None);
     let mut ctx = CommandContext::new(config.clone());
     let result = cmd.execute(&mut ctx).await?;
     println!("Result: {}\n", result.message);
@@ -91,11 +85,7 @@ async fn main() -> Result<()> {
 
     // Example 7: Verify backup
     println!("Example 7: Verify backup");
-    let cmd = BackupVerify::new(
-        config.clone(),
-        "backup-abc123".to_string(),
-        true,
-    );
+    let cmd = BackupVerify::new(config.clone(), "backup-abc123".to_string(), true);
     let mut ctx = CommandContext::new(config.clone());
     let result = cmd.execute(&mut ctx).await?;
     println!("Result: {}\n", result.message);

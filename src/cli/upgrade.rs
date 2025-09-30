@@ -174,12 +174,17 @@ pub async fn execute(args: UpgradeArgs, config: &Config) -> Result<()> {
     let upgrade_config = UpgradeConfig::from_config(config)?;
 
     match args.command {
-        UpgradeCommands::Check { force, format, include_prerelease } => {
-            execute_check(upgrade_config, force, &format, include_prerelease).await
-        }
-        UpgradeCommands::Install { version, yes, backup, dry_run } => {
-            execute_install(upgrade_config, version, yes, backup, dry_run).await
-        }
+        UpgradeCommands::Check {
+            force,
+            format,
+            include_prerelease,
+        } => execute_check(upgrade_config, force, &format, include_prerelease).await,
+        UpgradeCommands::Install {
+            version,
+            yes,
+            backup,
+            dry_run,
+        } => execute_install(upgrade_config, version, yes, backup, dry_run).await,
         UpgradeCommands::Status { format, detailed } => {
             execute_status(upgrade_config, &format, detailed).await
         }
@@ -189,15 +194,15 @@ pub async fn execute(args: UpgradeArgs, config: &Config) -> Result<()> {
         UpgradeCommands::Service { action } => {
             execute_service_command(upgrade_config, action).await
         }
-        UpgradeCommands::List { limit, include_prerelease, format } => {
-            execute_list(upgrade_config, limit, include_prerelease, &format).await
-        }
+        UpgradeCommands::List {
+            limit,
+            include_prerelease,
+            format,
+        } => execute_list(upgrade_config, limit, include_prerelease, &format).await,
         UpgradeCommands::History { limit, format } => {
             execute_history(upgrade_config, limit, &format).await
         }
-        UpgradeCommands::Config { action } => {
-            execute_config_command(upgrade_config, action).await
-        }
+        UpgradeCommands::Config { action } => execute_config_command(upgrade_config, action).await,
     }
 }
 
@@ -212,63 +217,71 @@ async fn execute_check(
     let upgrade_manager = UpgradeManager::new(config).await?;
 
     match upgrade_manager.check_for_updates().await {
-        Ok(Some(update_info)) => {
-            match format {
-                "json" => {
-                    let output = serde_json::json!({
-                        "update_available": true,
-                        "current_version": ApplicationVersion::current().to_string(),
-                        "new_version": update_info.version.to_string(),
-                        "release_date": update_info.release_date,
-                        "is_critical": update_info.is_critical,
-                        "is_security_update": update_info.is_security_update,
-                        "changelog": update_info.changelog,
-                        "download_size": get_download_size_for_platform(&update_info),
-                    });
-                    println!("{}", serde_json::to_string_pretty(&output)?);
-                }
-                _ => {
-                    println!("✅ Update available!");
-                    println!("   Current version: {}", ApplicationVersion::current().to_string());
-                    println!("   New version:     {}", update_info.version.to_string());
-                    println!("   Release date:    {}", update_info.release_date.format("%Y-%m-%d"));
-
-                    if update_info.is_critical {
-                        println!("   ⚠️  This is a CRITICAL update");
-                    }
-
-                    if update_info.is_security_update {
-                        println!("   🔒 This is a SECURITY update");
-                    }
-
-                    if let Some(size) = get_download_size_for_platform(&update_info) {
-                        println!("   Download size:   {:.1} MB", size as f64 / 1024.0 / 1024.0);
-                    }
-
-                    if !update_info.changelog.is_empty() {
-                        println!("\n📝 Release Notes:");
-                        println!("{}", format_changelog(&update_info.changelog));
-                    }
-
-                    println!("\n💡 To install: inferno upgrade install");
-                }
+        Ok(Some(update_info)) => match format {
+            "json" => {
+                let output = serde_json::json!({
+                    "update_available": true,
+                    "current_version": ApplicationVersion::current().to_string(),
+                    "new_version": update_info.version.to_string(),
+                    "release_date": update_info.release_date,
+                    "is_critical": update_info.is_critical,
+                    "is_security_update": update_info.is_security_update,
+                    "changelog": update_info.changelog,
+                    "download_size": get_download_size_for_platform(&update_info),
+                });
+                println!("{}", serde_json::to_string_pretty(&output)?);
             }
-        }
-        Ok(None) => {
-            match format {
-                "json" => {
-                    let output = serde_json::json!({
-                        "update_available": false,
-                        "current_version": ApplicationVersion::current().to_string(),
-                        "message": "You are running the latest version"
-                    });
-                    println!("{}", serde_json::to_string_pretty(&output)?);
+            _ => {
+                println!("✅ Update available!");
+                println!(
+                    "   Current version: {}",
+                    ApplicationVersion::current().to_string()
+                );
+                println!("   New version:     {}", update_info.version.to_string());
+                println!(
+                    "   Release date:    {}",
+                    update_info.release_date.format("%Y-%m-%d")
+                );
+
+                if update_info.is_critical {
+                    println!("   ⚠️  This is a CRITICAL update");
                 }
-                _ => {
-                    println!("✅ You are running the latest version ({})", ApplicationVersion::current().to_string());
+
+                if update_info.is_security_update {
+                    println!("   🔒 This is a SECURITY update");
                 }
+
+                if let Some(size) = get_download_size_for_platform(&update_info) {
+                    println!(
+                        "   Download size:   {:.1} MB",
+                        size as f64 / 1024.0 / 1024.0
+                    );
+                }
+
+                if !update_info.changelog.is_empty() {
+                    println!("\n📝 Release Notes:");
+                    println!("{}", format_changelog(&update_info.changelog));
+                }
+
+                println!("\n💡 To install: inferno upgrade install");
             }
-        }
+        },
+        Ok(None) => match format {
+            "json" => {
+                let output = serde_json::json!({
+                    "update_available": false,
+                    "current_version": ApplicationVersion::current().to_string(),
+                    "message": "You are running the latest version"
+                });
+                println!("{}", serde_json::to_string_pretty(&output)?);
+            }
+            _ => {
+                println!(
+                    "✅ You are running the latest version ({})",
+                    ApplicationVersion::current().to_string()
+                );
+            }
+        },
         Err(e) => {
             match format {
                 "json" => {
@@ -316,14 +329,20 @@ async fn execute_install(
     // Check if specific version was requested
     if let Some(requested_version) = version {
         if update_info.version.to_string() != requested_version {
-            println!("❌ Requested version {} is not available", requested_version);
+            println!(
+                "❌ Requested version {} is not available",
+                requested_version
+            );
             return Ok(());
         }
     }
 
     // Show what will be installed
     println!("📦 Update Details:");
-    println!("   Current version: {}", ApplicationVersion::current().to_string());
+    println!(
+        "   Current version: {}",
+        ApplicationVersion::current().to_string()
+    );
     println!("   New version:     {}", update_info.version.to_string());
 
     if update_info.is_critical {
@@ -396,9 +415,26 @@ async fn execute_status(config: UpgradeConfig, format: &str, detailed: bool) -> 
             println!("📊 Upgrade Status");
             println!("   Current version: {}", current_version.to_string());
             println!("   Status:          {}", status_to_string(&status));
-            println!("   Auto-check:      {}", if upgrade_manager.is_auto_check_enabled() { "Enabled" } else { "Disabled" });
-            println!("   Auto-install:    {}", if upgrade_manager.is_auto_update_enabled() { "Enabled" } else { "Disabled" });
-            println!("   Update channel:  {}", upgrade_manager.get_update_channel().as_str());
+            println!(
+                "   Auto-check:      {}",
+                if upgrade_manager.is_auto_check_enabled() {
+                    "Enabled"
+                } else {
+                    "Disabled"
+                }
+            );
+            println!(
+                "   Auto-install:    {}",
+                if upgrade_manager.is_auto_update_enabled() {
+                    "Enabled"
+                } else {
+                    "Disabled"
+                }
+            );
+            println!(
+                "   Update channel:  {}",
+                upgrade_manager.get_update_channel().as_str()
+            );
 
             if detailed {
                 match status {
@@ -406,10 +442,19 @@ async fn execute_status(config: UpgradeConfig, format: &str, detailed: bool) -> 
                         println!("\n📦 Available Update:");
                         println!("   Version:      {}", info.version.to_string());
                         println!("   Release date: {}", info.release_date.format("%Y-%m-%d"));
-                        println!("   Critical:     {}", if info.is_critical { "Yes" } else { "No" });
-                        println!("   Security:     {}", if info.is_security_update { "Yes" } else { "No" });
+                        println!(
+                            "   Critical:     {}",
+                            if info.is_critical { "Yes" } else { "No" }
+                        );
+                        println!(
+                            "   Security:     {}",
+                            if info.is_security_update { "Yes" } else { "No" }
+                        );
                     }
-                    UpgradeStatus::Installing { ref stage, progress } => {
+                    UpgradeStatus::Installing {
+                        ref stage,
+                        progress,
+                    } => {
                         println!("\n⏳ Installation Progress:");
                         println!("   Stage:    {}", stage.description());
                         println!("   Progress: {:.1}%", progress);
@@ -423,7 +468,11 @@ async fn execute_status(config: UpgradeConfig, format: &str, detailed: bool) -> 
     Ok(())
 }
 
-async fn execute_rollback(config: UpgradeConfig, yes: bool, backup_id: Option<String>) -> Result<()> {
+async fn execute_rollback(
+    config: UpgradeConfig,
+    yes: bool,
+    backup_id: Option<String>,
+) -> Result<()> {
     println!("🔄 Starting rollback process...");
 
     // Implementation would use BackupManager to restore from backup
@@ -534,30 +583,48 @@ async fn execute_history(config: UpgradeConfig, limit: usize, format: &str) -> R
 
 async fn execute_config_command(config: UpgradeConfig, action: ConfigCommands) -> Result<()> {
     match action {
-        ConfigCommands::Show { format } => {
-            match format.as_str() {
-                "json" => {
-                    let output = serde_json::json!({
-                        "auto_check": config.auto_check,
-                        "auto_install": config.auto_install,
-                        "check_interval_hours": config.check_interval.as_secs() / 3600,
-                        "update_channel": config.update_channel.as_str(),
-                        "backup_enabled": config.create_backups,
-                        "max_backups": config.max_backups
-                    });
-                    println!("{}", serde_json::to_string_pretty(&output)?);
-                }
-                _ => {
-                    println!("⚙️  Upgrade Configuration:");
-                    println!("   Auto-check:      {}", if config.auto_check { "Enabled" } else { "Disabled" });
-                    println!("   Auto-install:    {}", if config.auto_install { "Enabled" } else { "Disabled" });
-                    println!("   Check interval:  {} hours", config.check_interval.as_secs() / 3600);
-                    println!("   Update channel:  {}", config.update_channel.as_str());
-                    println!("   Create backups:  {}", if config.create_backups { "Yes" } else { "No" });
-                    println!("   Max backups:     {}", config.max_backups);
-                }
+        ConfigCommands::Show { format } => match format.as_str() {
+            "json" => {
+                let output = serde_json::json!({
+                    "auto_check": config.auto_check,
+                    "auto_install": config.auto_install,
+                    "check_interval_hours": config.check_interval.as_secs() / 3600,
+                    "update_channel": config.update_channel.as_str(),
+                    "backup_enabled": config.create_backups,
+                    "max_backups": config.max_backups
+                });
+                println!("{}", serde_json::to_string_pretty(&output)?);
             }
-        }
+            _ => {
+                println!("⚙️  Upgrade Configuration:");
+                println!(
+                    "   Auto-check:      {}",
+                    if config.auto_check {
+                        "Enabled"
+                    } else {
+                        "Disabled"
+                    }
+                );
+                println!(
+                    "   Auto-install:    {}",
+                    if config.auto_install {
+                        "Enabled"
+                    } else {
+                        "Disabled"
+                    }
+                );
+                println!(
+                    "   Check interval:  {} hours",
+                    config.check_interval.as_secs() / 3600
+                );
+                println!("   Update channel:  {}", config.update_channel.as_str());
+                println!(
+                    "   Create backups:  {}",
+                    if config.create_backups { "Yes" } else { "No" }
+                );
+                println!("   Max backups:     {}", config.max_backups);
+            }
+        },
         ConfigCommands::EnableAutoCheck => {
             println!("✅ Auto-check enabled");
             info!("Auto-check configuration updated");
@@ -586,11 +653,19 @@ fn status_to_string(status: &UpgradeStatus) -> String {
         UpgradeStatus::UpToDate => "Up to date".to_string(),
         UpgradeStatus::Available(_) => "Update available".to_string(),
         UpgradeStatus::Checking => "Checking for updates".to_string(),
-        UpgradeStatus::Downloading { progress, .. } => format!("Downloading ({}%)", *progress as u32),
-        UpgradeStatus::Installing { stage, progress } => format!("Installing: {} ({}%)", stage.description(), *progress as u32),
+        UpgradeStatus::Downloading { progress, .. } => {
+            format!("Downloading ({}%)", *progress as u32)
+        }
+        UpgradeStatus::Installing { stage, progress } => format!(
+            "Installing: {} ({}%)",
+            stage.description(),
+            *progress as u32
+        ),
         UpgradeStatus::Completed { .. } => "Installation completed".to_string(),
         UpgradeStatus::Failed { .. } => "Installation failed".to_string(),
-        UpgradeStatus::RollingBack { progress, .. } => format!("Rolling back ({}%)", *progress as u32),
+        UpgradeStatus::RollingBack { progress, .. } => {
+            format!("Rolling back ({}%)", *progress as u32)
+        }
     }
 }
 

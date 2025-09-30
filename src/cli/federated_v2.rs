@@ -171,10 +171,19 @@ impl Command for FederatedStatus {
                 println!("Connected Peers: {}", peers);
             } else {
                 println!("All Nodes:");
-                println!("{:<15} {:<12} {:<15} {:<8} {:<8}", "NODE ID", "STATUS", "ROLE", "ROUND", "PEERS");
+                println!(
+                    "{:<15} {:<12} {:<15} {:<8} {:<8}",
+                    "NODE ID", "STATUS", "ROLE", "ROUND", "PEERS"
+                );
                 println!("{}", "-".repeat(65));
-                println!("{:<15} {:<12} {:<15} {:<8} {:<8}", "node-001", "Connected", "Coordinator", round, peers);
-                println!("{:<15} {:<12} {:<15} {:<8} {:<8}", "node-002", "Training", "Participant", round, 1);
+                println!(
+                    "{:<15} {:<12} {:<15} {:<8} {:<8}",
+                    "node-001", "Connected", "Coordinator", round, peers
+                );
+                println!(
+                    "{:<15} {:<12} {:<15} {:<8} {:<8}",
+                    "node-002", "Training", "Participant", round, 1
+                );
             }
             if self.watch {
                 println!();
@@ -257,8 +266,13 @@ impl Command for FederatedRoundStart {
         }
 
         if let Some(ref strategy) = self.strategy {
-            if !["federated_averaging", "weighted_averaging", "secure_aggregation", "differential_privacy"]
-                .contains(&strategy.as_str())
+            if ![
+                "federated_averaging",
+                "weighted_averaging",
+                "secure_aggregation",
+                "differential_privacy",
+            ]
+            .contains(&strategy.as_str())
             {
                 anyhow::bail!("Strategy must be one of: federated_averaging, weighted_averaging, secure_aggregation, differential_privacy");
             }
@@ -399,10 +413,19 @@ impl Command for FederatedParticipants {
 
             match self.action.as_str() {
                 "list" => {
-                    println!("{:<15} {:<20} {:<12} {:<12}", "NODE ID", "ENDPOINT", "STATUS", "RELIABILITY");
+                    println!(
+                        "{:<15} {:<20} {:<12} {:<12}",
+                        "NODE ID", "ENDPOINT", "STATUS", "RELIABILITY"
+                    );
                     println!("{}", "-".repeat(65));
-                    println!("{:<15} {:<20} {:<12} {:<12}", "node-001", "192.168.1.10:8091", "Active", "0.95");
-                    println!("{:<15} {:<20} {:<12} {:<12}", "node-002", "192.168.1.11:8091", "Training", "0.88");
+                    println!(
+                        "{:<15} {:<20} {:<12} {:<12}",
+                        "node-001", "192.168.1.10:8091", "Active", "0.95"
+                    );
+                    println!(
+                        "{:<15} {:<20} {:<12} {:<12}",
+                        "node-002", "192.168.1.11:8091", "Training", "0.88"
+                    );
                 }
                 "info" => {
                     println!("Node ID: {}", self.node_id.as_ref().unwrap());
@@ -666,7 +689,10 @@ mod tests {
 
         let result = cmd.validate(&ctx).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Role must be one of"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Role must be one of"));
     }
 
     #[tokio::test]
@@ -677,7 +703,10 @@ mod tests {
 
         let result = cmd.validate(&ctx).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Port must be greater than 0"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Port must be greater than 0"));
     }
 
     #[tokio::test]
@@ -697,34 +726,51 @@ mod tests {
     #[tokio::test]
     async fn test_federated_round_start_validation_invalid_strategy() {
         let config = Config::default();
-        let cmd = FederatedRoundStart::new(config.clone(), None, None, None, Some("invalid".to_string()));
+        let cmd = FederatedRoundStart::new(
+            config.clone(),
+            None,
+            None,
+            None,
+            Some("invalid".to_string()),
+        );
         let ctx = CommandContext::new(config);
 
         let result = cmd.validate(&ctx).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Strategy must be one of"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Strategy must be one of"));
     }
 
     #[tokio::test]
     async fn test_federated_participants_validation_invalid_action() {
         let config = Config::default();
-        let cmd = FederatedParticipants::new(config.clone(), "invalid".to_string(), None, None, None);
+        let cmd =
+            FederatedParticipants::new(config.clone(), "invalid".to_string(), None, None, None);
         let ctx = CommandContext::new(config);
 
         let result = cmd.validate(&ctx).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Action must be one of"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Action must be one of"));
     }
 
     #[tokio::test]
     async fn test_federated_edge_deploy_validation_empty_model() {
         let config = Config::default();
-        let cmd = FederatedEdgeDeploy::new(config.clone(), "".to_string(), None, None, false, false);
+        let cmd =
+            FederatedEdgeDeploy::new(config.clone(), "".to_string(), None, None, false, false);
         let ctx = CommandContext::new(config);
 
         let result = cmd.validate(&ctx).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Model ID cannot be empty"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Model ID cannot be empty"));
     }
 
     #[tokio::test]

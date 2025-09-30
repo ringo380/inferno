@@ -9,7 +9,9 @@ use anyhow::Result;
 use inferno::cli::validate_v2::ValidateCommand;
 use inferno::config::Config;
 use inferno::core::config::ConfigBuilder;
-use inferno::interfaces::cli::{CommandContext, CommandPipeline, LoggingMiddleware, MetricsMiddleware};
+use inferno::interfaces::cli::{
+    CommandContext, CommandPipeline, LoggingMiddleware, MetricsMiddleware,
+};
 use std::path::PathBuf;
 
 #[tokio::main]
@@ -66,7 +68,10 @@ port = 8080
             println!("\n✓ {}", output.message);
             if let Some(data) = output.data {
                 if ctx.verbose {
-                    println!("  Details: {}", serde_json::to_string_pretty(&data).unwrap_or_default());
+                    println!(
+                        "  Details: {}",
+                        serde_json::to_string_pretty(&data).unwrap_or_default()
+                    );
                 }
             }
         }
@@ -83,20 +88,21 @@ port = 8080
     println!("Example 2: JSON Output Mode");
     println!("{}", "─".repeat(80));
 
-    let validate_cmd_json = ValidateCommand::new(
-        config.clone(),
-        config_path.clone(),
-        false,
-        false,
-    );
+    let validate_cmd_json = ValidateCommand::new(config.clone(), config_path.clone(), false, false);
 
     let mut ctx_json = CommandContext::new(config.clone());
     ctx_json.json_output = true;
 
-    match pipeline.execute(Box::new(validate_cmd_json), &mut ctx_json).await {
+    match pipeline
+        .execute(Box::new(validate_cmd_json), &mut ctx_json)
+        .await
+    {
         Ok(output) => {
             if let Some(data) = output.data {
-                println!("{}", serde_json::to_string_pretty(&data).unwrap_or_default());
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&data).unwrap_or_default()
+                );
             }
         }
         Err(e) => {
@@ -119,16 +125,15 @@ directory = "/models"  # Missing closing bracket
 "#;
     tokio::fs::write(&invalid_config_path, invalid_content).await?;
 
-    let validate_invalid = ValidateCommand::new(
-        config.clone(),
-        invalid_config_path.clone(),
-        false,
-        false,
-    );
+    let validate_invalid =
+        ValidateCommand::new(config.clone(), invalid_config_path.clone(), false, false);
 
     let mut ctx_invalid = CommandContext::new(config.clone());
 
-    match pipeline.execute(Box::new(validate_invalid), &mut ctx_invalid).await {
+    match pipeline
+        .execute(Box::new(validate_invalid), &mut ctx_invalid)
+        .await
+    {
         Ok(output) => {
             if output.success {
                 println!("Unexpected success");
@@ -136,7 +141,10 @@ directory = "/models"  # Missing closing bracket
                 println!("✓ Validation correctly detected errors:");
                 if let Some(data) = output.data {
                     if let Some(errors) = data.get("errors") {
-                        println!("  Errors: {}", serde_json::to_string_pretty(errors).unwrap_or_default());
+                        println!(
+                            "  Errors: {}",
+                            serde_json::to_string_pretty(errors).unwrap_or_default()
+                        );
                     }
                 }
             }
@@ -157,14 +165,17 @@ directory = "/models"  # Missing closing bracket
     let validate_checksum = ValidateCommand::new(
         config.clone(),
         config_path.clone(),
-        true,  // Enable checksum validation
+        true, // Enable checksum validation
         false,
     );
 
     let mut ctx_checksum = CommandContext::new(config.clone());
     ctx_checksum.set_verbosity(1);
 
-    match pipeline.execute(Box::new(validate_checksum), &mut ctx_checksum).await {
+    match pipeline
+        .execute(Box::new(validate_checksum), &mut ctx_checksum)
+        .await
+    {
         Ok(output) => {
             println!("\n✓ {}", output.message);
             if let Some(data) = output.data {
@@ -194,12 +205,7 @@ directory = "/models"  # Missing closing bracket
     tokio::fs::write(models_dir.join("model2.onnx"), b"fake onnx content").await?;
     tokio::fs::write(models_dir.join("readme.txt"), b"readme content").await?;
 
-    let validate_dir = ValidateCommand::new(
-        config.clone(),
-        models_dir.clone(),
-        false,
-        false,
-    );
+    let validate_dir = ValidateCommand::new(config.clone(), models_dir.clone(), false, false);
 
     let mut ctx_dir = CommandContext::new(config.clone());
 
@@ -226,16 +232,15 @@ directory = "/models"  # Missing closing bracket
     println!("{}", "─".repeat(80));
 
     let nonexistent_path = PathBuf::from("/nonexistent/model.gguf");
-    let validate_error = ValidateCommand::new(
-        config.clone(),
-        nonexistent_path.clone(),
-        false,
-        false,
-    );
+    let validate_error =
+        ValidateCommand::new(config.clone(), nonexistent_path.clone(), false, false);
 
     let mut ctx_error = CommandContext::new(config.clone());
 
-    match pipeline.execute(Box::new(validate_error), &mut ctx_error).await {
+    match pipeline
+        .execute(Box::new(validate_error), &mut ctx_error)
+        .await
+    {
         Ok(_) => {
             println!("Unexpected success");
         }

@@ -11,11 +11,11 @@
 //! Operations modules handle production deployment and maintenance tasks.
 
 // Re-export from existing locations for now
+pub use crate::backup_recovery;
 pub use crate::batch;
 pub use crate::deployment;
-pub use crate::backup_recovery;
-pub use crate::upgrade;
 pub use crate::resilience;
+pub use crate::upgrade;
 
 // Versioning consolidation
 pub mod versioning;

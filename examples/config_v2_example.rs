@@ -9,7 +9,9 @@ use anyhow::Result;
 use inferno::cli::config_v2::{ConfigInit, ConfigShow, ConfigValidate};
 use inferno::config::Config;
 use inferno::core::config::ConfigBuilder;
-use inferno::interfaces::cli::{CommandContext, CommandPipeline, LoggingMiddleware, MetricsMiddleware};
+use inferno::interfaces::cli::{
+    CommandContext, CommandPipeline, LoggingMiddleware, MetricsMiddleware,
+};
 use std::path::PathBuf;
 
 #[tokio::main]
@@ -62,10 +64,16 @@ async fn main() -> Result<()> {
     let mut ctx_json = CommandContext::new(config.clone());
     ctx_json.json_output = true;
 
-    match pipeline.execute(Box::new(show_json_cmd), &mut ctx_json).await {
+    match pipeline
+        .execute(Box::new(show_json_cmd), &mut ctx_json)
+        .await
+    {
         Ok(output) => {
             if let Some(data) = output.data {
-                println!("{}", serde_json::to_string_pretty(&data).unwrap_or_default());
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&data).unwrap_or_default()
+                );
             }
         }
         Err(e) => {
@@ -117,7 +125,10 @@ async fn main() -> Result<()> {
     let validate_cmd = ConfigValidate::new(Some(config_path.clone()));
     let mut ctx_validate = CommandContext::new(config.clone());
 
-    match pipeline.execute(Box::new(validate_cmd), &mut ctx_validate).await {
+    match pipeline
+        .execute(Box::new(validate_cmd), &mut ctx_validate)
+        .await
+    {
         Ok(output) => {
             println!("\n✓ {}", output.message);
             if let Some(data) = output.data {
@@ -150,7 +161,10 @@ async fn main() -> Result<()> {
     let validate_missing = ConfigValidate::new(Some(nonexistent_path.clone()));
     let mut ctx_missing = CommandContext::new(config.clone());
 
-    match pipeline.execute(Box::new(validate_missing), &mut ctx_missing).await {
+    match pipeline
+        .execute(Box::new(validate_missing), &mut ctx_missing)
+        .await
+    {
         Ok(_) => {
             println!("Unexpected success");
         }
@@ -171,7 +185,10 @@ async fn main() -> Result<()> {
     let init_duplicate = ConfigInit::new(Some(config_path.clone()));
     let mut ctx_duplicate = CommandContext::new(config.clone());
 
-    match pipeline.execute(Box::new(init_duplicate), &mut ctx_duplicate).await {
+    match pipeline
+        .execute(Box::new(init_duplicate), &mut ctx_duplicate)
+        .await
+    {
         Ok(_) => {
             println!("Unexpected success");
         }

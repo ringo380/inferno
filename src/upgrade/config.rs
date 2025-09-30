@@ -303,7 +303,7 @@ pub enum DeploymentAction {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MaintenanceWindow {
     pub name: String,
-    pub start_time: String,  // Cron expression or time string
+    pub start_time: String, // Cron expression or time string
     pub duration: Duration,
     pub timezone: String,
     pub allow_critical_updates: bool,
@@ -388,31 +388,33 @@ impl UpgradeConfig {
     /// Validate the configuration
     pub fn validate(&self) -> UpgradeResult<()> {
         // Check that required directories are accessible
-        std::fs::create_dir_all(&self.download_dir)
-            .map_err(|e| UpgradeError::ConfigurationError(format!("Cannot create download directory: {}", e)))?;
+        std::fs::create_dir_all(&self.download_dir).map_err(|e| {
+            UpgradeError::ConfigurationError(format!("Cannot create download directory: {}", e))
+        })?;
 
-        std::fs::create_dir_all(&self.backup_dir)
-            .map_err(|e| UpgradeError::ConfigurationError(format!("Cannot create backup directory: {}", e)))?;
+        std::fs::create_dir_all(&self.backup_dir).map_err(|e| {
+            UpgradeError::ConfigurationError(format!("Cannot create backup directory: {}", e))
+        })?;
 
         // Validate update source
         match &self.update_source {
             UpdateSource::GitHub { owner, repo } => {
                 if owner.is_empty() || repo.is_empty() {
                     return Err(UpgradeError::ConfigurationError(
-                        "GitHub owner and repo cannot be empty".to_string()
+                        "GitHub owner and repo cannot be empty".to_string(),
                     ));
                 }
             }
             UpdateSource::Custom { url } => {
                 if url.is_empty() {
                     return Err(UpgradeError::ConfigurationError(
-                        "Custom update server URL cannot be empty".to_string()
+                        "Custom update server URL cannot be empty".to_string(),
                     ));
                 }
                 // Validate URL format
                 if !url.starts_with("http://") && !url.starts_with("https://") {
                     return Err(UpgradeError::ConfigurationError(
-                        "Custom update server URL must start with http:// or https://".to_string()
+                        "Custom update server URL must start with http:// or https://".to_string(),
                     ));
                 }
             }
@@ -424,27 +426,27 @@ impl UpgradeConfig {
         // Validate safety check configuration
         if self.safety_checks.min_free_space_mb == 0 {
             return Err(UpgradeError::ConfigurationError(
-                "Minimum free space must be greater than 0".to_string()
+                "Minimum free space must be greater than 0".to_string(),
             ));
         }
 
         // Validate notification configuration
         if self.notifications.email_notifications && self.notifications.email_address.is_none() {
             return Err(UpgradeError::ConfigurationError(
-                "Email address required when email notifications are enabled".to_string()
+                "Email address required when email notifications are enabled".to_string(),
             ));
         }
 
         if self.notifications.webhook_notifications && self.notifications.webhook_url.is_none() {
             return Err(UpgradeError::ConfigurationError(
-                "Webhook URL required when webhook notifications are enabled".to_string()
+                "Webhook URL required when webhook notifications are enabled".to_string(),
             ));
         }
 
         // Validate enterprise configuration
         if self.enterprise.staged_rollouts && self.enterprise.rollout_percentage <= 0.0 {
             return Err(UpgradeError::ConfigurationError(
-                "Rollout percentage must be greater than 0 for staged rollouts".to_string()
+                "Rollout percentage must be greater than 0 for staged rollouts".to_string(),
             ));
         }
 
@@ -501,7 +503,10 @@ mod tests {
         // but in most test environments it should pass
         let result = config.validate();
         if result.is_err() {
-            println!("Validation failed (expected in some test environments): {:?}", result);
+            println!(
+                "Validation failed (expected in some test environments): {:?}",
+                result
+            );
         }
     }
 
@@ -509,7 +514,7 @@ mod tests {
     fn test_auto_install_logic() {
         let config = UpgradeConfig::default();
         assert!(!config.should_auto_install(false)); // Regular updates
-        assert!(config.should_auto_install(true));   // Critical updates
+        assert!(config.should_auto_install(true)); // Critical updates
     }
 
     #[test]
@@ -517,6 +522,9 @@ mod tests {
         assert_eq!(UpdateChannel::from_str("stable"), UpdateChannel::Stable);
         assert_eq!(UpdateChannel::from_str("beta"), UpdateChannel::Beta);
         assert_eq!(UpdateChannel::from_str("nightly"), UpdateChannel::Nightly);
-        assert_eq!(UpdateChannel::from_str("custom"), UpdateChannel::Custom("custom".to_string()));
+        assert_eq!(
+            UpdateChannel::from_str("custom"),
+            UpdateChannel::Custom("custom".to_string())
+        );
     }
 }

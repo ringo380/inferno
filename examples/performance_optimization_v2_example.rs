@@ -15,12 +15,7 @@ async fn main() -> Result<()> {
 
     // Example 1: Analyze performance
     println!("Example 1: Analyze performance");
-    let cmd = OptimizeAnalyze::new(
-        config.clone(),
-        "inference_engine".to_string(),
-        60,
-        true,
-    );
+    let cmd = OptimizeAnalyze::new(config.clone(), "inference_engine".to_string(), 60, true);
     let mut ctx = CommandContext::new(config.clone());
     let result = cmd.execute(&mut ctx).await?;
     println!("Result: {}\n", result.message);
@@ -75,12 +70,7 @@ async fn main() -> Result<()> {
 
     // Example 6: Monitor performance
     println!("Example 6: Monitor performance");
-    let cmd = OptimizeMonitor::new(
-        config.clone(),
-        "worker_pool".to_string(),
-        5,
-        Some(80.0),
-    );
+    let cmd = OptimizeMonitor::new(config.clone(), "worker_pool".to_string(), 5, Some(80.0));
     let mut ctx = CommandContext::new(config.clone());
     let result = cmd.execute(&mut ctx).await?;
     println!("Result: {}\n", result.message);

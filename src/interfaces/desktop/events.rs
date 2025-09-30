@@ -19,51 +19,79 @@ impl EventManager {
     /// Emit a model loaded event
     pub fn emit_model_loaded(&self, model_name: String, backend_id: String) -> Result<(), String> {
         self.app_handle
-            .emit_all("model_loaded", serde_json::json!({
-                "model_name": model_name,
-                "backend_id": backend_id,
-            }))
+            .emit_all(
+                "model_loaded",
+                serde_json::json!({
+                    "model_name": model_name,
+                    "backend_id": backend_id,
+                }),
+            )
             .map_err(|e| e.to_string())
     }
 
     /// Emit a model unloaded event
-    pub fn emit_model_unloaded(&self, model_name: String, backend_id: String) -> Result<(), String> {
+    pub fn emit_model_unloaded(
+        &self,
+        model_name: String,
+        backend_id: String,
+    ) -> Result<(), String> {
         self.app_handle
-            .emit_all("model_unloaded", serde_json::json!({
-                "model_name": model_name,
-                "backend_id": backend_id,
-            }))
+            .emit_all(
+                "model_unloaded",
+                serde_json::json!({
+                    "model_name": model_name,
+                    "backend_id": backend_id,
+                }),
+            )
             .map_err(|e| e.to_string())
     }
 
     /// Emit an inference started event
-    pub fn emit_inference_started(&self, inference_id: String, backend_id: String) -> Result<(), String> {
+    pub fn emit_inference_started(
+        &self,
+        inference_id: String,
+        backend_id: String,
+    ) -> Result<(), String> {
         self.app_handle
-            .emit_all("inference_started", serde_json::json!({
-                "inference_id": inference_id,
-                "backend_id": backend_id,
-            }))
+            .emit_all(
+                "inference_started",
+                serde_json::json!({
+                    "inference_id": inference_id,
+                    "backend_id": backend_id,
+                }),
+            )
             .map_err(|e| e.to_string())
     }
 
     /// Emit an inference completed event
-    pub fn emit_inference_completed(&self, inference_id: String, response: String, latency_ms: u64) -> Result<(), String> {
+    pub fn emit_inference_completed(
+        &self,
+        inference_id: String,
+        response: String,
+        latency_ms: u64,
+    ) -> Result<(), String> {
         self.app_handle
-            .emit_all("inference_completed", serde_json::json!({
-                "inference_id": inference_id,
-                "response": response,
-                "latency_ms": latency_ms,
-            }))
+            .emit_all(
+                "inference_completed",
+                serde_json::json!({
+                    "inference_id": inference_id,
+                    "response": response,
+                    "latency_ms": latency_ms,
+                }),
+            )
             .map_err(|e| e.to_string())
     }
 
     /// Emit an inference error event
     pub fn emit_inference_error(&self, inference_id: String, error: String) -> Result<(), String> {
         self.app_handle
-            .emit_all("inference_error", serde_json::json!({
-                "inference_id": inference_id,
-                "error": error,
-            }))
+            .emit_all(
+                "inference_error",
+                serde_json::json!({
+                    "inference_id": inference_id,
+                    "error": error,
+                }),
+            )
             .map_err(|e| e.to_string())
     }
 
@@ -75,13 +103,21 @@ impl EventManager {
     }
 
     /// Emit an API key created event
-    pub fn emit_api_key_created(&self, key_id: String, name: String, permissions: Vec<String>) -> Result<(), String> {
+    pub fn emit_api_key_created(
+        &self,
+        key_id: String,
+        name: String,
+        permissions: Vec<String>,
+    ) -> Result<(), String> {
         self.app_handle
-            .emit_all("api_key_created", serde_json::json!({
-                "key_id": key_id,
-                "name": name,
-                "permissions": permissions,
-            }))
+            .emit_all(
+                "api_key_created",
+                serde_json::json!({
+                    "key_id": key_id,
+                    "name": name,
+                    "permissions": permissions,
+                }),
+            )
             .map_err(|e| e.to_string())
     }
 

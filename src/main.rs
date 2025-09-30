@@ -2,7 +2,9 @@ use anyhow::Result;
 use inferno::{
     cli::{enhanced_parser::EnhancedCliParser, help::HelpSystem, Commands},
     config::Config,
-    upgrade::{background_service::BackgroundUpdateService, init_upgrade_system, ApplicationVersion},
+    upgrade::{
+        background_service::BackgroundUpdateService, init_upgrade_system, ApplicationVersion,
+    },
 };
 use std::sync::Arc;
 use tokio::sync::broadcast;
@@ -150,10 +152,11 @@ async fn main() -> Result<()> {
 
 /// Determine if the background update service should be started for this command
 fn should_start_background_service(command: &Commands) -> bool {
-    matches!(command,
+    matches!(
+        command,
         Commands::Serve(_) |     // API server runs continuously
         Commands::Tui |          // TUI runs continuously
-        Commands::Dashboard(_)   // Dashboard runs continuously
+        Commands::Dashboard(_) // Dashboard runs continuously
     )
 }
 
@@ -191,7 +194,10 @@ async fn init_background_update_service(config: &Config) -> Result<BackgroundUpd
         }
     });
 
-    info!("Background update service started for {}", ApplicationVersion::current().to_string());
+    info!(
+        "Background update service started for {}",
+        ApplicationVersion::current().to_string()
+    );
 
     Ok(service)
 }
@@ -203,7 +209,7 @@ fn setup_logging() {
         .with_env_filter(
             EnvFilter::from_default_env()
                 .add_directive("inferno=info".parse().unwrap())
-                .add_directive("warn".parse().unwrap())
+                .add_directive("warn".parse().unwrap()),
         )
         .with_target(false)
         .with_thread_ids(true)

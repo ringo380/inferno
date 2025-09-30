@@ -3,17 +3,16 @@
 //! This module defines the global application state that is shared across
 //! all Tauri commands and managed by Tauri's state management system.
 
-use std::sync::{Arc, Mutex};
 use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 use sysinfo::System;
 use tauri::AppHandle;
 
-use super::types::{AppSettings, Notification, BatchJob, MetricsSnapshot};
-use super::{
-    ActivityLogger, BackendManager, SecurityManager, ModelRepositoryService,
-    ModelDownloadManager,
-};
 use super::events::EventManager;
+use super::types::{AppSettings, BatchJob, MetricsSnapshot, Notification};
+use super::{
+    ActivityLogger, BackendManager, ModelDownloadManager, ModelRepositoryService, SecurityManager,
+};
 
 /// Global application state for the desktop application
 ///
@@ -87,23 +86,24 @@ impl AppState {
         // Initialize activity logger with settings path
         let activity_logger = ActivityLogger::new(
             PathBuf::from(".inferno-activity.json"),
-            settings.enable_audit_log
-        ).map_err(|e| format!("Failed to initialize activity logger: {}", e))?;
+            settings.enable_audit_log,
+        )
+        .map_err(|e| format!("Failed to initialize activity logger: {}", e))?;
 
         // Initialize security manager
         let security_manager = SecurityManager::new(
             PathBuf::from(".inferno-keys.json"),
-            settings.require_authentication
-        ).map_err(|e| format!("Failed to initialize security manager: {}", e))?;
+            settings.require_authentication,
+        )
+        .map_err(|e| format!("Failed to initialize security manager: {}", e))?;
 
         // Initialize model repository service
         let model_repository = ModelRepositoryService::new()
             .map_err(|e| format!("Failed to initialize model repository: {}", e))?;
 
         // Initialize download manager with models directory
-        let download_manager = ModelDownloadManager::new(
-            PathBuf::from(&settings.models_directory)
-        ).map_err(|e| format!("Failed to initialize download manager: {}", e))?;
+        let download_manager = ModelDownloadManager::new(PathBuf::from(&settings.models_directory))
+            .map_err(|e| format!("Failed to initialize download manager: {}", e))?;
 
         // Initialize event manager if app handle is provided
         let event_manager = if let Some(handle) = app_handle {
@@ -153,7 +153,9 @@ impl AppState {
     /// This is called from the Tauri setup handler after the app handle is available.
     /// It allows the event manager to be initialized with the proper app handle.
     pub fn init_event_manager(&self, app_handle: AppHandle) {
-        let mut event_mgr = self.event_manager.lock()
+        let mut event_mgr = self
+            .event_manager
+            .lock()
             .expect("Failed to lock event manager");
         *event_mgr = Some(EventManager::new(app_handle));
     }
@@ -161,18 +163,22 @@ impl AppState {
     /// Perform cleanup when the application is shutting down
     pub async fn shutdown(&self) -> Result<(), String> {
         // Save settings to disk
-        let settings = self.settings.lock()
+        let settings = self
+            .settings
+            .lock()
             .map_err(|e| format!("Failed to lock settings: {}", e))?;
 
         let config_path = Self::get_config_path();
         let contents = serde_json::to_string_pretty(&*settings)
             .map_err(|e| format!("Failed to serialize settings: {}", e))?;
 
-        tokio::fs::write(&config_path, contents).await
+        tokio::fs::write(&config_path, contents)
+            .await
             .map_err(|e| format!("Failed to write settings file: {}", e))?;
 
         // Flush activity logs
-        self.activity_logger.flush()
+        self.activity_logger
+            .flush()
             .map_err(|e| format!("Failed to flush activity logs: {}", e))?;
 
         // Unload all models
@@ -197,25 +203,20 @@ impl Default for AppState {
             ..Default::default()
         };
 
-        let backend_manager = BackendManager::new(config)
-            .expect("Failed to initialize backend manager");
+        let backend_manager =
+            BackendManager::new(config).expect("Failed to initialize backend manager");
 
-        let activity_logger = ActivityLogger::new(
-            PathBuf::from(".inferno-activity.json"),
-            true
-        ).expect("Failed to initialize activity logger");
+        let activity_logger = ActivityLogger::new(PathBuf::from(".inferno-activity.json"), true)
+            .expect("Failed to initialize activity logger");
 
-        let security_manager = SecurityManager::new(
-            PathBuf::from(".inferno-keys.json"),
-            false
-        ).expect("Failed to initialize security manager");
+        let security_manager = SecurityManager::new(PathBuf::from(".inferno-keys.json"), false)
+            .expect("Failed to initialize security manager");
 
-        let model_repository = ModelRepositoryService::new()
-            .expect("Failed to initialize model repository");
+        let model_repository =
+            ModelRepositoryService::new().expect("Failed to initialize model repository");
 
-        let download_manager = ModelDownloadManager::new(
-            PathBuf::from(&settings.models_directory)
-        ).expect("Failed to initialize download manager");
+        let download_manager = ModelDownloadManager::new(PathBuf::from(&settings.models_directory))
+            .expect("Failed to initialize download manager");
 
         Self {
             system: Arc::new(Mutex::new(system)),

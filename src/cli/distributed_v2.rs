@@ -149,7 +149,13 @@ pub struct DistributedBenchmark {
 }
 
 impl DistributedBenchmark {
-    pub fn new(config: Config, model: String, concurrent: usize, requests: usize, prompt: String) -> Self {
+    pub fn new(
+        config: Config,
+        model: String,
+        concurrent: usize,
+        requests: usize,
+        prompt: String,
+    ) -> Self {
         Self {
             config,
             model,
@@ -369,10 +375,7 @@ impl Command for DistributedStats {
 
         // Aggregate statistics from all workers
         let worker_count = stats.len();
-        let active_workers = stats
-            .values()
-            .filter(|s| s.active_requests > 0)
-            .count();
+        let active_workers = stats.values().filter(|s| s.active_requests > 0).count();
         let total_requests: u64 = stats.values().map(|s| s.total_requests).sum();
         let successful_requests: u64 = stats.values().map(|s| s.successful_requests).sum();
         let failed_requests: u64 = stats.values().map(|s| s.failed_requests).sum();
@@ -587,7 +590,8 @@ mod tests {
     #[tokio::test]
     async fn test_distributed_benchmark_validation_empty_model() {
         let config = Config::default();
-        let cmd = DistributedBenchmark::new(config.clone(), String::new(), 10, 5, "Hello".to_string());
+        let cmd =
+            DistributedBenchmark::new(config.clone(), String::new(), 10, 5, "Hello".to_string());
         let ctx = CommandContext::new(config);
 
         let result = cmd.validate(&ctx).await;

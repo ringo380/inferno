@@ -148,13 +148,18 @@ impl Command for BenchCommand {
 
         // Run warmup
         let warmup_stats = if self.warmup > 0 {
-            Some(self.run_warmup(&mut backend, &prompt, &inference_params, ctx).await?)
+            Some(
+                self.run_warmup(&mut backend, &prompt, &inference_params, ctx)
+                    .await?,
+            )
         } else {
             None
         };
 
         // Run benchmark
-        let bench_stats = self.run_benchmark(&mut backend, &prompt, &inference_params, ctx).await?;
+        let bench_stats = self
+            .run_benchmark(&mut backend, &prompt, &inference_params, ctx)
+            .await?;
 
         // Print results
         if !ctx.json_output {
@@ -354,7 +359,10 @@ impl BenchCommand {
         println!("==================");
         println!("Total time: {:?}", stats.total_time);
         println!("Total tokens: {}", stats.total_tokens);
-        println!("Throughput: {:.1} tokens/sec", stats.throughput_tokens_per_sec);
+        println!(
+            "Throughput: {:.1} tokens/sec",
+            stats.throughput_tokens_per_sec
+        );
         println!();
         println!("Per-iteration statistics:");
         println!(
@@ -367,7 +375,10 @@ impl BenchCommand {
             stats.max,
             self.tokens as f64 / stats.max.as_secs_f64()
         );
-        println!("  Mean:   {:?} ({:.1} tok/s)", stats.mean, stats.mean_tokens_per_sec);
+        println!(
+            "  Mean:   {:?} ({:.1} tok/s)",
+            stats.mean, stats.mean_tokens_per_sec
+        );
         println!(
             "  Median: {:?} ({:.1} tok/s)",
             stats.median,

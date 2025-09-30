@@ -60,11 +60,7 @@ impl Middleware for LoggingMiddleware {
         Ok(())
     }
 
-    async fn after(
-        &self,
-        ctx: &mut CommandContext,
-        result: &Result<CommandOutput>,
-    ) -> Result<()> {
+    async fn after(&self, ctx: &mut CommandContext, result: &Result<CommandOutput>) -> Result<()> {
         let duration = ctx.elapsed();
 
         match result {
@@ -124,7 +120,9 @@ mod tests {
 
         // Before hook
         middleware.before(&mut ctx).await.unwrap();
-        assert!(ctx.get_state::<std::time::Instant>("logging_start").is_some());
+        assert!(ctx
+            .get_state::<std::time::Instant>("logging_start")
+            .is_some());
 
         // After hook with success
         let output = CommandOutput::success("Test passed");

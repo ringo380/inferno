@@ -491,12 +491,8 @@ impl Command for MarketplaceList {
 
     async fn validate(&self, _ctx: &CommandContext) -> Result<()> {
         if let Some(ref status) = self.status {
-            if !["published", "pending", "rejected", "unpublished"]
-                .contains(&status.as_str())
-            {
-                anyhow::bail!(
-                    "Status must be one of: published, pending, rejected, unpublished"
-                );
+            if !["published", "pending", "rejected", "unpublished"].contains(&status.as_str()) {
+                anyhow::bail!("Status must be one of: published, pending, rejected, unpublished");
             }
         }
 
@@ -680,36 +676,17 @@ mod tests {
         let ctx = CommandContext::new(test_config());
 
         // Valid search
-        let mut cmd = MarketplaceSearch::new(
-            test_config(),
-            "llama".to_string(),
-            None,
-            false,
-            false,
-            20,
-        );
+        let mut cmd =
+            MarketplaceSearch::new(test_config(), "llama".to_string(), None, false, false, 20);
         assert!(cmd.validate(&ctx).await.is_ok());
 
         // Empty query
-        let mut cmd = MarketplaceSearch::new(
-            test_config(),
-            "".to_string(),
-            None,
-            false,
-            false,
-            20,
-        );
+        let mut cmd = MarketplaceSearch::new(test_config(), "".to_string(), None, false, false, 20);
         assert!(cmd.validate(&ctx).await.is_err());
 
         // Limit too high
-        let mut cmd = MarketplaceSearch::new(
-            test_config(),
-            "llama".to_string(),
-            None,
-            false,
-            false,
-            150,
-        );
+        let mut cmd =
+            MarketplaceSearch::new(test_config(), "llama".to_string(), None, false, false, 150);
         assert!(cmd.validate(&ctx).await.is_err());
 
         // Invalid category
@@ -770,13 +747,11 @@ mod tests {
         let ctx = CommandContext::new(test_config());
 
         // Missing confirmation
-        let mut cmd =
-            MarketplaceUnpublish::new(test_config(), "model-123".to_string(), false);
+        let mut cmd = MarketplaceUnpublish::new(test_config(), "model-123".to_string(), false);
         assert!(cmd.validate(&ctx).await.is_err());
 
         // Valid with confirmation
-        let mut cmd =
-            MarketplaceUnpublish::new(test_config(), "model-123".to_string(), true);
+        let mut cmd = MarketplaceUnpublish::new(test_config(), "model-123".to_string(), true);
         assert!(cmd.validate(&ctx).await.is_ok());
     }
 }

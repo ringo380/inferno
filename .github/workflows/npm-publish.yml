@@ -40,7 +40,18 @@ jobs:
             libayatana-appindicator3-dev \
             librsvg2-dev
 
+      - name: Check if desktop-app is ready
+        id: check_app
+        run: |
+          if [ -f "desktop-app/package.json" ] && [ -d "desktop-app/src" ]; then
+            echo "ready=true" >> $GITHUB_OUTPUT
+          else
+            echo "ready=false" >> $GITHUB_OUTPUT
+            echo "Desktop app directory not fully configured, skipping npm publish"
+          fi
+
       - name: Update version
+        if: steps.check_app.outputs.ready == 'true'
         run: |
           VERSION=${{ github.ref_name }}
           VERSION=${VERSION#v}
@@ -48,14 +59,17 @@ jobs:
           npm version $VERSION --no-git-tag-version || true
 
       - name: Install dependencies
+        if: steps.check_app.outputs.ready == 'true'
         working-directory: desktop-app
         run: npm ci
 
       - name: Build desktop app
+        if: steps.check_app.outputs.ready == 'true'
         working-directory: desktop-app
         run: npm run build
 
       - name: Publish to GitHub Packages
+        if: steps.check_app.outputs.ready == 'true'
         working-directory: desktop-app
         run: npm publish
         env:
@@ -68,18 +82,31 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Check if desktop-app is ready
+        id: check_app
+        run: |
+          if [ -f "desktop-app/package.json" ] && [ -d "desktop-app/src" ]; then
+            echo "ready=true" >> $GITHUB_OUTPUT
+          else
+            echo "ready=false" >> $GITHUB_OUTPUT
+            echo "Desktop app directory not fully configured, skipping npm publish"
+          fi
+
       - name: Setup Node.js
+        if: steps.check_app.outputs.ready == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           registry-url: 'https://registry.npmjs.org'
 
       - name: Setup Rust for Tauri
+        if: steps.check_app.outputs.ready == 'true'
         uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           toolchain: stable
 
       - name: Install Tauri dependencies
+        if: steps.check_app.outputs.ready == 'true'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -93,6 +120,7 @@ jobs:
             librsvg2-dev
 
       - name: Update version
+        if: steps.check_app.outputs.ready == 'true'
         run: |
           VERSION=${{ github.ref_name }}
           VERSION=${VERSION#v}
@@ -100,14 +128,17 @@ jobs:
           npm version $VERSION --no-git-tag-version || true
 
       - name: Install dependencies
+        if: steps.check_app.outputs.ready == 'true'
         working-directory: desktop-app
         run: npm ci
 
       - name: Build desktop app
+        if: steps.check_app.outputs.ready == 'true'
         working-directory: desktop-app
         run: npm run build
 
       - name: Publish to NPM Registry
+        if: steps.check_app.outputs.ready == 'true'
         working-directory: desktop-app
         run: npm publish --access public
         env:

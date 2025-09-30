@@ -530,14 +530,8 @@ async fn main() -> Result<()> {
     println!("Example 18: Input Validation");
     println!("{}", "─".repeat(80));
 
-    let empty_package = PackageInstall::new(
-        config.clone(),
-        "".to_string(),
-        false,
-        None,
-        false,
-        false,
-    );
+    let empty_package =
+        PackageInstall::new(config.clone(), "".to_string(), false, None, false, false);
     let ctx_invalid = CommandContext::new(config.clone());
 
     match pipeline
@@ -553,13 +547,7 @@ async fn main() -> Result<()> {
 
     println!();
 
-    let invalid_limit = PackageSearch::new(
-        config.clone(),
-        "llama".to_string(),
-        None,
-        150,
-        false,
-    );
+    let invalid_limit = PackageSearch::new(config.clone(), "llama".to_string(), None, 150, false);
 
     match pipeline
         .execute(Box::new(invalid_limit), &mut ctx_invalid.clone())

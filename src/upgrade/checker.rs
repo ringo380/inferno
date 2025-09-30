@@ -3,8 +3,10 @@
 //! Background service that periodically checks for application updates from
 //! various sources (GitHub releases, custom update servers, etc.).
 
-use super::{ApplicationVersion, UpdateChannel, UpdateInfo, UpgradeConfig, UpgradeError, UpgradeResult};
 use super::config::UpdateSource;
+use super::{
+    ApplicationVersion, UpdateChannel, UpdateInfo, UpgradeConfig, UpgradeError, UpgradeResult,
+};
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use reqwest::Client;
@@ -72,7 +74,8 @@ impl UpdateChecker {
     pub async fn new(config: &UpgradeConfig) -> Result<Self> {
         let http_client = Client::builder()
             .timeout(Duration::from_secs(30))
-            .user_agent(format!("Inferno/{} ({})",
+            .user_agent(format!(
+                "Inferno/{} ({})",
                 ApplicationVersion::current().to_string(),
                 std::env::consts::OS
             ))
@@ -86,19 +89,24 @@ impl UpdateChecker {
     }
 
     /// Check for available updates
-    pub async fn check_for_updates(&mut self, current_version: &ApplicationVersion) -> UpgradeResult<Option<UpdateInfo>> {
-        info!("Checking for updates (current version: {})", current_version.to_string());
+    pub async fn check_for_updates(
+        &mut self,
+        current_version: &ApplicationVersion,
+    ) -> UpgradeResult<Option<UpdateInfo>> {
+        info!(
+            "Checking for updates (current version: {})",
+            current_version.to_string()
+        );
 
         self.last_check = Some(Utc::now());
 
         // Check based on configured update source
         match &self.config.update_source {
             UpdateSource::GitHub { owner, repo } => {
-                self.check_github_releases(owner, repo, current_version).await
+                self.check_github_releases(owner, repo, current_version)
+                    .await
             }
-            UpdateSource::Custom { url } => {
-                self.check_custom_server(url, current_version).await
-            }
+            UpdateSource::Custom { url } => self.check_custom_server(url, current_version).await,
             UpdateSource::Disabled => {
                 debug!("Update checking is disabled");
                 Ok(None)
@@ -107,14 +115,20 @@ impl UpdateChecker {
     }
 
     /// Start periodic update checking in the background
-    pub async fn start_periodic_checking(&mut self, current_version: ApplicationVersion) -> Result<()> {
+    pub async fn start_periodic_checking(
+        &mut self,
+        current_version: ApplicationVersion,
+    ) -> Result<()> {
         if !self.config.auto_check {
             info!("Automatic update checking is disabled");
             return Ok(());
         }
 
         let check_interval = self.config.check_interval;
-        info!("Starting periodic update checking every {:?}", check_interval);
+        info!(
+            "Starting periodic update checking every {:?}",
+            check_interval
+        );
 
         let mut interval_timer = interval(check_interval);
 
@@ -123,7 +137,8 @@ impl UpdateChecker {
 
             match self.check_for_updates(&current_version).await {
                 Ok(Some(update_info)) => {
-                    info!("Update available: {} -> {}",
+                    info!(
+                        "Update available: {} -> {}",
                         current_version.to_string(),
                         update_info.version.to_string()
                     );
@@ -158,16 +173,19 @@ impl UpdateChecker {
 
         debug!("Checking GitHub releases: {}", url);
 
-        let response = self.http_client
+        let response = self
+            .http_client
             .get(&url)
             .send()
             .await
             .map_err(|e| UpgradeError::NetworkError(e.to_string()))?;
 
         if !response.status().is_success() {
-            return Err(UpgradeError::NetworkError(
-                format!("HTTP {}: {}", response.status(), response.status().canonical_reason().unwrap_or("Unknown"))
-            ));
+            return Err(UpgradeError::NetworkError(format!(
+                "HTTP {}: {}",
+                response.status(),
+                response.status().canonical_reason().unwrap_or("Unknown")
+            )));
         }
 
         let releases: Vec<GitHubRelease> = response
@@ -182,7 +200,9 @@ impl UpdateChecker {
         for release in filtered_releases {
             if let Ok(release_version) = self.parse_github_version(&release.tag_name) {
                 if release_version.is_newer_than(current_version) {
-                    return Ok(Some(self.create_update_info_from_github(&release, release_version)?));
+                    return Ok(Some(
+                        self.create_update_info_from_github(&release, release_version)?,
+                    ));
                 }
             }
         }
@@ -200,7 +220,8 @@ impl UpdateChecker {
 
         debug!("Checking custom update server: {}", url);
 
-        let response = self.http_client
+        let response = self
+            .http_client
             .get(&url)
             .query(&[
                 ("current_version", current_version.to_string()),
@@ -212,9 +233,11 @@ impl UpdateChecker {
             .map_err(|e| UpgradeError::NetworkError(e.to_string()))?;
 
         if !response.status().is_success() {
-            return Err(UpgradeError::NetworkError(
-                format!("HTTP {}: {}", response.status(), response.status().canonical_reason().unwrap_or("Unknown"))
-            ));
+            return Err(UpgradeError::NetworkError(format!(
+                "HTTP {}: {}",
+                response.status(),
+                response.status().canonical_reason().unwrap_or("Unknown")
+            )));
         }
 
         let update_response: UpdateServerResponse = response
@@ -226,7 +249,9 @@ impl UpdateChecker {
         for release in update_response.releases {
             if let Ok(release_version) = self.parse_version_string(&release.version) {
                 if release_version.is_newer_than(current_version) {
-                    return Ok(Some(self.create_update_info_from_custom(&release, release_version)?));
+                    return Ok(Some(
+                        self.create_update_info_from_custom(&release, release_version)?,
+                    ));
                 }
             }
         }
@@ -235,7 +260,10 @@ impl UpdateChecker {
     }
 
     /// Filter GitHub releases based on update channel
-    fn filter_releases_by_channel<'a>(&self, releases: &'a [GitHubRelease]) -> Vec<&'a GitHubRelease> {
+    fn filter_releases_by_channel<'a>(
+        &self,
+        releases: &'a [GitHubRelease],
+    ) -> Vec<&'a GitHubRelease> {
         releases
             .iter()
             .filter(|release| {
@@ -359,8 +387,9 @@ impl UpdateChecker {
         }
 
         let minimum_version = if let Some(min_ver_str) = &release.minimum_version {
-            Some(self.parse_version_string(min_ver_str)
-                .map_err(|e| UpgradeError::InvalidPackage(format!("Invalid minimum version: {}", e)))?)
+            Some(self.parse_version_string(min_ver_str).map_err(|e| {
+                UpgradeError::InvalidPackage(format!("Invalid minimum version: {}", e))
+            })?)
         } else {
             None
         };
@@ -401,7 +430,6 @@ impl UpdateChecker {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -433,17 +461,28 @@ mod tests {
 
     #[test]
     fn test_platform_detection() {
-        let checker = futures::executor::block_on(UpdateChecker::new(&UpgradeConfig::default())).unwrap();
+        let checker =
+            futures::executor::block_on(UpdateChecker::new(&UpgradeConfig::default())).unwrap();
 
-        assert_eq!(checker.detect_platform_from_filename("inferno-macos.tar.gz"), Some("macos".to_string()));
-        assert_eq!(checker.detect_platform_from_filename("inferno-linux.tar.gz"), Some("linux".to_string()));
-        assert_eq!(checker.detect_platform_from_filename("inferno-windows.exe"), Some("windows".to_string()));
+        assert_eq!(
+            checker.detect_platform_from_filename("inferno-macos.tar.gz"),
+            Some("macos".to_string())
+        );
+        assert_eq!(
+            checker.detect_platform_from_filename("inferno-linux.tar.gz"),
+            Some("linux".to_string())
+        );
+        assert_eq!(
+            checker.detect_platform_from_filename("inferno-windows.exe"),
+            Some("windows".to_string())
+        );
         assert_eq!(checker.detect_platform_from_filename("inferno.txt"), None);
     }
 
     #[test]
     fn test_release_filtering() {
-        let checker = futures::executor::block_on(UpdateChecker::new(&UpgradeConfig::default())).unwrap();
+        let checker =
+            futures::executor::block_on(UpdateChecker::new(&UpgradeConfig::default())).unwrap();
 
         let releases = vec![
             GitHubRelease {

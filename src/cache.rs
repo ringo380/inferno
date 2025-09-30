@@ -368,8 +368,12 @@ impl ModelCache {
     /// Load a model and cache it
     async fn load_model(&self, model_name: &str) -> Result<Arc<CachedModel>> {
         let model_info = self.model_manager.resolve_model(model_name).await?;
-        let backend_type = BackendType::from_model_path(&model_info.path)
-            .ok_or_else(|| anyhow::anyhow!("No suitable backend found for model: {}", model_info.path.display()))?;
+        let backend_type = BackendType::from_model_path(&model_info.path).ok_or_else(|| {
+            anyhow::anyhow!(
+                "No suitable backend found for model: {}",
+                model_info.path.display()
+            )
+        })?;
 
         let backend_handle = BackendHandle::new_shared(backend_type, &self.backend_config)?;
         backend_handle.load_model(&model_info).await?;

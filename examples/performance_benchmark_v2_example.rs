@@ -84,12 +84,7 @@ async fn main() -> Result<()> {
 
     // Example 8: Profile performance
     println!("Example 8: Profile performance");
-    let cmd = BenchmarkProfile::new(
-        config.clone(),
-        "inference_engine".to_string(),
-        30,
-        true,
-    );
+    let cmd = BenchmarkProfile::new(config.clone(), "inference_engine".to_string(), 30, true);
     let mut ctx = CommandContext::new(config.clone());
     let result = cmd.execute(&mut ctx).await?;
     println!("Result: {}\n", result.message);

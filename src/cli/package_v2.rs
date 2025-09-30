@@ -590,7 +590,10 @@ impl Command for PackageClean {
                 println!("  - Old versions: 8.2 GB");
             }
             println!();
-            println!("Total space to be freed: {}", if self.all { "10.8 GB" } else { "2.6 GB" });
+            println!(
+                "Total space to be freed: {}",
+                if self.all { "10.8 GB" } else { "2.6 GB" }
+            );
         } else {
             println!("Cleaning...");
             println!("✓ Download cache cleaned: 2.5 GB");
@@ -599,7 +602,10 @@ impl Command for PackageClean {
                 println!("✓ Old versions removed: 8.2 GB");
             }
             println!();
-            println!("✓ Total space freed: {}", if self.all { "10.8 GB" } else { "2.6 GB" });
+            println!(
+                "✓ Total space freed: {}",
+                if self.all { "10.8 GB" } else { "2.6 GB" }
+            );
         }
 
         Ok(CommandOutput::success_with_data(
@@ -642,14 +648,7 @@ mod tests {
         assert!(cmd.validate(&ctx).await.is_ok());
 
         // Empty package name
-        let mut cmd = PackageInstall::new(
-            test_config(),
-            "".to_string(),
-            false,
-            None,
-            false,
-            false,
-        );
+        let mut cmd = PackageInstall::new(test_config(), "".to_string(), false, None, false, false);
         assert!(cmd.validate(&ctx).await.is_err());
     }
 
@@ -658,43 +657,19 @@ mod tests {
         let ctx = CommandContext::new(test_config());
 
         // Valid search
-        let mut cmd = PackageSearch::new(
-            test_config(),
-            "llama".to_string(),
-            None,
-            20,
-            false,
-        );
+        let mut cmd = PackageSearch::new(test_config(), "llama".to_string(), None, 20, false);
         assert!(cmd.validate(&ctx).await.is_ok());
 
         // Empty query
-        let mut cmd = PackageSearch::new(
-            test_config(),
-            "".to_string(),
-            None,
-            20,
-            false,
-        );
+        let mut cmd = PackageSearch::new(test_config(), "".to_string(), None, 20, false);
         assert!(cmd.validate(&ctx).await.is_err());
 
         // Limit too high
-        let mut cmd = PackageSearch::new(
-            test_config(),
-            "llama".to_string(),
-            None,
-            150,
-            false,
-        );
+        let mut cmd = PackageSearch::new(test_config(), "llama".to_string(), None, 150, false);
         assert!(cmd.validate(&ctx).await.is_err());
 
         // Zero limit
-        let mut cmd = PackageSearch::new(
-            test_config(),
-            "llama".to_string(),
-            None,
-            0,
-            false,
-        );
+        let mut cmd = PackageSearch::new(test_config(), "llama".to_string(), None, 0, false);
         assert!(cmd.validate(&ctx).await.is_err());
     }
 
@@ -703,21 +678,11 @@ mod tests {
         let ctx = CommandContext::new(test_config());
 
         // Valid info
-        let mut cmd = PackageInfo::new(
-            test_config(),
-            "llama-2-7b".to_string(),
-            false,
-            false,
-        );
+        let mut cmd = PackageInfo::new(test_config(), "llama-2-7b".to_string(), false, false);
         assert!(cmd.validate(&ctx).await.is_ok());
 
         // Empty package
-        let mut cmd = PackageInfo::new(
-            test_config(),
-            "".to_string(),
-            false,
-            false,
-        );
+        let mut cmd = PackageInfo::new(test_config(), "".to_string(), false, false);
         assert!(cmd.validate(&ctx).await.is_err());
     }
 }

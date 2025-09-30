@@ -11,9 +11,9 @@
 
 // Re-export from existing locations for now
 pub use crate::conversion;
+pub use crate::gpu;
 pub use crate::multimodal;
 pub use crate::streaming;
-pub use crate::gpu;
 
 // Optimization consolidation
 pub mod optimization;

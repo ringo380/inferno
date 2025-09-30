@@ -177,12 +177,16 @@ impl ValidateCommand {
         }
 
         if model_count == 0 {
-            result.warnings.push("No model files found in directory".to_string());
+            result
+                .warnings
+                .push("No model files found in directory".to_string());
             if !ctx.json_output {
                 println!("ℹ No model files found in directory");
             }
         } else {
-            result.details.insert("model_count".to_string(), model_count.into());
+            result
+                .details
+                .insert("model_count".to_string(), model_count.into());
             if !ctx.json_output {
                 println!("✓ Validated {} model files", model_count);
             }
@@ -242,7 +246,9 @@ impl ValidateCommand {
                 println!("  Computing SHA256 checksum...");
             }
             let checksum = model_manager.compute_checksum(&self.path).await?;
-            result.details.insert("checksum".to_string(), checksum.clone().into());
+            result
+                .details
+                .insert("checksum".to_string(), checksum.clone().into());
             if ctx.is_verbose() && !ctx.json_output {
                 println!("  ✓ SHA256: {}", checksum);
             }
@@ -299,9 +305,15 @@ impl ValidateCommand {
                 }
 
                 result.details.insert("format".to_string(), "gguf".into());
-                result.details.insert("architecture".to_string(), metadata.architecture.into());
-                result.details.insert("parameters".to_string(), metadata.parameter_count.into());
-                result.details.insert("quantization".to_string(), metadata.quantization.into());
+                result
+                    .details
+                    .insert("architecture".to_string(), metadata.architecture.into());
+                result
+                    .details
+                    .insert("parameters".to_string(), metadata.parameter_count.into());
+                result
+                    .details
+                    .insert("quantization".to_string(), metadata.quantization.into());
             }
             Err(e) => {
                 result.passed = false;
@@ -331,10 +343,18 @@ impl ValidateCommand {
                 }
 
                 result.details.insert("format".to_string(), "onnx".into());
-                result.details.insert("version".to_string(), metadata.version.into());
-                result.details.insert("producer".to_string(), metadata.producer.into());
-                result.details.insert("input_count".to_string(), metadata.input_count.into());
-                result.details.insert("output_count".to_string(), metadata.output_count.into());
+                result
+                    .details
+                    .insert("version".to_string(), metadata.version.into());
+                result
+                    .details
+                    .insert("producer".to_string(), metadata.producer.into());
+                result
+                    .details
+                    .insert("input_count".to_string(), metadata.input_count.into());
+                result
+                    .details
+                    .insert("output_count".to_string(), metadata.output_count.into());
             }
             Err(e) => {
                 result.passed = false;
@@ -360,7 +380,9 @@ impl ValidateCommand {
                     println!("  ✓ Valid TOML syntax");
                 }
                 result.details.insert("format".to_string(), "toml".into());
-                result.details.insert("syntax_valid".to_string(), true.into());
+                result
+                    .details
+                    .insert("syntax_valid".to_string(), true.into());
             }
             Err(e) => {
                 result.passed = false;
@@ -387,7 +409,9 @@ impl ValidateCommand {
             println!("  ✓ Modified: {:?}", metadata.modified()?);
         }
 
-        result.details.insert("size".to_string(), metadata.len().into());
+        result
+            .details
+            .insert("size".to_string(), metadata.len().into());
         result.details.insert("exists".to_string(), true.into());
 
         Ok(result)
@@ -398,19 +422,17 @@ impl ValidateCommand {
         let mut result = FileValidationResult::default();
 
         let backend_type = BackendType::from_model_path(&self.path).ok_or_else(|| {
-            anyhow::anyhow!("No suitable backend found for model: {}", self.path.display())
+            anyhow::anyhow!(
+                "No suitable backend found for model: {}",
+                self.path.display()
+            )
         })?;
 
         let mut backend = Backend::new(backend_type.clone(), &self.config.backend_config)?;
 
         let metadata = tokio::fs::metadata(&self.path).await?;
         let model_info = ModelInfo {
-            name: self
-                .path
-                .file_name()
-                .unwrap()
-                .to_string_lossy()
-                .to_string(),
+            name: self.path.file_name().unwrap().to_string_lossy().to_string(),
             path: self.path.clone(),
             file_path: self.path.clone(),
             size: metadata.len(),
@@ -449,8 +471,12 @@ impl ValidateCommand {
                         if !ctx.json_output {
                             println!("  ✓ Model inference works");
                         }
-                        result.details.insert("deep_validation".to_string(), true.into());
-                        result.details.insert("inference_test".to_string(), "passed".into());
+                        result
+                            .details
+                            .insert("deep_validation".to_string(), true.into());
+                        result
+                            .details
+                            .insert("inference_test".to_string(), "passed".into());
                     }
                     Err(e) => {
                         result.passed = false;
@@ -499,14 +525,24 @@ impl FileValidationResult {
             self.passed = false;
         }
 
-        self.details.insert("file_readable".to_string(), validation.file_readable.into());
-        self.details.insert("format_valid".to_string(), validation.format_valid.into());
-        self.details.insert("size_valid".to_string(), validation.size_valid.into());
-        self.details.insert("security_valid".to_string(), validation.security_valid.into());
-        self.details.insert("metadata_valid".to_string(), validation.metadata_valid.into());
+        self.details
+            .insert("file_readable".to_string(), validation.file_readable.into());
+        self.details
+            .insert("format_valid".to_string(), validation.format_valid.into());
+        self.details
+            .insert("size_valid".to_string(), validation.size_valid.into());
+        self.details.insert(
+            "security_valid".to_string(),
+            validation.security_valid.into(),
+        );
+        self.details.insert(
+            "metadata_valid".to_string(),
+            validation.metadata_valid.into(),
+        );
 
         if let Some(checksum_valid) = validation.checksum_valid {
-            self.details.insert("checksum_valid".to_string(), checksum_valid.into());
+            self.details
+                .insert("checksum_valid".to_string(), checksum_valid.into());
         }
 
         self.errors.extend(validation.errors.clone());
@@ -556,7 +592,14 @@ fn print_validation_details(result: &ValidationResult, verbose: bool) {
 
 fn print_validation_summary(result: &FileValidationResult) {
     println!("\nValidation Summary:");
-    println!("  Status: {}", if result.passed { "✓ Passed" } else { "✗ Failed" });
+    println!(
+        "  Status: {}",
+        if result.passed {
+            "✓ Passed"
+        } else {
+            "✗ Failed"
+        }
+    );
 
     if !result.errors.is_empty() {
         println!("  Errors: {}", result.errors.len());

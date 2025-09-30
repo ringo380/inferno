@@ -284,10 +284,7 @@ impl Command for DeploymentScale {
     }
 
     async fn execute(&self, ctx: &mut CommandContext) -> Result<CommandOutput> {
-        info!(
-            "Scaling {} to {} replicas",
-            self.environment, self.replicas
-        );
+        info!("Scaling {} to {} replicas", self.environment, self.replicas);
 
         // Human-readable output
         if !ctx.json_output {
@@ -430,23 +427,25 @@ mod tests {
 
         let result = cmd.validate(&ctx).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Environment must be one of"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Environment must be one of"));
     }
 
     #[tokio::test]
     async fn test_deploy_validation_zero_replicas() {
         let config = Config::default();
-        let cmd = DeploymentDeploy::new(
-            config.clone(),
-            "prod".to_string(),
-            0,
-            "rolling".to_string(),
-        );
+        let cmd =
+            DeploymentDeploy::new(config.clone(), "prod".to_string(), 0, "rolling".to_string());
         let ctx = CommandContext::new(config);
 
         let result = cmd.validate(&ctx).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Replicas must be greater than 0"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Replicas must be greater than 0"));
     }
 
     #[tokio::test]
@@ -463,6 +462,9 @@ mod tests {
 
         let result = cmd.validate(&ctx).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Value is required"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Value is required"));
     }
 }

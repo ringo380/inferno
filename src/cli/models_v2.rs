@@ -176,7 +176,8 @@ impl Command for ModelsInfo {
                 if let Ok(metadata) = model_manager.get_gguf_metadata(&model_info.path).await {
                     metadata_json["architecture"] = json!(metadata.architecture);
                     metadata_json["parameters"] = json!(metadata.parameter_count);
-                    metadata_json["parameters_formatted"] = json!(format_params(metadata.parameter_count));
+                    metadata_json["parameters_formatted"] =
+                        json!(format_params(metadata.parameter_count));
                     metadata_json["quantization"] = json!(metadata.quantization);
                     metadata_json["context_length"] = json!(metadata.context_length);
                 }
@@ -273,10 +274,13 @@ impl Command for ModelsValidate {
     }
 
     async fn execute(&self, ctx: &mut CommandContext) -> Result<CommandOutput> {
-        let model_manager = ModelManager::new(&self.path.parent().unwrap_or(std::path::Path::new(".")));
+        let model_manager =
+            ModelManager::new(&self.path.parent().unwrap_or(std::path::Path::new(".")));
 
         // Perform comprehensive validation
-        let validation_result = model_manager.validate_model_comprehensive(&self.path, None).await?;
+        let validation_result = model_manager
+            .validate_model_comprehensive(&self.path, None)
+            .await?;
 
         let validation_json = json!({
             "path": self.path.display().to_string(),
@@ -295,15 +299,60 @@ impl Command for ModelsValidate {
         if !ctx.json_output {
             println!("Model Validation Results:");
             println!("  Path: {}", self.path.display());
-            println!("  Valid: {}", if validation_result.is_valid { "✓" } else { "✗" });
-            println!("  File Readable: {}", if validation_result.file_readable { "✓" } else { "✗" });
-            println!("  Format Valid: {}", if validation_result.format_valid { "✓" } else { "✗" });
-            println!("  Size Valid: {}", if validation_result.size_valid { "✓" } else { "✗" });
+            println!(
+                "  Valid: {}",
+                if validation_result.is_valid {
+                    "✓"
+                } else {
+                    "✗"
+                }
+            );
+            println!(
+                "  File Readable: {}",
+                if validation_result.file_readable {
+                    "✓"
+                } else {
+                    "✗"
+                }
+            );
+            println!(
+                "  Format Valid: {}",
+                if validation_result.format_valid {
+                    "✓"
+                } else {
+                    "✗"
+                }
+            );
+            println!(
+                "  Size Valid: {}",
+                if validation_result.size_valid {
+                    "✓"
+                } else {
+                    "✗"
+                }
+            );
             if let Some(checksum_valid) = validation_result.checksum_valid {
-                println!("  Checksum Valid: {}", if checksum_valid { "✓" } else { "✗" });
+                println!(
+                    "  Checksum Valid: {}",
+                    if checksum_valid { "✓" } else { "✗" }
+                );
             }
-            println!("  Security Valid: {}", if validation_result.security_valid { "✓" } else { "✗" });
-            println!("  Metadata Valid: {}", if validation_result.metadata_valid { "✓" } else { "✗" });
+            println!(
+                "  Security Valid: {}",
+                if validation_result.security_valid {
+                    "✓"
+                } else {
+                    "✗"
+                }
+            );
+            println!(
+                "  Metadata Valid: {}",
+                if validation_result.metadata_valid {
+                    "✓"
+                } else {
+                    "✗"
+                }
+            );
 
             if !validation_result.errors.is_empty() {
                 println!("\n  Errors:");
@@ -329,7 +378,7 @@ impl Command for ModelsValidate {
             Ok(CommandOutput::error_with_data(
                 "Model validation failed",
                 validation_json,
-                1,  // Exit code for validation failure
+                1, // Exit code for validation failure
             ))
         }
     }

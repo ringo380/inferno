@@ -1,14 +1,17 @@
+use crate::activity_logger::{ActivityLogger, ActivityStatus, ActivityType};
 use anyhow::Result;
-use inferno::backends::{Backend, BackendHandle, BackendType, BackendConfig, InferenceParams as InfernoInferenceParams, InferenceMetrics};
-use inferno::models::{ModelInfo as InfernoModelInfo, ModelManager};
+use inferno::backends::{
+    Backend, BackendConfig, BackendHandle, BackendType, InferenceMetrics,
+    InferenceParams as InfernoInferenceParams,
+};
 use inferno::config::Config;
+use inferno::models::{ModelInfo as InfernoModelInfo, ModelManager};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tokio::sync::RwLock;
 use uuid::Uuid;
-use std::path::PathBuf;
-use crate::activity_logger::{ActivityLogger, ActivityType, ActivityStatus};
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct ModelInfo {
@@ -61,11 +64,15 @@ impl BackendManager {
                     path.pop();
                     path.pop();
                 }
-                Err(std::io::Error::new(std::io::ErrorKind::NotFound, "Config not found"))
+                Err(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    "Config not found",
+                ))
             })
             .and_then(|config_path| {
                 let content = std::fs::read_to_string(&config_path)?;
-                toml::from_str(&content).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
+                toml::from_str(&content)
+                    .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
             }) {
             Ok(config) => config,
             Err(_) => Config::default(),
@@ -87,15 +94,18 @@ impl BackendManager {
         let model_manager = self.model_manager.read().await;
         let models = model_manager.list_models().await?;
 
-        Ok(models.into_iter().map(|m| ModelInfo {
-            id: m.name.clone(), // Use name as ID
-            name: m.name.clone(),
-            path: m.path.to_string_lossy().to_string(),
-            format: m.backend_type.clone(),
-            size: m.size,
-            checksum: m.checksum.unwrap_or_else(|| "unknown".to_string()),
-            status: "available".to_string(),
-        }).collect())
+        Ok(models
+            .into_iter()
+            .map(|m| ModelInfo {
+                id: m.name.clone(), // Use name as ID
+                name: m.name.clone(),
+                path: m.path.to_string_lossy().to_string(),
+                format: m.backend_type.clone(),
+                size: m.size,
+                checksum: m.checksum.unwrap_or_else(|| "unknown".to_string()),
+                status: "available".to_string(),
+            })
+            .collect())
     }
 
     pub async fn load_model(&self, model_name: String, backend_type_str: String) -> Result<String> {
@@ -104,21 +114,24 @@ impl BackendManager {
             ActivityType::ModelLoad,
             &model_name,
             ActivityStatus::InProgress,
-            Some(&format!("Loading model with {} backend", backend_type_str))
+            Some(&format!("Loading model with {} backend", backend_type_str)),
         );
 
         let model_manager = self.model_manager.read().await;
 
         // Find the model
-        let model = model_manager.resolve_model(&model_name).await.map_err(|e| {
-            self.activity_logger.log_model_operation(
-                ActivityType::ModelLoad,
-                &model_name,
-                ActivityStatus::Error,
-                Some(&format!("Failed to resolve model: {}", e))
-            );
-            e
-        })?;
+        let model = model_manager
+            .resolve_model(&model_name)
+            .await
+            .map_err(|e| {
+                self.activity_logger.log_model_operation(
+                    ActivityType::ModelLoad,
+                    &model_name,
+                    ActivityStatus::Error,
+                    Some(&format!("Failed to resolve model: {}", e)),
+                );
+                e
+            })?;
 
         // Parse backend type
         let backend_type = match backend_type_str.to_lowercase().as_str() {
@@ -130,22 +143,23 @@ impl BackendManager {
         let backend_config = BackendConfig::default();
 
         // Create and load backend
-        let backend_handle = BackendHandle::new_shared(backend_type, &backend_config).map_err(|e| {
-            self.activity_logger.log_model_operation(
-                ActivityType::ModelLoad,
-                &model_name,
-                ActivityStatus::Error,
-                Some(&format!("Failed to create backend: {}", e))
-            );
-            e
-        })?;
+        let backend_handle =
+            BackendHandle::new_shared(backend_type, &backend_config).map_err(|e| {
+                self.activity_logger.log_model_operation(
+                    ActivityType::ModelLoad,
+                    &model_name,
+                    ActivityStatus::Error,
+                    Some(&format!("Failed to create backend: {}", e)),
+                );
+                e
+            })?;
 
         backend_handle.load_model(&model).await.map_err(|e| {
             self.activity_logger.log_model_operation(
                 ActivityType::ModelLoad,
                 &model_name,
                 ActivityStatus::Error,
-                Some(&format!("Failed to load model into backend: {}", e))
+                Some(&format!("Failed to load model into backend: {}", e)),
             );
             e
         })?;
@@ -168,7 +182,10 @@ impl BackendManager {
             ActivityType::ModelLoad,
             &model_name,
             ActivityStatus::Success,
-            Some(&format!("Model loaded successfully with backend ID: {}", backend_id))
+            Some(&format!(
+                "Model loaded successfully with backend ID: {}",
+                backend_id
+            )),
         );
 
         Ok(backend_id)
@@ -180,7 +197,7 @@ impl BackendManager {
             ActivityType::ModelUnload,
             &backend_id,
             ActivityStatus::InProgress,
-            Some("Unloading model from backend")
+            Some("Unloading model from backend"),
         );
 
         let backend_handle = {
@@ -195,7 +212,7 @@ impl BackendManager {
                     ActivityType::ModelUnload,
                     &backend_id,
                     ActivityStatus::Error,
-                    Some(&format!("Failed to unload model: {}", e))
+                    Some(&format!("Failed to unload model: {}", e)),
                 );
                 e
             })?;
@@ -211,7 +228,7 @@ impl BackendManager {
                 ActivityType::ModelUnload,
                 &backend_id,
                 ActivityStatus::Success,
-                Some("Model unloaded successfully")
+                Some("Model unloaded successfully"),
             );
 
             Ok(())
@@ -220,7 +237,7 @@ impl BackendManager {
                 ActivityType::ModelUnload,
                 &backend_id,
                 ActivityStatus::Error,
-                Some("Backend not found")
+                Some("Backend not found"),
             );
             Err(anyhow::anyhow!("Backend not found: {}", backend_id))
         }
@@ -231,7 +248,12 @@ impl BackendManager {
         loaded_backends.keys().cloned().collect()
     }
 
-    pub async fn infer(&self, backend_id: String, prompt: String, params: InferenceParams) -> Result<String> {
+    pub async fn infer(
+        &self,
+        backend_id: String,
+        prompt: String,
+        params: InferenceParams,
+    ) -> Result<String> {
         let start_time = std::time::Instant::now();
 
         // Log the start of inference
@@ -241,20 +263,21 @@ impl BackendManager {
             prompt_tokens,
             0, // completion_tokens not known yet
             0, // duration not known yet
-            ActivityStatus::InProgress
+            ActivityStatus::InProgress,
         );
 
         // Get the backend handle
         let backend_handle = {
             let loaded_backends = self.loaded_backends.lock().unwrap();
-            loaded_backends.get(&backend_id)
+            loaded_backends
+                .get(&backend_id)
                 .ok_or_else(|| {
                     self.activity_logger.log_inference(
                         &backend_id,
                         prompt_tokens,
                         0, // no completion tokens for error
                         start_time.elapsed().as_millis() as u64,
-                        ActivityStatus::Error
+                        ActivityStatus::Error,
                     );
                     anyhow::anyhow!("Backend not found: {}", backend_id)
                 })?
@@ -294,7 +317,7 @@ impl BackendManager {
                         prompt_tokens,
                         completion_tokens,
                         elapsed as u64,
-                        ActivityStatus::Success
+                        ActivityStatus::Success,
                     );
                 }
                 Err(e) => {
@@ -307,7 +330,7 @@ impl BackendManager {
                         prompt_tokens,
                         0, // no completion tokens for error
                         elapsed as u64,
-                        ActivityStatus::Error
+                        ActivityStatus::Error,
                     );
                 }
             }
@@ -323,6 +346,8 @@ impl BackendManager {
 
     pub async fn validate_model(&self, model_path: String) -> Result<bool> {
         let model_manager = self.model_manager.read().await;
-        Ok(model_manager.validate_model(&std::path::PathBuf::from(model_path)).await?)
+        Ok(model_manager
+            .validate_model(&std::path::PathBuf::from(model_path))
+            .await?)
     }
 }

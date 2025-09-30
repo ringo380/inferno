@@ -71,7 +71,10 @@ impl Command for MonitoringStart {
         // Human-readable output
         if !ctx.json_output {
             println!("=== Advanced Monitoring System ===");
-            println!("Mode: {}", if self.daemon { "Daemon" } else { "Foreground" });
+            println!(
+                "Mode: {}",
+                if self.daemon { "Daemon" } else { "Foreground" }
+            );
             println!("Prometheus: {}", prometheus_url);
             println!("Dashboard: {}", dashboard_url);
             println!();
@@ -136,7 +139,12 @@ impl Command for MonitoringStatus {
         if !ctx.json_output {
             println!("=== Monitoring System Status ===");
             println!("Status: {}", status);
-            println!("Uptime: {}h {}m {}s", uptime / 3600, (uptime % 3600) / 60, uptime % 60);
+            println!(
+                "Uptime: {}h {}m {}s",
+                uptime / 3600,
+                (uptime % 3600) / 60,
+                uptime % 60
+            );
             if self.detailed {
                 println!();
                 println!("Components:");
@@ -244,25 +252,16 @@ impl Command for MonitoringAlerts {
                     println!("  3. slow_response (warning)");
                 }
                 "add" => {
-                    println!(
-                        "✓ Alert added: {}",
-                        self.name.as_ref().unwrap()
-                    );
+                    println!("✓ Alert added: {}", self.name.as_ref().unwrap());
                     if let Some(ref sev) = self.severity {
                         println!("Severity: {}", sev);
                     }
                 }
                 "remove" => {
-                    println!(
-                        "✓ Alert removed: {}",
-                        self.name.as_ref().unwrap()
-                    );
+                    println!("✓ Alert removed: {}", self.name.as_ref().unwrap());
                 }
                 "silence" => {
-                    println!(
-                        "✓ Alert silenced: {}",
-                        self.name.as_ref().unwrap()
-                    );
+                    println!("✓ Alert silenced: {}", self.name.as_ref().unwrap());
                 }
                 _ => {}
             }
@@ -327,8 +326,7 @@ impl Command for MonitoringTargets {
             anyhow::bail!("Action must be one of: list, add, remove, health");
         }
 
-        if ["add", "remove", "health"].contains(&self.action.as_str())
-            && self.target_url.is_none()
+        if ["add", "remove", "health"].contains(&self.action.as_str()) && self.target_url.is_none()
         {
             anyhow::bail!("Target URL is required for {} action", self.action);
         }
@@ -355,25 +353,16 @@ impl Command for MonitoringTargets {
                     println!("  3. http://localhost:8082/metrics (down)");
                 }
                 "add" => {
-                    println!(
-                        "✓ Target added: {}",
-                        self.target_url.as_ref().unwrap()
-                    );
+                    println!("✓ Target added: {}", self.target_url.as_ref().unwrap());
                     if let Some(ref labels) = self.labels {
                         println!("Labels: {}", labels);
                     }
                 }
                 "remove" => {
-                    println!(
-                        "✓ Target removed: {}",
-                        self.target_url.as_ref().unwrap()
-                    );
+                    println!("✓ Target removed: {}", self.target_url.as_ref().unwrap());
                 }
                 "health" => {
-                    println!(
-                        "Target: {}",
-                        self.target_url.as_ref().unwrap()
-                    );
+                    println!("Target: {}", self.target_url.as_ref().unwrap());
                     println!("Health: UP");
                     println!("Last Scrape: 2.3s ago");
                 }
@@ -559,7 +548,10 @@ mod tests {
 
         let result = cmd.validate(&ctx).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Metrics port must be greater than 0"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Metrics port must be greater than 0"));
     }
 
     #[tokio::test]
@@ -570,7 +562,10 @@ mod tests {
 
         let result = cmd.validate(&ctx).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("must be different"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("must be different"));
     }
 
     #[tokio::test]
@@ -581,7 +576,10 @@ mod tests {
 
         let result = cmd.validate(&ctx).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Action must be one of"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Action must be one of"));
     }
 
     #[tokio::test]
@@ -592,7 +590,10 @@ mod tests {
 
         let result = cmd.validate(&ctx).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Alert name is required"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Alert name is required"));
     }
 
     #[tokio::test]
@@ -603,6 +604,9 @@ mod tests {
 
         let result = cmd.validate(&ctx).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Time range must be one of"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Time range must be one of"));
     }
 }

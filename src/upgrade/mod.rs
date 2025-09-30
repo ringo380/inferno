@@ -12,14 +12,14 @@
 //! - **Backup & Rollback**: Automatic backups with one-click rollback
 //! - **Enterprise Features**: Centralized management and staged rollouts
 
-pub mod checker;
-pub mod downloader;
-pub mod backup;
-pub mod platform;
-pub mod manager;
-pub mod config;
-pub mod safety;
 pub mod background_service;
+pub mod backup;
+pub mod checker;
+pub mod config;
+pub mod downloader;
+pub mod manager;
+pub mod platform;
+pub mod safety;
 
 #[cfg(target_os = "macos")]
 pub mod macos;
@@ -40,14 +40,14 @@ use tokio::sync::RwLock;
 use tracing::{info, warn};
 use uuid::Uuid;
 
-pub use manager::UpgradeManager;
-pub use config::UpgradeConfig;
+pub use background_service::{BackgroundUpdateService, ServiceStatistics, ServiceStatus};
+pub use backup::{BackupManager, BackupMetadata, BackupStorageStats, BackupType};
 pub use checker::UpdateChecker;
 pub use config::UpdateSource;
-pub use downloader::{UpdateDownloader, ProgressCallback};
-pub use backup::{BackupManager, BackupMetadata, BackupType, BackupStorageStats};
-pub use safety::{SafetyChecker, CompatibilityReport, ResourceReport};
-pub use background_service::{BackgroundUpdateService, ServiceStatus, ServiceStatistics};
+pub use config::UpgradeConfig;
+pub use downloader::{ProgressCallback, UpdateDownloader};
+pub use manager::UpgradeManager;
+pub use safety::{CompatibilityReport, ResourceReport, SafetyChecker};
 
 /// Current application version information
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
@@ -386,6 +386,9 @@ mod tests {
     fn test_update_channel_conversion() {
         assert_eq!(UpdateChannel::Stable.as_str(), "stable");
         assert_eq!(UpdateChannel::from_str("beta"), UpdateChannel::Beta);
-        assert_eq!(UpdateChannel::from_str("custom"), UpdateChannel::Custom("custom".to_string()));
+        assert_eq!(
+            UpdateChannel::from_str("custom"),
+            UpdateChannel::Custom("custom".to_string())
+        );
     }
 }

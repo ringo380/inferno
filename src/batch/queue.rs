@@ -499,7 +499,10 @@ impl JobQueueManager {
 
         // Save the queue to persistent storage
         if let Err(e) = self.save_queue(&queue_id).await {
-            warn!("Failed to save queue '{}' to persistent storage: {}", queue_id, e);
+            warn!(
+                "Failed to save queue '{}' to persistent storage: {}",
+                queue_id, e
+            );
         }
 
         info!("Created job queue: {}", queue_id);
@@ -549,25 +552,36 @@ impl JobQueueManager {
         {
             let mut queues = self.queues.write().await;
             if let Some(queue) = queues.get_mut(queue_id) {
-            queue.metrics.total_jobs_submitted += 1;
-            // Note: This would need async access in real implementation
-            // queue.metrics.current_queue_size = queue.jobs.read().await.len();
+                queue.metrics.total_jobs_submitted += 1;
+                // Note: This would need async access in real implementation
+                // queue.metrics.current_queue_size = queue.jobs.read().await.len();
 
-            // Calculate throughput (jobs per hour)
-            let elapsed_hours = queue.created_at.elapsed().unwrap_or(Duration::from_secs(1)).as_secs() as f64 / 3600.0;
-            if elapsed_hours > 0.0 {
-                queue.metrics.throughput_jobs_per_hour = queue.metrics.total_jobs_submitted as f64 / elapsed_hours;
-                queue.metrics.throughput_items_per_hour = queue.metrics.total_items_processed as f64 / elapsed_hours;
-            }
+                // Calculate throughput (jobs per hour)
+                let elapsed_hours = queue
+                    .created_at
+                    .elapsed()
+                    .unwrap_or(Duration::from_secs(1))
+                    .as_secs() as f64
+                    / 3600.0;
+                if elapsed_hours > 0.0 {
+                    queue.metrics.throughput_jobs_per_hour =
+                        queue.metrics.total_jobs_submitted as f64 / elapsed_hours;
+                    queue.metrics.throughput_items_per_hour =
+                        queue.metrics.total_items_processed as f64 / elapsed_hours;
+                }
 
-            // Update success rate
-            let total_finished = queue.metrics.total_jobs_completed + queue.metrics.total_jobs_failed;
-            if total_finished > 0 {
-                queue.metrics.success_rate = (queue.metrics.total_jobs_completed as f64 / total_finished as f64) * 100.0;
-            }
+                // Update success rate
+                let total_finished =
+                    queue.metrics.total_jobs_completed + queue.metrics.total_jobs_failed;
+                if total_finished > 0 {
+                    queue.metrics.success_rate =
+                        (queue.metrics.total_jobs_completed as f64 / total_finished as f64) * 100.0;
+                }
 
-            debug!("Updated metrics for queue '{}': {} total jobs submitted",
-                   queue_id, queue.metrics.total_jobs_submitted);
+                debug!(
+                    "Updated metrics for queue '{}': {} total jobs submitted",
+                    queue_id, queue.metrics.total_jobs_submitted
+                );
             }
         }
 
@@ -651,7 +665,10 @@ impl JobQueueManager {
             ScheduleType::Daily { time, weekdays } => {
                 // Validate time format (HH:MM)
                 if let Err(e) = self.validate_time_format(time) {
-                    return Err(anyhow::anyhow!("Invalid time format in daily schedule: {}", e));
+                    return Err(anyhow::anyhow!(
+                        "Invalid time format in daily schedule: {}",
+                        e
+                    ));
                 }
 
                 if weekdays.is_empty() {
@@ -680,26 +697,42 @@ impl JobQueueManager {
     fn validate_time_format(&self, time: &str) -> Result<()> {
         // Validate HH:MM format
         if time.len() != 5 {
-            return Err(anyhow::anyhow!("Time must be in HH:MM format, got: '{}'", time));
+            return Err(anyhow::anyhow!(
+                "Time must be in HH:MM format, got: '{}'",
+                time
+            ));
         }
 
         let parts: Vec<&str> = time.split(':').collect();
         if parts.len() != 2 {
-            return Err(anyhow::anyhow!("Time must contain exactly one colon, got: '{}'", time));
+            return Err(anyhow::anyhow!(
+                "Time must contain exactly one colon, got: '{}'",
+                time
+            ));
         }
 
         // Validate hour (00-23)
-        let hour: u8 = parts[0].parse()
+        let hour: u8 = parts[0]
+            .parse()
             .map_err(|_| anyhow::anyhow!("Invalid hour in time '{}': not a number", time))?;
         if hour > 23 {
-            return Err(anyhow::anyhow!("Invalid hour in time '{}': {} (must be 0-23)", time, hour));
+            return Err(anyhow::anyhow!(
+                "Invalid hour in time '{}': {} (must be 0-23)",
+                time,
+                hour
+            ));
         }
 
         // Validate minute (00-59)
-        let minute: u8 = parts[1].parse()
+        let minute: u8 = parts[1]
+            .parse()
             .map_err(|_| anyhow::anyhow!("Invalid minute in time '{}': not a number", time))?;
         if minute > 59 {
-            return Err(anyhow::anyhow!("Invalid minute in time '{}': {} (must be 0-59)", time, minute));
+            return Err(anyhow::anyhow!(
+                "Invalid minute in time '{}': {} (must be 0-59)",
+                time,
+                minute
+            ));
         }
 
         debug!("Validated time format: {}", time);
@@ -1277,7 +1310,10 @@ impl JobScheduler {
                     Ok(SystemTime::now() + Duration::from_secs(86400)) // Default to 24 hours
                 }
             }
-            ScheduleType::Weekly { day_of_week, time: _ } => {
+            ScheduleType::Weekly {
+                day_of_week,
+                time: _,
+            } => {
                 // Calculate next occurrence of the specified day
                 // day_of_week is u8: 0 = Monday, 6 = Sunday
                 let days_ahead = (*day_of_week as u64 + 1) % 7;
@@ -1286,7 +1322,10 @@ impl JobScheduler {
             ScheduleType::Cron { expression, .. } => {
                 // Basic cron support - for now just schedule hourly
                 // Full cron parsing would require a cron library
-                info!("Cron expression '{}' simplified to hourly schedule", expression);
+                info!(
+                    "Cron expression '{}' simplified to hourly schedule",
+                    expression
+                );
                 Ok(SystemTime::now() + Duration::from_secs(3600))
             }
             ScheduleType::Monthly { .. } => {
@@ -1365,7 +1404,12 @@ impl Worker {
     }
 
     async fn execute_job(&self, job: BatchJob) -> Result<()> {
-        info!("Worker {} starting job {} with {} inputs", self.id, job.id, job.inputs.len());
+        info!(
+            "Worker {} starting job {} with {} inputs",
+            self.id,
+            job.id,
+            job.inputs.len()
+        );
 
         let start_time = std::time::Instant::now();
         let mut results: Vec<BatchResult> = Vec::new();
@@ -1377,9 +1421,17 @@ impl Worker {
 
         // 2. Process the batch inputs
         for (index, input) in job.inputs.iter().enumerate() {
-            info!("Processing input {} of {} for job {}", index + 1, job.inputs.len(), job.id);
+            info!(
+                "Processing input {} of {} for job {}",
+                index + 1,
+                job.inputs.len(),
+                job.id
+            );
 
-            match self.process_single_input(input, &job.inference_params).await {
+            match self
+                .process_single_input(input, &job.inference_params)
+                .await
+            {
                 Ok(result) => {
                     let batch_result = BatchResult {
                         id: input.id.clone(),
@@ -1392,21 +1444,34 @@ impl Worker {
                         metadata: input.metadata.clone(),
                     };
                     results.push(batch_result);
-                    info!("Successfully processed input {} for job {}", index + 1, job.id);
+                    info!(
+                        "Successfully processed input {} for job {}",
+                        index + 1,
+                        job.id
+                    );
                 }
                 Err(e) => {
-                    warn!("Failed to process input {} for job {}: {}", index + 1, job.id, e);
+                    warn!(
+                        "Failed to process input {} for job {}: {}",
+                        index + 1,
+                        job.id,
+                        e
+                    );
                     failed_inputs.push((index, e.to_string()));
 
                     // Handle retries
                     if job.retry_config.max_retries > 0 {
                         info!("Attempting retry for input {} (job {})", index + 1, job.id);
                         tokio::time::sleep(tokio::time::Duration::from_millis(
-                            job.retry_config.retry_delay_ms
-                        )).await;
+                            job.retry_config.retry_delay_ms,
+                        ))
+                        .await;
 
                         // Retry the input
-                        match self.process_single_input(input, &job.inference_params).await {
+                        match self
+                            .process_single_input(input, &job.inference_params)
+                            .await
+                        {
                             Ok(result) => {
                                 let batch_result = BatchResult {
                                     id: input.id.clone(),
@@ -1422,7 +1487,12 @@ impl Worker {
                                 info!("Retry successful for input {} (job {})", index + 1, job.id);
                             }
                             Err(retry_err) => {
-                                warn!("Retry failed for input {} (job {}): {}", index + 1, job.id, retry_err);
+                                warn!(
+                                    "Retry failed for input {} (job {}): {}",
+                                    index + 1,
+                                    job.id,
+                                    retry_err
+                                );
                                 // Keep the failure recorded
                             }
                         }
@@ -1455,16 +1525,26 @@ impl Worker {
             processed_items: success_count,
             failed_items: failure_count,
             success_rate,
-            retry_count: if job.retry_config.max_retries > 0 { 1 } else { 0 },
-            partial_results: failed_inputs.iter().map(|(idx, err)| {
-                format!("Input {}: {}", idx + 1, err)
-            }).collect(),
+            retry_count: if job.retry_config.max_retries > 0 {
+                1
+            } else {
+                0
+            },
+            partial_results: failed_inputs
+                .iter()
+                .map(|(idx, err)| format!("Input {}: {}", idx + 1, err))
+                .collect(),
         };
 
         // 5. Log completion
         info!(
             "Worker {} completed job {} in {:.2}s: {}/{} inputs processed (success rate: {:.1}%)",
-            self.id, job.id, total_time.as_secs_f64(), success_count, job.inputs.len(), success_rate
+            self.id,
+            job.id,
+            total_time.as_secs_f64(),
+            success_count,
+            job.inputs.len(),
+            success_rate
         );
 
         // Save results to persistent storage
@@ -1491,7 +1571,11 @@ impl Worker {
         Ok(())
     }
 
-    async fn process_single_input(&self, input: &BatchInput, params: &InferenceParams) -> Result<String> {
+    async fn process_single_input(
+        &self,
+        input: &BatchInput,
+        params: &InferenceParams,
+    ) -> Result<String> {
         // Simulate processing time based on input length
         let processing_time = std::cmp::min(input.content.len() * 2, 1000); // Max 1 second
         tokio::time::sleep(tokio::time::Duration::from_millis(processing_time as u64)).await;
@@ -1560,8 +1644,10 @@ impl ResourceMonitor {
         // Network usage monitoring (simplified)
         self.network_usage = self.get_network_usage().await?;
 
-        debug!("Updated resource metrics: CPU: {:.1}%, Memory: {:.1}%, Disk: {:.1}%, Network: {:.1}%",
-               self.cpu_usage, self.memory_usage, self.disk_usage, self.network_usage);
+        debug!(
+            "Updated resource metrics: CPU: {:.1}%, Memory: {:.1}%, Disk: {:.1}%, Network: {:.1}%",
+            self.cpu_usage, self.memory_usage, self.disk_usage, self.network_usage
+        );
 
         Ok(())
     }
@@ -1593,7 +1679,7 @@ impl ResourceMonitor {
                         Ok(0.0)
                     }
                 }
-                Err(_) => Ok(0.0)
+                Err(_) => Ok(0.0),
             }
         }
         #[cfg(not(target_os = "linux"))]
@@ -1622,7 +1708,7 @@ impl ResourceMonitor {
                     }
                     Ok(0.0)
                 }
-                Err(_) => Ok(0.0)
+                Err(_) => Ok(0.0),
             }
         }
         #[cfg(not(target_os = "linux"))]
@@ -1646,7 +1732,7 @@ impl ResourceMonitor {
                     // A real implementation would use statvfs or similar
                     Ok(25.0) // Mock 25% disk usage
                 }
-                Err(_) => Ok(0.0)
+                Err(_) => Ok(0.0),
             }
         }
         #[cfg(not(target_os = "linux"))]
@@ -1667,12 +1753,14 @@ impl ResourceMonitor {
         if let Some(required_memory_mb) = requirements.memory_mb {
             let available_memory_percent = 100.0 - self.memory_usage;
             let system_memory_gb = 8.0; // Assume 8GB system memory for calculation
-            let available_memory_mb = (available_memory_percent / 100.0) * system_memory_gb * 1024.0;
+            let available_memory_mb =
+                (available_memory_percent / 100.0) * system_memory_gb * 1024.0;
 
             if required_memory_mb as f64 > available_memory_mb {
                 return Err(anyhow::anyhow!(
                     "Insufficient memory: required {}MB, available {:.1}MB",
-                    required_memory_mb, available_memory_mb
+                    required_memory_mb,
+                    available_memory_mb
                 ));
             }
         }
@@ -1680,10 +1768,12 @@ impl ResourceMonitor {
         // Check CPU requirements
         if let Some(required_cpu_cores) = requirements.cpu_cores {
             let available_cpu_percent = 100.0 - self.cpu_usage;
-            if available_cpu_percent < (required_cpu_cores as f64 * 20.0) { // Approximate 20% per core
+            if available_cpu_percent < (required_cpu_cores as f64 * 20.0) {
+                // Approximate 20% per core
                 return Err(anyhow::anyhow!(
                     "Insufficient CPU: required {} cores, current usage {:.1}%",
-                    required_cpu_cores, self.cpu_usage
+                    required_cpu_cores,
+                    self.cpu_usage
                 ));
             }
         }
@@ -1697,7 +1787,8 @@ impl ResourceMonitor {
             if required_disk_mb as f64 > available_disk_mb {
                 return Err(anyhow::anyhow!(
                     "Insufficient disk space: required {}MB, available {:.1}MB",
-                    required_disk_mb, available_disk_mb
+                    required_disk_mb,
+                    available_disk_mb
                 ));
             }
         }
@@ -1711,8 +1802,10 @@ impl ResourceMonitor {
             ));
         }
 
-        debug!("Resource requirements check passed: Memory: {:.1}%, CPU: {:.1}%, Disk: {:.1}%",
-               self.memory_usage, self.cpu_usage, self.disk_usage);
+        debug!(
+            "Resource requirements check passed: Memory: {:.1}%, CPU: {:.1}%, Disk: {:.1}%",
+            self.memory_usage, self.cpu_usage, self.disk_usage
+        );
 
         Ok(())
     }

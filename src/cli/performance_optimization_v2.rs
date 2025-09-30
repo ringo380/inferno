@@ -146,7 +146,10 @@ impl Command for OptimizeTune {
     }
 
     async fn execute(&self, ctx: &mut CommandContext) -> Result<CommandOutput> {
-        info!("Auto-tuning {} with {} strategy", self.target, self.strategy);
+        info!(
+            "Auto-tuning {} with {} strategy",
+            self.target, self.strategy
+        );
 
         // Stub implementation
         let improvement_pct = 23.5;
@@ -497,7 +500,11 @@ impl Command for OptimizeValidate {
             println!("  Improvement: {:.1}%", improvement);
             println!(
                 "  Validation: {}",
-                if validation_passed { "✓ PASS" } else { "✗ FAIL" }
+                if validation_passed {
+                    "✓ PASS"
+                } else {
+                    "✗ FAIL"
+                }
             );
             println!();
             println!("⚠️  Full validation not yet fully implemented");
@@ -525,17 +532,15 @@ mod tests {
     #[tokio::test]
     async fn test_analyze_validation_zero_duration() {
         let config = Config::default();
-        let cmd = OptimizeAnalyze::new(
-            config.clone(),
-            "target".to_string(),
-            0,
-            false,
-        );
+        let cmd = OptimizeAnalyze::new(config.clone(), "target".to_string(), 0, false);
         let ctx = CommandContext::new(config);
 
         let result = cmd.validate(&ctx).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Duration must be greater than 0"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Duration must be greater than 0"));
     }
 
     #[tokio::test]
@@ -551,23 +556,24 @@ mod tests {
 
         let result = cmd.validate(&ctx).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Strategy must be one of"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Strategy must be one of"));
     }
 
     #[tokio::test]
     async fn test_monitor_validation_invalid_threshold() {
         let config = Config::default();
-        let cmd = OptimizeMonitor::new(
-            config.clone(),
-            "target".to_string(),
-            5,
-            Some(150.0),
-        );
+        let cmd = OptimizeMonitor::new(config.clone(), "target".to_string(), 5, Some(150.0));
         let ctx = CommandContext::new(config);
 
         let result = cmd.validate(&ctx).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Alert threshold must be between"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Alert threshold must be between"));
     }
 
     #[tokio::test]
@@ -583,6 +589,9 @@ mod tests {
 
         let result = cmd.validate(&ctx).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Format must be one of"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Format must be one of"));
     }
 }

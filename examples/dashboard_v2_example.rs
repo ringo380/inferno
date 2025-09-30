@@ -17,61 +17,35 @@ async fn main() -> Result<()> {
 
     // Example 1: Start dashboard on default port
     println!("Example 1: Start dashboard on default port");
-    let cmd = DashboardStart::new(
-        config.clone(),
-        "127.0.0.1".to_string(),
-        8080,
-        false,
-        false,
-    );
+    let cmd = DashboardStart::new(config.clone(), "127.0.0.1".to_string(), 8080, false, false);
     let mut ctx = CommandContext::new(config.clone());
     let result = cmd.execute(&mut ctx).await?;
     println!("Result: {}\n", result.message);
 
     // Example 2: Start with authentication
     println!("Example 2: Start with authentication");
-    let cmd = DashboardStart::new(
-        config.clone(),
-        "0.0.0.0".to_string(),
-        8080,
-        true,
-        false,
-    );
+    let cmd = DashboardStart::new(config.clone(), "0.0.0.0".to_string(), 8080, true, false);
     let mut ctx = CommandContext::new(config.clone());
     let result = cmd.execute(&mut ctx).await?;
     println!("Result: {}\n", result.message);
 
     // Example 3: Start as daemon
     println!("Example 3: Start as daemon");
-    let cmd = DashboardStart::new(
-        config.clone(),
-        "127.0.0.1".to_string(),
-        8080,
-        false,
-        true,
-    );
+    let cmd = DashboardStart::new(config.clone(), "127.0.0.1".to_string(), 8080, false, true);
     let mut ctx = CommandContext::new(config.clone());
     let result = cmd.execute(&mut ctx).await?;
     println!("Result: {}\n", result.message);
 
     // Example 4: Basic status
     println!("Example 4: Basic status");
-    let cmd = DashboardStatus::new(
-        config.clone(),
-        "http://localhost:8080".to_string(),
-        false,
-    );
+    let cmd = DashboardStatus::new(config.clone(), "http://localhost:8080".to_string(), false);
     let mut ctx = CommandContext::new(config.clone());
     let result = cmd.execute(&mut ctx).await?;
     println!("Result: {}\n", result.message);
 
     // Example 5: Detailed status
     println!("Example 5: Detailed status");
-    let cmd = DashboardStatus::new(
-        config.clone(),
-        "http://localhost:8080".to_string(),
-        true,
-    );
+    let cmd = DashboardStatus::new(config.clone(), "http://localhost:8080".to_string(), true);
     let mut ctx = CommandContext::new(config.clone());
     let result = cmd.execute(&mut ctx).await?;
     println!("Result: {}\n", result.message);
@@ -147,13 +121,7 @@ async fn main() -> Result<()> {
 
     // Example 13: Validation - Zero port
     println!("Example 13: Validation - Zero port");
-    let cmd = DashboardStart::new(
-        config.clone(),
-        "127.0.0.1".to_string(),
-        0,
-        false,
-        false,
-    );
+    let cmd = DashboardStart::new(config.clone(), "127.0.0.1".to_string(), 0, false, false);
     let ctx = CommandContext::new(config.clone());
     match cmd.validate(&ctx).await {
         Ok(_) => println!("Validation passed unexpectedly"),

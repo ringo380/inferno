@@ -131,24 +131,14 @@ async fn main() -> Result<()> {
 
     // Example 11: Delete with backup
     println!("Example 11: Delete with backup");
-    let cmd = TenantDelete::new(
-        config.clone(),
-        "tenant-old".to_string(),
-        false,
-        true,
-    );
+    let cmd = TenantDelete::new(config.clone(), "tenant-old".to_string(), false, true);
     let mut ctx = CommandContext::new(config.clone());
     let result = cmd.execute(&mut ctx).await?;
     println!("Result: {}\n", result.message);
 
     // Example 12: Force delete
     println!("Example 12: Force delete");
-    let cmd = TenantDelete::new(
-        config.clone(),
-        "tenant-test".to_string(),
-        true,
-        false,
-    );
+    let cmd = TenantDelete::new(config.clone(), "tenant-test".to_string(), true, false);
     let mut ctx = CommandContext::new(config.clone());
     let result = cmd.execute(&mut ctx).await?;
     println!("Result: {}\n", result.message);

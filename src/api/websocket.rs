@@ -5,7 +5,7 @@ use crate::{
     backends::{Backend, InferenceParams},
     cli::serve::ServerState,
     streaming::{StreamingConfig, StreamingManager},
-    upgrade::{UpgradeStatus, UpgradeEvent, UpdateInfo, ApplicationVersion},
+    upgrade::{ApplicationVersion, UpdateInfo, UpgradeEvent, UpgradeStatus},
     InfernoError,
 };
 use axum::{
@@ -65,14 +65,9 @@ pub enum WSMessage {
         current_version: ApplicationVersion,
     },
     #[serde(rename = "upgrade_event")]
-    UpgradeEvent {
-        event: UpgradeEvent,
-    },
+    UpgradeEvent { event: UpgradeEvent },
     #[serde(rename = "upgrade_check_request")]
-    UpgradeCheckRequest {
-        id: String,
-        force: bool,
-    },
+    UpgradeCheckRequest { id: String, force: bool },
     #[serde(rename = "upgrade_install_request")]
     UpgradeInstallRequest {
         id: String,
@@ -397,7 +392,10 @@ async fn handle_ws_message(
             Ok(())
         }
         WSMessage::UpgradeCheckRequest { id, force } => {
-            info!("Processing upgrade check request {} for connection {}", id, connection_id);
+            info!(
+                "Processing upgrade check request {} for connection {}",
+                id, connection_id
+            );
 
             // Initialize upgrade system if not already available
             let upgrade_manager = match &state.upgrade_manager {
@@ -445,8 +443,15 @@ async fn handle_ws_message(
 
             Ok(())
         }
-        WSMessage::UpgradeInstallRequest { id, version, auto_backup } => {
-            info!("Processing upgrade install request {} for connection {}", id, connection_id);
+        WSMessage::UpgradeInstallRequest {
+            id,
+            version,
+            auto_backup,
+        } => {
+            info!(
+                "Processing upgrade install request {} for connection {}",
+                id, connection_id
+            );
 
             // Initialize upgrade system if not already available
             let upgrade_manager = match &state.upgrade_manager {
@@ -473,7 +478,10 @@ async fn handle_ws_message(
                             if update_info.version.to_string() != requested_version {
                                 let error_msg = WSMessage::Error {
                                     id: Some(id),
-                                    message: format!("Requested version {} not available", requested_version),
+                                    message: format!(
+                                        "Requested version {} not available",
+                                        requested_version
+                                    ),
                                     code: "VERSION_NOT_FOUND".to_string(),
                                 };
                                 let _ = send_ws_message(&sender_clone, &error_msg).await;
@@ -562,8 +570,13 @@ async fn get_or_load_backend_for_ws(
         .await
         .map_err(|e| InfernoError::WebSocket(format!("Model resolution failed: {}", e)))?;
 
-    let backend_type = crate::backends::BackendType::from_model_path(&model_info.path)
-        .ok_or_else(|| InfernoError::WebSocket(format!("No suitable backend found for model: {}", model_info.path.display())))?;
+    let backend_type =
+        crate::backends::BackendType::from_model_path(&model_info.path).ok_or_else(|| {
+            InfernoError::WebSocket(format!(
+                "No suitable backend found for model: {}",
+                model_info.path.display()
+            ))
+        })?;
     let mut backend = Backend::new(backend_type, &state.config.backend_config)
         .map_err(|e| InfernoError::WebSocket(format!("Backend creation failed: {}", e)))?;
 

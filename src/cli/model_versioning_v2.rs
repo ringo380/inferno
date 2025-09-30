@@ -185,10 +185,16 @@ impl Command for ModelVersionList {
             }
             println!("Limit: {}", self.limit);
             println!();
-            println!("{:<20} {:<10} {:<15} {:<15}", "MODEL", "VERSION", "STATUS", "CREATED");
+            println!(
+                "{:<20} {:<10} {:<15} {:<15}",
+                "MODEL", "VERSION", "STATUS", "CREATED"
+            );
             println!("{}", "-".repeat(65));
             for (model, version, status, created) in &versions {
-                println!("{:<20} {:<10} {:<15} {:<15}", model, version, status, created);
+                println!(
+                    "{:<20} {:<10} {:<15} {:<15}",
+                    model, version, status, created
+                );
             }
             println!();
             println!("⚠️  Full version listing is not yet fully implemented");
@@ -532,7 +538,9 @@ impl Command for ModelVersionValidate {
 
         if let Some(ref suite) = self.test_suite {
             if !["smoke", "regression", "performance", "comprehensive"].contains(&suite.as_str()) {
-                anyhow::bail!("Test suite must be one of: smoke, regression, performance, comprehensive");
+                anyhow::bail!(
+                    "Test suite must be one of: smoke, regression, performance, comprehensive"
+                );
             }
         }
 
@@ -640,7 +648,11 @@ impl Command for ModelVersionExport {
     }
 
     async fn execute(&self, ctx: &mut CommandContext) -> Result<CommandOutput> {
-        info!("Exporting version {} to {}", self.version_id, self.output.display());
+        info!(
+            "Exporting version {} to {}",
+            self.version_id,
+            self.output.display()
+        );
 
         // Human-readable output
         if !ctx.json_output {
@@ -694,7 +706,10 @@ mod tests {
 
         let result = cmd.validate(&ctx).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Model name cannot be empty"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Model name cannot be empty"));
     }
 
     #[tokio::test]
@@ -705,7 +720,10 @@ mod tests {
 
         let result = cmd.validate(&ctx).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Limit must be between"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Limit must be between"));
     }
 
     #[tokio::test]
@@ -722,7 +740,10 @@ mod tests {
 
         let result = cmd.validate(&ctx).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Strategy must be one of"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Strategy must be one of"));
     }
 
     #[tokio::test]
@@ -738,7 +759,10 @@ mod tests {
 
         let result = cmd.validate(&ctx).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("must be different"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("must be different"));
     }
 
     #[tokio::test]
@@ -754,7 +778,10 @@ mod tests {
 
         let result = cmd.validate(&ctx).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Test suite must be one of"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Test suite must be one of"));
     }
 
     #[tokio::test]

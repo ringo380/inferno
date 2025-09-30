@@ -22,10 +22,18 @@ pub mod state;
 pub mod types;
 
 // Re-export key types for convenience
-pub use activity_logger::{ActivityLogger, ActivityLog, ActivityStats, ActivityType, ActivityStatus};
-pub use backend_manager::{BackendManager, ModelInfo, InferenceParams, GlobalMetrics};
-pub use model_repository::{ModelRepositoryService, ModelDownloadManager, ExternalModelInfo, ModelSearchQuery, ModelSearchResponse, DownloadProgress};
-pub use security::{SecurityManager, ApiKey, SecurityEvent, SecurityMetrics, CreateApiKeyRequest, CreateApiKeyResponse};
+pub use activity_logger::{
+    ActivityLog, ActivityLogger, ActivityStats, ActivityStatus, ActivityType,
+};
+pub use backend_manager::{BackendManager, GlobalMetrics, InferenceParams, ModelInfo};
+pub use model_repository::{
+    DownloadProgress, ExternalModelInfo, ModelDownloadManager, ModelRepositoryService,
+    ModelSearchQuery, ModelSearchResponse,
+};
+pub use security::{
+    ApiKey, CreateApiKeyRequest, CreateApiKeyResponse, SecurityEvent, SecurityManager,
+    SecurityMetrics,
+};
 pub use state::AppState;
 
 /// Initialize the desktop application
