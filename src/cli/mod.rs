@@ -5,6 +5,7 @@ pub mod api_gateway;
 pub mod audit;
 pub mod backup_recovery;
 pub mod batch;
+pub mod batch_v2;  // New architecture implementation
 pub mod batch_queue;
 pub mod bench;
 pub mod bench_v2;  // New architecture implementation
