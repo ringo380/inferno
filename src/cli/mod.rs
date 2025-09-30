@@ -27,6 +27,7 @@ pub mod distributed_v2;  // New architecture implementation
 pub mod enhanced_parser;
 pub mod enhanced_parser_v2;  // New architecture implementation
 pub mod federated;
+pub mod federated_v2;  // New architecture implementation
 pub mod fuzzy;
 pub mod fuzzy_v2;  // New architecture implementation
 pub mod gpu;
