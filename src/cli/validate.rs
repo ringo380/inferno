@@ -309,8 +309,9 @@ async fn deep_validate_model(path: &PathBuf, config: &Config) -> Result<bool> {
     use crate::backends::{Backend, BackendType};
     use crate::models::ModelInfo;
 
-    let backend_type = BackendType::from_model_path(path)
-        .ok_or_else(|| anyhow::anyhow!("No suitable backend found for model: {}", path.display()))?;
+    let backend_type = BackendType::from_model_path(path).ok_or_else(|| {
+        anyhow::anyhow!("No suitable backend found for model: {}", path.display())
+    })?;
     let mut backend = Backend::new(backend_type.clone(), &config.backend_config)?;
 
     let model_info = ModelInfo {
@@ -321,7 +322,11 @@ async fn deep_validate_model(path: &PathBuf, config: &Config) -> Result<bool> {
         size_bytes: tokio::fs::metadata(path).await?.len(),
         modified: chrono::DateTime::from(tokio::fs::metadata(path).await?.modified()?),
         backend_type: backend_type.to_string(),
-        format: path.extension().and_then(|ext| ext.to_str()).unwrap_or("unknown").to_string(),
+        format: path
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .unwrap_or("unknown")
+            .to_string(),
         checksum: None,
         metadata: std::collections::HashMap::new(),
     };

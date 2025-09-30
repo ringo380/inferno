@@ -9,7 +9,9 @@ use anyhow::Result;
 use inferno::cli::bench_v2::BenchCommand;
 use inferno::config::Config;
 use inferno::core::config::ConfigBuilder;
-use inferno::interfaces::cli::{CommandContext, CommandPipeline, LoggingMiddleware, MetricsMiddleware};
+use inferno::interfaces::cli::{
+    CommandContext, CommandPipeline, LoggingMiddleware, MetricsMiddleware,
+};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -75,7 +77,10 @@ async fn main() -> Result<()> {
 
     let mut ctx_invalid = CommandContext::new(config.clone());
 
-    match pipeline.execute(Box::new(invalid_bench), &mut ctx_invalid).await {
+    match pipeline
+        .execute(Box::new(invalid_bench), &mut ctx_invalid)
+        .await
+    {
         Ok(_) => println!("Unexpected success"),
         Err(e) => {
             println!("✓ Validation correctly caught errors:");
@@ -103,7 +108,10 @@ async fn main() -> Result<()> {
 
     let mut ctx_iters = CommandContext::new(config.clone());
 
-    match pipeline.execute(Box::new(too_many_iters), &mut ctx_iters).await {
+    match pipeline
+        .execute(Box::new(too_many_iters), &mut ctx_iters)
+        .await
+    {
         Ok(_) => println!("Unexpected success"),
         Err(e) => {
             println!("✓ Validation caught iteration limit:");
@@ -119,43 +127,46 @@ async fn main() -> Result<()> {
     println!("Example 4: JSON Output Mode");
     println!("{}", "─".repeat(80));
     println!("When run with json_output = true, the command returns structured data:");
-    println!("{}", serde_json::to_string_pretty(&serde_json::json!({
-        "model": "llama-2-7b.gguf",
-        "backend": "Gguf",
-        "load_time_ms": 1234,
-        "config": {
-            "iterations": 10,
-            "warmup": 3,
-            "max_tokens": 100,
-            "prompt_length": 27
-        },
-        "warmup": {
-            "iterations": 3,
-            "total_time_ms": 856,
-            "mean_ms": 285
-        },
-        "benchmark": {
-            "iterations": 10,
-            "total_time_ms": 2847,
-            "total_tokens": 980,
-            "throughput_tokens_per_sec": 344.3,
-            "statistics": {
-                "min_ms": 245,
-                "max_ms": 312,
-                "mean_ms": 284,
-                "median_ms": 281,
-                "min_tokens_per_sec": 320.5,
-                "max_tokens_per_sec": 408.2,
-                "mean_tokens_per_sec": 352.1,
-                "median_tokens_per_sec": 355.9
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&serde_json::json!({
+            "model": "llama-2-7b.gguf",
+            "backend": "Gguf",
+            "load_time_ms": 1234,
+            "config": {
+                "iterations": 10,
+                "warmup": 3,
+                "max_tokens": 100,
+                "prompt_length": 27
             },
-            "performance_rating": "Excellent (>100 tok/s)"
-        },
-        "memory": {
-            "used_gb": 4.2,
-            "total_gb": 16.0
-        }
-    }))?);
+            "warmup": {
+                "iterations": 3,
+                "total_time_ms": 856,
+                "mean_ms": 285
+            },
+            "benchmark": {
+                "iterations": 10,
+                "total_time_ms": 2847,
+                "total_tokens": 980,
+                "throughput_tokens_per_sec": 344.3,
+                "statistics": {
+                    "min_ms": 245,
+                    "max_ms": 312,
+                    "mean_ms": 284,
+                    "median_ms": 281,
+                    "min_tokens_per_sec": 320.5,
+                    "max_tokens_per_sec": 408.2,
+                    "mean_tokens_per_sec": 352.1,
+                    "median_tokens_per_sec": 355.9
+                },
+                "performance_rating": "Excellent (>100 tok/s)"
+            },
+            "memory": {
+                "used_gb": 4.2,
+                "total_gb": 16.0
+            }
+        }))?
+    );
 
     println!("\n");
 

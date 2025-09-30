@@ -366,8 +366,7 @@ impl Command for BatchQueueListJobs {
             anyhow::bail!("Queue ID cannot be empty");
         }
         if let Some(ref status) = self.status_filter {
-            if !["queued", "running", "completed", "failed", "cancelled"]
-                .contains(&status.as_str())
+            if !["queued", "running", "completed", "failed", "cancelled"].contains(&status.as_str())
             {
                 anyhow::bail!(
                     "Status must be one of: queued, running, completed, failed, cancelled"
@@ -450,12 +449,7 @@ pub struct BatchQueueJobStatus {
 }
 
 impl BatchQueueJobStatus {
-    pub fn new(
-        config: Config,
-        queue_id: String,
-        job_id: String,
-        show_progress: bool,
-    ) -> Self {
+    pub fn new(config: Config, queue_id: String, job_id: String, show_progress: bool) -> Self {
         Self {
             config,
             queue_id,
@@ -673,7 +667,10 @@ impl Command for BatchQueueMetrics {
             println!("Running: {}", running);
             println!("Queued: {}", queued);
             println!();
-            println!("Success Rate: {:.1}%", (completed as f64 / total_jobs as f64) * 100.0);
+            println!(
+                "Success Rate: {:.1}%",
+                (completed as f64 / total_jobs as f64) * 100.0
+            );
             println!("Average Processing Time: 12.5 minutes");
 
             if self.historical {

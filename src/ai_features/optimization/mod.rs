@@ -10,8 +10,8 @@
 
 // Re-export existing optimization modules during transition
 pub use crate::optimization::*;
-pub use crate::performance_optimization;
 pub use crate::performance_baseline;
+pub use crate::performance_optimization;
 
 // Future: Will consolidate into unified API
 // pub mod performance;

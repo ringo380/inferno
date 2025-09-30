@@ -93,31 +93,17 @@ async fn main() -> Result<()> {
     println!();
     println!("  # HELP inferno_inference_latency_seconds Inference latency in seconds");
     println!("  # TYPE inferno_inference_latency_seconds histogram");
-    println!(
-        "  inferno_inference_latency_seconds_bucket{{le=\"0.1\"}} 234"
-    );
-    println!(
-        "  inferno_inference_latency_seconds_bucket{{le=\"0.5\"}} 987"
-    );
-    println!(
-        "  inferno_inference_latency_seconds_bucket{{le=\"1.0\"}} 1432"
-    );
-    println!(
-        "  inferno_inference_latency_seconds_bucket{{le=\"+Inf\"}} 1523"
-    );
+    println!("  inferno_inference_latency_seconds_bucket{{le=\"0.1\"}} 234");
+    println!("  inferno_inference_latency_seconds_bucket{{le=\"0.5\"}} 987");
+    println!("  inferno_inference_latency_seconds_bucket{{le=\"1.0\"}} 1432");
+    println!("  inferno_inference_latency_seconds_bucket{{le=\"+Inf\"}} 1523");
     println!("  inferno_inference_latency_seconds_sum 521.234");
     println!("  inferno_inference_latency_seconds_count 1523");
     println!();
-    println!(
-        "  # HELP inferno_model_requests_total Total requests per model"
-    );
+    println!("  # HELP inferno_model_requests_total Total requests per model");
     println!("  # TYPE inferno_model_requests_total counter");
-    println!(
-        "  inferno_model_requests_total{{model=\"llama-2-7b-chat\"}} 845"
-    );
-    println!(
-        "  inferno_model_requests_total{{model=\"mistral-7b-instruct\"}} 653"
-    );
+    println!("  inferno_model_requests_total{{model=\"llama-2-7b-chat\"}} 845");
+    println!("  inferno_model_requests_total{{model=\"mistral-7b-instruct\"}} 653");
 
     println!("\n");
 
@@ -196,7 +182,10 @@ async fn main() -> Result<()> {
         Ok(output) => {
             println!("✓ {}", output.message);
             if let Some(data) = output.data {
-                println!("Snapshot captured at: {}", data["timestamp"].as_str().unwrap());
+                println!(
+                    "Snapshot captured at: {}",
+                    data["timestamp"].as_str().unwrap()
+                );
                 println!("Pretty format: {}", data["pretty"]);
             }
         }

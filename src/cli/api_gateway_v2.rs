@@ -65,7 +65,10 @@ impl Command for ApiGatewayStart {
     }
 
     async fn execute(&self, ctx: &mut CommandContext) -> Result<CommandOutput> {
-        info!("Starting API gateway on {}:{}", self.bind_address, self.port);
+        info!(
+            "Starting API gateway on {}:{}",
+            self.bind_address, self.port
+        );
 
         // Human-readable output
         if !ctx.json_output {
@@ -358,7 +361,10 @@ impl Command for ApiGatewayRateLimit {
                     println!("Window: {}s", self.window.unwrap());
                 }
                 "remove" => {
-                    println!("✓ Rate limit rule removed: {}", self.rule_name.as_ref().unwrap());
+                    println!(
+                        "✓ Rate limit rule removed: {}",
+                        self.rule_name.as_ref().unwrap()
+                    );
                 }
                 "enable" => {
                     println!("✓ Rate limiting enabled");
@@ -597,7 +603,10 @@ mod tests {
 
         let result = cmd.validate(&ctx).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Port must be greater than 0"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Port must be greater than 0"));
     }
 
     #[tokio::test]
@@ -608,7 +617,10 @@ mod tests {
 
         let result = cmd.validate(&ctx).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Action must be one of"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Action must be one of"));
     }
 
     #[tokio::test]
@@ -619,7 +631,10 @@ mod tests {
 
         let result = cmd.validate(&ctx).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("required for add action"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("required for add action"));
     }
 
     #[tokio::test]
@@ -630,7 +645,10 @@ mod tests {
 
         let result = cmd.validate(&ctx).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Time range must be one of"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Time range must be one of"));
     }
 
     #[tokio::test]

@@ -70,8 +70,14 @@ impl Command for DashboardStart {
         if !ctx.json_output {
             println!("=== Web Dashboard ===");
             println!("URL: {}", dashboard_url);
-            println!("Mode: {}", if self.daemon { "Daemon" } else { "Foreground" });
-            println!("Authentication: {}", if self.auth { "Enabled" } else { "Disabled" });
+            println!(
+                "Mode: {}",
+                if self.daemon { "Daemon" } else { "Foreground" }
+            );
+            println!(
+                "Authentication: {}",
+                if self.auth { "Enabled" } else { "Disabled" }
+            );
             println!();
             println!("✓ Dashboard server started");
             println!();
@@ -246,7 +252,10 @@ impl Command for DashboardConfig {
                 "set" => {
                     println!("✓ Configuration updated");
                     if let Some(auth) = self.auth_enabled {
-                        println!("Authentication: {}", if auth { "Enabled" } else { "Disabled" });
+                        println!(
+                            "Authentication: {}",
+                            if auth { "Enabled" } else { "Disabled" }
+                        );
                     }
                     if let Some(ref theme) = self.theme {
                         println!("Theme: {}", theme);
@@ -367,18 +376,15 @@ mod tests {
     #[tokio::test]
     async fn test_dashboard_start_validation_zero_port() {
         let config = Config::default();
-        let cmd = DashboardStart::new(
-            config.clone(),
-            "127.0.0.1".to_string(),
-            0,
-            false,
-            false,
-        );
+        let cmd = DashboardStart::new(config.clone(), "127.0.0.1".to_string(), 0, false, false);
         let ctx = CommandContext::new(config);
 
         let result = cmd.validate(&ctx).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Port must be greater than 0"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Port must be greater than 0"));
     }
 
     #[tokio::test]
@@ -389,7 +395,10 @@ mod tests {
 
         let result = cmd.validate(&ctx).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Address cannot be empty"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Address cannot be empty"));
     }
 
     #[tokio::test]
@@ -419,7 +428,10 @@ mod tests {
 
         let result = cmd.validate(&ctx).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Export type must be one of"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Export type must be one of"));
     }
 
     #[tokio::test]
@@ -435,6 +447,9 @@ mod tests {
 
         let result = cmd.validate(&ctx).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Format must be one of"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Format must be one of"));
     }
 }

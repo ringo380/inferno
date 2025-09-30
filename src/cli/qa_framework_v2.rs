@@ -470,33 +470,29 @@ mod tests {
     #[tokio::test]
     async fn test_report_validation_invalid_format() {
         let config = Config::default();
-        let cmd = QAReport::new(
-            config.clone(),
-            "invalid".to_string(),
-            None,
-            false,
-        );
+        let cmd = QAReport::new(config.clone(), "invalid".to_string(), None, false);
         let ctx = CommandContext::new(config);
 
         let result = cmd.validate(&ctx).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Format must be one of"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Format must be one of"));
     }
 
     #[tokio::test]
     async fn test_coverage_validation_invalid_threshold() {
         let config = Config::default();
-        let cmd = QACoverage::new(
-            config.clone(),
-            None,
-            Some(150.0),
-            false,
-        );
+        let cmd = QACoverage::new(config.clone(), None, Some(150.0), false);
         let ctx = CommandContext::new(config);
 
         let result = cmd.validate(&ctx).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Threshold must be between"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Threshold must be between"));
     }
 
     #[tokio::test]
@@ -512,22 +508,23 @@ mod tests {
 
         let result = cmd.validate(&ctx).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Action must be one of"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Action must be one of"));
     }
 
     #[tokio::test]
     async fn test_benchmark_validation_zero_iterations() {
         let config = Config::default();
-        let cmd = QABenchmark::new(
-            config.clone(),
-            None,
-            0,
-            false,
-        );
+        let cmd = QABenchmark::new(config.clone(), None, 0, false);
         let ctx = CommandContext::new(config);
 
         let result = cmd.validate(&ctx).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Iterations must be greater than 0"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Iterations must be greater than 0"));
     }
 }

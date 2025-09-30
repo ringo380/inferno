@@ -17,13 +17,7 @@ async fn main() -> Result<()> {
 
     // Example 1: Start coordinator node
     println!("Example 1: Start coordinator node");
-    let cmd = FederatedStart::new(
-        config.clone(),
-        "coordinator".to_string(),
-        8090,
-        None,
-        false,
-    );
+    let cmd = FederatedStart::new(config.clone(), "coordinator".to_string(), 8090, None, false);
     let mut ctx = CommandContext::new(config.clone());
     let result = cmd.execute(&mut ctx).await?;
     println!("Result: {}\n", result.message);
@@ -43,13 +37,7 @@ async fn main() -> Result<()> {
 
     // Example 3: Start node as daemon
     println!("Example 3: Start node as daemon");
-    let cmd = FederatedStart::new(
-        config.clone(),
-        "both".to_string(),
-        8090,
-        None,
-        true,
-    );
+    let cmd = FederatedStart::new(config.clone(), "both".to_string(), 8090, None, true);
     let mut ctx = CommandContext::new(config.clone());
     let result = cmd.execute(&mut ctx).await?;
     println!("Result: {}\n", result.message);
@@ -117,13 +105,7 @@ async fn main() -> Result<()> {
 
     // Example 11: List all participants
     println!("Example 11: List all participants");
-    let cmd = FederatedParticipants::new(
-        config.clone(),
-        "list".to_string(),
-        None,
-        None,
-        None,
-    );
+    let cmd = FederatedParticipants::new(config.clone(), "list".to_string(), None, None, None);
     let mut ctx = CommandContext::new(config.clone());
     let result = cmd.execute(&mut ctx).await?;
     println!("Result: {}\n", result.message);
@@ -218,13 +200,7 @@ async fn main() -> Result<()> {
 
     // Example 20: Validation - Invalid role
     println!("Example 20: Validation - Invalid role");
-    let cmd = FederatedStart::new(
-        config.clone(),
-        "invalid".to_string(),
-        8090,
-        None,
-        false,
-    );
+    let cmd = FederatedStart::new(config.clone(), "invalid".to_string(), 8090, None, false);
     let ctx = CommandContext::new(config.clone());
     match cmd.validate(&ctx).await {
         Ok(_) => println!("Validation passed unexpectedly"),
@@ -233,13 +209,7 @@ async fn main() -> Result<()> {
 
     // Example 21: Validation - Participant without coordinator
     println!("Example 21: Validation - Participant without coordinator");
-    let cmd = FederatedStart::new(
-        config.clone(),
-        "participant".to_string(),
-        8091,
-        None,
-        false,
-    );
+    let cmd = FederatedStart::new(config.clone(), "participant".to_string(), 8091, None, false);
     let ctx = CommandContext::new(config.clone());
     match cmd.validate(&ctx).await {
         Ok(_) => println!("Validation passed unexpectedly"),

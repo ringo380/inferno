@@ -282,8 +282,9 @@ impl PerformanceBaseline {
                 let timeout_duration = Duration::from_secs(10);
                 let inference_result = tokio::time::timeout(
                     timeout_duration,
-                    backend.infer(prompt, &inference_params)
-                ).await;
+                    backend.infer(prompt, &inference_params),
+                )
+                .await;
 
                 match inference_result {
                     Ok(Ok(_)) => {
@@ -312,8 +313,10 @@ impl PerformanceBaseline {
         // Track disk I/O at end and calculate rate
         let final_disk_read = self.get_total_disk_read_bytes(&system);
         let final_disk_write = self.get_total_disk_write_bytes(&system);
-        let total_disk_io_bytes = (final_disk_read - initial_disk_read) + (final_disk_write - initial_disk_write);
-        let disk_io_mb_per_sec = (total_disk_io_bytes as f64 / 1024.0 / 1024.0) / actual_test_duration.as_secs_f64();
+        let total_disk_io_bytes =
+            (final_disk_read - initial_disk_read) + (final_disk_write - initial_disk_write);
+        let disk_io_mb_per_sec =
+            (total_disk_io_bytes as f64 / 1024.0 / 1024.0) / actual_test_duration.as_secs_f64();
 
         // Calculate throughput
         let total_requests = successful_requests + failed_requests;
@@ -678,7 +681,9 @@ impl PerformanceBaseline {
         }
 
         // Fallback: use sysinfo for cross-platform compatibility
-        system.disks().iter()
+        system
+            .disks()
+            .iter()
             .map(|disk| 0)
             .sum::<u64>()
             .saturating_mul(10) // Approximate read activity
@@ -706,7 +711,9 @@ impl PerformanceBaseline {
         }
 
         // Fallback: use sysinfo for cross-platform compatibility
-        system.disks().iter()
+        system
+            .disks()
+            .iter()
             .map(|disk| 0)
             .sum::<u64>()
             .saturating_mul(5) // Approximate write activity

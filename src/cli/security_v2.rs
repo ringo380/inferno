@@ -60,12 +60,26 @@ impl Command for SecurityStatus {
         // Human-readable output
         if !ctx.json_output {
             println!("=== Security Status ===");
-            println!("Security System: {}", if enabled { "✓ Enabled" } else { "✗ Disabled" });
+            println!(
+                "Security System: {}",
+                if enabled {
+                    "✓ Enabled"
+                } else {
+                    "✗ Disabled"
+                }
+            );
             println!();
             println!("Users: {}", user_count);
             println!("Active Sessions: {}", active_sessions);
             println!("Blocked IPs: {}", blocked_ips);
-            println!("Rate Limiting: {}", if rate_limits_active { "✓ Active" } else { "✗ Inactive" });
+            println!(
+                "Rate Limiting: {}",
+                if rate_limits_active {
+                    "✓ Active"
+                } else {
+                    "✗ Inactive"
+                }
+            );
             println!();
             println!("⚠️  Full security system is not yet fully implemented");
         }
@@ -579,7 +593,9 @@ impl Command for SecurityRateLimit {
                 anyhow::bail!("Identifier is required for set operation");
             }
             if self.per_minute.is_none() && self.per_hour.is_none() && self.per_day.is_none() {
-                anyhow::bail!("At least one rate limit (per_minute, per_hour, per_day) must be specified");
+                anyhow::bail!(
+                    "At least one rate limit (per_minute, per_hour, per_day) must be specified"
+                );
             }
         }
 
@@ -648,7 +664,10 @@ impl Command for SecurityRateLimit {
                     println!("  Requests: {}", requests);
                     println!("  Allowed: {}", requests - 5);
                     println!("  Blocked: 5");
-                    println!("  Success Rate: {:.1}%", ((requests - 5) as f64 / requests as f64) * 100.0);
+                    println!(
+                        "  Success Rate: {:.1}%",
+                        ((requests - 5) as f64 / requests as f64) * 100.0
+                    );
                 }
                 _ => {}
             }
@@ -863,7 +882,12 @@ impl Command for SecurityAudit {
         // Stub audit entries
         let entries = vec![
             ("2025-09-29T10:15:00Z", "user-123", "login", "success"),
-            ("2025-09-29T10:16:30Z", "user-456", "api_key_generate", "success"),
+            (
+                "2025-09-29T10:16:30Z",
+                "user-456",
+                "api_key_generate",
+                "success",
+            ),
             ("2025-09-29T10:17:45Z", "user-789", "login", "failure"),
         ];
 
@@ -1053,7 +1077,10 @@ mod tests {
 
         let result = cmd.validate(&ctx).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Operation must be"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Operation must be"));
     }
 
     #[tokio::test]
@@ -1072,7 +1099,10 @@ mod tests {
 
         let result = cmd.validate(&ctx).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("User ID is required"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("User ID is required"));
     }
 
     #[tokio::test]

@@ -148,22 +148,14 @@ async fn main() -> Result<()> {
 
     // Example 12: Basic profiling
     println!("Example 12: Basic profiling");
-    let cmd = OptimizeProfile::new(
-        config.clone(),
-        "models/model.gguf".to_string(),
-        false,
-    );
+    let cmd = OptimizeProfile::new(config.clone(), "models/model.gguf".to_string(), false);
     let mut ctx = CommandContext::new(config.clone());
     let result = cmd.execute(&mut ctx).await?;
     println!("Result: {}\n", result.message);
 
     // Example 13: Detailed profiling
     println!("Example 13: Detailed profiling");
-    let cmd = OptimizeProfile::new(
-        config.clone(),
-        "models/model.gguf".to_string(),
-        true,
-    );
+    let cmd = OptimizeProfile::new(config.clone(), "models/model.gguf".to_string(), true);
     let mut ctx = CommandContext::new(config.clone());
     let result = cmd.execute(&mut ctx).await?;
     println!("Result: {}\n", result.message);

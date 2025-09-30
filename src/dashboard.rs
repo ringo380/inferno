@@ -12,13 +12,13 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
+use sysinfo::{System, SystemExt};
 use tokio::sync::{broadcast, RwLock};
 use tower::ServiceBuilder;
 use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
 use tracing::{info, warn};
 use uuid::Uuid;
-use sysinfo::{System, SystemExt};
 
 /// Configuration for the web dashboard
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -688,7 +688,7 @@ pub struct FeatureConfigUpdate {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct MarketplaceSearchRequest {
     pub query: Option<String>,
-    pub format: Option<String>, // gguf, onnx, pytorch, etc.
+    pub format: Option<String>,   // gguf, onnx, pytorch, etc.
     pub category: Option<String>, // llm, embedding, vision, etc.
     pub size_limit_gb: Option<f64>,
     pub limit: Option<usize>,
@@ -812,7 +812,9 @@ impl DashboardServer {
             users: Arc::new(RwLock::new(vec![])),
             notifications: notification_tx,
             security_manager: Arc::new(crate::security::SecurityManager::new(Default::default())),
-            marketplace: Arc::new(crate::marketplace::ModelMarketplace::new(Default::default())?),
+            marketplace: Arc::new(crate::marketplace::ModelMarketplace::new(
+                Default::default(),
+            )?),
         };
 
         Ok(Self { config, state })
@@ -2117,13 +2119,16 @@ async fn api_deployment_logs(
         return (
             StatusCode::BAD_REQUEST,
             Json(serde_json::json!({"error": "Invalid deployment ID"})),
-        ).into_response();
+        )
+            .into_response();
     }
 
     // Parse query parameters
     let level = params.level.unwrap_or_else(|| "info".to_string());
     let lines = params.lines.unwrap_or(100).min(1000); // Cap at 1000 lines
-    let since = params.since.unwrap_or_else(|| Utc::now() - chrono::Duration::hours(24));
+    let since = params
+        .since
+        .unwrap_or_else(|| Utc::now() - chrono::Duration::hours(24));
     let follow = params.follow.unwrap_or(false);
 
     // Mock deployment logs - in real implementation, this would fetch from logging system
@@ -2173,14 +2178,38 @@ fn generate_mock_deployment_logs(
 
     // Generate realistic deployment logs
     let log_templates = vec![
-        ("info", "Model loading started for deployment {}", "model_loading"),
+        (
+            "info",
+            "Model loading started for deployment {}",
+            "model_loading",
+        ),
         ("info", "Backend initialization completed", "backend_init"),
-        ("info", "Health check endpoint registered on port 8080", "health_check"),
-        ("info", "Processing inference request from user {}", "inference_request"),
-        ("debug", "Token processing: {} tokens/sec", "token_processing"),
-        ("info", "Model inference completed in {}ms", "inference_complete"),
+        (
+            "info",
+            "Health check endpoint registered on port 8080",
+            "health_check",
+        ),
+        (
+            "info",
+            "Processing inference request from user {}",
+            "inference_request",
+        ),
+        (
+            "debug",
+            "Token processing: {} tokens/sec",
+            "token_processing",
+        ),
+        (
+            "info",
+            "Model inference completed in {}ms",
+            "inference_complete",
+        ),
         ("warn", "High memory usage detected: {}%", "memory_warning"),
-        ("info", "Scaling event triggered: current replicas {}", "scaling"),
+        (
+            "info",
+            "Scaling event triggered: current replicas {}",
+            "scaling",
+        ),
         ("error", "Failed to process request: {}", "request_error"),
         ("info", "Graceful shutdown initiated", "shutdown"),
     ];
@@ -2196,7 +2225,10 @@ fn generate_mock_deployment_logs(
 
         let message = match template.2 {
             "model_loading" => format!("Model loading started for deployment {}", deployment_id),
-            "inference_request" => format!("Processing inference request from user {}", format!("user_{}", i % 5 + 1)),
+            "inference_request" => format!(
+                "Processing inference request from user {}",
+                format!("user_{}", i % 5 + 1)
+            ),
             "token_processing" => format!("Token processing: {} tokens/sec", 450 + (i % 100)),
             "inference_complete" => format!("Model inference completed in {}ms", 125 + (i % 50)),
             "memory_warning" => format!("High memory usage detected: {}%", 75 + (i % 20)),
@@ -2249,15 +2281,17 @@ async fn api_marketplace_search(
     let per_page = params.limit.unwrap_or(20);
 
     // Map category from string to ModelCategory enum if needed
-    let category_filter = params.category.as_ref().and_then(|cat| {
-        match cat.to_lowercase().as_str() {
-            "llm" => Some(crate::marketplace::ModelCategory::Language),
-            "embedding" => Some(crate::marketplace::ModelCategory::Embedding),
-            "vision" => Some(crate::marketplace::ModelCategory::Vision),
-            "audio" => Some(crate::marketplace::ModelCategory::Audio),
-            _ => None,
-        }
-    });
+    let category_filter =
+        params
+            .category
+            .as_ref()
+            .and_then(|cat| match cat.to_lowercase().as_str() {
+                "llm" => Some(crate::marketplace::ModelCategory::Language),
+                "embedding" => Some(crate::marketplace::ModelCategory::Embedding),
+                "vision" => Some(crate::marketplace::ModelCategory::Vision),
+                "audio" => Some(crate::marketplace::ModelCategory::Audio),
+                _ => None,
+            });
 
     let filters = Some(crate::marketplace::SearchFilters {
         category: category_filter,
@@ -2266,7 +2300,11 @@ async fn api_marketplace_search(
         min_rating: None,
         max_size_gb: params.size_limit_gb,
         tags: vec![],
-        frameworks: params.format.as_ref().map(|f| vec![f.clone()]).unwrap_or_default(),
+        frameworks: params
+            .format
+            .as_ref()
+            .map(|f| vec![f.clone()])
+            .unwrap_or_default(),
         languages: vec![],
         platforms: vec![],
         free_only: false,
@@ -2274,7 +2312,11 @@ async fn api_marketplace_search(
     });
 
     // Query the real marketplace
-    let search_result = match state.marketplace.search_models(query, filters, page, per_page).await {
+    let search_result = match state
+        .marketplace
+        .search_models(query, filters, page, per_page)
+        .await
+    {
         Ok(result) => result,
         Err(e) => {
             warn!("Marketplace search failed: {}", e);
@@ -2309,7 +2351,7 @@ async fn api_marketplace_search(
             created_at: model.published_at,
             updated_at: model.updated_at,
             download_url: model.download_url,
-            homepage_url: None, // Could be derived from model metadata
+            homepage_url: None,      // Could be derived from model metadata
             documentation_url: None, // Could be derived from model metadata
         });
     }
@@ -2341,7 +2383,8 @@ async fn api_marketplace_featured(
         MarketplaceModel {
             id: "llama-2-7b-chat".to_string(),
             name: "Llama 2 7B Chat".to_string(),
-            description: "Editor's choice: Best general-purpose chat model for most use cases".to_string(),
+            description: "Editor's choice: Best general-purpose chat model for most use cases"
+                .to_string(),
             author: "Meta".to_string(),
             version: "1.0.0".to_string(),
             format: "gguf".to_string(),
@@ -2350,7 +2393,11 @@ async fn api_marketplace_featured(
             license: "Custom".to_string(),
             downloads: 1250000,
             rating: 4.8,
-            tags: vec!["featured".to_string(), "chat".to_string(), "recommended".to_string()],
+            tags: vec![
+                "featured".to_string(),
+                "chat".to_string(),
+                "recommended".to_string(),
+            ],
             created_at: Utc::now() - chrono::Duration::days(180),
             updated_at: Utc::now() - chrono::Duration::days(30),
             download_url: "https://huggingface.co/meta-llama/Llama-2-7b-chat-hf".to_string(),
@@ -2360,7 +2407,8 @@ async fn api_marketplace_featured(
         MarketplaceModel {
             id: "bert-base-uncased".to_string(),
             name: "BERT Base Uncased".to_string(),
-            description: "Staff pick: Most reliable embeddings model for text understanding".to_string(),
+            description: "Staff pick: Most reliable embeddings model for text understanding"
+                .to_string(),
             author: "Google".to_string(),
             version: "1.0.0".to_string(),
             format: "onnx".to_string(),
@@ -2369,12 +2417,21 @@ async fn api_marketplace_featured(
             license: "Apache 2.0".to_string(),
             downloads: 2100000,
             rating: 4.6,
-            tags: vec!["featured".to_string(), "embeddings".to_string(), "reliable".to_string()],
+            tags: vec![
+                "featured".to_string(),
+                "embeddings".to_string(),
+                "reliable".to_string(),
+            ],
             created_at: Utc::now() - chrono::Duration::days(900),
             updated_at: Utc::now() - chrono::Duration::days(60),
             download_url: "https://huggingface.co/bert-base-uncased".to_string(),
-            homepage_url: Some("https://ai.googleblog.com/2018/11/open-sourcing-bert-state-of-art-pre.html".to_string()),
-            documentation_url: Some("https://huggingface.co/docs/transformers/model_doc/bert".to_string()),
+            homepage_url: Some(
+                "https://ai.googleblog.com/2018/11/open-sourcing-bert-state-of-art-pre.html"
+                    .to_string(),
+            ),
+            documentation_url: Some(
+                "https://huggingface.co/docs/transformers/model_doc/bert".to_string(),
+            ),
         },
     ];
 
@@ -2382,7 +2439,8 @@ async fn api_marketplace_featured(
         MarketplaceModel {
             id: "whisper-large-v3".to_string(),
             name: "Whisper Large v3".to_string(),
-            description: "🔥 Trending: Latest speech recognition breakthrough from OpenAI".to_string(),
+            description: "🔥 Trending: Latest speech recognition breakthrough from OpenAI"
+                .to_string(),
             author: "OpenAI".to_string(),
             version: "3.0".to_string(),
             format: "onnx".to_string(),
@@ -2391,7 +2449,11 @@ async fn api_marketplace_featured(
             license: "MIT".to_string(),
             downloads: 750000,
             rating: 4.9,
-            tags: vec!["trending".to_string(), "new".to_string(), "speech-to-text".to_string()],
+            tags: vec![
+                "trending".to_string(),
+                "new".to_string(),
+                "speech-to-text".to_string(),
+            ],
             created_at: Utc::now() - chrono::Duration::days(60),
             updated_at: Utc::now() - chrono::Duration::days(5),
             download_url: "https://huggingface.co/openai/whisper-large-v3".to_string(),
@@ -2410,7 +2472,11 @@ async fn api_marketplace_featured(
             license: "Apache 2.0".to_string(),
             downloads: 890000,
             rating: 4.7,
-            tags: vec!["trending".to_string(), "reasoning".to_string(), "efficient".to_string()],
+            tags: vec![
+                "trending".to_string(),
+                "reasoning".to_string(),
+                "efficient".to_string(),
+            ],
             created_at: Utc::now() - chrono::Duration::days(120),
             updated_at: Utc::now() - chrono::Duration::days(15),
             download_url: "https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.2".to_string(),
@@ -2419,27 +2485,32 @@ async fn api_marketplace_featured(
         },
     ];
 
-    let recent_models = vec![
-        MarketplaceModel {
-            id: "phi-3-mini".to_string(),
-            name: "Phi-3 Mini".to_string(),
-            description: "🆕 Just released: Compact yet powerful 3.8B parameter model from Microsoft".to_string(),
-            author: "Microsoft".to_string(),
-            version: "1.0.0".to_string(),
-            format: "onnx".to_string(),
-            size_gb: 2.3,
-            category: "llm".to_string(),
-            license: "MIT".to_string(),
-            downloads: 45000,
-            rating: 4.5,
-            tags: vec!["new".to_string(), "compact".to_string(), "mobile-ready".to_string()],
-            created_at: Utc::now() - chrono::Duration::days(7),
-            updated_at: Utc::now() - chrono::Duration::days(2),
-            download_url: "https://huggingface.co/microsoft/Phi-3-mini-4k-instruct".to_string(),
-            homepage_url: Some("https://azure.microsoft.com/en-us/products/ai-services/phi-3".to_string()),
-            documentation_url: Some("https://github.com/microsoft/Phi-3CookBook".to_string()),
-        },
-    ];
+    let recent_models = vec![MarketplaceModel {
+        id: "phi-3-mini".to_string(),
+        name: "Phi-3 Mini".to_string(),
+        description: "🆕 Just released: Compact yet powerful 3.8B parameter model from Microsoft"
+            .to_string(),
+        author: "Microsoft".to_string(),
+        version: "1.0.0".to_string(),
+        format: "onnx".to_string(),
+        size_gb: 2.3,
+        category: "llm".to_string(),
+        license: "MIT".to_string(),
+        downloads: 45000,
+        rating: 4.5,
+        tags: vec![
+            "new".to_string(),
+            "compact".to_string(),
+            "mobile-ready".to_string(),
+        ],
+        created_at: Utc::now() - chrono::Duration::days(7),
+        updated_at: Utc::now() - chrono::Duration::days(2),
+        download_url: "https://huggingface.co/microsoft/Phi-3-mini-4k-instruct".to_string(),
+        homepage_url: Some(
+            "https://azure.microsoft.com/en-us/products/ai-services/phi-3".to_string(),
+        ),
+        documentation_url: Some("https://github.com/microsoft/Phi-3CookBook".to_string()),
+    }];
 
     let response = FeaturedModelsResponse {
         featured: featured_models,
@@ -2712,7 +2783,8 @@ async fn api_update_config(
         }
 
         if let Some(token_expiry) = security.token_expiry_hours {
-            if token_expiry < 1 || token_expiry > 168 { // 1 hour to 1 week
+            if token_expiry < 1 || token_expiry > 168 {
+                // 1 hour to 1 week
                 let error = ApiError {
                     error: "Token expiry must be between 1 and 168 hours".to_string(),
                     details: None,
@@ -2734,7 +2806,8 @@ async fn api_update_config(
         }
 
         if let Some(timeout) = server.request_timeout_seconds {
-            if timeout == 0 || timeout > 300 { // 5 minutes max
+            if timeout == 0 || timeout > 300 {
+                // 5 minutes max
                 let error = ApiError {
                     error: "Request timeout must be between 1 and 300 seconds".to_string(),
                     details: None,
@@ -2756,66 +2829,102 @@ async fn api_update_config(
     let config = &state.config;
     let response = SystemConfigResponse {
         dashboard: DashboardConfigSummary {
-            enabled: request.dashboard.as_ref()
+            enabled: request
+                .dashboard
+                .as_ref()
                 .and_then(|d| d.enabled)
                 .unwrap_or(config.enabled),
-            port: request.dashboard.as_ref()
+            port: request
+                .dashboard
+                .as_ref()
                 .and_then(|d| d.port)
                 .unwrap_or(config.port),
-            bind_address: request.dashboard.as_ref()
+            bind_address: request
+                .dashboard
+                .as_ref()
                 .and_then(|d| d.bind_address.clone())
                 .unwrap_or_else(|| config.bind_address.clone()),
             auth_enabled: config.auth.enabled,
-            theme: request.dashboard.as_ref()
+            theme: request
+                .dashboard
+                .as_ref()
                 .and_then(|d| d.theme.clone())
                 .unwrap_or_else(|| config.ui.theme.default_theme.clone()),
-            title: request.dashboard.as_ref()
+            title: request
+                .dashboard
+                .as_ref()
                 .and_then(|d| d.title.clone())
                 .unwrap_or_else(|| config.ui.title.clone()),
         },
         security: SecurityConfigSummary {
             auth_enabled: config.auth.enabled,
-            rate_limiting_enabled: request.security.as_ref()
+            rate_limiting_enabled: request
+                .security
+                .as_ref()
                 .and_then(|s| s.rate_limiting_enabled)
                 .unwrap_or(config.security.rate_limit.enabled),
-            max_requests_per_minute: request.security.as_ref()
+            max_requests_per_minute: request
+                .security
+                .as_ref()
                 .and_then(|s| s.max_requests_per_minute)
                 .unwrap_or(config.security.rate_limit.requests_per_minute),
-            token_expiry_hours: request.security.as_ref()
+            token_expiry_hours: request
+                .security
+                .as_ref()
                 .and_then(|s| s.token_expiry_hours)
                 .unwrap_or(config.auth.session_timeout_minutes as i64 / 60),
-            tls_required: request.security.as_ref()
+            tls_required: request
+                .security
+                .as_ref()
                 .and_then(|s| s.tls_required)
                 .unwrap_or(config.security.https_enabled),
         },
         server: ServerConfigSummary {
-            max_concurrent_requests: request.server.as_ref()
+            max_concurrent_requests: request
+                .server
+                .as_ref()
                 .and_then(|s| s.max_concurrent_requests)
                 .unwrap_or(1000),
-            request_timeout_seconds: request.server.as_ref()
+            request_timeout_seconds: request
+                .server
+                .as_ref()
                 .and_then(|s| s.request_timeout_seconds)
                 .unwrap_or(30),
-            enable_cors: request.server.as_ref()
+            enable_cors: request
+                .server
+                .as_ref()
                 .and_then(|s| s.enable_cors)
                 .unwrap_or(true),
         },
         features: FeatureConfigSummary {
-            model_management: request.features.as_ref()
+            model_management: request
+                .features
+                .as_ref()
                 .and_then(|f| f.model_management)
                 .unwrap_or(config.ui.features.model_management),
-            metrics: request.features.as_ref()
+            metrics: request
+                .features
+                .as_ref()
                 .and_then(|f| f.metrics)
                 .unwrap_or(config.ui.features.metrics),
-            marketplace: request.features.as_ref()
+            marketplace: request
+                .features
+                .as_ref()
                 .and_then(|f| f.marketplace)
                 .unwrap_or(config.ui.features.marketplace),
-            deployment: request.features.as_ref()
+            deployment: request
+                .features
+                .as_ref()
                 .and_then(|f| f.deployment)
                 .unwrap_or(config.ui.features.deployment),
-            user_management: request.features.as_ref()
+            user_management: request
+                .features
+                .as_ref()
                 .and_then(|f| f.user_management)
                 .unwrap_or(config.ui.features.user_management),
-            monitoring: request.features.as_ref()
+            monitoring: request
+                .features
+                .as_ref()
                 .and_then(|f| f.monitoring)
                 .unwrap_or(config.ui.features.monitoring),
         },
@@ -3170,7 +3279,11 @@ async fn api_login(
     Json(request): Json<LoginRequest>,
 ) -> impl IntoResponse {
     // Authenticate user
-    match state.security_manager.authenticate_user(&request.username, &request.password).await {
+    match state
+        .security_manager
+        .authenticate_user(&request.username, &request.password)
+        .await
+    {
         Ok(Some(user)) => {
             // Generate JWT token
             match state.security_manager.generate_jwt_token(&user).await {
@@ -3288,35 +3401,29 @@ async fn extract_auth_context(
     headers: &axum::http::HeaderMap,
 ) -> Result<AuthContext, (StatusCode, Json<ApiError>)> {
     // Extract JWT from Authorization header
-    let auth_header = headers
-        .get("Authorization")
-        .ok_or_else(|| {
-            let error = ApiError {
-                error: "Authorization header missing".to_string(),
-                details: None,
-            };
-            (StatusCode::UNAUTHORIZED, Json(error))
-        })?;
+    let auth_header = headers.get("Authorization").ok_or_else(|| {
+        let error = ApiError {
+            error: "Authorization header missing".to_string(),
+            details: None,
+        };
+        (StatusCode::UNAUTHORIZED, Json(error))
+    })?;
 
-    let auth_str = auth_header
-        .to_str()
-        .map_err(|_| {
-            let error = ApiError {
-                error: "Invalid Authorization header".to_string(),
-                details: None,
-            };
-            (StatusCode::UNAUTHORIZED, Json(error))
-        })?;
+    let auth_str = auth_header.to_str().map_err(|_| {
+        let error = ApiError {
+            error: "Invalid Authorization header".to_string(),
+            details: None,
+        };
+        (StatusCode::UNAUTHORIZED, Json(error))
+    })?;
 
-    let token = auth_str
-        .strip_prefix("Bearer ")
-        .ok_or_else(|| {
-            let error = ApiError {
-                error: "Authorization header must be Bearer token".to_string(),
-                details: None,
-            };
-            (StatusCode::UNAUTHORIZED, Json(error))
-        })?;
+    let token = auth_str.strip_prefix("Bearer ").ok_or_else(|| {
+        let error = ApiError {
+            error: "Authorization header must be Bearer token".to_string(),
+            details: None,
+        };
+        (StatusCode::UNAUTHORIZED, Json(error))
+    })?;
 
     // Verify token
     let claims = state

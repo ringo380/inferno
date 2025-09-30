@@ -154,7 +154,7 @@ pub mod pipeline;
 // Re-export main types for convenience
 pub use command::{Command, CommandExample, CommandMetadata};
 pub use context::CommandContext;
-pub use middleware::{Middleware, MiddlewareStack, LoggingMiddleware, MetricsMiddleware};
+pub use middleware::{LoggingMiddleware, MetricsMiddleware, Middleware, MiddlewareStack};
 pub use output::{CommandOutput, OutputLevel};
 pub use pipeline::{CommandPipeline, DefaultErrorHandler, ErrorHandler, PipelineBuilder};
 

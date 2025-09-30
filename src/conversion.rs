@@ -913,7 +913,9 @@ impl ModelConverter {
         _input_path: &Path,
         _output_path: &Path,
     ) -> Result<Vec<String>> {
-        Err(anyhow::anyhow!("ONNX support not enabled. Compile with --features onnx"))
+        Err(anyhow::anyhow!(
+            "ONNX support not enabled. Compile with --features onnx"
+        ))
     }
 
     // Real ONNX to GGUF conversion
@@ -952,7 +954,9 @@ impl ModelConverter {
         _input_path: &Path,
         _output_path: &Path,
     ) -> Result<Vec<String>> {
-        Err(anyhow::anyhow!("ONNX support not enabled. Compile with --features onnx"))
+        Err(anyhow::anyhow!(
+            "ONNX support not enabled. Compile with --features onnx"
+        ))
     }
 
     // Real PyTorch to GGUF conversion
@@ -1111,7 +1115,9 @@ impl ModelConverter {
         _input_path: &Path,
         _output_path: &Path,
     ) -> Result<Vec<String>> {
-        Err(anyhow::anyhow!("ONNX support not enabled. Compile with --features onnx"))
+        Err(anyhow::anyhow!(
+            "ONNX support not enabled. Compile with --features onnx"
+        ))
     }
 
     // Helper functions for architecture extraction
@@ -1414,12 +1420,19 @@ impl ModelConverter {
 
     #[cfg(not(feature = "onnx"))]
     async fn read_onnx_model(&self, _path: &Path) -> Result<Vec<OnnxTensorInfo>> {
-        Err(anyhow::anyhow!("ONNX support not enabled. Compile with --features onnx"))
+        Err(anyhow::anyhow!(
+            "ONNX support not enabled. Compile with --features onnx"
+        ))
     }
 
     #[cfg(not(feature = "onnx"))]
-    async fn convert_onnx_tensors_to_gguf(&self, _tensors: &[OnnxTensorInfo]) -> Result<(GgufFile, Vec<u8>)> {
-        Err(anyhow::anyhow!("ONNX support not enabled. Compile with --features onnx"))
+    async fn convert_onnx_tensors_to_gguf(
+        &self,
+        _tensors: &[OnnxTensorInfo],
+    ) -> Result<(GgufFile, Vec<u8>)> {
+        Err(anyhow::anyhow!(
+            "ONNX support not enabled. Compile with --features onnx"
+        ))
     }
 
     #[cfg(feature = "pytorch")]
@@ -1443,7 +1456,6 @@ impl ModelConverter {
     //
     //     Ok(tensors)
     // }
-
     #[cfg(feature = "pytorch")]
     async fn convert_pytorch_tensors_to_gguf(
         &self,
@@ -1922,7 +1934,6 @@ impl ModelConverter {
         Ok(())
     }
 
-
     // Real quantization and optimization implementations
     pub async fn quantize_model(
         &self,
@@ -2174,7 +2185,9 @@ impl ModelConverter {
         _output_path: &Path,
         _quantization_type: &QuantizationType,
     ) -> Result<Vec<String>> {
-        Err(anyhow::anyhow!("ONNX support not enabled. Compile with --features onnx"))
+        Err(anyhow::anyhow!(
+            "ONNX support not enabled. Compile with --features onnx"
+        ))
     }
 
     fn quantize_tensor_data(
@@ -2501,7 +2514,9 @@ impl ModelConverter {
         _output_path: &Path,
         _options: &OptimizationOptions,
     ) -> Result<Vec<String>> {
-        Err(anyhow::anyhow!("ONNX support not enabled. Compile with --features onnx"))
+        Err(anyhow::anyhow!(
+            "ONNX support not enabled. Compile with --features onnx"
+        ))
     }
 
     fn optimize_tensor_memory(&self, data: &[u8], _tensor: &GgufTensorInfo) -> Result<Vec<u8>> {
@@ -2609,7 +2624,9 @@ impl ModelConverter {
     // Stub ONNX verification when ONNX feature is disabled
     #[cfg(not(feature = "onnx"))]
     async fn verify_onnx_model(&self, _path: &Path) -> Result<bool> {
-        Err(anyhow::anyhow!("ONNX support not enabled. Compile with --features onnx"))
+        Err(anyhow::anyhow!(
+            "ONNX support not enabled. Compile with --features onnx"
+        ))
     }
 
     // Batch conversion support

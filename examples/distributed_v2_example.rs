@@ -224,13 +224,8 @@ async fn main() -> Result<()> {
 
     println!();
 
-    let empty_model = DistributedBenchmark::new(
-        config.clone(),
-        String::new(),
-        10,
-        5,
-        "Hello".to_string(),
-    );
+    let empty_model =
+        DistributedBenchmark::new(config.clone(), String::new(), 10, 5, "Hello".to_string());
 
     match pipeline
         .execute(Box::new(empty_model), &mut ctx_invalid.clone())

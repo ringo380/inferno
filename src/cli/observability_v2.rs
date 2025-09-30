@@ -57,9 +57,30 @@ impl Command for ObservabilityStatus {
         // Human-readable output
         if !ctx.json_output {
             println!("=== Observability Status ===");
-            println!("Prometheus: {}", if prometheus_enabled { "✓ Enabled" } else { "✗ Disabled" });
-            println!("OpenTelemetry: {}", if otel_enabled { "✓ Enabled" } else { "✗ Disabled" });
-            println!("Grafana: {}", if grafana_enabled { "✓ Enabled" } else { "✗ Disabled" });
+            println!(
+                "Prometheus: {}",
+                if prometheus_enabled {
+                    "✓ Enabled"
+                } else {
+                    "✗ Disabled"
+                }
+            );
+            println!(
+                "OpenTelemetry: {}",
+                if otel_enabled {
+                    "✓ Enabled"
+                } else {
+                    "✗ Disabled"
+                }
+            );
+            println!(
+                "Grafana: {}",
+                if grafana_enabled {
+                    "✓ Enabled"
+                } else {
+                    "✗ Disabled"
+                }
+            );
             println!();
             println!("Metrics Collected: {}", metrics_collected);
             println!("Traces Recorded: {}", traces_recorded);
@@ -263,7 +284,10 @@ impl Command for ObservabilityTracing {
         // Human-readable output
         if !ctx.json_output {
             println!("=== Distributed Tracing ===");
-            println!("Status: {}", if self.enabled { "Enabled" } else { "Disabled" });
+            println!(
+                "Status: {}",
+                if self.enabled { "Enabled" } else { "Disabled" }
+            );
             println!("Backend: OpenTelemetry");
             println!("Traces Recorded: 567");
             println!();

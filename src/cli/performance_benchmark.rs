@@ -1,24 +1,24 @@
 use crate::{
-    backends::{BackendType, Backend, BackendHandle, BackendConfig, InferenceParams},
+    backends::{Backend, BackendConfig, BackendHandle, BackendType, InferenceParams},
     models::ModelInfo,
     performance_baseline::{PerformanceBaseline, PerformanceTarget},
 };
 use anyhow::Result;
+use chrono::{DateTime, Utc};
 use clap::{Args, Subcommand};
 use std::{
     path::PathBuf,
     time::{Duration, Instant},
 };
 use sysinfo::{CpuExt, System, SystemExt};
-use chrono::{DateTime, Utc};
 
 // Memory profiling structures
 #[derive(Debug, Clone)]
 struct MemoryUsage {
     heap_used: u64,
     heap_total: u64,
-    rss: u64,  // Resident Set Size
-    vms: u64,  // Virtual Memory Size
+    rss: u64, // Resident Set Size
+    vms: u64, // Virtual Memory Size
 }
 
 #[derive(Debug, Clone)]
@@ -406,7 +406,9 @@ async fn run_inference_benchmark(
     _model_name: Option<String>,
     _iterations: u32,
 ) -> Result<()> {
-    Err(anyhow::anyhow!("GGUF backend not available. Enable 'gguf' feature for inference benchmarks."))
+    Err(anyhow::anyhow!(
+        "GGUF backend not available. Enable 'gguf' feature for inference benchmarks."
+    ))
 }
 
 #[cfg(feature = "gguf")]
@@ -544,7 +546,9 @@ async fn run_memory_benchmark(
     _model_name: Option<String>,
     _iterations: u32,
 ) -> Result<()> {
-    Err(anyhow::anyhow!("GGUF backend not available. Enable 'gguf' feature for memory benchmarks."))
+    Err(anyhow::anyhow!(
+        "GGUF backend not available. Enable 'gguf' feature for memory benchmarks."
+    ))
 }
 
 #[cfg(feature = "gguf")]
@@ -652,7 +656,9 @@ async fn run_concurrent_benchmark(
     _model_name: Option<String>,
     _iterations: u32,
 ) -> Result<()> {
-    Err(anyhow::anyhow!("GGUF backend not available. Enable 'gguf' feature for concurrent benchmarks."))
+    Err(anyhow::anyhow!(
+        "GGUF backend not available. Enable 'gguf' feature for concurrent benchmarks."
+    ))
 }
 
 // Cache benchmark temporarily disabled due to dependency issues
@@ -838,7 +844,10 @@ async fn stress_test(
     let mut errors = Vec::new();
 
     println!("🚀 Starting stress test...");
-    println!("Clients: {}, Duration: {}s, Rate: {:.1} req/s/client", clients, duration, rate);
+    println!(
+        "Clients: {}, Duration: {}s, Rate: {:.1} req/s/client",
+        clients, duration, rate
+    );
     println!("{}", "=".repeat(60));
 
     // Spawn concurrent client tasks
@@ -867,7 +876,10 @@ async fn stress_test(
 
                 // Simulate inference request
                 let request_start = std::time::Instant::now();
-                let test_input = format!("Stress test input from client {} request {}", client_id, client_requests);
+                let test_input = format!(
+                    "Stress test input from client {} request {}",
+                    client_id, client_requests
+                );
 
                 match simulate_inference_request(&model_clone, &test_input).await {
                     Ok(response_time) => {
@@ -892,7 +904,13 @@ async fn stress_test(
                 }
             }
 
-            (client_id, client_requests, client_successes, client_failures, client_response_times)
+            (
+                client_id,
+                client_requests,
+                client_successes,
+                client_failures,
+                client_response_times,
+            )
         });
 
         client_handles.push(client_handle);
@@ -911,7 +929,11 @@ async fn stress_test(
             }
 
             let progress = (elapsed.as_secs_f64() / test_duration.as_secs_f64()) * 100.0;
-            println!("Progress: {:.1}% ({:.0}s elapsed)", progress, elapsed.as_secs_f64());
+            println!(
+                "Progress: {:.1}% ({:.0}s elapsed)",
+                progress,
+                elapsed.as_secs_f64()
+            );
             last_report = std::time::Instant::now();
         }
     });
@@ -926,8 +948,10 @@ async fn stress_test(
                 response_times.extend(response_times_vec);
 
                 if failures > 0 {
-                    errors.push(format!("Client {}: {} failures out of {} requests",
-                                       client_id, failures, requests));
+                    errors.push(format!(
+                        "Client {}: {} failures out of {} requests",
+                        client_id, failures, requests
+                    ));
                 }
             }
             Err(e) => {
@@ -944,7 +968,8 @@ async fn stress_test(
     // Calculate response time statistics
     response_times.sort_by(|a, b| a.partial_cmp(b).unwrap());
     let response_times_secs: Vec<f64> = response_times.iter().map(|d| d.as_secs_f64()).collect();
-    let avg_response_time = response_times_secs.iter().sum::<f64>() / response_times_secs.len() as f64;
+    let avg_response_time =
+        response_times_secs.iter().sum::<f64>() / response_times_secs.len() as f64;
     let p50 = percentile(&response_times_secs, 50.0);
     let p95 = percentile(&response_times_secs, 95.0);
     let p99 = percentile(&response_times_secs, 99.0);
@@ -955,12 +980,21 @@ async fn stress_test(
     println!("{}", "=".repeat(60));
     println!("Duration: {:.2}s", actual_duration.as_secs_f64());
     println!("Total Requests: {}", total_requests);
-    println!("Successful Requests: {} ({:.1}%)", successful_requests,
-             (successful_requests as f64 / total_requests as f64) * 100.0);
-    println!("Failed Requests: {} ({:.1}%)", failed_requests,
-             (failed_requests as f64 / total_requests as f64) * 100.0);
+    println!(
+        "Successful Requests: {} ({:.1}%)",
+        successful_requests,
+        (successful_requests as f64 / total_requests as f64) * 100.0
+    );
+    println!(
+        "Failed Requests: {} ({:.1}%)",
+        failed_requests,
+        (failed_requests as f64 / total_requests as f64) * 100.0
+    );
     println!("Overall Throughput: {:.2} req/s", overall_throughput);
-    println!("Peak Memory Usage: {:.1} MB", peak_memory as f64 / 1024.0 / 1024.0);
+    println!(
+        "Peak Memory Usage: {:.1} MB",
+        peak_memory as f64 / 1024.0 / 1024.0
+    );
 
     println!("\n📊 Response Time Statistics:");
     println!("Average: {:.2}ms", avg_response_time);
@@ -979,7 +1013,10 @@ async fn stress_test(
     let success_rate = successful_requests as f64 / total_requests as f64;
     if success_rate < 0.95 {
         println!("\n⚠️  STRESS TEST FAILED: Success rate below 95%");
-        return Err(anyhow::anyhow!("Stress test failed with {:.1}% success rate", success_rate * 100.0));
+        return Err(anyhow::anyhow!(
+            "Stress test failed with {:.1}% success rate",
+            success_rate * 100.0
+        ));
     } else if p99 > 5000.0 {
         println!("\n⚠️  STRESS TEST WARNING: 99th percentile latency above 5s");
     } else {
@@ -1016,19 +1053,32 @@ async fn memory_profile(
     println!("🧠 Memory Profiling Started");
     println!("├─ Cycles: {}", cycles);
     println!("├─ Model: {}", model_name.as_deref().unwrap_or("default"));
-    println!("├─ Tracking: {}", if track { "enabled" } else { "disabled" });
-    println!("└─ Baseline Memory: {:.2} MB RSS, {:.2} MB Heap",
-             baseline_memory.rss as f64 / 1024.0 / 1024.0,
-             baseline_memory.heap_used as f64 / 1024.0 / 1024.0);
+    println!(
+        "├─ Tracking: {}",
+        if track { "enabled" } else { "disabled" }
+    );
+    println!(
+        "└─ Baseline Memory: {:.2} MB RSS, {:.2} MB Heap",
+        baseline_memory.rss as f64 / 1024.0 / 1024.0,
+        baseline_memory.heap_used as f64 / 1024.0 / 1024.0
+    );
 
     // Load backend for testing
     #[cfg(feature = "gguf")]
     let backend_type = BackendType::Gguf;
     #[cfg(all(not(feature = "gguf"), feature = "onnx"))]
     let backend_type = BackendType::Onnx;
-    #[cfg(all(not(feature = "gguf"), not(feature = "onnx"), all(feature = "gpu-metal", target_os = "macos")))]
+    #[cfg(all(
+        not(feature = "gguf"),
+        not(feature = "onnx"),
+        all(feature = "gpu-metal", target_os = "macos")
+    ))]
     let backend_type = BackendType::Metal;
-    #[cfg(not(any(feature = "gguf", feature = "onnx", all(feature = "gpu-metal", target_os = "macos"))))]
+    #[cfg(not(any(
+        feature = "gguf",
+        feature = "onnx",
+        all(feature = "gpu-metal", target_os = "macos")
+    )))]
     let backend_type = BackendType::None;
     let backend_config = BackendConfig::default();
     let mut backend = Backend::new(backend_type, &backend_config)?;
@@ -1063,8 +1113,10 @@ async fn memory_profile(
         });
 
         let model_memory_usage = post_load_memory.rss.saturating_sub(baseline_memory.rss);
-        println!("📊 Model loaded - Memory delta: {:.2} MB",
-                 model_memory_usage as f64 / 1024.0 / 1024.0);
+        println!(
+            "📊 Model loaded - Memory delta: {:.2} MB",
+            model_memory_usage as f64 / 1024.0 / 1024.0
+        );
     }
 
     // Run inference cycles with memory tracking
@@ -1105,19 +1157,28 @@ async fn memory_profile(
                         model_loaded: true,
                     });
 
-                    let cycle_memory_delta = post_inference_memory.rss.saturating_sub(pre_inference_memory.rss);
+                    let cycle_memory_delta = post_inference_memory
+                        .rss
+                        .saturating_sub(pre_inference_memory.rss);
 
                     if track {
-                        println!("Cycle {}/{}: {:.2} MB delta, {:.2} MB total RSS",
-                                 cycle, cycles,
-                                 cycle_memory_delta as f64 / 1024.0 / 1024.0,
-                                 post_inference_memory.rss as f64 / 1024.0 / 1024.0);
+                        println!(
+                            "Cycle {}/{}: {:.2} MB delta, {:.2} MB total RSS",
+                            cycle,
+                            cycles,
+                            cycle_memory_delta as f64 / 1024.0 / 1024.0,
+                            post_inference_memory.rss as f64 / 1024.0 / 1024.0
+                        );
                     }
 
                     // Check for significant memory growth (potential leak)
-                    if cycle > 1 && cycle_memory_delta > 10 * 1024 * 1024 { // 10MB+ growth
-                        tracing::warn!("Potential memory leak detected in cycle {}: {:.2} MB growth",
-                                       cycle, cycle_memory_delta as f64 / 1024.0 / 1024.0);
+                    if cycle > 1 && cycle_memory_delta > 10 * 1024 * 1024 {
+                        // 10MB+ growth
+                        tracing::warn!(
+                            "Potential memory leak detected in cycle {}: {:.2} MB growth",
+                            cycle,
+                            cycle_memory_delta as f64 / 1024.0 / 1024.0
+                        );
                     }
                 }
                 Err(e) => {
@@ -1242,25 +1303,34 @@ fn analyze_memory_patterns(snapshots: &[MemorySnapshot], baseline: MemoryUsage) 
     }
 
     let baseline_rss = baseline.rss;
-    let peak_rss = snapshots.iter().map(|s| s.rss).max().unwrap_or(baseline_rss);
+    let peak_rss = snapshots
+        .iter()
+        .map(|s| s.rss)
+        .max()
+        .unwrap_or(baseline_rss);
     let final_rss = snapshots.last().map(|s| s.rss).unwrap_or(baseline_rss);
 
     let total_growth = final_rss as i64 - baseline_rss as i64;
 
     // Calculate model loading overhead
-    let model_load_overhead = snapshots.iter()
+    let model_load_overhead = snapshots
+        .iter()
         .find(|s| s.model_loaded && s.inference_id == 0)
         .map(|s| s.rss.saturating_sub(baseline_rss))
         .unwrap_or(0);
 
     // Analyze growth patterns to detect potential leaks
-    let inference_snapshots: Vec<_> = snapshots.iter()
-        .filter(|s| s.inference_id > 0)
-        .collect();
+    let inference_snapshots: Vec<_> = snapshots.iter().filter(|s| s.inference_id > 0).collect();
 
     let average_growth_per_cycle = if inference_snapshots.len() > 1 {
-        let first_inference_rss = inference_snapshots.first().map(|s| s.rss).unwrap_or(baseline_rss);
-        let last_inference_rss = inference_snapshots.last().map(|s| s.rss).unwrap_or(baseline_rss);
+        let first_inference_rss = inference_snapshots
+            .first()
+            .map(|s| s.rss)
+            .unwrap_or(baseline_rss);
+        let last_inference_rss = inference_snapshots
+            .last()
+            .map(|s| s.rss)
+            .unwrap_or(baseline_rss);
         let cycles = inference_snapshots.len() as f64;
 
         (last_inference_rss as f64 - first_inference_rss as f64) / cycles
@@ -1311,20 +1381,34 @@ fn display_memory_analysis(analysis: &MemoryAnalysis) {
     println!("┌─────────────────────────────────────────────────────────────────┐");
     println!("│                           Memory Report                         │");
     println!("├─────────────────────────────────────────────────────────────────┤");
-    println!("│ Baseline RSS:           {:>8.2} MB                        │",
-             analysis.baseline_rss as f64 / 1024.0 / 1024.0);
-    println!("│ Peak RSS:               {:>8.2} MB                        │",
-             analysis.peak_rss as f64 / 1024.0 / 1024.0);
-    println!("│ Final RSS:              {:>8.2} MB                        │",
-             analysis.final_rss as f64 / 1024.0 / 1024.0);
-    println!("│ Total Growth:           {:>8.2} MB                        │",
-             analysis.total_growth as f64 / 1024.0 / 1024.0);
-    println!("│ Model Load Overhead:    {:>8.2} MB                        │",
-             analysis.model_load_overhead as f64 / 1024.0 / 1024.0);
-    println!("│ Avg Growth/Cycle:       {:>8.2} KB                        │",
-             analysis.average_growth_per_cycle / 1024.0);
-    println!("│ GC Efficiency:          {:>8.1}%                          │",
-             analysis.gc_efficiency * 100.0);
+    println!(
+        "│ Baseline RSS:           {:>8.2} MB                        │",
+        analysis.baseline_rss as f64 / 1024.0 / 1024.0
+    );
+    println!(
+        "│ Peak RSS:               {:>8.2} MB                        │",
+        analysis.peak_rss as f64 / 1024.0 / 1024.0
+    );
+    println!(
+        "│ Final RSS:              {:>8.2} MB                        │",
+        analysis.final_rss as f64 / 1024.0 / 1024.0
+    );
+    println!(
+        "│ Total Growth:           {:>8.2} MB                        │",
+        analysis.total_growth as f64 / 1024.0 / 1024.0
+    );
+    println!(
+        "│ Model Load Overhead:    {:>8.2} MB                        │",
+        analysis.model_load_overhead as f64 / 1024.0 / 1024.0
+    );
+    println!(
+        "│ Avg Growth/Cycle:       {:>8.2} KB                        │",
+        analysis.average_growth_per_cycle / 1024.0
+    );
+    println!(
+        "│ GC Efficiency:          {:>8.1}%                          │",
+        analysis.gc_efficiency * 100.0
+    );
     println!("├─────────────────────────────────────────────────────────────────┤");
 
     if analysis.memory_leak_detected {
@@ -1343,9 +1427,11 @@ fn display_memory_analysis(analysis: &MemoryAnalysis) {
 
     // Performance assessment
     let peak_overhead = analysis.peak_rss.saturating_sub(analysis.baseline_rss);
-    if peak_overhead > 500 * 1024 * 1024 { // 500MB
+    if peak_overhead > 500 * 1024 * 1024 {
+        // 500MB
         println!("\n⚠️  HIGH MEMORY USAGE: Peak memory usage exceeds 500MB");
-    } else if peak_overhead > 100 * 1024 * 1024 { // 100MB
+    } else if peak_overhead > 100 * 1024 * 1024 {
+        // 100MB
         println!("\n📊 MODERATE MEMORY USAGE: Peak memory usage is moderate");
     } else {
         println!("\n✅ LOW MEMORY USAGE: Efficient memory utilization");
@@ -1355,7 +1441,7 @@ fn display_memory_analysis(analysis: &MemoryAnalysis) {
 async fn save_memory_profile(
     snapshots: &[MemorySnapshot],
     analysis: &MemoryAnalysis,
-    output_path: &PathBuf
+    output_path: &PathBuf,
 ) -> Result<()> {
     use std::io::Write;
 
@@ -1363,34 +1449,76 @@ async fn save_memory_profile(
 
     // Write header
     writeln!(file, "# Memory Profile Report")?;
-    writeln!(file, "Generated: {}", chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC"))?;
+    writeln!(
+        file,
+        "Generated: {}",
+        chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC")
+    )?;
     writeln!(file, "")?;
 
     // Write analysis summary
     writeln!(file, "## Analysis Summary")?;
-    writeln!(file, "- Baseline RSS: {:.2} MB", analysis.baseline_rss as f64 / 1024.0 / 1024.0)?;
-    writeln!(file, "- Peak RSS: {:.2} MB", analysis.peak_rss as f64 / 1024.0 / 1024.0)?;
-    writeln!(file, "- Final RSS: {:.2} MB", analysis.final_rss as f64 / 1024.0 / 1024.0)?;
-    writeln!(file, "- Total Growth: {:.2} MB", analysis.total_growth as f64 / 1024.0 / 1024.0)?;
-    writeln!(file, "- Model Load Overhead: {:.2} MB", analysis.model_load_overhead as f64 / 1024.0 / 1024.0)?;
-    writeln!(file, "- Average Growth per Cycle: {:.2} KB", analysis.average_growth_per_cycle / 1024.0)?;
-    writeln!(file, "- GC Efficiency: {:.1}%", analysis.gc_efficiency * 100.0)?;
-    writeln!(file, "- Memory Leak Detected: {}", analysis.memory_leak_detected)?;
+    writeln!(
+        file,
+        "- Baseline RSS: {:.2} MB",
+        analysis.baseline_rss as f64 / 1024.0 / 1024.0
+    )?;
+    writeln!(
+        file,
+        "- Peak RSS: {:.2} MB",
+        analysis.peak_rss as f64 / 1024.0 / 1024.0
+    )?;
+    writeln!(
+        file,
+        "- Final RSS: {:.2} MB",
+        analysis.final_rss as f64 / 1024.0 / 1024.0
+    )?;
+    writeln!(
+        file,
+        "- Total Growth: {:.2} MB",
+        analysis.total_growth as f64 / 1024.0 / 1024.0
+    )?;
+    writeln!(
+        file,
+        "- Model Load Overhead: {:.2} MB",
+        analysis.model_load_overhead as f64 / 1024.0 / 1024.0
+    )?;
+    writeln!(
+        file,
+        "- Average Growth per Cycle: {:.2} KB",
+        analysis.average_growth_per_cycle / 1024.0
+    )?;
+    writeln!(
+        file,
+        "- GC Efficiency: {:.1}%",
+        analysis.gc_efficiency * 100.0
+    )?;
+    writeln!(
+        file,
+        "- Memory Leak Detected: {}",
+        analysis.memory_leak_detected
+    )?;
     writeln!(file, "")?;
 
     // Write detailed snapshots
     writeln!(file, "## Memory Snapshots")?;
-    writeln!(file, "Timestamp(ms),InferenceID,ModelLoaded,HeapUsed(MB),HeapTotal(MB),RSS(MB),VMS(MB)")?;
+    writeln!(
+        file,
+        "Timestamp(ms),InferenceID,ModelLoaded,HeapUsed(MB),HeapTotal(MB),RSS(MB),VMS(MB)"
+    )?;
 
     for snapshot in snapshots {
-        writeln!(file, "{},{},{},{:.2},{:.2},{:.2},{:.2}",
-                 snapshot.timestamp.as_millis(),
-                 snapshot.inference_id,
-                 snapshot.model_loaded,
-                 snapshot.heap_used as f64 / 1024.0 / 1024.0,
-                 snapshot.heap_total as f64 / 1024.0 / 1024.0,
-                 snapshot.rss as f64 / 1024.0 / 1024.0,
-                 snapshot.vms as f64 / 1024.0 / 1024.0)?;
+        writeln!(
+            file,
+            "{},{},{},{:.2},{:.2},{:.2},{:.2}",
+            snapshot.timestamp.as_millis(),
+            snapshot.inference_id,
+            snapshot.model_loaded,
+            snapshot.heap_used as f64 / 1024.0 / 1024.0,
+            snapshot.heap_total as f64 / 1024.0 / 1024.0,
+            snapshot.rss as f64 / 1024.0 / 1024.0,
+            snapshot.vms as f64 / 1024.0 / 1024.0
+        )?;
     }
 
     file.flush()?;
@@ -1414,10 +1542,7 @@ fn percentile(sorted_data: &[f64], percentile: f64) -> f64 {
     }
 }
 
-async fn simulate_inference_request(
-    model: &str,
-    input: &str,
-) -> Result<Duration> {
+async fn simulate_inference_request(model: &str, input: &str) -> Result<Duration> {
     let start = Instant::now();
 
     // Simulate processing time based on input length

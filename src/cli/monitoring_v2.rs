@@ -93,11 +93,8 @@ impl Command for MonitoringStatus {
             collector
         }));
 
-        let _monitor = PerformanceMonitor::new(
-            MonitoringConfig::default(),
-            metrics.clone(),
-        )
-        .await?;
+        let _monitor =
+            PerformanceMonitor::new(MonitoringConfig::default(), metrics.clone()).await?;
 
         // Stub implementation
         let status = MonitoringStatusData {
@@ -197,11 +194,8 @@ impl Command for MonitoringAlerts {
             collector
         }));
 
-        let _monitor = PerformanceMonitor::new(
-            MonitoringConfig::default(),
-            metrics.clone(),
-        )
-        .await?;
+        let _monitor =
+            PerformanceMonitor::new(MonitoringConfig::default(), metrics.clone()).await?;
 
         // Stub implementation
         let alerts: Vec<AlertData> = vec![];
@@ -415,11 +409,8 @@ impl Command for MonitoringTrends {
             collector
         }));
 
-        let _monitor = PerformanceMonitor::new(
-            MonitoringConfig::default(),
-            metrics.clone(),
-        )
-        .await?;
+        let _monitor =
+            PerformanceMonitor::new(MonitoringConfig::default(), metrics.clone()).await?;
 
         // Stub implementation
         let trends = TrendData {
@@ -514,11 +505,8 @@ impl Command for MonitoringReport {
             collector
         }));
 
-        let _monitor = PerformanceMonitor::new(
-            MonitoringConfig::default(),
-            metrics.clone(),
-        )
-        .await?;
+        let _monitor =
+            PerformanceMonitor::new(MonitoringConfig::default(), metrics.clone()).await?;
 
         // Stub implementation
         let report = ReportData {
@@ -627,7 +615,8 @@ mod tests {
     #[tokio::test]
     async fn test_monitoring_configure_validation() {
         let config = Config::default();
-        let cmd = MonitoringConfigure::new(config.clone(), Some(1000), None, None, None, None, None);
+        let cmd =
+            MonitoringConfigure::new(config.clone(), Some(1000), None, None, None, None, None);
         let ctx = CommandContext::new(config);
 
         let result = cmd.validate(&ctx).await;
@@ -637,7 +626,8 @@ mod tests {
     #[tokio::test]
     async fn test_monitoring_configure_validation_invalid_error_rate() {
         let config = Config::default();
-        let cmd = MonitoringConfigure::new(config.clone(), None, None, Some(150.0), None, None, None);
+        let cmd =
+            MonitoringConfigure::new(config.clone(), None, None, Some(150.0), None, None, None);
         let ctx = CommandContext::new(config);
 
         let result = cmd.validate(&ctx).await;

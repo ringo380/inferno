@@ -1,8 +1,8 @@
 use crate::{
     audit::{
-        Actor, ActorType, AuditConfiguration, AuditEvent, AuditLogger, AuditQuery, EventType,
-        ExportFormat, LogLevel, Resource, ResourceType, Severity, SortField, SortOrder,
-        CompressionMethod, AlertConfiguration,
+        Actor, ActorType, AlertConfiguration, AuditConfiguration, AuditEvent, AuditLogger,
+        AuditQuery, CompressionMethod, EventType, ExportFormat, LogLevel, Resource, ResourceType,
+        Severity, SortField, SortOrder,
     },
     config::Config,
 };
@@ -632,14 +632,20 @@ pub async fn execute(args: AuditArgs, config: &Config) -> Result<()> {
                 if specific_file.exists() {
                     vec![specific_file]
                 } else {
-                    println!("Error: Specified file does not exist: {}", specific_file.display());
+                    println!(
+                        "Error: Specified file does not exist: {}",
+                        specific_file.display()
+                    );
                     return Ok(());
                 }
             } else {
                 // Get all audit log files from the audit directory
                 let audit_dir = std::path::Path::new("./audit_logs");
                 if !audit_dir.exists() {
-                    println!("Error: Audit directory does not exist: {}", audit_dir.display());
+                    println!(
+                        "Error: Audit directory does not exist: {}",
+                        audit_dir.display()
+                    );
                     return Ok(());
                 }
 
@@ -709,7 +715,7 @@ pub async fn execute(args: AuditArgs, config: &Config) -> Result<()> {
                                             ));
                                         }
                                     }
-                                },
+                                }
                                 Err(_) => {
                                     validation_errors.push(format!(
                                         "{}:{} - Invalid JSON format",
@@ -719,7 +725,7 @@ pub async fn execute(args: AuditArgs, config: &Config) -> Result<()> {
                                 }
                             }
                         }
-                    },
+                    }
                     Err(e) => {
                         validation_errors.push(format!(
                             "Failed to read file {}: {}",
@@ -737,7 +743,8 @@ pub async fn execute(args: AuditArgs, config: &Config) -> Result<()> {
                 println!("Checking for potential gaps in audit trail...");
 
                 if total_events == 0 {
-                    validation_errors.push("No audit events found - potential data loss".to_string());
+                    validation_errors
+                        .push("No audit events found - potential data loss".to_string());
                 } else {
                     println!("Found {} total audit events", total_events);
 
@@ -762,7 +769,10 @@ pub async fn execute(args: AuditArgs, config: &Config) -> Result<()> {
                 println!("  - Total events: {}", total_events);
                 println!("  - No integrity issues found");
             } else {
-                println!("✗ Audit logs validation found {} issue(s):", validation_errors.len());
+                println!(
+                    "✗ Audit logs validation found {} issue(s):",
+                    validation_errors.len()
+                );
                 for error in &validation_errors {
                     println!("  - {}", error);
                 }
@@ -779,7 +789,10 @@ pub async fn execute(args: AuditArgs, config: &Config) -> Result<()> {
 
             let audit_dir = std::path::Path::new(&config.logging_audit.audit.storage_path);
             if !audit_dir.exists() {
-                println!("Error: Audit directory does not exist: {}", audit_dir.display());
+                println!(
+                    "Error: Audit directory does not exist: {}",
+                    audit_dir.display()
+                );
                 return Ok(());
             }
 
@@ -827,14 +840,26 @@ pub async fn execute(args: AuditArgs, config: &Config) -> Result<()> {
                     let filename = log_file.file_name().unwrap();
                     let archive_name = match compression {
                         CompressionFormat::Gzip => {
-                            format!("{}.{}.gz", filename.to_string_lossy(), modified_datetime.format("%Y%m%d"))
-                        },
+                            format!(
+                                "{}.{}.gz",
+                                filename.to_string_lossy(),
+                                modified_datetime.format("%Y%m%d")
+                            )
+                        }
                         CompressionFormat::Zip => {
-                            format!("{}.{}.zip", filename.to_string_lossy(), modified_datetime.format("%Y%m%d"))
-                        },
+                            format!(
+                                "{}.{}.zip",
+                                filename.to_string_lossy(),
+                                modified_datetime.format("%Y%m%d")
+                            )
+                        }
                         CompressionFormat::Tar => {
-                            format!("{}.{}.tar", filename.to_string_lossy(), modified_datetime.format("%Y%m%d"))
-                        },
+                            format!(
+                                "{}.{}.tar",
+                                filename.to_string_lossy(),
+                                modified_datetime.format("%Y%m%d")
+                            )
+                        }
                     };
 
                     let archive_path = destination.join(&archive_name);
@@ -845,11 +870,14 @@ pub async fn execute(args: AuditArgs, config: &Config) -> Result<()> {
                             // Simple gzip compression
                             let input_data = std::fs::read(&log_file)?;
                             use std::io::Write;
-                            let mut encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+                            let mut encoder = flate2::write::GzEncoder::new(
+                                Vec::new(),
+                                flate2::Compression::default(),
+                            );
                             encoder.write_all(&input_data)?;
                             let compressed_data = encoder.finish()?;
                             std::fs::write(&archive_path, compressed_data)?;
-                        },
+                        }
                         CompressionFormat::Zip => {
                             // Create a ZIP file with the log file
                             let zip_file = std::fs::File::create(&archive_path)?;
@@ -862,17 +890,18 @@ pub async fn execute(args: AuditArgs, config: &Config) -> Result<()> {
                             use std::io::Write;
                             zip.write_all(&input_data)?;
                             zip.finish()?;
-                        },
+                        }
                         CompressionFormat::Tar => {
                             // Create a simple tar file with the log file
                             let tar_file = std::fs::File::create(&archive_path)?;
                             let mut tar = tar::Builder::new(tar_file);
                             tar.append_path_with_name(&log_file, filename)?;
                             tar.finish()?;
-                        },
+                        }
                     }
 
-                    println!("Archived: {} -> {} ({} bytes -> {} bytes)",
+                    println!(
+                        "Archived: {} -> {} ({} bytes -> {} bytes)",
                         log_file.display(),
                         archive_path.display(),
                         file_size,
@@ -887,7 +916,8 @@ pub async fn execute(args: AuditArgs, config: &Config) -> Result<()> {
 
                     archived_files.push((log_file, archive_path));
                 } else {
-                    println!("Skipping file (not old enough): {} (modified: {})",
+                    println!(
+                        "Skipping file (not old enough): {} (modified: {})",
                         log_file.display(),
                         modified_datetime.format("%Y-%m-%d %H:%M:%S UTC")
                     );
@@ -896,10 +926,18 @@ pub async fn execute(args: AuditArgs, config: &Config) -> Result<()> {
 
             // Summary
             if archived_files.is_empty() {
-                println!("No files were old enough to archive (older than {} days)", older_than_days);
+                println!(
+                    "No files were old enough to archive (older than {} days)",
+                    older_than_days
+                );
             } else {
-                let total_archived_size = archived_files.iter()
-                    .map(|(_, archive_path)| std::fs::metadata(archive_path).map(|m| m.len()).unwrap_or(0))
+                let total_archived_size = archived_files
+                    .iter()
+                    .map(|(_, archive_path)| {
+                        std::fs::metadata(archive_path)
+                            .map(|m| m.len())
+                            .unwrap_or(0)
+                    })
                     .sum::<u64>();
 
                 let compression_ratio = if total_size_bytes > 0 {

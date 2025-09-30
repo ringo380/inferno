@@ -9,7 +9,9 @@ use anyhow::Result;
 use inferno::cli::run_v2::RunCommand;
 use inferno::config::Config;
 use inferno::core::config::ConfigBuilder;
-use inferno::interfaces::cli::{CommandContext, CommandPipeline, LoggingMiddleware, MetricsMiddleware};
+use inferno::interfaces::cli::{
+    CommandContext, CommandPipeline, LoggingMiddleware, MetricsMiddleware,
+};
 use inferno::io::{InputFormat, OutputFormat};
 use std::path::PathBuf;
 
@@ -105,7 +107,10 @@ async fn main() -> Result<()> {
     let mut ctx_json = CommandContext::new(config.clone());
     ctx_json.json_output = true;
 
-    match pipeline.execute(Box::new(run_cmd_json), &mut ctx_json).await {
+    match pipeline
+        .execute(Box::new(run_cmd_json), &mut ctx_json)
+        .await
+    {
         Ok(output) => {
             if let Some(data) = output.data {
                 println!(
@@ -139,14 +144,17 @@ async fn main() -> Result<()> {
         30,
         0.7,
         0.9,
-        true,  // stream enabled
+        true, // stream enabled
         false,
         None,
     );
 
     let mut ctx_stream = CommandContext::new(config.clone());
 
-    match pipeline.execute(Box::new(run_cmd_stream), &mut ctx_stream).await {
+    match pipeline
+        .execute(Box::new(run_cmd_stream), &mut ctx_stream)
+        .await
+    {
         Ok(output) => {
             println!("\n✓ {}", output.message);
         }
@@ -187,13 +195,16 @@ async fn main() -> Result<()> {
         0.7,
         0.9,
         false,
-        true,  // batch mode enabled
+        true, // batch mode enabled
         None,
     );
 
     let mut ctx_batch = CommandContext::new(config.clone());
 
-    match pipeline.execute(Box::new(run_cmd_batch), &mut ctx_batch).await {
+    match pipeline
+        .execute(Box::new(run_cmd_batch), &mut ctx_batch)
+        .await
+    {
         Ok(output) => {
             println!("\n✓ {}", output.message);
             if let Some(data) = output.data {
@@ -229,7 +240,7 @@ async fn main() -> Result<()> {
         None,
         InputFormat::Text,
         OutputFormat::Text,
-        0,  // Invalid: max_tokens = 0
+        0,   // Invalid: max_tokens = 0
         3.0, // Invalid: temperature > 2.0
         0.9,
         false,
@@ -239,7 +250,10 @@ async fn main() -> Result<()> {
 
     let mut ctx_invalid = CommandContext::new(config.clone());
 
-    match pipeline.execute(Box::new(invalid_cmd), &mut ctx_invalid).await {
+    match pipeline
+        .execute(Box::new(invalid_cmd), &mut ctx_invalid)
+        .await
+    {
         Ok(_) => {
             println!("Unexpected success");
         }

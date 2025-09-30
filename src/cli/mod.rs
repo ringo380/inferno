@@ -1,93 +1,93 @@
 pub mod ab_testing;
-pub mod ab_testing_v2;  // New architecture implementation
+pub mod ab_testing_v2; // New architecture implementation
 pub mod advanced_cache;
-pub mod advanced_cache_v2;  // New architecture implementation
+pub mod advanced_cache_v2; // New architecture implementation
 pub mod advanced_monitoring;
-pub mod advanced_monitoring_v2;  // New architecture implementation
+pub mod advanced_monitoring_v2; // New architecture implementation
 pub mod api_gateway;
-pub mod api_gateway_v2;  // New architecture implementation
+pub mod api_gateway_v2; // New architecture implementation
 pub mod audit;
-pub mod audit_v2;  // New architecture implementation
+pub mod audit_v2; // New architecture implementation
 pub mod backup_recovery;
-pub mod backup_recovery_v2;  // New architecture implementation
+pub mod backup_recovery_v2; // New architecture implementation
 pub mod batch;
-pub mod batch_v2;  // New architecture implementation
 pub mod batch_queue;
-pub mod batch_queue_v2;  // New architecture implementation
+pub mod batch_queue_v2; // New architecture implementation
+pub mod batch_v2; // New architecture implementation
 pub mod bench;
-pub mod bench_v2;  // New architecture implementation
+pub mod bench_v2; // New architecture implementation
 pub mod cache;
-pub mod cache_v2;  // New architecture implementation
+pub mod cache_v2; // New architecture implementation
 pub mod config;
-pub mod config_v2;  // New architecture implementation
+pub mod config_v2; // New architecture implementation
 pub mod convert;
-pub mod convert_v2;  // New architecture implementation
+pub mod convert_v2; // New architecture implementation
 pub mod dashboard;
-pub mod dashboard_v2;  // New architecture implementation
+pub mod dashboard_v2; // New architecture implementation
 pub mod data_pipeline;
-pub mod data_pipeline_v2;  // New architecture implementation
+pub mod data_pipeline_v2; // New architecture implementation
 pub mod deployment;
-pub mod deployment_v2;  // New architecture implementation
+pub mod deployment_v2; // New architecture implementation
 pub mod distributed;
-pub mod distributed_v2;  // New architecture implementation
+pub mod distributed_v2; // New architecture implementation
 pub mod enhanced_parser;
-pub mod enhanced_parser_v2;  // New architecture implementation
+pub mod enhanced_parser_v2; // New architecture implementation
 pub mod federated;
-pub mod federated_v2;  // New architecture implementation
+pub mod federated_v2; // New architecture implementation
 pub mod fuzzy;
-pub mod fuzzy_v2;  // New architecture implementation
+pub mod fuzzy_v2; // New architecture implementation
 pub mod gpu;
-pub mod gpu_v2;  // New architecture implementation
+pub mod gpu_v2; // New architecture implementation
 pub mod help;
-pub mod help_v2;  // New architecture implementation
+pub mod help_v2; // New architecture implementation
 pub mod logging_audit;
-pub mod logging_audit_v2;  // New architecture implementation
+pub mod logging_audit_v2; // New architecture implementation
 pub mod marketplace;
-pub mod marketplace_v2;  // New architecture implementation
+pub mod marketplace_v2; // New architecture implementation
 pub mod metrics;
-pub mod metrics_v2;  // New architecture implementation
+pub mod metrics_v2; // New architecture implementation
 pub mod model_versioning;
-pub mod model_versioning_v2;  // New architecture implementation
+pub mod model_versioning_v2; // New architecture implementation
 pub mod models;
-pub mod models_v2;  // New architecture implementation
+pub mod models_v2; // New architecture implementation
 pub mod monitoring;
-pub mod monitoring_v2;  // New architecture implementation
+pub mod monitoring_v2; // New architecture implementation
 pub mod multi_tenancy;
-pub mod multi_tenancy_v2;  // New architecture implementation
+pub mod multi_tenancy_v2; // New architecture implementation
 pub mod multimodal;
-pub mod multimodal_v2;  // New architecture implementation
+pub mod multimodal_v2; // New architecture implementation
 pub mod observability;
-pub mod observability_v2;  // New architecture implementation
+pub mod observability_v2; // New architecture implementation
 pub mod optimization;
-pub mod optimization_v2;  // New architecture implementation
+pub mod optimization_v2; // New architecture implementation
 pub mod package;
-pub mod package_v2;  // New architecture implementation
+pub mod package_v2; // New architecture implementation
 pub mod performance_benchmark;
-pub mod performance_benchmark_v2;  // New architecture implementation
+pub mod performance_benchmark_v2; // New architecture implementation
 pub mod performance_optimization;
-pub mod performance_optimization_v2;  // New architecture implementation
+pub mod performance_optimization_v2; // New architecture implementation
 pub mod qa_framework;
-pub mod qa_framework_v2;  // New architecture implementation
+pub mod qa_framework_v2; // New architecture implementation
 pub mod repo;
-pub mod repo_v2;  // New architecture implementation
+pub mod repo_v2; // New architecture implementation
 pub mod resilience;
-pub mod resilience_v2;  // New architecture implementation
+pub mod resilience_v2; // New architecture implementation
 pub mod response_cache;
-pub mod response_cache_v2;  // New architecture implementation
+pub mod response_cache_v2; // New architecture implementation
 pub mod run;
-pub mod run_v2;  // New architecture implementation
+pub mod run_v2; // New architecture implementation
 pub mod security;
-pub mod security_v2;  // New architecture implementation
+pub mod security_v2; // New architecture implementation
 pub mod serve;
-pub mod serve_v2;  // New architecture implementation
+pub mod serve_v2; // New architecture implementation
 pub mod streaming;
-pub mod streaming_v2;  // New architecture implementation
+pub mod streaming_v2; // New architecture implementation
 pub mod upgrade;
-pub mod upgrade_v2;  // New architecture implementation
+pub mod upgrade_v2; // New architecture implementation
 pub mod validate;
-pub mod validate_v2;  // New architecture implementation
+pub mod validate_v2; // New architecture implementation
 pub mod versioning;
-pub mod versioning_v2;  // New architecture implementation
+pub mod versioning_v2; // New architecture implementation
 
 use clap::{Parser, Subcommand};
 

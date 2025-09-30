@@ -72,7 +72,14 @@ impl Command for ServeStart {
             }
             if self.distributed {
                 println!("Mode: Distributed");
-                println!("Workers: {}", if self.workers == 0 { "auto".to_string() } else { self.workers.to_string() });
+                println!(
+                    "Workers: {}",
+                    if self.workers == 0 {
+                        "auto".to_string()
+                    } else {
+                        self.workers.to_string()
+                    }
+                );
             } else {
                 println!("Mode: Single-process");
             }
@@ -148,7 +155,14 @@ impl Command for ServeStatus {
         // Human-readable output
         if !ctx.json_output {
             println!("=== HTTP Server Status ===");
-            println!("Server: {}", if running { "✓ Running" } else { "✗ Stopped" });
+            println!(
+                "Server: {}",
+                if running {
+                    "✓ Running"
+                } else {
+                    "✗ Stopped"
+                }
+            );
 
             if running {
                 println!("Address: {}", bind_address);
@@ -390,7 +404,10 @@ mod tests {
 
         let result = cmd.validate(&ctx).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Timeout must be greater than 0"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Timeout must be greater than 0"));
     }
 
     #[tokio::test]
@@ -401,6 +418,9 @@ mod tests {
 
         let result = cmd.validate(&ctx).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Timeout must be <= 300"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Timeout must be <= 300"));
     }
 }

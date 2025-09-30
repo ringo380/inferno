@@ -108,13 +108,12 @@ impl Command for StreamingBenchmark {
         // Load model
         let model_manager = ModelManager::new(&self.config.models_dir);
         let model_info = model_manager.resolve_model(&self.model).await?;
-        let backend_type = BackendType::from_model_path(&model_info.path)
-            .ok_or_else(|| {
-                anyhow::anyhow!(
-                    "No suitable backend found for model: {}",
-                    model_info.path.display()
-                )
-            })?;
+        let backend_type = BackendType::from_model_path(&model_info.path).ok_or_else(|| {
+            anyhow::anyhow!(
+                "No suitable backend found for model: {}",
+                model_info.path.display()
+            )
+        })?;
 
         // Human-readable output
         if !ctx.json_output {
@@ -328,10 +327,7 @@ impl Command for StreamingConfigExport {
         if let Some(ref output) = self.output {
             if let Some(parent) = output.parent() {
                 if !parent.exists() {
-                    anyhow::bail!(
-                        "Output directory does not exist: {}",
-                        parent.display()
-                    );
+                    anyhow::bail!("Output directory does not exist: {}", parent.display());
                 }
             }
         }
@@ -355,10 +351,7 @@ impl Command for StreamingConfigExport {
             Some(path) => {
                 tokio::fs::write(path, &content).await?;
                 if !ctx.json_output {
-                    println!(
-                        "✓ Configuration exported to: {}",
-                        path.display()
-                    );
+                    println!("✓ Configuration exported to: {}", path.display());
                 }
             }
             None => {

@@ -494,8 +494,11 @@ impl ModelMarketplace {
             PackageDatabase::new()
         };
 
-        let dependency_resolver =
-            DependencyResolver::new(package_db.clone(), config.repositories.clone(), (*registry_client).clone());
+        let dependency_resolver = DependencyResolver::new(
+            package_db.clone(),
+            config.repositories.clone(),
+            (*registry_client).clone(),
+        );
 
         Ok(Self {
             config,
@@ -1425,7 +1428,8 @@ impl RegistryClient {
         {
             // Fallback implementation for when download feature is disabled
             // Fetch from configured repositories using Git/HTTP without file downloads
-            self.search_from_repositories(query, filters, page, per_page).await
+            self.search_from_repositories(query, filters, page, per_page)
+                .await
         }
     }
 
@@ -1447,12 +1451,13 @@ impl RegistryClient {
             match self.fetch_repository_models(&repo_config.url).await {
                 Ok(models) => {
                     // Filter models based on query and filters
-                    let filtered_models = models.into_iter()
+                    let filtered_models = models
+                        .into_iter()
                         .filter(|model| self.matches_search_criteria(model, query, &filters))
                         .collect::<Vec<_>>();
 
                     all_models.extend(filtered_models);
-                },
+                }
                 Err(e) => {
                     tracing::warn!("Failed to fetch from repository {}: {}", repo_config.url, e);
                     continue;
@@ -1484,7 +1489,10 @@ impl RegistryClient {
 
     async fn fetch_repository_models(&self, repo_url: &str) -> Result<Vec<ModelListing>> {
         // Check if this is a Git repository or HTTP API endpoint
-        if repo_url.ends_with(".git") || repo_url.contains("github.com") || repo_url.contains("gitlab.com") {
+        if repo_url.ends_with(".git")
+            || repo_url.contains("github.com")
+            || repo_url.contains("gitlab.com")
+        {
             self.fetch_from_git_repository(repo_url).await
         } else if repo_url.starts_with("http") {
             self.fetch_from_http_api(repo_url).await
@@ -1513,9 +1521,7 @@ impl RegistryClient {
 
     async fn fetch_from_github_api(&self, repo_url: &str) -> Result<Vec<ModelListing>> {
         // Extract owner/repo from GitHub URL
-        let parts: Vec<&str> = repo_url.trim_end_matches(".git")
-            .split('/')
-            .collect();
+        let parts: Vec<&str> = repo_url.trim_end_matches(".git").split('/').collect();
 
         if parts.len() < 2 {
             return Ok(Vec::new());
@@ -1559,7 +1565,11 @@ impl RegistryClient {
                 minimum_ram_gb: 4.0,
                 minimum_vram_gb: Some(2.0),
                 supported_backends: vec!["gguf".to_string()],
-                supported_platforms: vec!["linux".to_string(), "macos".to_string(), "windows".to_string()],
+                supported_platforms: vec![
+                    "linux".to_string(),
+                    "macos".to_string(),
+                    "windows".to_string(),
+                ],
                 gpu_architectures: vec!["cuda".to_string(), "metal".to_string()],
                 cpu_instructions: vec!["avx2".to_string()],
             },
@@ -1630,11 +1640,14 @@ impl RegistryClient {
     ) -> bool {
         // Check if model matches search query
         let query_lower = query.to_lowercase();
-        let matches_query = query.is_empty() ||
-            model.name.to_lowercase().contains(&query_lower) ||
-            model.description.to_lowercase().contains(&query_lower) ||
-            model.publisher.to_lowercase().contains(&query_lower) ||
-            model.tags.iter().any(|tag| tag.to_lowercase().contains(&query_lower));
+        let matches_query = query.is_empty()
+            || model.name.to_lowercase().contains(&query_lower)
+            || model.description.to_lowercase().contains(&query_lower)
+            || model.publisher.to_lowercase().contains(&query_lower)
+            || model
+                .tags
+                .iter()
+                .any(|tag| tag.to_lowercase().contains(&query_lower));
 
         if !matches_query {
             return false;
@@ -1674,9 +1687,12 @@ impl RegistryClient {
             }
 
             if !filters.tags.is_empty() {
-                let has_matching_tag = filters.tags.iter()
-                    .any(|filter_tag| model.tags.iter()
-                        .any(|model_tag| model_tag.eq_ignore_ascii_case(filter_tag)));
+                let has_matching_tag = filters.tags.iter().any(|filter_tag| {
+                    model
+                        .tags
+                        .iter()
+                        .any(|model_tag| model_tag.eq_ignore_ascii_case(filter_tag))
+                });
                 if !has_matching_tag {
                     return false;
                 }
@@ -1713,7 +1729,9 @@ impl RegistryClient {
             *licenses.entry(model.license.clone()).or_insert(0) += 1;
 
             // Count frameworks
-            *frameworks.entry(model.metadata.framework.clone()).or_insert(0) += 1;
+            *frameworks
+                .entry(model.metadata.framework.clone())
+                .or_insert(0) += 1;
 
             // Count tags
             for tag in &model.tags {
@@ -1834,7 +1852,8 @@ impl RegistryClient {
         self.validate_publish_request(&request)?;
 
         // Generate unique model ID
-        let model_id = format!("{}-{}",
+        let model_id = format!(
+            "{}-{}",
             request.metadata.name.to_lowercase().replace(' ', "-"),
             uuid::Uuid::new_v4().to_string()[..8].to_string()
         );
@@ -1896,7 +1915,10 @@ impl RegistryClient {
         };
 
         // Store in local registry (in real implementation, this would be a database)
-        info!("Model '{}' published successfully with ID: {}", request.metadata.name, model_id);
+        info!(
+            "Model '{}' published successfully with ID: {}",
+            request.metadata.name, model_id
+        );
 
         Ok(model_id)
     }
@@ -1915,14 +1937,20 @@ impl RegistryClient {
         }
 
         if !request.model_path.exists() {
-            return Err(anyhow::anyhow!("Model file does not exist: {}", request.model_path.display()));
+            return Err(anyhow::anyhow!(
+                "Model file does not exist: {}",
+                request.model_path.display()
+            ));
         }
 
         // Validate file size
         let metadata = std::fs::metadata(&request.model_path)?;
         let file_size = metadata.len();
-        if file_size > 50 * 1024 * 1024 * 1024 { // 50GB limit
-            return Err(anyhow::anyhow!("Model file too large. Maximum size is 50GB"));
+        if file_size > 50 * 1024 * 1024 * 1024 {
+            // 50GB limit
+            return Err(anyhow::anyhow!(
+                "Model file too large. Maximum size is 50GB"
+            ));
         }
 
         Ok(())
@@ -1950,7 +1978,10 @@ impl RegistryClient {
         category: Option<ModelCategory>,
         limit: usize,
     ) -> Result<Vec<ModelListing>> {
-        info!("Fetching popular models (category: {:?}, limit: {})", category, limit);
+        info!(
+            "Fetching popular models (category: {:?}, limit: {})",
+            category, limit
+        );
 
         // Get models from all repositories and sort by popularity metrics
         let mut all_models = Vec::new();
@@ -1963,9 +1994,13 @@ impl RegistryClient {
             match self.fetch_repository_models(&repo_config.url).await {
                 Ok(models) => {
                     all_models.extend(models);
-                },
+                }
                 Err(e) => {
-                    tracing::warn!("Failed to fetch popular models from repository {}: {}", repo_config.url, e);
+                    tracing::warn!(
+                        "Failed to fetch popular models from repository {}: {}",
+                        repo_config.url,
+                        e
+                    );
                     continue;
                 }
             }
@@ -1987,7 +2022,10 @@ impl RegistryClient {
             }
 
             // Secondary sort: average rating (descending)
-            let rating_cmp = b.ratings.average_rating.partial_cmp(&a.ratings.average_rating)
+            let rating_cmp = b
+                .ratings
+                .average_rating
+                .partial_cmp(&a.ratings.average_rating)
                 .unwrap_or(std::cmp::Ordering::Equal);
             if rating_cmp != std::cmp::Ordering::Equal {
                 return rating_cmp;
@@ -2017,9 +2055,13 @@ impl RegistryClient {
             match self.fetch_repository_models(&repo_config.url).await {
                 Ok(models) => {
                     all_models.extend(models);
-                },
+                }
                 Err(e) => {
-                    tracing::warn!("Failed to fetch models for recommendations from repository {}: {}", repo_config.url, e);
+                    tracing::warn!(
+                        "Failed to fetch models for recommendations from repository {}: {}",
+                        repo_config.url,
+                        e
+                    );
                     continue;
                 }
             }
@@ -2033,7 +2075,9 @@ impl RegistryClient {
             // 4. Recent trending models in user's domains
 
             // For now, implement a simple content-based filtering
-            let recommendations = self.generate_content_based_recommendations(&all_models, user_id).await?;
+            let recommendations = self
+                .generate_content_based_recommendations(&all_models, user_id)
+                .await?;
             Ok(recommendations)
         } else {
             // Anonymous recommendations - show trending and well-rated models
@@ -2054,7 +2098,8 @@ impl RegistryClient {
         // 4. Weight by user's rating patterns
 
         // For now, return a curated list based on general preferences
-        let mut recommendations: Vec<ModelListing> = models.iter()
+        let mut recommendations: Vec<ModelListing> = models
+            .iter()
             .filter(|model| {
                 // Prefer verified models with good ratings
                 model.verified && model.ratings.average_rating >= 3.5
@@ -2066,7 +2111,9 @@ impl RegistryClient {
         recommendations.sort_by(|a, b| {
             let score_a = a.ratings.average_rating * (1.0 + (a.downloads as f64).ln());
             let score_b = b.ratings.average_rating * (1.0 + (b.downloads as f64).ln());
-            score_b.partial_cmp(&score_a).unwrap_or(std::cmp::Ordering::Equal)
+            score_b
+                .partial_cmp(&score_a)
+                .unwrap_or(std::cmp::Ordering::Equal)
         });
 
         recommendations.truncate(10); // Limit to top 10 recommendations
@@ -2078,7 +2125,8 @@ impl RegistryClient {
         models: &[ModelListing],
     ) -> Result<Vec<ModelListing>> {
         // For anonymous users, show trending and popular models
-        let mut recommendations: Vec<ModelListing> = models.iter()
+        let mut recommendations: Vec<ModelListing> = models
+            .iter()
             .filter(|model| {
                 // Show free, well-rated models
                 model.pricing.free && model.ratings.average_rating >= 4.0
@@ -2095,10 +2143,14 @@ impl RegistryClient {
             let freshness_a = 1.0 / (1.0 + days_since_a / 30.0); // Decay over 30 days
             let freshness_b = 1.0 / (1.0 + days_since_b / 30.0);
 
-            let score_a = a.ratings.average_rating * (1.0 + (a.downloads as f64).ln()) * freshness_a;
-            let score_b = b.ratings.average_rating * (1.0 + (b.downloads as f64).ln()) * freshness_b;
+            let score_a =
+                a.ratings.average_rating * (1.0 + (a.downloads as f64).ln()) * freshness_a;
+            let score_b =
+                b.ratings.average_rating * (1.0 + (b.downloads as f64).ln()) * freshness_b;
 
-            score_b.partial_cmp(&score_a).unwrap_or(std::cmp::Ordering::Equal)
+            score_b
+                .partial_cmp(&score_a)
+                .unwrap_or(std::cmp::Ordering::Equal)
         });
 
         recommendations.truncate(8); // Limit to top 8 recommendations
@@ -2224,11 +2276,16 @@ impl VerificationEngine {
 
         // Validate algorithm
         if algorithm != "ED25519" && algorithm != "RSA-PSS-SHA256" {
-            return Err(anyhow::anyhow!("Unsupported signature algorithm: {}", algorithm));
+            return Err(anyhow::anyhow!(
+                "Unsupported signature algorithm: {}",
+                algorithm
+            ));
         }
 
         // Read file content for verification
-        let file_content = tokio::fs::read(path).await.context("Failed to read file for signature verification")?;
+        let file_content = tokio::fs::read(path)
+            .await
+            .context("Failed to read file for signature verification")?;
         let file_hash = sha2::Sha256::digest(&file_content);
 
         // In a real implementation, this would:
@@ -2258,18 +2315,18 @@ impl VerificationEngine {
         let file_size = tokio::fs::metadata(path).await?.len();
 
         // Check for suspicious file sizes
-        if file_size > 50_000_000_000 { // 50GB limit
+        if file_size > 50_000_000_000 {
+            // 50GB limit
             return Err(anyhow::anyhow!("File size too large: {} bytes", file_size));
         }
 
-        if file_size < 1000 { // Suspiciously small for a model
+        if file_size < 1000 {
+            // Suspiciously small for a model
             warn!("Model file suspiciously small: {} bytes", file_size);
         }
 
         // Check file extension consistency
-        let extension = path.extension()
-            .and_then(|ext| ext.to_str())
-            .unwrap_or("");
+        let extension = path.extension().and_then(|ext| ext.to_str()).unwrap_or("");
 
         match extension {
             "gguf" => self.validate_gguf_structure(path).await?,
@@ -2282,31 +2339,43 @@ impl VerificationEngine {
     }
 
     async fn scan_embedded_content(&self, path: &Path) -> Result<()> {
-        let file_content = tokio::fs::read(path).await.context("Failed to read file for content scanning")?;
+        let file_content = tokio::fs::read(path)
+            .await
+            .context("Failed to read file for content scanning")?;
 
         // Scan for embedded executables or suspicious patterns
         let suspicious_patterns: &[&[u8]] = &[
-            b"\x4d\x5a",        // PE header (Windows executable)
+            b"\x4d\x5a",         // PE header (Windows executable)
             b"\x7f\x45\x4c\x46", // ELF header (Linux executable)
-            b"\xfe\xed\xfa",   // Mach-O header (macOS executable)
-            b"#!/bin/",         // Shell script
-            b"javascript:",     // JavaScript URL
-            b"data:text/html",  // HTML data URL
+            b"\xfe\xed\xfa",     // Mach-O header (macOS executable)
+            b"#!/bin/",          // Shell script
+            b"javascript:",      // JavaScript URL
+            b"data:text/html",   // HTML data URL
         ];
 
         for pattern in suspicious_patterns {
-            if file_content.windows(pattern.len()).any(|window| window == *pattern) {
-                return Err(anyhow::anyhow!("Suspicious content pattern detected in model file"));
+            if file_content
+                .windows(pattern.len())
+                .any(|window| window == *pattern)
+            {
+                return Err(anyhow::anyhow!(
+                    "Suspicious content pattern detected in model file"
+                ));
             }
         }
 
         // Check for excessive string data (potential data exfiltration)
-        let printable_ratio = file_content.iter()
+        let printable_ratio = file_content
+            .iter()
             .filter(|&b| *b >= 32 && *b <= 126)
-            .count() as f64 / file_content.len() as f64;
+            .count() as f64
+            / file_content.len() as f64;
 
         if printable_ratio > 0.8 {
-            warn!("High ratio of printable characters detected: {:.2}%", printable_ratio * 100.0);
+            warn!(
+                "High ratio of printable characters detected: {:.2}%",
+                printable_ratio * 100.0
+            );
         }
 
         Ok(())
@@ -2315,7 +2384,9 @@ impl VerificationEngine {
     async fn scan_metadata_threats(&self, path: &Path) -> Result<()> {
         // For GGUF files, check metadata for suspicious entries
         if path.extension().and_then(|ext| ext.to_str()) == Some("gguf") {
-            let file_content = tokio::fs::read(path).await.context("Failed to read GGUF file")?;
+            let file_content = tokio::fs::read(path)
+                .await
+                .context("Failed to read GGUF file")?;
 
             // Check for GGUF magic bytes
             if file_content.len() < 4 || &file_content[0..4] != b"GGUF" {
@@ -2324,8 +2395,8 @@ impl VerificationEngine {
 
             // Scan metadata section for suspicious keys
             let suspicious_metadata_keys = [
-                "exec", "execute", "script", "command", "shell",
-                "eval", "import", "require", "load", "include"
+                "exec", "execute", "script", "command", "shell", "eval", "import", "require",
+                "load", "include",
             ];
 
             let content_str = String::from_utf8_lossy(&file_content);
@@ -2348,15 +2419,21 @@ impl VerificationEngine {
             Some("gguf") => {
                 // Typical GGUF models range from 100MB to 100GB
                 if file_size < 100_000_000 {
-                    warn!("GGUF model smaller than expected: {:.2} MB", file_size as f64 / 1_000_000.0);
+                    warn!(
+                        "GGUF model smaller than expected: {:.2} MB",
+                        file_size as f64 / 1_000_000.0
+                    );
                 }
-            },
+            }
             Some("onnx") => {
                 // ONNX models typically range from 1MB to 10GB
                 if file_size > 10_000_000_000 {
-                    warn!("ONNX model larger than typical: {:.2} GB", file_size as f64 / 1_000_000_000.0);
+                    warn!(
+                        "ONNX model larger than typical: {:.2} GB",
+                        file_size as f64 / 1_000_000_000.0
+                    );
                 }
-            },
+            }
             _ => {}
         }
 
@@ -2364,7 +2441,9 @@ impl VerificationEngine {
     }
 
     async fn validate_gguf_structure(&self, path: &Path) -> Result<()> {
-        let file_content = tokio::fs::read(path).await.context("Failed to read GGUF file")?;
+        let file_content = tokio::fs::read(path)
+            .await
+            .context("Failed to read GGUF file")?;
 
         if file_content.len() < 8 {
             return Err(anyhow::anyhow!("GGUF file too small"));
@@ -2377,7 +2456,10 @@ impl VerificationEngine {
 
         // Check version
         let version = u32::from_le_bytes([
-            file_content[4], file_content[5], file_content[6], file_content[7]
+            file_content[4],
+            file_content[5],
+            file_content[6],
+            file_content[7],
         ]);
 
         if version < 1 || version > 3 {
@@ -2389,7 +2471,9 @@ impl VerificationEngine {
     }
 
     async fn validate_onnx_structure(&self, path: &Path) -> Result<()> {
-        let file_content = tokio::fs::read(path).await.context("Failed to read ONNX file")?;
+        let file_content = tokio::fs::read(path)
+            .await
+            .context("Failed to read ONNX file")?;
 
         // ONNX files are Protocol Buffer format, check for protobuf header
         if file_content.len() < 16 {
@@ -2407,7 +2491,9 @@ impl VerificationEngine {
     }
 
     async fn validate_safetensors_structure(&self, path: &Path) -> Result<()> {
-        let file_content = tokio::fs::read(path).await.context("Failed to read SafeTensors file")?;
+        let file_content = tokio::fs::read(path)
+            .await
+            .context("Failed to read SafeTensors file")?;
 
         if file_content.len() < 8 {
             return Err(anyhow::anyhow!("SafeTensors file too small"));
@@ -2415,8 +2501,14 @@ impl VerificationEngine {
 
         // SafeTensors files start with a length prefix (8 bytes, little-endian)
         let header_length = u64::from_le_bytes([
-            file_content[0], file_content[1], file_content[2], file_content[3],
-            file_content[4], file_content[5], file_content[6], file_content[7]
+            file_content[0],
+            file_content[1],
+            file_content[2],
+            file_content[3],
+            file_content[4],
+            file_content[5],
+            file_content[6],
+            file_content[7],
         ]);
 
         if header_length > file_content.len() as u64 - 8 {
@@ -2459,7 +2551,11 @@ impl PackageDatabase {
 }
 
 impl DependencyResolver {
-    pub fn new(package_db: PackageDatabase, repositories: Vec<Repository>, registry_client: RegistryClient) -> Self {
+    pub fn new(
+        package_db: PackageDatabase,
+        repositories: Vec<Repository>,
+        registry_client: RegistryClient,
+    ) -> Self {
         Self {
             package_db,
             repositories,
@@ -2530,10 +2626,14 @@ impl DependencyResolver {
                     if let Some(model) = models.iter().find(|m| m.name == model_id) {
                         return Ok(model.clone());
                     }
-                },
+                }
                 Err(e) => {
-                    tracing::debug!("Failed to fetch models from repository {} for dependency {}: {}",
-                                   repo_config.url, model_id, e);
+                    tracing::debug!(
+                        "Failed to fetch models from repository {} for dependency {}: {}",
+                        repo_config.url,
+                        model_id,
+                        e
+                    );
                     continue;
                 }
             }
@@ -2545,7 +2645,10 @@ impl DependencyResolver {
             Err(_) => {
                 // Last resort: create a minimal model entry for unknown dependencies
                 // This allows the dependency resolution to continue, but with warnings
-                tracing::warn!("Creating minimal model entry for unknown dependency: {}", model_id);
+                tracing::warn!(
+                    "Creating minimal model entry for unknown dependency: {}",
+                    model_id
+                );
                 Ok(ModelListing {
                     id: model_id.to_string(),
                     name: model_id.to_string(),

@@ -132,7 +132,11 @@ impl CommandOutput {
     pub fn to_display(&self) -> String {
         match (&self.message, &self.data) {
             (Some(msg), Some(data)) => {
-                format!("{}\n{}", msg, serde_json::to_string_pretty(data).unwrap_or_default())
+                format!(
+                    "{}\n{}",
+                    msg,
+                    serde_json::to_string_pretty(data).unwrap_or_default()
+                )
             }
             (Some(msg), None) => msg.clone(),
             (None, Some(data)) => serde_json::to_string_pretty(data).unwrap_or_default(),
@@ -180,10 +184,7 @@ mod tests {
 
     #[test]
     fn test_json_serialization() {
-        let output = CommandOutput::success_with_data(
-            "Test",
-            json!({"key": "value"}),
-        );
+        let output = CommandOutput::success_with_data("Test", json!({"key": "value"}));
 
         let json = output.to_json().unwrap();
         assert!(json.contains("\"success\": true"));

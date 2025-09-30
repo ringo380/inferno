@@ -1,7 +1,7 @@
+use anyhow::{anyhow, Result};
+use reqwest;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use anyhow::{Result, anyhow};
-use reqwest;
 use uuid::Uuid;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -36,7 +36,7 @@ pub struct ModelSearchQuery {
     pub query: Option<String>,
     pub task: Option<String>,
     pub tags: Vec<String>,
-    pub sort: String, // "downloads", "likes", "created", "updated"
+    pub sort: String,      // "downloads", "likes", "created", "updated"
     pub direction: String, // "asc", "desc"
     pub limit: u32,
     pub offset: u32,
@@ -123,10 +123,13 @@ impl ModelRepositoryService {
         // Build URL with query parameters
         if !params.is_empty() {
             url.push('?');
-            url.push_str(&params.iter()
-                .map(|(k, v)| format!("{}={}", urlencoding::encode(k), urlencoding::encode(v)))
-                .collect::<Vec<_>>()
-                .join("&"));
+            url.push_str(
+                &params
+                    .iter()
+                    .map(|(k, v)| format!("{}={}", urlencoding::encode(k), urlencoding::encode(v)))
+                    .collect::<Vec<_>>()
+                    .join("&"),
+            );
         }
 
         let mut request = self.client.get(&url);
@@ -164,7 +167,10 @@ impl ModelRepositoryService {
         let response = request.send().await?;
 
         if !response.status().is_success() {
-            return Err(anyhow!("Failed to get model details: {}", response.status()));
+            return Err(anyhow!(
+                "Failed to get model details: {}",
+                response.status()
+            ));
         }
 
         let raw_model: serde_json::Value = response.json().await?;
@@ -201,8 +207,12 @@ impl ModelRepositoryService {
         Ok(response.models)
     }
 
-    fn parse_huggingface_models(&self, raw_data: serde_json::Value) -> Result<Vec<ExternalModelInfo>> {
-        let models_array = raw_data.as_array()
+    fn parse_huggingface_models(
+        &self,
+        raw_data: serde_json::Value,
+    ) -> Result<Vec<ExternalModelInfo>> {
+        let models_array = raw_data
+            .as_array()
             .ok_or_else(|| anyhow!("Invalid response format: expected array"))?;
 
         let mut models = Vec::new();
@@ -221,27 +231,47 @@ impl ModelRepositoryService {
     }
 
     fn parse_huggingface_model(&self, raw_model: serde_json::Value) -> Result<ExternalModelInfo> {
-        let id = raw_model["id"].as_str()
+        let id = raw_model["id"]
+            .as_str()
             .ok_or_else(|| anyhow!("Missing model id"))?
             .to_string();
 
-        let name = raw_model["id"].as_str().unwrap_or("Unknown Model").to_string();
-        let author = raw_model["author"].as_str().unwrap_or("unknown").to_string();
+        let name = raw_model["id"]
+            .as_str()
+            .unwrap_or("Unknown Model")
+            .to_string();
+        let author = raw_model["author"]
+            .as_str()
+            .unwrap_or("unknown")
+            .to_string();
         let description = raw_model["description"].as_str().unwrap_or("").to_string();
 
-        let tags = raw_model["tags"].as_array()
-            .map(|arr| arr.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect())
+        let tags = raw_model["tags"]
+            .as_array()
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                    .collect()
+            })
             .unwrap_or_default();
 
-        let model_type = raw_model["pipeline_tag"].as_str().unwrap_or("text-generation").to_string();
+        let model_type = raw_model["pipeline_tag"]
+            .as_str()
+            .unwrap_or("text-generation")
+            .to_string();
         let downloads = raw_model["downloads"].as_u64().unwrap_or(0) as u32;
         let likes = raw_model["likes"].as_u64().unwrap_or(0) as u32;
-        let license = raw_model["license"].as_str().unwrap_or("unknown").to_string();
+        let license = raw_model["license"]
+            .as_str()
+            .unwrap_or("unknown")
+            .to_string();
 
-        let created_at = raw_model["createdAt"].as_str()
+        let created_at = raw_model["createdAt"]
+            .as_str()
             .unwrap_or(&chrono::Utc::now().to_rfc3339())
             .to_string();
-        let updated_at = raw_model["lastModified"].as_str()
+        let updated_at = raw_model["lastModified"]
+            .as_str()
             .unwrap_or(&chrono::Utc::now().to_rfc3339())
             .to_string();
 
@@ -261,7 +291,11 @@ impl ModelRepositoryService {
             description,
             tags,
             model_type,
-            size_bytes: if size_bytes > 0 { Some(size_bytes) } else { None },
+            size_bytes: if size_bytes > 0 {
+                Some(size_bytes)
+            } else {
+                None
+            },
             download_url,
             repository_url,
             license,
@@ -273,7 +307,11 @@ impl ModelRepositoryService {
         })
     }
 
-    fn parse_model_files(&self, raw_model: &serde_json::Value, model_id: &str) -> Result<Vec<ModelFileInfo>> {
+    fn parse_model_files(
+        &self,
+        raw_model: &serde_json::Value,
+        model_id: &str,
+    ) -> Result<Vec<ModelFileInfo>> {
         let mut files = Vec::new();
 
         // Check if files are in the siblings array
@@ -282,9 +320,13 @@ impl ModelRepositoryService {
                 if let Some(filename) = file_data["rfilename"].as_str() {
                     // Filter for supported model formats
                     let file_extension = filename.split('.').last().unwrap_or("").to_lowercase();
-                    if matches!(file_extension.as_str(), "gguf" | "onnx" | "safetensors" | "bin" | "pt") {
+                    if matches!(
+                        file_extension.as_str(),
+                        "gguf" | "onnx" | "safetensors" | "bin" | "pt"
+                    ) {
                         let size_bytes = file_data["size"].as_u64().unwrap_or(0);
-                        let download_url = format!("{}/{}/resolve/main/{}", self.base_url, model_id, filename);
+                        let download_url =
+                            format!("{}/{}/resolve/main/{}", self.base_url, model_id, filename);
 
                         files.push(ModelFileInfo {
                             filename: filename.to_string(),
@@ -325,11 +367,17 @@ impl ModelDownloadManager {
         }
     }
 
-    pub async fn start_download(&self, model: &ExternalModelInfo, target_dir: &str) -> Result<String> {
+    pub async fn start_download(
+        &self,
+        model: &ExternalModelInfo,
+        target_dir: &str,
+    ) -> Result<String> {
         let download_id = Uuid::new_v4().to_string();
 
         // For now, download the first available file
-        let file_to_download = model.file_info.first()
+        let file_to_download = model
+            .file_info
+            .first()
             .ok_or_else(|| anyhow!("No downloadable files found for model"))?;
 
         let progress = DownloadProgress {
@@ -367,7 +415,8 @@ impl ModelDownloadManager {
                 target_path,
                 download_id_clone.clone(),
                 downloads_ref.clone(),
-            ).await;
+            )
+            .await;
 
             // Update final status
             if let Ok(mut downloads) = downloads_ref.lock() {
@@ -395,7 +444,8 @@ impl ModelDownloadManager {
     }
 
     pub fn get_all_downloads(&self) -> Vec<DownloadProgress> {
-        self.downloads.lock()
+        self.downloads
+            .lock()
             .map(|downloads| downloads.values().cloned().collect())
             .unwrap_or_default()
     }
@@ -431,7 +481,10 @@ impl ModelDownloadManager {
         let response = client.get(&url).send().await?;
 
         if !response.status().is_success() {
-            return Err(anyhow!("Download failed with status: {}", response.status()));
+            return Err(anyhow!(
+                "Download failed with status: {}",
+                response.status()
+            ));
         }
 
         let total_size = response.content_length().unwrap_or(0);
@@ -460,7 +513,10 @@ impl ModelDownloadManager {
             downloaded += chunk.len() as u64;
 
             // Update progress every 1MB or 5% progress
-            if downloaded % (1024 * 1024) == 0 || downloaded * 20 / total_size != (downloaded - chunk.len() as u64) * 20 / total_size {
+            if downloaded % (1024 * 1024) == 0
+                || downloaded * 20 / total_size
+                    != (downloaded - chunk.len() as u64) * 20 / total_size
+            {
                 let elapsed = start_time.elapsed().as_secs();
                 let speed = if elapsed > 0 { downloaded / elapsed } else { 0 };
                 let eta = if speed > 0 && total_size > downloaded {

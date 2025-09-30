@@ -165,7 +165,11 @@ impl Command for LoggingConfig {
             anyhow::bail!("Action must be one of: get, set");
         }
 
-        if self.action == "set" && self.level.is_none() && self.format.is_none() && self.output.is_none() {
+        if self.action == "set"
+            && self.level.is_none()
+            && self.format.is_none()
+            && self.output.is_none()
+        {
             anyhow::bail!("At least one setting must be specified for set action");
         }
 
@@ -262,12 +266,8 @@ impl Command for ComplianceReport {
     }
 
     async fn validate(&self, _ctx: &CommandContext) -> Result<()> {
-        if !["soc2", "hipaa", "gdpr", "pci-dss", "iso27001"]
-            .contains(&self.standard.as_str())
-        {
-            anyhow::bail!(
-                "Standard must be one of: soc2, hipaa, gdpr, pci-dss, iso27001"
-            );
+        if !["soc2", "hipaa", "gdpr", "pci-dss", "iso27001"].contains(&self.standard.as_str()) {
+            anyhow::bail!("Standard must be one of: soc2, hipaa, gdpr, pci-dss, iso27001");
         }
 
         if !["1h", "24h", "7d", "30d", "90d"].contains(&self.time_range.as_str()) {
@@ -568,7 +568,10 @@ impl Command for AuditExport {
     }
 
     async fn execute(&self, ctx: &mut CommandContext) -> Result<CommandOutput> {
-        info!("Exporting audit data: {} ({})", self.format, self.time_range);
+        info!(
+            "Exporting audit data: {} ({})",
+            self.format, self.time_range
+        );
 
         // Stub implementation
         let records_exported = 12_543;
@@ -687,7 +690,10 @@ mod tests {
 
         let result = cmd.validate(&ctx).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Action must be one of"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Action must be one of"));
     }
 
     #[tokio::test]
@@ -717,7 +723,10 @@ mod tests {
 
         let result = cmd.validate(&ctx).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Standard must be one of"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Standard must be one of"));
     }
 
     #[tokio::test]
@@ -747,6 +756,9 @@ mod tests {
 
         let result = cmd.validate(&ctx).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Format must be one of"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Format must be one of"));
     }
 }

@@ -13,9 +13,9 @@
 pub use crate::observability;
 
 // Submodules for consolidated features
+pub mod audit;
 pub mod cache;
 pub mod monitoring;
-pub mod audit;
 
 // Keep direct access to metrics for now
 pub use crate::metrics;

@@ -38,40 +38,42 @@ jobs:
         run: cargo publish --token ${{ secrets.CRATES_IO_TOKEN }}
         continue-on-error: true
 
-  publish-github:
-    name: Publish to GitHub Packages
-    runs-on: ubuntu-latest
-    if: |
-      github.event_name == 'release' ||
-      (github.event_name == 'workflow_dispatch' &&
-       (github.event.inputs.registry == 'github' || github.event.inputs.registry == 'both'))
-
-    permissions:
-      contents: read
-      packages: write
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Rust
-        uses: actions-rust-lang/setup-rust-toolchain@v1
-        with:
-          toolchain: stable
-
-      - name: Configure Cargo for GitHub Packages
-        run: |
-          mkdir -p ~/.cargo
-          cat >> ~/.cargo/config.toml << EOF
-          [registries.github]
-          index = "https://github.com/ringo380/inferno-cargo-index"
-          token = "${{ secrets.GITHUB_TOKEN }}"
-
-          [registry]
-          default = "github"
-          EOF
-
-      - name: Publish to GitHub Packages
-        run: |
-          cargo publish --registry github
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  # GitHub Packages publishing disabled until cargo registry is set up
+  # Uncomment and configure when registry is ready
+  # publish-github:
+  #   name: Publish to GitHub Packages
+  #   runs-on: ubuntu-latest
+  #   if: |
+  #     github.event_name == 'release' ||
+  #     (github.event_name == 'workflow_dispatch' &&
+  #      (github.event.inputs.registry == 'github' || github.event.inputs.registry == 'both'))
+  #
+  #   permissions:
+  #     contents: read
+  #     packages: write
+  #
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #
+  #     - name: Setup Rust
+  #       uses: actions-rust-lang/setup-rust-toolchain@v1
+  #       with:
+  #         toolchain: stable
+  #
+  #     - name: Configure Cargo for GitHub Packages
+  #       run: |
+  #         mkdir -p ~/.cargo
+  #         cat >> ~/.cargo/config.toml << EOF
+  #         [registries.github]
+  #         index = "https://github.com/ringo380/inferno-cargo-index"
+  #         token = "${{ secrets.GITHUB_TOKEN }}"
+  #
+  #         [registry]
+  #         default = "github"
+  #         EOF
+  #
+  #     - name: Publish to GitHub Packages
+  #       run: |
+  #         cargo publish --registry github
+  #       env:
+  #         CARGO_REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -6,7 +6,7 @@
 use super::{ApplicationVersion, UpgradeConfig, UpgradeError, UpgradeResult};
 use anyhow::Result;
 use chrono::{DateTime, Utc};
-use flate2::{Compression, read::GzDecoder, write::GzEncoder};
+use flate2::{read::GzDecoder, write::GzEncoder, Compression};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::fs::{self, File};
@@ -86,16 +86,17 @@ impl BackupManager {
         let paths_to_backup = self.get_backup_paths(BackupType::Full)?;
 
         // Create backup archive
-        let backup_filename = format!("inferno_backup_{}_{}.tar.gz",
-                                    current_version.to_string().replace('.', "_"),
-                                    backup_id);
+        let backup_filename = format!(
+            "inferno_backup_{}_{}.tar.gz",
+            current_version.to_string().replace('.', "_"),
+            backup_id
+        );
         let backup_path = self.backup_dir.join(&backup_filename);
 
         // Create compressed tar archive
-        let (compressed_size, uncompressed_size, checksum) = self.create_compressed_archive(
-            &paths_to_backup,
-            &backup_path,
-        ).await?;
+        let (compressed_size, uncompressed_size, checksum) = self
+            .create_compressed_archive(&paths_to_backup, &backup_path)
+            .await?;
 
         // Create metadata
         let metadata = BackupMetadata {
@@ -136,15 +137,16 @@ impl BackupManager {
 
         let paths_to_backup = self.get_backup_paths(backup_type.clone())?;
 
-        let backup_filename = format!("inferno_selective_{}_{}.tar.gz",
-                                    current_version.to_string().replace('.', "_"),
-                                    backup_id);
+        let backup_filename = format!(
+            "inferno_selective_{}_{}.tar.gz",
+            current_version.to_string().replace('.', "_"),
+            backup_id
+        );
         let backup_path = self.backup_dir.join(&backup_filename);
 
-        let (compressed_size, uncompressed_size, checksum) = self.create_compressed_archive(
-            &paths_to_backup,
-            &backup_path,
-        ).await?;
+        let (compressed_size, uncompressed_size, checksum) = self
+            .create_compressed_archive(&paths_to_backup, &backup_path)
+            .await?;
 
         let (includes_config, includes_data) = match &backup_type {
             BackupType::Full => (true, true),
@@ -255,7 +257,10 @@ impl BackupManager {
         debug!("Verifying backup integrity: {}", metadata.id);
 
         if !metadata.file_path.exists() {
-            return Err(anyhow::anyhow!("Backup file missing: {:?}", metadata.file_path));
+            return Err(anyhow::anyhow!(
+                "Backup file missing: {:?}",
+                metadata.file_path
+            ));
         }
 
         // Verify file size
@@ -263,7 +268,8 @@ impl BackupManager {
         if file_size != metadata.compressed_size {
             return Err(anyhow::anyhow!(
                 "Backup file size mismatch: expected {}, got {}",
-                metadata.compressed_size, file_size
+                metadata.compressed_size,
+                file_size
             ));
         }
 
@@ -272,7 +278,8 @@ impl BackupManager {
         if calculated_checksum != metadata.checksum {
             return Err(anyhow::anyhow!(
                 "Backup checksum mismatch: expected {}, got {}",
-                metadata.checksum, calculated_checksum
+                metadata.checksum,
+                calculated_checksum
             ));
         }
 
@@ -347,11 +354,14 @@ impl BackupManager {
                 .collect();
 
             for backup in to_delete {
-            info!("Cleaning up old backup: {} ({})", backup.id, backup.created_at);
-            if let Err(e) = self.delete_backup(&backup.id).await {
-                warn!("Failed to delete old backup {}: {}", backup.id, e);
+                info!(
+                    "Cleaning up old backup: {} ({})",
+                    backup.id, backup.created_at
+                );
+                if let Err(e) = self.delete_backup(&backup.id).await {
+                    warn!("Failed to delete old backup {}: {}", backup.id, e);
+                }
             }
-        }
         }
 
         Ok(())
@@ -366,7 +376,8 @@ impl BackupManager {
     /// Get paths to backup based on backup type
     fn get_backup_paths(&self, backup_type: BackupType) -> Result<Vec<PathBuf>> {
         let current_exe = std::env::current_exe()?;
-        let app_dir = current_exe.parent()
+        let app_dir = current_exe
+            .parent()
             .ok_or_else(|| anyhow::anyhow!("Cannot determine application directory"))?;
 
         match backup_type {
@@ -448,7 +459,8 @@ impl BackupManager {
                 let file_size = fs::metadata(path)?.len();
                 uncompressed_size += file_size;
 
-                let relative_path = path.file_name()
+                let relative_path = path
+                    .file_name()
                     .ok_or_else(|| anyhow::anyhow!("Invalid file path: {:?}", path))?;
 
                 archive.append_file(relative_path, &mut File::open(path)?)?;
@@ -568,13 +580,17 @@ impl BackupManager {
 
     /// Create a restore point before performing restore
     async fn create_restore_point(&self) -> Result<PathBuf> {
-        let restore_point_path = self.backup_dir.join(format!("restore_point_{}.tar.gz",
-                                                             chrono::Utc::now().timestamp()));
+        let restore_point_path = self.backup_dir.join(format!(
+            "restore_point_{}.tar.gz",
+            chrono::Utc::now().timestamp()
+        ));
 
         let current_exe = std::env::current_exe()?;
         let paths = vec![current_exe];
 
-        let (_, _, _) = self.create_compressed_archive(&paths, &restore_point_path).await?;
+        let (_, _, _) = self
+            .create_compressed_archive(&paths, &restore_point_path)
+            .await?;
 
         Ok(restore_point_path)
     }
@@ -598,7 +614,8 @@ impl BackupManager {
 
             let hash = hasher.finalize();
             Ok(format!("{:x}", hash))
-        }).await?
+        })
+        .await?
     }
 
     /// Save backup metadata

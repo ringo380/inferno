@@ -17,26 +17,14 @@ async fn main() -> Result<()> {
 
     // Example 1: Start gateway on default port
     println!("Example 1: Start gateway on default port");
-    let cmd = ApiGatewayStart::new(
-        config.clone(),
-        8080,
-        "0.0.0.0".to_string(),
-        false,
-        false,
-    );
+    let cmd = ApiGatewayStart::new(config.clone(), 8080, "0.0.0.0".to_string(), false, false);
     let mut ctx = CommandContext::new(config.clone());
     let result = cmd.execute(&mut ctx).await?;
     println!("Result: {}\n", result.message);
 
     // Example 2: Start as daemon with rate limiting disabled
     println!("Example 2: Start as daemon with rate limiting disabled");
-    let cmd = ApiGatewayStart::new(
-        config.clone(),
-        8080,
-        "127.0.0.1".to_string(),
-        true,
-        true,
-    );
+    let cmd = ApiGatewayStart::new(config.clone(), 8080, "127.0.0.1".to_string(), true, true);
     let mut ctx = CommandContext::new(config.clone());
     let result = cmd.execute(&mut ctx).await?;
     println!("Result: {}\n", result.message);

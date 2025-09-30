@@ -60,12 +60,7 @@ async fn main() -> Result<()> {
 
     // Example 5: List only active versions
     println!("Example 5: List only active versions");
-    let cmd = ModelVersionList::new(
-        config.clone(),
-        None,
-        Some("active".to_string()),
-        100,
-    );
+    let cmd = ModelVersionList::new(config.clone(), None, Some("active".to_string()), 100);
     let mut ctx = CommandContext::new(config.clone());
     let result = cmd.execute(&mut ctx).await?;
     println!("Result: {}\n", result.message);

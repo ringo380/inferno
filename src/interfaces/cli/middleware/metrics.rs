@@ -80,11 +80,7 @@ impl Middleware for MetricsMiddleware {
         Ok(())
     }
 
-    async fn after(
-        &self,
-        ctx: &mut CommandContext,
-        result: &Result<CommandOutput>,
-    ) -> Result<()> {
+    async fn after(&self, ctx: &mut CommandContext, result: &Result<CommandOutput>) -> Result<()> {
         // Calculate duration
         if let Some(start) = ctx.get_state::<Instant>("metrics_start") {
             let duration = start.elapsed();

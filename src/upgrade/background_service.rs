@@ -73,11 +73,16 @@ impl BackgroundUpdateService {
         {
             let mut status = self.status.write().await;
             status.running = true;
-            status.next_check = Some(Utc::now() + chrono::Duration::from_std(self.config.check_interval)?);
+            status.next_check =
+                Some(Utc::now() + chrono::Duration::from_std(self.config.check_interval)?);
         }
 
         // Emit service started event
-        self.emit_service_event(UpgradeEventType::UpdateCheckStarted, "Background update service started").await;
+        self.emit_service_event(
+            UpgradeEventType::UpdateCheckStarted,
+            "Background update service started",
+        )
+        .await;
 
         // Start the checking loop
         self.run_check_loop().await
@@ -98,7 +103,11 @@ impl BackgroundUpdateService {
             status.next_check = None;
         }
 
-        self.emit_service_event(UpgradeEventType::UpdateCheckCompleted, "Background update service stopped").await;
+        self.emit_service_event(
+            UpgradeEventType::UpdateCheckCompleted,
+            "Background update service stopped",
+        )
+        .await;
 
         Ok(())
     }
@@ -163,7 +172,11 @@ impl BackgroundUpdateService {
             status.last_check = Some(Utc::now());
             status.check_count += 1;
             status.last_error = None;
-            status.next_check = Some(Utc::now() + chrono::Duration::from_std(self.config.check_interval).unwrap_or(chrono::Duration::hours(1)));
+            status.next_check = Some(
+                Utc::now()
+                    + chrono::Duration::from_std(self.config.check_interval)
+                        .unwrap_or(chrono::Duration::hours(1)),
+            );
         }
 
         // Delegate to upgrade manager
@@ -172,9 +185,11 @@ impl BackgroundUpdateService {
 
     /// Handle when an update is available
     async fn handle_update_available(&self, update_info: UpdateInfo) {
-        info!("Update available: {} -> {}",
-              ApplicationVersion::current().to_string(),
-              update_info.version.to_string());
+        info!(
+            "Update available: {} -> {}",
+            ApplicationVersion::current().to_string(),
+            update_info.version.to_string()
+        );
 
         // Update status
         {
@@ -185,9 +200,13 @@ impl BackgroundUpdateService {
         // Emit notification event
         self.emit_update_event(
             UpgradeEventType::UpdateAvailable,
-            &format!("New version {} is available", update_info.version.to_string()),
+            &format!(
+                "New version {} is available",
+                update_info.version.to_string()
+            ),
             Some(update_info.clone()),
-        ).await;
+        )
+        .await;
 
         // Send notification to all interfaces
         self.notify_interfaces_of_update(&update_info).await;
@@ -224,7 +243,8 @@ impl BackgroundUpdateService {
         self.emit_service_event(
             UpgradeEventType::UpdateCheckFailed,
             &format!("Update check failed: {}", error),
-        ).await;
+        )
+        .await;
 
         // Implement exponential backoff on repeated failures
         if self.should_apply_backoff().await {
@@ -253,7 +273,8 @@ impl BackgroundUpdateService {
             UpgradeEventType::UpdateAvailable,
             "Update notification sent to interfaces",
             Some(update_info.clone()),
-        ).await;
+        )
+        .await;
 
         // The event will be received by:
         // - TUI interface (if running)
@@ -270,7 +291,8 @@ impl BackgroundUpdateService {
             UpgradeEventType::InstallationStarted,
             "Automatic update installation started",
             Some(update_info.clone()),
-        ).await;
+        )
+        .await;
 
         // Delegate to upgrade manager for actual installation
         match self.upgrade_manager.install_update(&update_info).await {
@@ -280,14 +302,16 @@ impl BackgroundUpdateService {
                     UpgradeEventType::InstallationCompleted,
                     "Automatic update installation completed",
                     Some(update_info),
-                ).await;
+                )
+                .await;
             }
             Err(e) => {
                 error!("Automatic update installation failed: {}", e);
                 self.emit_service_event(
                     UpgradeEventType::InstallationFailed,
                     &format!("Automatic update installation failed: {}", e),
-                ).await;
+                )
+                .await;
             }
         }
     }
@@ -297,10 +321,10 @@ impl BackgroundUpdateService {
         let status = self.status.read().await;
 
         // Apply backoff if we've had recent errors
-        status.last_error.is_some() &&
-        status.last_check.map_or(false, |last| {
-            Utc::now().signed_duration_since(last) < chrono::Duration::hours(1)
-        })
+        status.last_error.is_some()
+            && status.last_check.map_or(false, |last| {
+                Utc::now().signed_duration_since(last) < chrono::Duration::hours(1)
+            })
     }
 
     /// Get abbreviated changelog preview
@@ -338,7 +362,12 @@ impl BackgroundUpdateService {
     }
 
     /// Emit update-related event with data
-    async fn emit_update_event(&self, event_type: UpgradeEventType, message: &str, update_info: Option<UpdateInfo>) {
+    async fn emit_update_event(
+        &self,
+        event_type: UpgradeEventType,
+        message: &str,
+        update_info: Option<UpdateInfo>,
+    ) {
         let data = update_info.as_ref().map(|info| {
             serde_json::json!({
                 "version": info.version.to_string(),
@@ -376,7 +405,9 @@ impl BackgroundUpdateService {
             total_checks: status.check_count,
             last_check: status.last_check,
             next_check: status.next_check,
-            uptime: status.last_check.map(|start| Utc::now().signed_duration_since(start)),
+            uptime: status
+                .last_check
+                .map(|start| Utc::now().signed_duration_since(start)),
             has_available_update: status.available_update.is_some(),
             last_error: status.last_error.clone(),
         }
@@ -446,14 +477,20 @@ mod tests {
         let service = BackgroundUpdateService::new(upgrade_manager, config, event_sender);
 
         // Emit a test event
-        service.emit_service_event(UpgradeEventType::UpdateCheckStarted, "Test message").await;
+        service
+            .emit_service_event(UpgradeEventType::UpdateCheckStarted, "Test message")
+            .await;
 
         // Verify event was received
-        let received_event = tokio::time::timeout(Duration::from_millis(100), event_receiver.recv()).await;
+        let received_event =
+            tokio::time::timeout(Duration::from_millis(100), event_receiver.recv()).await;
         assert!(received_event.is_ok());
 
         let event = received_event.unwrap().unwrap();
-        assert!(matches!(event.event_type, UpgradeEventType::UpdateCheckStarted));
+        assert!(matches!(
+            event.event_type,
+            UpgradeEventType::UpdateCheckStarted
+        ));
         assert_eq!(event.message, "Test message");
     }
 }

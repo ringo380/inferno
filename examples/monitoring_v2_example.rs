@@ -270,15 +270,8 @@ async fn main() -> Result<()> {
 
     println!();
 
-    let invalid_error_rate = MonitoringConfigure::new(
-        config.clone(),
-        None,
-        None,
-        Some(150.0),
-        None,
-        None,
-        None,
-    );
+    let invalid_error_rate =
+        MonitoringConfigure::new(config.clone(), None, None, Some(150.0), None, None, None);
 
     match pipeline
         .execute(Box::new(invalid_error_rate), &mut ctx_invalid.clone())

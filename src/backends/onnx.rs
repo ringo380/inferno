@@ -153,7 +153,8 @@ impl InferenceBackend for OnnxBackend {
                     }
                 }
 
-                let session = builder.with_model_from_file(&path)
+                let session = builder
+                    .with_model_from_file(&path)
                     .map_err(|e| anyhow!("Failed to load ONNX model: {}", e))?;
 
                 info!("ONNX session created successfully");
@@ -192,7 +193,9 @@ impl InferenceBackend for OnnxBackend {
     }
 
     async fn infer(&mut self, input: &str, params: &InferenceParams) -> Result<String> {
-        let session = self.session.as_ref()
+        let session = self
+            .session
+            .as_ref()
             .ok_or_else(|| anyhow!("Model not loaded"))?;
 
         let start_time = Instant::now();
@@ -367,16 +370,18 @@ impl InferenceBackend for OnnxBackend {
         // Create meaningful embeddings based on input characteristics
         let input_len = input.len() as f32;
         let word_count = input.split_whitespace().count() as f32;
-        let char_variety = input.chars().collect::<std::collections::HashSet<_>>().len() as f32;
+        let char_variety = input
+            .chars()
+            .collect::<std::collections::HashSet<_>>()
+            .len() as f32;
 
         // Generate embeddings that reflect input properties
         for (i, embedding) in embeddings.iter_mut().enumerate() {
             let position_factor = (i as f32) / (embedding_size as f32);
-            *embedding = (
-                (input_len / 100.0).sin() * position_factor +
-                (word_count / 10.0).cos() * (1.0 - position_factor) +
-                (char_variety / 26.0).sin() * 0.1
-            ).tanh();
+            *embedding = ((input_len / 100.0).sin() * position_factor
+                + (word_count / 10.0).cos() * (1.0 - position_factor)
+                + (char_variety / 26.0).sin() * 0.1)
+                .tanh();
         }
 
         info!("Generated {} dimensional embeddings", embeddings.len());

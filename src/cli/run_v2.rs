@@ -196,7 +196,12 @@ impl RunCommand {
 
         // Process batch
         let progress = processor
-            .process_file(backend, input_path, self.output.as_deref(), &inference_params)
+            .process_file(
+                backend,
+                input_path,
+                self.output.as_deref(),
+                &inference_params,
+            )
             .await?;
 
         let result_json = json!({
@@ -216,7 +221,10 @@ impl RunCommand {
 
         if !ctx.json_output {
             println!("✓ Batch processing complete:");
-            println!("  Processed: {}/{}", progress.completed_items, progress.total_items);
+            println!(
+                "  Processed: {}/{}",
+                progress.completed_items, progress.total_items
+            );
             println!("  Failed: {}", progress.failed_items);
             if let Some(output) = &self.output {
                 println!("  Output: {}", output.display());

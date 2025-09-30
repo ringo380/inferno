@@ -123,8 +123,12 @@ async fn main() -> Result<()> {
 
     // Example 11: HIPAA compliance report
     println!("Example 11: HIPAA compliance report");
-    let cmd =
-        ComplianceReport::new(config.clone(), "hipaa".to_string(), "30d".to_string(), false);
+    let cmd = ComplianceReport::new(
+        config.clone(),
+        "hipaa".to_string(),
+        "30d".to_string(),
+        false,
+    );
     let mut ctx = CommandContext::new(config.clone());
     let result = cmd.execute(&mut ctx).await?;
     println!("Result: {}\n", result.message);
@@ -194,12 +198,7 @@ async fn main() -> Result<()> {
 
     // Example 19: Export to CSV
     println!("Example 19: Export to CSV");
-    let cmd = AuditExport::new(
-        config.clone(),
-        "csv".to_string(),
-        None,
-        "7d".to_string(),
-    );
+    let cmd = AuditExport::new(config.clone(), "csv".to_string(), None, "7d".to_string());
     let mut ctx = CommandContext::new(config.clone());
     let result = cmd.execute(&mut ctx).await?;
     println!("Result: {}\n", result.message);

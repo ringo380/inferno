@@ -61,7 +61,9 @@ impl Command for GpuList {
 
         // Filter by vendor if specified
         if let Some(ref vendor) = self.vendor {
-            available_gpus.retain(|gpu| std::mem::discriminant(&gpu.vendor) == std::mem::discriminant(vendor));
+            available_gpus.retain(|gpu| {
+                std::mem::discriminant(&gpu.vendor) == std::mem::discriminant(vendor)
+            });
         }
 
         // Human-readable output
@@ -324,7 +326,8 @@ impl Command for GpuAllocate {
                 .await?
         };
 
-        let allocated_gpu_id = allocated_gpu.ok_or_else(|| anyhow::anyhow!("No suitable GPU found for allocation"))?;
+        let allocated_gpu_id =
+            allocated_gpu.ok_or_else(|| anyhow::anyhow!("No suitable GPU found for allocation"))?;
 
         // Structured output
         Ok(CommandOutput::success_with_data(

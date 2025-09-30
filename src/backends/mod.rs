@@ -1,9 +1,9 @@
 #[cfg(feature = "gguf")]
 mod gguf;
-#[cfg(feature = "onnx")]
-mod onnx;
 #[cfg(all(feature = "gpu-metal", target_os = "macos"))]
 mod metal;
+#[cfg(feature = "onnx")]
+mod onnx;
 
 use crate::{models::ModelInfo, InfernoError};
 use anyhow::{anyhow, Result};
@@ -24,7 +24,11 @@ pub enum BackendType {
     #[cfg(all(feature = "gpu-metal", target_os = "macos"))]
     #[value(name = "metal")]
     Metal,
-    #[cfg(not(any(feature = "gguf", feature = "onnx", all(feature = "gpu-metal", target_os = "macos"))))]
+    #[cfg(not(any(
+        feature = "gguf",
+        feature = "onnx",
+        all(feature = "gpu-metal", target_os = "macos")
+    )))]
     #[value(name = "none")]
     None,
 }
@@ -73,7 +77,11 @@ impl std::fmt::Display for BackendType {
             BackendType::Onnx => write!(f, "onnx"),
             #[cfg(all(feature = "gpu-metal", target_os = "macos"))]
             BackendType::Metal => write!(f, "metal"),
-            #[cfg(not(any(feature = "gguf", feature = "onnx", all(feature = "gpu-metal", target_os = "macos"))))]
+            #[cfg(not(any(
+                feature = "gguf",
+                feature = "onnx",
+                all(feature = "gpu-metal", target_os = "macos")
+            )))]
             BackendType::None => write!(f, "none"),
         }
     }
@@ -166,8 +174,16 @@ impl Backend {
             BackendType::Onnx => Box::new(onnx::OnnxBackend::new(config.clone())?),
             #[cfg(all(feature = "gpu-metal", target_os = "macos"))]
             BackendType::Metal => Box::new(metal::MetalBackend::new()?),
-            #[cfg(not(any(feature = "gguf", feature = "onnx", all(feature = "gpu-metal", target_os = "macos"))))]
-            BackendType::None => return Err(anyhow!("No backend available. Enable 'gguf', 'onnx', or 'gpu-metal' features.")),
+            #[cfg(not(any(
+                feature = "gguf",
+                feature = "onnx",
+                all(feature = "gpu-metal", target_os = "macos")
+            )))]
+            BackendType::None => {
+                return Err(anyhow!(
+                    "No backend available. Enable 'gguf', 'onnx', or 'gpu-metal' features."
+                ))
+            }
         };
 
         Ok(Self { backend_impl })

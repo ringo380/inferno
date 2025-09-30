@@ -92,10 +92,7 @@ impl Command for ConvertModel {
         // Validate output directory exists or can be created
         if let Some(parent) = self.output.parent() {
             if !parent.exists() {
-                anyhow::bail!(
-                    "Output directory does not exist: {}",
-                    parent.display()
-                );
+                anyhow::bail!("Output directory does not exist: {}", parent.display());
             }
         }
 
@@ -277,10 +274,7 @@ impl Command for QuantizeModel {
         // Validate output directory exists
         if let Some(parent) = self.output.parent() {
             if !parent.exists() {
-                anyhow::bail!(
-                    "Output directory does not exist: {}",
-                    parent.display()
-                );
+                anyhow::bail!("Output directory does not exist: {}", parent.display());
             }
         }
 
@@ -439,10 +433,7 @@ impl Command for AnalyzeModel {
             println!("=== Model Information ===");
             println!("Name: {}", model_info.name);
             println!("Path: {}", model_info.path.display());
-            println!(
-                "Size: {:.2} MB",
-                model_info.size as f64 / (1024.0 * 1024.0)
-            );
+            println!("Size: {:.2} MB", model_info.size as f64 / (1024.0 * 1024.0));
             println!(
                 "Modified: {}",
                 model_info.modified.format("%Y-%m-%d %H:%M:%S UTC")
@@ -585,10 +576,7 @@ mod tests {
 
         let result = cmd.validate(&ctx).await;
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("does not exist"));
+        assert!(result.unwrap_err().to_string().contains("does not exist"));
     }
 
     #[tokio::test]
@@ -632,10 +620,7 @@ mod tests {
 
         let result = cmd.validate(&ctx).await;
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("does not exist"));
+        assert!(result.unwrap_err().to_string().contains("does not exist"));
     }
 
     #[tokio::test]
@@ -650,9 +635,6 @@ mod tests {
 
         let result = cmd.validate(&ctx).await;
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("does not exist"));
+        assert!(result.unwrap_err().to_string().contains("does not exist"));
     }
 }

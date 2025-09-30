@@ -9,7 +9,9 @@ use anyhow::Result;
 use inferno::cli::models_v2::{ModelsInfo, ModelsList, ModelsValidate};
 use inferno::config::Config;
 use inferno::core::config::ConfigBuilder;
-use inferno::interfaces::cli::{CommandContext, CommandPipeline, LoggingMiddleware, MetricsMiddleware};
+use inferno::interfaces::cli::{
+    CommandContext, CommandPipeline, LoggingMiddleware, MetricsMiddleware,
+};
 use std::path::PathBuf;
 
 #[tokio::main]
@@ -67,7 +69,10 @@ async fn main() -> Result<()> {
     ctx_json.verbose = false;
     ctx_json.json_output = true;
 
-    match pipeline.execute(Box::new(list_cmd_json), &mut ctx_json).await {
+    match pipeline
+        .execute(Box::new(list_cmd_json), &mut ctx_json)
+        .await
+    {
         Ok(output) => {
             println!("✓ Command completed: {}", output.message);
             if let Some(data) = output.data {
@@ -95,7 +100,10 @@ async fn main() -> Result<()> {
     let mut ctx_first = CommandContext::new(config.clone());
     ctx_first.json_output = true;
 
-    if let Ok(output) = pipeline.execute(Box::new(list_cmd_first), &mut ctx_first).await {
+    if let Ok(output) = pipeline
+        .execute(Box::new(list_cmd_first), &mut ctx_first)
+        .await
+    {
         if let Some(data) = output.data {
             if let Some(models) = data["models"].as_array() {
                 if let Some(first_model) = models.first() {
@@ -139,7 +147,10 @@ async fn main() -> Result<()> {
         let mut validate_ctx = CommandContext::new(config.clone());
         validate_ctx.verbose = true;
 
-        match pipeline.execute(Box::new(validate_cmd), &mut validate_ctx).await {
+        match pipeline
+            .execute(Box::new(validate_cmd), &mut validate_ctx)
+            .await
+        {
             Ok(val_output) => {
                 if val_output.success {
                     println!("\n✓ {}", val_output.message);
@@ -176,7 +187,10 @@ async fn main() -> Result<()> {
     let validate_invalid = ModelsValidate::new(invalid_path.clone());
     let mut error_ctx = CommandContext::new(config.clone());
 
-    match pipeline.execute(Box::new(validate_invalid), &mut error_ctx).await {
+    match pipeline
+        .execute(Box::new(validate_invalid), &mut error_ctx)
+        .await
+    {
         Ok(output) => {
             println!("Unexpected success: {}", output.message);
         }

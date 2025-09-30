@@ -106,16 +106,12 @@ impl CommandContext {
 
     /// Get typed state value
     pub fn get_state<T: Any + Send + Sync>(&self, key: &str) -> Option<&T> {
-        self.state
-            .get(key)
-            .and_then(|v| v.downcast_ref::<T>())
+        self.state.get(key).and_then(|v| v.downcast_ref::<T>())
     }
 
     /// Get mutable typed state value
     pub fn get_state_mut<T: Any + Send + Sync>(&mut self, key: &str) -> Option<&mut T> {
-        self.state
-            .get_mut(key)
-            .and_then(|v| v.downcast_mut::<T>())
+        self.state.get_mut(key).and_then(|v| v.downcast_mut::<T>())
     }
 
     /// Get elapsed time since command started

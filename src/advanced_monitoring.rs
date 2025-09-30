@@ -2593,7 +2593,9 @@ impl PrometheusClient {
 
     #[cfg(not(feature = "reqwest"))]
     pub async fn query(&self, _query: &str) -> Result<MetricQueryResult> {
-        Err(anyhow::anyhow!("HTTP client support not enabled. Compile with --features reqwest"))
+        Err(anyhow::anyhow!(
+            "HTTP client support not enabled. Compile with --features reqwest"
+        ))
     }
 
     #[cfg(feature = "reqwest")]
@@ -2632,7 +2634,9 @@ impl PrometheusClient {
         _start: DateTime<Utc>,
         _end: DateTime<Utc>,
     ) -> Result<MetricQueryResult> {
-        Err(anyhow::anyhow!("HTTP client support not enabled. Compile with --features reqwest"))
+        Err(anyhow::anyhow!(
+            "HTTP client support not enabled. Compile with --features reqwest"
+        ))
     }
 
     #[cfg(feature = "reqwest")]

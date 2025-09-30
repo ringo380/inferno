@@ -49,8 +49,7 @@ pub trait Middleware: Send + Sync {
     /// contains the command's result.
     ///
     /// Middleware errors are logged but don't affect the command result.
-    async fn after(&self, ctx: &mut CommandContext, result: &Result<CommandOutput>)
-        -> Result<()>;
+    async fn after(&self, ctx: &mut CommandContext, result: &Result<CommandOutput>) -> Result<()>;
 
     /// Middleware name for identification
     fn name(&self) -> &str {

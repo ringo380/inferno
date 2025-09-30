@@ -180,7 +180,12 @@ pub struct VersionPromote {
 }
 
 impl VersionPromote {
-    pub fn new(config: Config, model_name: String, version_id: String, target_status: String) -> Self {
+    pub fn new(
+        config: Config,
+        model_name: String,
+        version_id: String,
+        target_status: String,
+    ) -> Self {
         Self {
             config,
             model_name,
@@ -260,7 +265,12 @@ pub struct VersionRollback {
 }
 
 impl VersionRollback {
-    pub fn new(config: Config, model_name: String, version_id: String, reason: Option<String>) -> Self {
+    pub fn new(
+        config: Config,
+        model_name: String,
+        version_id: String,
+        reason: Option<String>,
+    ) -> Self {
         Self {
             config,
             model_name,
@@ -465,12 +475,7 @@ mod tests {
     #[tokio::test]
     async fn test_version_rollback_validation_empty_model() {
         let config = Config::default();
-        let cmd = VersionRollback::new(
-            config.clone(),
-            String::new(),
-            "v1.0.0".to_string(),
-            None,
-        );
+        let cmd = VersionRollback::new(config.clone(), String::new(), "v1.0.0".to_string(), None);
         let ctx = CommandContext::new(config);
 
         let result = cmd.validate(&ctx).await;

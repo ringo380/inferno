@@ -57,9 +57,11 @@ impl Command for ValidateCommand {
         let validation = fuzzy_matcher.validate_command(&self.command_name);
 
         let (is_valid, message, suggestion) = match validation {
-            crate::cli::fuzzy::CommandValidation::Valid => {
-                (true, format!("'{}' is a valid command", self.command_name), None)
-            }
+            crate::cli::fuzzy::CommandValidation::Valid => (
+                true,
+                format!("'{}' is a valid command", self.command_name),
+                None,
+            ),
             crate::cli::fuzzy::CommandValidation::Alias(correct) => (
                 true,
                 format!("'{}' is an alias for '{}'", self.command_name, correct),

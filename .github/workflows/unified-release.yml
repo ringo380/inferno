@@ -44,42 +44,51 @@ jobs:
 
       - name: Create Release
         id: create_release
-        uses: actions/create-release@v1
+        run: |
+          VERSION=${{ steps.version.outputs.version }}
+
+          # Check if release already exists
+          if gh release view ${VERSION} >/dev/null 2>&1; then
+            echo "Release ${VERSION} already exists, using existing release"
+            UPLOAD_URL=$(gh release view ${VERSION} --json uploadUrl -q .uploadUrl)
+          else
+            # Create new release
+            gh release create ${VERSION} \
+              --title "Release ${VERSION}" \
+              --notes "## 🔥 Inferno ${VERSION}
+
+          ### Installation Options
+
+          #### 🍎 macOS
+          - **DMG Package**: \`inferno-universal-${VERSION}.dmg\`
+          - **Homebrew**: \`brew install ringo380/tap/inferno\`
+          - **Direct Download**: Platform-specific binaries below
+
+          #### 🐳 Docker
+          \`\`\`bash
+          docker pull ghcr.io/ringo380/inferno:${{ steps.version.outputs.version_number }}
+          \`\`\`
+
+          #### 📦 Package Managers
+          - **Cargo**: \`cargo install inferno\`
+          - **NPM**: \`npm install @ringo380/inferno-desktop\`
+          - **GitHub Packages**: Available in Packages tab
+
+          ### What's New
+          - Enhanced upgrade system with automatic updates
+          - Improved performance and stability
+          - Bug fixes and improvements
+
+          ### Checksums
+          Checksums for all artifacts are available in \`checksums.txt\`" \
+              $(if [[ "${VERSION}" == *"beta"* ]] || [[ "${VERSION}" == *"alpha"* ]] || [[ "${VERSION}" == *"rc"* ]]; then echo "--prerelease"; fi)
+
+            UPLOAD_URL=$(gh release view ${VERSION} --json uploadUrl -q .uploadUrl)
+          fi
+
+          echo "upload_url=${UPLOAD_URL}" >> $GITHUB_OUTPUT
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ steps.version.outputs.version }}
-          release_name: Release ${{ steps.version.outputs.version }}
-          body: |
-            ## 🔥 Inferno ${{ steps.version.outputs.version }}
-
-            ### Installation Options
-
-            #### 🍎 macOS
-            - **DMG Package**: `inferno-universal-${{ steps.version.outputs.version }}.dmg`
-            - **Homebrew**: `brew install ringo380/tap/inferno`
-            - **Direct Download**: Platform-specific binaries below
-
-            #### 🐳 Docker
-            ```bash
-            docker pull ghcr.io/ringo380/inferno:${{ steps.version.outputs.version_number }}
-            ```
-
-            #### 📦 Package Managers
-            - **Cargo**: `cargo install inferno`
-            - **NPM**: `npm install @ringo380/inferno-desktop`
-            - **GitHub Packages**: Available in Packages tab
-
-            ### What's New
-            - Enhanced upgrade system with automatic updates
-            - Improved performance and stability
-            - Bug fixes and improvements
-
-            ### Checksums
-            Checksums for all artifacts are available in `checksums.txt`
-
-          draft: false
-          prerelease: ${{ contains(steps.version.outputs.version, 'beta') || contains(steps.version.outputs.version, 'alpha') || contains(steps.version.outputs.version, 'rc') }}
+          GH_TOKEN: ${{ github.token }}
 
   # Trigger all package workflows
   trigger-packages:

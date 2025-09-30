@@ -24,12 +24,7 @@ pub struct TenantCreate {
 }
 
 impl TenantCreate {
-    pub fn new(
-        config: Config,
-        name: String,
-        tier: String,
-        contact_email: Option<String>,
-    ) -> Self {
+    pub fn new(config: Config, name: String, tier: String, contact_email: Option<String>) -> Self {
         Self {
             config,
             name,
@@ -163,7 +158,10 @@ impl Command for TenantList {
             }
             println!("Limit: {}", self.limit);
             println!();
-            println!("{:<20} {:<12} {:<12} {:<10}", "NAME", "TIER", "STATUS", "USERS");
+            println!(
+                "{:<20} {:<12} {:<12} {:<10}",
+                "NAME", "TIER", "STATUS", "USERS"
+            );
             println!("{}", "-".repeat(60));
             for (name, tier, status, users) in &tenants {
                 println!("{:<20} {:<12} {:<12} {:<10}", name, tier, status, users);
@@ -578,18 +576,29 @@ mod tests {
 
         let result = cmd.validate(&ctx).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Tenant name cannot be empty"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Tenant name cannot be empty"));
     }
 
     #[tokio::test]
     async fn test_tenant_create_validation_invalid_tier() {
         let config = Config::default();
-        let cmd = TenantCreate::new(config.clone(), "test".to_string(), "invalid".to_string(), None);
+        let cmd = TenantCreate::new(
+            config.clone(),
+            "test".to_string(),
+            "invalid".to_string(),
+            None,
+        );
         let ctx = CommandContext::new(config);
 
         let result = cmd.validate(&ctx).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Tier must be one of"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Tier must be one of"));
     }
 
     #[tokio::test]
@@ -600,7 +609,10 @@ mod tests {
 
         let result = cmd.validate(&ctx).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Limit must be between"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Limit must be between"));
     }
 
     #[tokio::test]
@@ -616,7 +628,10 @@ mod tests {
 
         let result = cmd.validate(&ctx).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Isolation level must be one of"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Isolation level must be one of"));
     }
 
     #[tokio::test]
@@ -627,6 +642,9 @@ mod tests {
 
         let result = cmd.validate(&ctx).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Either --force or --backup"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Either --force or --backup"));
     }
 }

@@ -64,7 +64,10 @@ async fn main() -> Result<()> {
     let mut ctx_list = CommandContext::new(config.clone());
 
     println!("Running: GpuList with detailed=true...");
-    match pipeline.execute(Box::new(list_detailed), &mut ctx_list).await {
+    match pipeline
+        .execute(Box::new(list_detailed), &mut ctx_list)
+        .await
+    {
         Ok(output) => {
             println!("✓ {}", output.message);
             if let Some(data) = output.data {
@@ -211,7 +214,10 @@ async fn main() -> Result<()> {
     );
     let ctx_zero = CommandContext::new(config.clone());
 
-    match pipeline.execute(Box::new(zero_memory), &mut ctx_zero.clone()).await {
+    match pipeline
+        .execute(Box::new(zero_memory), &mut ctx_zero.clone())
+        .await
+    {
         Ok(_) => println!("Unexpected success"),
         Err(e) => {
             println!("✓ Validation correctly caught zero memory allocation:");
@@ -341,9 +347,7 @@ async fn main() -> Result<()> {
         Err(e) => {
             println!("Note: Could not allocate GPU");
             println!("  {}", e);
-            println!(
-                "This is expected if no GPUs are available or insufficient free memory."
-            );
+            println!("This is expected if no GPUs are available or insufficient free memory.");
         }
     }
 

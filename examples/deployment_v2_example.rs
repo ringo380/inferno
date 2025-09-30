@@ -15,12 +15,7 @@ async fn main() -> Result<()> {
 
     // Example 1: Deploy to dev environment
     println!("Example 1: Deploy to dev environment");
-    let cmd = DeploymentDeploy::new(
-        config.clone(),
-        "dev".to_string(),
-        3,
-        "rolling".to_string(),
-    );
+    let cmd = DeploymentDeploy::new(config.clone(), "dev".to_string(), 3, "rolling".to_string());
     let mut ctx = CommandContext::new(config.clone());
     let result = cmd.execute(&mut ctx).await?;
     println!("Result: {}\n", result.message);
@@ -39,12 +34,7 @@ async fn main() -> Result<()> {
 
     // Example 3: Deploy to prod with canary
     println!("Example 3: Deploy to prod with canary");
-    let cmd = DeploymentDeploy::new(
-        config.clone(),
-        "prod".to_string(),
-        10,
-        "canary".to_string(),
-    );
+    let cmd = DeploymentDeploy::new(config.clone(), "prod".to_string(), 10, "canary".to_string());
     let mut ctx = CommandContext::new(config.clone());
     let result = cmd.execute(&mut ctx).await?;
     println!("Result: {}\n", result.message);

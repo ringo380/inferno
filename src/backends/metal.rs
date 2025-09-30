@@ -94,7 +94,8 @@ impl MetalBackend {
             if let Some(displays) = json["SPDisplaysDataType"].as_array() {
                 for display in displays {
                     if let Some(chipset) = display["sppci_model"].as_str() {
-                        let supports_metal_3 = chipset.contains("Apple M") || chipset.contains("AMD");
+                        let supports_metal_3 =
+                            chipset.contains("Apple M") || chipset.contains("AMD");
 
                         // Get unified memory size
                         let max_memory = if chipset.contains("Apple") {
@@ -121,7 +122,9 @@ impl MetalBackend {
                                         .next()
                                         .and_then(|s| s.parse::<u64>().ok())
                                         .unwrap_or(2)
-                                        * 1024 * 1024 * 1024
+                                        * 1024
+                                        * 1024
+                                        * 1024
                                 } else {
                                     2 * 1024 * 1024 * 1024 // Default 2GB
                                 }
@@ -137,7 +140,11 @@ impl MetalBackend {
         }
 
         // Fallback values
-        Ok(("Unknown Metal Device".to_string(), false, 2 * 1024 * 1024 * 1024))
+        Ok((
+            "Unknown Metal Device".to_string(),
+            false,
+            2 * 1024 * 1024 * 1024,
+        ))
     }
 
     fn estimate_model_memory(&self, model_info: &ModelInfo) -> u64 {
@@ -240,7 +247,10 @@ impl InferenceBackend for MetalBackend {
         let response = format!(
             "[Metal GPU Inference Placeholder]\nInput: {}\nModel: {}\nDevice: {}\nMetal 3: {}",
             input,
-            self.model_info.as_ref().map(|m| m.name.as_str()).unwrap_or("unknown"),
+            self.model_info
+                .as_ref()
+                .map(|m| m.name.as_str())
+                .unwrap_or("unknown"),
             self.device_name,
             if self.supports_metal_3 { "Yes" } else { "No" }
         );
