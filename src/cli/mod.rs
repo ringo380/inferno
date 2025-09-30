@@ -44,6 +44,7 @@ pub mod serve;
 pub mod streaming;
 pub mod upgrade;
 pub mod validate;
+pub mod validate_v2;  // New architecture implementation
 pub mod versioning;
 
 use clap::{Parser, Subcommand};
