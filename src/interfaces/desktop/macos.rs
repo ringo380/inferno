@@ -298,22 +298,84 @@ pub fn show_from_tray<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
 
 /// Detect if Metal GPU is available on this system
 ///
-/// This will be used in Phase 2 to enable/disable Metal acceleration.
+/// Queries the macOS system for Metal GPU capabilities using system_profiler.
+/// This provides device name, memory size, and feature support.
 #[command]
 pub async fn detect_metal_gpu() -> Result<MetalInfo, String> {
     #[cfg(target_os = "macos")]
     {
-        // TODO: Implement Metal device detection
-        //
-        // This will use metal-rs to query available Metal devices:
-        // - Device name (e.g., "Apple M1")
-        // - Memory size
-        // - Feature set
-        // - Support for required operations
+        use std::process::Command;
 
+        // Use system_profiler to get GPU information
+        let output = Command::new("system_profiler")
+            .arg("SPDisplaysDataType")
+            .arg("-json")
+            .output()
+            .map_err(|e| format!("Failed to run system_profiler: {}", e))?;
+
+        if !output.status.success() {
+            return Err("system_profiler command failed".to_string());
+        }
+
+        let json_str = String::from_utf8_lossy(&output.stdout);
+
+        // Parse JSON to extract Metal info
+        if let Ok(json) = serde_json::from_str::<serde_json::Value>(&json_str) {
+            if let Some(displays) = json["SPDisplaysDataType"].as_array() {
+                for display in displays {
+                    if let Some(chipset_model) = display["sppci_model"].as_str() {
+                        // Detect Metal availability (all modern Macs have Metal)
+                        let available = true;
+
+                        // Extract VRAM if available
+                        let memory_gb = if let Some(vram) = display["sppci_vram"].as_str() {
+                            // Parse "8 GB" or "8192 MB" format
+                            if vram.contains("GB") {
+                                vram.split_whitespace()
+                                    .next()
+                                    .and_then(|s| s.parse::<f64>().ok())
+                                    .unwrap_or(0.0)
+                            } else if vram.contains("MB") {
+                                vram.split_whitespace()
+                                    .next()
+                                    .and_then(|s| s.parse::<f64>().ok())
+                                    .map(|mb| mb / 1024.0)
+                                    .unwrap_or(0.0)
+                            } else {
+                                0.0
+                            }
+                        } else {
+                            // For Apple Silicon, use unified memory (estimate from total RAM)
+                            if chipset_model.contains("Apple") {
+                                if let Ok(sysinfo) = get_total_memory() {
+                                    sysinfo / 1024.0 / 1024.0 / 1024.0  // Convert to GB
+                                } else {
+                                    0.0
+                                }
+                            } else {
+                                0.0
+                            }
+                        };
+
+                        // Check for Metal 3 support (macOS 13+ with Apple Silicon or AMD GPUs)
+                        let supports_metal_3 = chipset_model.contains("Apple M")
+                            || chipset_model.contains("AMD");
+
+                        return Ok(MetalInfo {
+                            available,
+                            device_name: chipset_model.to_string(),
+                            memory_gb,
+                            supports_metal_3,
+                        });
+                    }
+                }
+            }
+        }
+
+        // Fallback: Metal is available on all Macs since 2012
         Ok(MetalInfo {
-            available: false, // Placeholder
-            device_name: "Not implemented".to_string(),
+            available: true,
+            device_name: "Unknown Metal Device".to_string(),
             memory_gb: 0.0,
             supports_metal_3: false,
         })
@@ -330,6 +392,23 @@ pub async fn detect_metal_gpu() -> Result<MetalInfo, String> {
     }
 }
 
+/// Helper function to get total system memory
+#[cfg(target_os = "macos")]
+fn get_total_memory() -> Result<f64, String> {
+    use std::process::Command;
+
+    let output = Command::new("sysctl")
+        .arg("-n")
+        .arg("hw.memsize")
+        .output()
+        .map_err(|e| format!("Failed to get memory size: {}", e))?;
+
+    let mem_str = String::from_utf8_lossy(&output.stdout);
+    mem_str.trim()
+        .parse::<f64>()
+        .map_err(|e| format!("Failed to parse memory size: {}", e))
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct MetalInfo {
     pub available: bool,
@@ -343,32 +422,138 @@ pub struct MetalInfo {
 // ============================================================================
 
 /// Detect Apple Silicon chip type (M1, M2, M3, M4)
+///
+/// Uses sysctl to query chip information including core counts and Neural Engine.
 #[command]
 pub async fn detect_apple_silicon() -> Result<ChipInfo, String> {
     #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
     {
-        // TODO: Implement chip detection using sysctl
-        //
-        // Use sysctl to query:
-        // - hw.model
-        // - machdep.cpu.brand_string
-        // - hw.perflevel0.name (performance cores)
-        // - hw.perflevel1.name (efficiency cores)
+        use std::process::Command;
+
+        // Get brand string to identify chip generation
+        let brand_output = Command::new("sysctl")
+            .arg("-n")
+            .arg("machdep.cpu.brand_string")
+            .output()
+            .map_err(|e| format!("Failed to get CPU brand: {}", e))?;
+
+        let brand_string = String::from_utf8_lossy(&brand_output.stdout)
+            .trim()
+            .to_string();
+
+        // Detect chip name (M1, M2, M3, M4, etc.)
+        let chip_name = if brand_string.contains("M1") {
+            if brand_string.contains("Pro") {
+                "Apple M1 Pro".to_string()
+            } else if brand_string.contains("Max") {
+                "Apple M1 Max".to_string()
+            } else if brand_string.contains("Ultra") {
+                "Apple M1 Ultra".to_string()
+            } else {
+                "Apple M1".to_string()
+            }
+        } else if brand_string.contains("M2") {
+            if brand_string.contains("Pro") {
+                "Apple M2 Pro".to_string()
+            } else if brand_string.contains("Max") {
+                "Apple M2 Max".to_string()
+            } else if brand_string.contains("Ultra") {
+                "Apple M2 Ultra".to_string()
+            } else {
+                "Apple M2".to_string()
+            }
+        } else if brand_string.contains("M3") {
+            if brand_string.contains("Pro") {
+                "Apple M3 Pro".to_string()
+            } else if brand_string.contains("Max") {
+                "Apple M3 Max".to_string()
+            } else {
+                "Apple M3".to_string()
+            }
+        } else if brand_string.contains("M4") {
+            if brand_string.contains("Pro") {
+                "Apple M4 Pro".to_string()
+            } else if brand_string.contains("Max") {
+                "Apple M4 Max".to_string()
+            } else {
+                "Apple M4".to_string()
+            }
+        } else {
+            brand_string.clone()
+        };
+
+        // Get performance core count
+        let perf_cores = Command::new("sysctl")
+            .arg("-n")
+            .arg("hw.perflevel0.physicalcpu")
+            .output()
+            .ok()
+            .and_then(|out| {
+                String::from_utf8_lossy(&out.stdout)
+                    .trim()
+                    .parse::<u32>()
+                    .ok()
+            })
+            .unwrap_or(0);
+
+        // Get efficiency core count
+        let efficiency_cores = Command::new("sysctl")
+            .arg("-n")
+            .arg("hw.perflevel1.physicalcpu")
+            .output()
+            .ok()
+            .and_then(|out| {
+                String::from_utf8_lossy(&out.stdout)
+                    .trim()
+                    .parse::<u32>()
+                    .ok()
+            })
+            .unwrap_or(0);
+
+        // All Apple Silicon chips have Neural Engine
+        let neural_engine = true;
+
+        tracing::info!(
+            "🍎 Detected: {} (P:{} E:{} ANE:{})",
+            chip_name,
+            perf_cores,
+            efficiency_cores,
+            neural_engine
+        );
 
         Ok(ChipInfo {
             is_apple_silicon: true,
-            chip_name: "Unknown".to_string(), // Placeholder
-            performance_cores: 0,
-            efficiency_cores: 0,
-            neural_engine: false,
+            chip_name,
+            performance_cores: perf_cores,
+            efficiency_cores,
+            neural_engine,
         })
     }
 
     #[cfg(not(all(target_os = "macos", target_arch = "aarch64")))]
     {
+        use std::process::Command;
+
+        // Try to get Intel CPU info
+        #[cfg(target_os = "macos")]
+        let cpu_name = Command::new("sysctl")
+            .arg("-n")
+            .arg("machdep.cpu.brand_string")
+            .output()
+            .ok()
+            .map(|out| {
+                String::from_utf8_lossy(&out.stdout)
+                    .trim()
+                    .to_string()
+            })
+            .unwrap_or_else(|| "Intel x86_64".to_string());
+
+        #[cfg(not(target_os = "macos"))]
+        let cpu_name = "x86_64".to_string();
+
         Ok(ChipInfo {
             is_apple_silicon: false,
-            chip_name: "Intel x86_64".to_string(),
+            chip_name: cpu_name,
             performance_cores: 0,
             efficiency_cores: 0,
             neural_engine: false,

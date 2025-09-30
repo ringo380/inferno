@@ -22,6 +22,28 @@ pub struct SystemInfo {
     pub available_memory: u64,
     pub platform: String,
     pub arch: String,
+    // New GPU and chip info (Phase 2)
+    pub gpu_info: Option<GpuInfo>,
+    pub chip_info: Option<ChipInfo>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct GpuInfo {
+    pub available: bool,
+    pub device_name: String,
+    pub memory_gb: f64,
+    pub supports_metal_3: bool,
+    pub vendor: String, // "Apple", "AMD", "NVIDIA", etc.
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct ChipInfo {
+    pub is_apple_silicon: bool,
+    pub chip_name: String,
+    pub performance_cores: u32,
+    pub efficiency_cores: u32,
+    pub neural_engine: bool,
+    pub total_cores: u32,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
