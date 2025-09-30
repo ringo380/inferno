@@ -26,6 +26,7 @@ pub mod dashboard_v2;  // New architecture implementation
 pub mod data_pipeline;
 pub mod data_pipeline_v2;  // New architecture implementation
 pub mod deployment;
+pub mod deployment_v2;  // New architecture implementation
 pub mod distributed;
 pub mod distributed_v2;  // New architecture implementation
 pub mod enhanced_parser;
