@@ -616,3 +616,215 @@ Verified library compilation:
 
 **End of Session 4**
 **Next Session**: Phase 2.1 - Metal GPU Detection & Optimization
+
+---
+
+## ✅ Session 5: Phase 2.1 Complete - GPU Detection & Apple Silicon
+
+**Date**: 2025-09-29
+**Duration**: ~1 hour
+**Status**: ✅ Phase 2.1 Complete
+
+### Completed Tasks
+
+#### 1. Metal GPU Detection (src/interfaces/desktop/macos.rs)
+
+**Implementation Details**:
+- `detect_metal_gpu()` function using system_profiler
+- Queries `SPDisplaysDataType` for GPU information
+- Parses JSON output to extract device details
+- Handles VRAM detection (GB/MB parsing)
+- Unified memory support for Apple Silicon
+- Metal 3 support detection (Apple M/AMD GPUs)
+- Fallback handling for unknown devices
+
+**Code Additions**: ~120 lines
+- JSON parsing with serde_json
+- Memory calculation for unified architecture
+- Vendor detection (Apple/AMD/NVIDIA)
+- Helper function: `get_total_memory()` using sysctl
+
+#### 2. Apple Silicon Chip Detection
+
+**Implementation Details**:
+- `detect_apple_silicon()` function using sysctl
+- Queries `machdep.cpu.brand_string` for chip identification
+- Detects all variants: M1/M2/M3/M4 + Pro/Max/Ultra
+- Performance core count: `hw.perflevel0.physicalcpu`
+- Efficiency core count: `hw.perflevel1.physicalcpu`
+- Neural Engine detection (all Apple Silicon has ANE)
+- Intel fallback for x86_64 Macs
+
+**Code Additions**: ~130 lines
+- Brand string parsing with variant detection
+- Core counting with sysctl queries
+- Logging with emoji indicators
+- Cross-platform compatibility
+
+#### 3. Type System Updates (src/interfaces/desktop/types.rs)
+
+**New Types**:
+```rust
+pub struct GpuInfo {
+    pub available: bool,
+    pub device_name: String,
+    pub memory_gb: f64,
+    pub supports_metal_3: bool,
+    pub vendor: String,
+}
+
+pub struct ChipInfo {
+    pub is_apple_silicon: bool,
+    pub chip_name: String,
+    pub performance_cores: u32,
+    pub efficiency_cores: u32,
+    pub neural_engine: bool,
+    pub total_cores: u32,
+}
+```
+
+**SystemInfo Enhanced**:
+- Added `gpu_info: Option<GpuInfo>`
+- Added `chip_info: Option<ChipInfo>`
+
+#### 4. Command Integration (src/interfaces/desktop/commands.rs)
+
+**get_system_info() Enhanced**:
+- Conditionally calls `detect_metal_gpu()` on macOS
+- Conditionally calls `detect_apple_silicon()` on macOS
+- Vendor extraction from device name
+- Total core calculation (P + E cores)
+- Feature-gated with `#[cfg(feature = "desktop")]`
+
+**Code Additions**: ~70 lines
+
+#### 5. Documentation Updates
+
+**CLAUDE.md**:
+- Added "Desktop Features (Phase 2.1)" section
+- Listed 6 GPU detection features
+- Checkmarks for completed features
+
+**README.md**:
+- Updated desktop app feature list
+- Added "NEW in Phase 2.1" labels
+- Highlighted Apple Silicon and Metal GPU
+
+### Testing Results
+
+**System Detected**:
+```
+Chip: Apple M4 Max
+Performance Cores: 10
+Efficiency Cores: 4
+Neural Engine: Yes
+Total Cores: 14
+Metal: Available
+Metal 3: Supported
+```
+
+**Commands Tested**:
+```bash
+# GPU Detection
+system_profiler SPDisplaysDataType -json
+✅ Returns: Apple M4 Max, no discrete VRAM (unified)
+
+# Chip Detection
+sysctl -n machdep.cpu.brand_string
+✅ Returns: Apple M4 Max
+
+# Core Counts
+sysctl -n hw.perflevel0.physicalcpu  # 10 P-cores
+sysctl -n hw.perflevel1.physicalcpu  # 4 E-cores
+✅ All working correctly
+```
+
+### Commit Details
+
+**Commit**: 8139f9e
+**Message**: "feat(desktop): Phase 2.1 - Metal GPU Detection & Apple Silicon identification"
+**Changes**: 301 insertions, 24 deletions across 5 files
+
+### Files Modified
+
+1. `src/interfaces/desktop/macos.rs` - GPU and chip detection functions
+2. `src/interfaces/desktop/types.rs` - New GpuInfo and ChipInfo types
+3. `src/interfaces/desktop/commands.rs` - Enhanced get_system_info()
+4. `CLAUDE.md` - Feature documentation
+5. `README.md` - User-facing feature list
+
+---
+
+## 📊 Phase 2.1 Summary
+
+### Code Metrics
+- **Lines Added**: ~320 lines
+- **New Functions**: 2 (detect_metal_gpu, detect_apple_silicon)
+- **New Types**: 2 (GpuInfo, ChipInfo)
+- **Helper Functions**: 1 (get_total_memory)
+
+### Capabilities Added
+- ✅ Metal GPU detection and capabilities
+- ✅ VRAM/unified memory calculation
+- ✅ Metal 3 support detection
+- ✅ Apple Silicon variant identification (M1-M4)
+- ✅ Pro/Max/Ultra variant detection
+- ✅ Performance and efficiency core counting
+- ✅ Neural Engine detection
+- ✅ Vendor identification (Apple/AMD/NVIDIA)
+
+### Compilation Status
+- ✅ Library compiles: 575 warnings, 0 errors
+- ✅ Build time: 17.86 seconds
+- ✅ All features working on Apple M4 Max
+
+---
+
+## 🎯 Key Insights
+
+### What Worked Well
+1. **System Commands**: Using sysctl and system_profiler provides reliable data
+2. **Conditional Compilation**: Feature gates keep library buildable without Tauri
+3. **Unified Memory**: Properly handles Apple Silicon's unified memory architecture
+4. **Variant Detection**: String parsing correctly identifies all M-series variants
+
+### Technical Decisions
+1. **system_profiler over Metal API**: Simpler, no additional dependencies
+2. **sysctl for Core Counts**: Direct kernel queries more reliable than estimates
+3. **Optional Fields**: gpu_info and chip_info are optional for cross-platform
+4. **Fallback Values**: Graceful degradation when detection fails
+
+### Detection Accuracy
+- ✅ Chip Name: "Apple M4 Max" (correct)
+- ✅ P-Cores: 10 (correct for M4 Max)
+- ✅ E-Cores: 4 (correct for M4 Max)
+- ✅ Neural Engine: Yes (all Apple Silicon has ANE)
+- ✅ Metal 3: Supported (M4 supports Metal 3)
+
+---
+
+## 🚀 Next Steps: Phase 2.2 - Metal Backend Integration
+
+### Upcoming Work
+1. Create `src/core/backends/metal.rs`
+2. Implement `InferenceBackend` trait for Metal
+3. Integrate with llama.cpp Metal kernels
+4. Add GPU memory management
+5. Implement Metal compute pipeline
+6. Add performance benchmarks
+
+### Prerequisites (All Met)
+- ✅ GPU detection working
+- ✅ Chip detection working
+- ✅ System info integration complete
+- ✅ Documentation updated
+- ✅ Tests passing
+
+### Estimated Timeline
+- **Phase 2.2**: 3-4 hours (Metal backend implementation)
+- **Phase 2.3**: 2-3 hours (Performance optimization)
+
+---
+
+**End of Session 5**
+**Next Session**: Phase 2.2 - Metal Backend Implementation
