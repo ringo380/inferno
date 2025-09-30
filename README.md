@@ -41,13 +41,36 @@ Choose your preferred installation method:
 
 ### 🍎 macOS
 
-#### DMG Package (Easiest)
-1. Visit [Releases](https://github.com/ringo380/inferno/releases/latest)
-2. Download `inferno-universal-vX.X.X.dmg` (universal binary for Intel & Apple Silicon)
-3. Open the DMG file and drag Inferno to Applications
-4. Launch from Applications or use `inferno` command in Terminal
+#### Desktop App (NEW in v0.5.0) - Recommended for macOS users
+**Native macOS application with Metal GPU acceleration, optimized for Apple Silicon (M1/M2/M3/M4)**
 
-#### Homebrew
+1. Visit [Releases](https://github.com/ringo380/inferno/releases/latest)
+2. Download `Inferno.dmg` (universal binary for Intel & Apple Silicon)
+3. Open the DMG and drag Inferno to Applications
+4. Launch from Applications folder
+
+**Features:**
+- 🎨 Native macOS UI with vibrancy effects
+- 🔔 System tray integration with live metrics
+- ⚡ Metal GPU acceleration for inference
+- 🔄 Automatic model downloads and updates
+- 📊 Real-time performance monitoring
+- 🔐 Built-in security and API key management
+
+**Build from source:**
+```bash
+# Clone and build
+git clone https://github.com/ringo380/inferno.git
+cd inferno
+./scripts/build-desktop.sh --release --universal
+
+# Development mode with hot reload
+cd dashboard && npm run tauri dev
+```
+
+#### CLI Tools (for automation and scripting)
+
+**Homebrew**
 ```bash
 # Add tap and install
 brew tap ringo380/tap
@@ -60,7 +83,7 @@ brew install ringo380/tap/inferno
 brew services start inferno
 ```
 
-#### Quick Install Script
+**Quick Install Script**
 ```bash
 curl -sSL https://github.com/ringo380/inferno/releases/latest/download/install-inferno.sh | bash
 ```

@@ -1,3 +1,47 @@
+//! # DEPRECATED: Tauri v1 Application (v0.5.0+)
+//!
+//! **⚠️ DEPRECATION NOTICE ⚠️**
+//!
+//! This module is deprecated as of v0.5.0 and will be removed in v0.6.0.
+//!
+//! ## Migration Path
+//!
+//! **Old (Tauri v1)**: `src/tauri_app.rs` with 14 commands
+//! **New (Tauri v2)**: `src/interfaces/desktop/` with 51 commands
+//!
+//! ### Why Deprecated?
+//!
+//! 1. **Tauri v2 is Superior**: Modern architecture, better performance
+//! 2. **More Features**: 51 commands vs 14 (3.6x more functionality)
+//! 3. **Better Integration**: Unified with dashboard implementation
+//! 4. **Apple Silicon Optimized**: Native M1/M2/M3/M4 support
+//! 5. **Dependency Conflicts**: Tauri v1 and v2 cannot coexist
+//!
+//! ### How to Migrate
+//!
+//! Instead of using the `inferno_app` binary, use the new desktop app:
+//!
+//! ```bash
+//! # OLD (deprecated):
+//! cargo run --bin inferno_app --features tauri-app
+//!
+//! # NEW (recommended):
+//! cd dashboard && npm run tauri dev
+//! ./scripts/build-desktop.sh --release
+//! ```
+//!
+//! ### Feature Comparison
+//!
+//! | Feature | Tauri v1 (Old) | Tauri v2 (New) |
+//! |---------|---------------|----------------|
+//! | Commands | 14 | 51 |
+//! | Plugins | Limited | Full ecosystem |
+//! | Performance | Good | Excellent |
+//! | macOS Integration | Basic | Native + optimized |
+//! | Updates | Manual | Automatic |
+//!
+//! See: `src/interfaces/desktop/` for the new implementation.
+
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

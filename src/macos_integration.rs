@@ -1,3 +1,46 @@
+//! # DEPRECATED: Tauri v1 macOS Integration (v0.5.0+)
+//!
+//! **⚠️ DEPRECATION NOTICE ⚠️**
+//!
+//! This module is deprecated as of v0.5.0 and will be removed in v0.6.0.
+//!
+//! ## Migration Path
+//!
+//! **Old (Tauri v1)**: `src/macos_integration.rs` with basic macOS features
+//! **New (Tauri v2)**: `src/interfaces/desktop/macos.rs` with full macOS integration
+//!
+//! ### Why Deprecated?
+//!
+//! 1. **Tauri v2 API**: Modern menu and tray APIs with better ergonomics
+//! 2. **Plugin System**: Native notification plugin with more features
+//! 3. **Better Performance**: Optimized for Apple Silicon (M1/M2/M3/M4)
+//! 4. **Enhanced Features**: Window vibrancy, appearance detection, Metal GPU support
+//! 5. **Dependency Conflicts**: Tauri v1 and v2 cannot coexist
+//!
+//! ### How to Migrate
+//!
+//! Use the new desktop interface instead:
+//!
+//! ```bash
+//! # OLD (deprecated):
+//! use inferno::macos_integration::{create_system_tray, send_native_notification};
+//!
+//! # NEW (recommended):
+//! use inferno::interfaces::desktop::macos::{create_menu_bar, send_notification};
+//! ```
+//!
+//! ### Feature Comparison
+//!
+//! | Feature | Tauri v1 (Old) | Tauri v2 (New) |
+//! |---------|---------------|----------------|
+//! | Menu Bar | Basic | Full native support |
+//! | System Tray | Static | Live metrics updates |
+//! | Notifications | Basic | Rich notifications |
+//! | Window Effects | Limited | Full vibrancy support |
+//! | Metal GPU | None | Detection + optimization |
+//!
+//! See: `src/interfaces/desktop/macos.rs` for the new implementation.
+
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use tauri::{

@@ -31,6 +31,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `cargo run -- audit enable --encryption` - Enable encrypted audit logs
 - `cargo run -- batch-queue create --schedule "0 2 * * *"` - Create scheduled batch jobs
 
+### Desktop Application (NEW in v0.5.0)
+- `cd dashboard && npm run tauri dev` - Run desktop app in development mode
+- `./scripts/build-desktop.sh --release` - Build production desktop app
+- `./scripts/build-desktop.sh --release --universal` - Build universal binary (ARM64 + x86_64)
+- `./scripts/build-desktop.sh --dev` - Fast development build
+- `./scripts/build-desktop.sh --clean --release` - Clean build
+- `./scripts/build-desktop.sh --skip-frontend` - Skip frontend rebuild (faster iteration)
+
 ### Development Tools
 - `./bootstrap.sh` - Bootstrap new project from scratch
 - `cargo watch -x check` - Watch for changes and check compilation
@@ -92,7 +100,17 @@ src/
     ├── api/                  # HTTP API (OpenAI-compatible)
     ├── tui/                  # Terminal UI
     ├── dashboard/            # Web dashboard
-    └── desktop/              # Desktop app (Tauri)
+    └── desktop/              # Desktop app (Tauri v2) - PRIMARY INTERFACE for macOS
+        ├── mod.rs            # Module exports
+        ├── state.rs          # AppState with full persistence
+        ├── commands.rs       # 51 Tauri command handlers
+        ├── types.rs          # Shared Rust ↔ TypeScript types
+        ├── events.rs         # Event emission system
+        ├── macos.rs          # macOS integration (menu, tray, notifications)
+        ├── backend_manager.rs    # Backend lifecycle management
+        ├── activity_logger.rs    # Activity logging & history
+        ├── security.rs           # API key & security management
+        └── model_repository.rs   # Model marketplace integration
 ```
 
 **Backward Compatibility**: Old module paths (e.g., `inferno::cache`, `inferno::monitoring`) are still available via re-exports in `lib.rs`. New code should use organized paths (e.g., `inferno::infrastructure::cache`).
