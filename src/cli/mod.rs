@@ -38,6 +38,7 @@ pub mod gpu_v2;  // New architecture implementation
 pub mod help;
 pub mod help_v2;  // New architecture implementation
 pub mod logging_audit;
+pub mod logging_audit_v2;  // New architecture implementation
 pub mod marketplace;
 pub mod marketplace_v2;  // New architecture implementation
 pub mod metrics;
