@@ -47,6 +47,7 @@ pub mod models_v2;  // New architecture implementation
 pub mod monitoring;
 pub mod monitoring_v2;  // New architecture implementation
 pub mod multi_tenancy;
+pub mod multi_tenancy_v2;  // New architecture implementation
 pub mod multimodal;
 pub mod observability;
 pub mod observability_v2;  // New architecture implementation
