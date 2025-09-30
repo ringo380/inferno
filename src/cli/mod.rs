@@ -48,6 +48,7 @@ pub mod observability;
 pub mod observability_v2;  // New architecture implementation
 pub mod optimization;
 pub mod package;
+pub mod package_v2;  // New architecture implementation
 pub mod performance_benchmark;
 pub mod performance_optimization;
 pub mod qa_framework;
