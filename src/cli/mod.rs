@@ -12,6 +12,7 @@ pub mod cache;
 pub mod config;
 pub mod config_v2;  // New architecture implementation
 pub mod convert;
+pub mod convert_v2;  // New architecture implementation
 pub mod dashboard;
 pub mod data_pipeline;
 pub mod deployment;
