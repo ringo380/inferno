@@ -3,6 +3,7 @@ pub mod advanced_cache;
 pub mod advanced_monitoring;
 pub mod api_gateway;
 pub mod audit;
+pub mod audit_v2;  // New architecture implementation
 pub mod backup_recovery;
 pub mod batch;
 pub mod batch_v2;  // New architecture implementation
