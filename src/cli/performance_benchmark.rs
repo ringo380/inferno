@@ -1023,9 +1023,13 @@ async fn memory_profile(
 
     // Load backend for testing
     #[cfg(feature = "gguf")]
-    let backend_type = BackendType::Gguf; // Default for memory profiling
-    #[cfg(not(feature = "gguf"))]
-    let backend_type = BackendType::None; // Default when no features enabled
+    let backend_type = BackendType::Gguf;
+    #[cfg(all(not(feature = "gguf"), feature = "onnx"))]
+    let backend_type = BackendType::Onnx;
+    #[cfg(all(not(feature = "gguf"), not(feature = "onnx"), all(feature = "gpu-metal", target_os = "macos")))]
+    let backend_type = BackendType::Metal;
+    #[cfg(not(any(feature = "gguf", feature = "onnx", all(feature = "gpu-metal", target_os = "macos"))))]
+    let backend_type = BackendType::None;
     let backend_config = BackendConfig::default();
     let mut backend = Backend::new(backend_type, &backend_config)?;
 

@@ -47,6 +47,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - ✅ Metal 3 support detection
 - ✅ Unified memory architecture support
 
+**Metal Backend (Phase 2.2 - Inference Backend)**:
+- ✅ Metal backend implementation (`src/backends/metal.rs`)
+- ✅ InferenceBackend trait implementation for Metal
+- ✅ GPU memory management and limits checking
+- ✅ GGUF model format validation for Metal
+- ✅ Placeholder inference/streaming for Phase 2.3
+- ✅ Feature-gated compilation (`gpu-metal` feature)
+
 ### Development Tools
 - `./bootstrap.sh` - Bootstrap new project from scratch
 - `cargo watch -x check` - Watch for changes and check compilation
