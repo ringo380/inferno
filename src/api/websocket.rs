@@ -5,7 +5,7 @@ use crate::{
     backends::{Backend, InferenceParams},
     cli::serve::ServerState,
     streaming::{StreamingConfig, StreamingManager},
-    upgrade::{ApplicationVersion, UpdateInfo, UpgradeEvent, UpgradeStatus},
+    upgrade::{ApplicationVersion, UpgradeEvent, UpgradeStatus},
     InfernoError,
 };
 use axum::{

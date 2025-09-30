@@ -1,10 +1,9 @@
 use crate::{
-    backends::{Backend, BackendConfig, BackendHandle, BackendType, InferenceParams},
+    backends::{Backend, BackendConfig, BackendType, InferenceParams},
     models::ModelInfo,
     performance_baseline::{PerformanceBaseline, PerformanceTarget},
 };
 use anyhow::Result;
-use chrono::{DateTime, Utc};
 use clap::{Args, Subcommand};
 use std::{
     path::PathBuf,

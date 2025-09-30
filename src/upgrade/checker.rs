@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::Duration;
 use tokio::time::{interval, sleep};
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info, warn};
 
 /// Update checker service for background update checking
 pub struct UpdateChecker {

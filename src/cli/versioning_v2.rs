@@ -5,7 +5,7 @@
 use crate::{
     config::Config,
     interfaces::cli::{Command, CommandContext, CommandOutput},
-    versioning::{ModelVersionManager, SemanticVersion, VersionStatus, VersioningConfig},
+    versioning::{ModelVersionManager, VersioningConfig},
 };
 use anyhow::Result;
 use async_trait::async_trait;

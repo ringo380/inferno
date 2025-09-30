@@ -3,14 +3,14 @@
 //! Comprehensive backup and restore system for safe application upgrades
 //! with versioned backups, compression, and integrity verification.
 
-use super::{ApplicationVersion, UpgradeConfig, UpgradeError, UpgradeResult};
+use super::{ApplicationVersion, UpgradeConfig};
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use flate2::{read::GzDecoder, write::GzEncoder, Compression};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::fs::{self, File};
-use std::io::{self, BufRead, BufReader, Read, Write};
+use std::io::Read;
 use std::path::{Path, PathBuf};
 use tar::{Archive, Builder};
 use tracing::{debug, error, info, warn};

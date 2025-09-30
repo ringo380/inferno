@@ -1,23 +1,45 @@
-//! Windows-specific upgrade functionality
+//! # Windows-Specific Upgrade Handler
 //!
-//! Handles platform-specific upgrade operations for Windows systems.
+//! Handles Windows-specific upgrade operations including MSI/EXE installers,
+//! service management, and Windows Store integration.
 
+use super::{
+    platform::BasePlatformHandler, PlatformUpgradeHandler, UpgradeConfig, UpgradeError,
+    UpgradeResult,
+};
 use anyhow::Result;
-use std::path::Path;
+use std::path::PathBuf;
 
-/// Install an upgrade package on Windows
-pub async fn install_upgrade<P: AsRef<Path>>(_package_path: P) -> Result<()> {
-    // TODO: Implement Windows-specific upgrade installation
-    // This could handle:
-    // - MSI installers
-    // - .exe installers
-    // - Windows Store updates
-    anyhow::bail!("Windows upgrade installation not yet implemented")
+/// Windows-specific upgrade handler
+pub struct WindowsUpgradeHandler {
+    base: BasePlatformHandler,
 }
 
-/// Verify package integrity on Windows
-pub fn verify_package<P: AsRef<Path>>(_package_path: P) -> Result<bool> {
-    // TODO: Implement package verification
-    // Check digital signatures, etc.
-    Ok(false)
+impl WindowsUpgradeHandler {
+    /// Create a new Windows upgrade handler
+    pub fn new(config: &UpgradeConfig) -> Result<Self> {
+        let base = BasePlatformHandler::new(config)?;
+        Ok(Self { base })
+    }
+}
+
+#[async_trait::async_trait]
+impl PlatformUpgradeHandler for WindowsUpgradeHandler {
+    async fn install_upgrade(&self, _package_path: PathBuf) -> UpgradeResult<()> {
+        Err(UpgradeError::UnsupportedPlatform(
+            "Windows upgrade installation not yet implemented".to_string(),
+        ))
+    }
+
+    fn verify_package(&self, _package_path: &PathBuf) -> UpgradeResult<bool> {
+        Ok(false)
+    }
+
+    fn get_platform_info(&self) -> super::PlatformInfo {
+        self.base.get_platform_info()
+    }
+
+    fn cleanup_old_versions(&self) -> UpgradeResult<()> {
+        self.base.cleanup_old_versions()
+    }
 }

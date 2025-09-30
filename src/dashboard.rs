@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
-use sysinfo::{System, SystemExt};
+use sysinfo::SystemExt;
 use tokio::sync::{broadcast, RwLock};
 use tower::ServiceBuilder;
 use tower_http::cors::CorsLayer;
