@@ -23,6 +23,7 @@ use uuid::Uuid;
 use super::types::{
     SystemInfo, MetricsSnapshot, InfernoMetrics, ActiveProcessInfo,
     AppSettings, Notification, NotificationAction, BatchJob, BatchJobConfig,
+    GpuInfo, ChipInfo,  // Phase 2: GPU and chip detection types
 };
 
 use super::{
@@ -213,6 +214,63 @@ pub async fn get_system_info(state: State<'_, AppState>) -> Result<SystemInfo, S
     let used_memory = system.used_memory();
     let available_memory = total_memory - used_memory;
 
+    // Get GPU information (Phase 2)
+    let gpu_info = if cfg!(target_os = "macos") {
+        #[cfg(feature = "desktop")]
+        {
+            use crate::interfaces::desktop::macos::detect_metal_gpu;
+            match detect_metal_gpu().await {
+                Ok(metal_info) => Some(GpuInfo {
+                    available: metal_info.available,
+                    device_name: metal_info.device_name.clone(),
+                    memory_gb: metal_info.memory_gb,
+                    supports_metal_3: metal_info.supports_metal_3,
+                    vendor: if metal_info.device_name.contains("Apple") {
+                        "Apple".to_string()
+                    } else if metal_info.device_name.contains("AMD") {
+                        "AMD".to_string()
+                    } else if metal_info.device_name.contains("NVIDIA") {
+                        "NVIDIA".to_string()
+                    } else {
+                        "Unknown".to_string()
+                    },
+                }),
+                Err(_) => None,
+            }
+        }
+        #[cfg(not(feature = "desktop"))]
+        {
+            None
+        }
+    } else {
+        None
+    };
+
+    // Get chip information (Phase 2)
+    let chip_info = if cfg!(target_os = "macos") {
+        #[cfg(feature = "desktop")]
+        {
+            use crate::interfaces::desktop::macos::detect_apple_silicon;
+            match detect_apple_silicon().await {
+                Ok(chip) => Some(ChipInfo {
+                    is_apple_silicon: chip.is_apple_silicon,
+                    chip_name: chip.chip_name.clone(),
+                    performance_cores: chip.performance_cores,
+                    efficiency_cores: chip.efficiency_cores,
+                    neural_engine: chip.neural_engine,
+                    total_cores: chip.performance_cores + chip.efficiency_cores,
+                }),
+                Err(_) => None,
+            }
+        }
+        #[cfg(not(feature = "desktop"))]
+        {
+            None
+        }
+    } else {
+        None
+    };
+
     Ok(SystemInfo {
         cpu_name: system.global_cpu_info().brand().to_string(),
         cpu_usage,
@@ -222,6 +280,8 @@ pub async fn get_system_info(state: State<'_, AppState>) -> Result<SystemInfo, S
         available_memory,
         platform: std::env::consts::OS.to_string(),
         arch: std::env::consts::ARCH.to_string(),
+        gpu_info,
+        chip_info,
     })
 }
 

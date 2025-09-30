@@ -52,10 +52,12 @@ Choose your preferred installation method:
 **Features:**
 - 🎨 Native macOS UI with vibrancy effects
 - 🔔 System tray integration with live metrics
-- ⚡ Metal GPU acceleration for inference
+- ⚡ Metal GPU acceleration for inference (NEW in Phase 2.1)
+- 🍎 Apple Silicon optimization (M1/M2/M3/M4 detection) (NEW in Phase 2.1)
 - 🔄 Automatic model downloads and updates
-- 📊 Real-time performance monitoring
+- 📊 Real-time performance monitoring with GPU metrics
 - 🔐 Built-in security and API key management
+- 🧠 Neural Engine detection for AI workloads
 
 **Build from source:**
 ```bash

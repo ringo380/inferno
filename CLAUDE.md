@@ -39,6 +39,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `./scripts/build-desktop.sh --clean --release` - Clean build
 - `./scripts/build-desktop.sh --skip-frontend` - Skip frontend rebuild (faster iteration)
 
+**Desktop Features (Phase 2.1 - GPU Detection)**:
+- ✅ Metal GPU detection and capabilities
+- ✅ Apple Silicon chip identification (M1/M2/M3/M4/Pro/Max/Ultra)
+- ✅ Performance and efficiency core counting
+- ✅ Neural Engine detection
+- ✅ Metal 3 support detection
+- ✅ Unified memory architecture support
+
 ### Development Tools
 - `./bootstrap.sh` - Bootstrap new project from scratch
 - `cargo watch -x check` - Watch for changes and check compilation
