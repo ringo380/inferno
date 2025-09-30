@@ -62,6 +62,7 @@ pub mod optimization_v2;  // New architecture implementation
 pub mod package;
 pub mod package_v2;  // New architecture implementation
 pub mod performance_benchmark;
+pub mod performance_benchmark_v2;  // New architecture implementation
 pub mod performance_optimization;
 pub mod qa_framework;
 pub mod qa_framework_v2;  // New architecture implementation
