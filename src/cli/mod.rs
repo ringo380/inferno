@@ -50,6 +50,7 @@ pub mod repo;
 pub mod repo_v2;  // New architecture implementation
 pub mod resilience;
 pub mod response_cache;
+pub mod response_cache_v2;  // New architecture implementation
 pub mod run;
 pub mod run_v2;  // New architecture implementation
 pub mod security;
