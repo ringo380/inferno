@@ -39,12 +39,12 @@
 //!
 //! See: `dashboard/src-tauri/` and `scripts/build-desktop.sh` for details.
 
-#[cfg(not(feature = "tauri-app"))]
+#[cfg(not(feature = "desktop"))]
 use anyhow::Result;
-#[cfg(feature = "tauri-app")]
+#[cfg(feature = "desktop")]
 use inferno::tauri_app::run_tauri_app;
 
-#[cfg(not(feature = "tauri-app"))]
+#[cfg(not(feature = "desktop"))]
 fn main() -> Result<()> {
     eprintln!("⚠️  DEPRECATED: This binary is deprecated as of v0.5.0");
     eprintln!("   Use the new Tauri v2 desktop app instead:");
@@ -57,7 +57,7 @@ fn main() -> Result<()> {
     std::process::exit(1);
 }
 
-#[cfg(feature = "tauri-app")]
+#[cfg(feature = "desktop")]
 fn main() -> anyhow::Result<()> {
     eprintln!("⚠️  DEPRECATED: This binary is deprecated as of v0.5.0");
     eprintln!("   Use the new Tauri v2 desktop app instead:");

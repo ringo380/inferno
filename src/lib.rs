@@ -108,7 +108,7 @@ pub mod marketplace;
 pub mod qa_framework;
 
 // Conditional Tauri app support
-#[cfg(feature = "tauri-app")]
+#[cfg(feature = "desktop")]
 pub mod tauri_app;
 
 /// Core error types for the Inferno platform
@@ -230,7 +230,7 @@ impl PlatformInfo {
         #[cfg(feature = "gpu-vulkan")]
         features.push("Vulkan GPU".to_string());
 
-        #[cfg(feature = "tauri-app")]
+        #[cfg(feature = "desktop")]
         {
             features.push("Desktop App".to_string());
             interfaces.push("Desktop GUI".to_string());

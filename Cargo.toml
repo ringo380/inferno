@@ -28,7 +28,7 @@ path = "src/bin/generate_icons.rs"
 [[bin]]
 name = "inferno_app"
 path = "src/bin/inferno_app.rs"
-required-features = ["tauri-app"]
+required-features = ["desktop"]
 
 # Universal binary configuration moved to .cargo/config.toml
 
