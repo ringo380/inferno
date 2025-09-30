@@ -49,6 +49,7 @@ pub mod qa_framework;
 pub mod repo;
 pub mod repo_v2;  // New architecture implementation
 pub mod resilience;
+pub mod resilience_v2;  // New architecture implementation
 pub mod response_cache;
 pub mod response_cache_v2;  // New architecture implementation
 pub mod run;
