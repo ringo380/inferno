@@ -38,6 +38,7 @@ pub mod repo;
 pub mod resilience;
 pub mod response_cache;
 pub mod run;
+pub mod run_v2;  // New architecture implementation
 pub mod security;
 pub mod serve;
 pub mod streaming;
