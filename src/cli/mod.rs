@@ -58,6 +58,7 @@ pub mod response_cache_v2;  // New architecture implementation
 pub mod run;
 pub mod run_v2;  // New architecture implementation
 pub mod security;
+pub mod security_v2;  // New architecture implementation
 pub mod serve;
 pub mod streaming;
 pub mod streaming_v2;  // New architecture implementation
