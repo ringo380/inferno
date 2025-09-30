@@ -1,4 +1,5 @@
 pub mod ab_testing;
+pub mod ab_testing_v2;  // New architecture implementation
 pub mod advanced_cache;
 pub mod advanced_monitoring;
 pub mod api_gateway;
