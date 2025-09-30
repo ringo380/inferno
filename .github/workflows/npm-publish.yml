@@ -22,32 +22,15 @@ jobs:
           registry-url: 'https://npm.pkg.github.com'
           scope: '@ringo380'
 
-      - name: Setup Rust for Tauri
-        uses: actions-rust-lang/setup-rust-toolchain@v1
-        with:
-          toolchain: stable
-
-      - name: Install Tauri dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libwebkit2gtk-4.0-dev \
-            build-essential \
-            curl \
-            wget \
-            libssl-dev \
-            libgtk-3-dev \
-            libayatana-appindicator3-dev \
-            librsvg2-dev
-
-      - name: Check if desktop-app is ready
+      - name: Check if desktop-app exists
         id: check_app
         run: |
-          if [ -f "desktop-app/package.json" ] && [ -d "desktop-app/src" ]; then
+          if [ -f "desktop-app/package.json" ]; then
             echo "ready=true" >> $GITHUB_OUTPUT
+            echo "Desktop app package found, proceeding with publish"
           else
             echo "ready=false" >> $GITHUB_OUTPUT
-            echo "Desktop app directory not fully configured, skipping npm publish"
+            echo "Desktop app package.json not found, skipping npm publish"
           fi
 
       - name: Update version
@@ -56,17 +39,8 @@ jobs:
           VERSION=${{ github.ref_name }}
           VERSION=${VERSION#v}
           cd desktop-app
-          npm version $VERSION --no-git-tag-version || true
-
-      - name: Install dependencies
-        if: steps.check_app.outputs.ready == 'true'
-        working-directory: desktop-app
-        run: npm ci
-
-      - name: Build desktop app
-        if: steps.check_app.outputs.ready == 'true'
-        working-directory: desktop-app
-        run: npm run build
+          npm version $VERSION --no-git-tag-version --allow-same-version
+          echo "Updated package version to $VERSION"
 
       - name: Publish to GitHub Packages
         if: steps.check_app.outputs.ready == 'true'
@@ -82,14 +56,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Check if desktop-app is ready
+      - name: Check if desktop-app exists
         id: check_app
         run: |
-          if [ -f "desktop-app/package.json" ] && [ -d "desktop-app/src" ]; then
+          if [ -f "desktop-app/package.json" ]; then
             echo "ready=true" >> $GITHUB_OUTPUT
+            echo "Desktop app package found, proceeding with publish"
           else
             echo "ready=false" >> $GITHUB_OUTPUT
-            echo "Desktop app directory not fully configured, skipping npm publish"
+            echo "Desktop app package.json not found, skipping npm publish"
           fi
 
       - name: Setup Node.js
@@ -99,43 +74,14 @@ jobs:
           node-version: '20'
           registry-url: 'https://registry.npmjs.org'
 
-      - name: Setup Rust for Tauri
-        if: steps.check_app.outputs.ready == 'true'
-        uses: actions-rust-lang/setup-rust-toolchain@v1
-        with:
-          toolchain: stable
-
-      - name: Install Tauri dependencies
-        if: steps.check_app.outputs.ready == 'true'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libwebkit2gtk-4.0-dev \
-            build-essential \
-            curl \
-            wget \
-            libssl-dev \
-            libgtk-3-dev \
-            libayatana-appindicator3-dev \
-            librsvg2-dev
-
       - name: Update version
         if: steps.check_app.outputs.ready == 'true'
         run: |
           VERSION=${{ github.ref_name }}
           VERSION=${VERSION#v}
           cd desktop-app
-          npm version $VERSION --no-git-tag-version || true
-
-      - name: Install dependencies
-        if: steps.check_app.outputs.ready == 'true'
-        working-directory: desktop-app
-        run: npm ci
-
-      - name: Build desktop app
-        if: steps.check_app.outputs.ready == 'true'
-        working-directory: desktop-app
-        run: npm run build
+          npm version $VERSION --no-git-tag-version --allow-same-version
+          echo "Updated package version to $VERSION"
 
       - name: Publish to NPM Registry
         if: steps.check_app.outputs.ready == 'true'
