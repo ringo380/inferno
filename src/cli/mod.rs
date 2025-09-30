@@ -50,6 +50,7 @@ pub mod run_v2;  // New architecture implementation
 pub mod security;
 pub mod serve;
 pub mod streaming;
+pub mod streaming_v2;  // New architecture implementation
 pub mod upgrade;
 pub mod validate;
 pub mod validate_v2;  // New architecture implementation
