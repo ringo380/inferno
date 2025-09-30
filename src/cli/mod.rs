@@ -41,6 +41,7 @@ pub mod performance_benchmark;
 pub mod performance_optimization;
 pub mod qa_framework;
 pub mod repo;
+pub mod repo_v2;  // New architecture implementation
 pub mod resilience;
 pub mod response_cache;
 pub mod run;
