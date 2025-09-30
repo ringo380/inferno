@@ -102,17 +102,19 @@ Comprehensive refactoring of the Inferno codebase to address architectural issue
 - [x] Create comprehensive documentation (README.md)
 - [x] Create runnable examples (examples/cli_architecture.rs)
 - [x] Maintain backward compatibility with old command style
-- [x] Refactor 3 example commands (models, run, serve) - **models completed**
+- [x] Refactor 3 example commands (models, run, serve) - **2 of 3 completed**
   - [x] Created `models_v2.rs` with Command trait implementations
   - [x] Implemented ModelsList, ModelsInfo, ModelsValidate commands
   - [x] Created `examples/models_v2_example.rs` demonstrating usage
-  - [ ] Refactor run command
+  - [x] Created `run_v2.rs` with RunCommand implementation
+  - [x] Implemented single inference, batch processing, and streaming modes
+  - [x] Created `examples/run_v2_example.rs` demonstrating all modes
   - [ ] Refactor serve command
 - [ ] Create migration guide with patterns
 - [ ] Add command testing framework
 - [ ] Migrate remaining 43 commands incrementally
 
-**Status**: Foundation complete! Command trait, pipeline, and middleware system working with full backward compatibility. **First migration (models) complete!**
+**Status**: Foundation complete! Command trait, pipeline, and middleware system working with full backward compatibility. **Two migrations complete (models, run)! 2 of 3 example commands done.**
 
 ### Massive File Decomposition
 Files to split (priority order):
