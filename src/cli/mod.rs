@@ -7,6 +7,7 @@ pub mod backup_recovery;
 pub mod batch;
 pub mod batch_queue;
 pub mod bench;
+pub mod bench_v2;  // New architecture implementation
 pub mod cache;
 pub mod config;
 pub mod convert;
