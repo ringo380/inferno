@@ -2641,7 +2641,7 @@ async fn api_system_info(
             "onnx_backend": cfg!(feature = "onnx"),
             "gpu_metal": cfg!(feature = "gpu-metal"),
             "gpu_vulkan": cfg!(feature = "gpu-vulkan"),
-            "tauri_app": cfg!(feature = "tauri-app"),
+            "tauri_app": cfg!(feature = "desktop"),
             "download_support": cfg!(feature = "download")
         },
         "endpoints": {

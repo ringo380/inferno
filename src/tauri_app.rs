@@ -48,7 +48,7 @@ use std::collections::HashMap;
 use tauri::{command, generate_context, generate_handler, AppHandle, Manager, State, Window};
 use tokio::sync::Mutex;
 
-#[cfg(feature = "tauri-app")]
+#[cfg(feature = "desktop")]
 use crate::macos_integration::{
     create_app_menu, create_system_tray, get_system_appearance, handle_menu_event,
     handle_system_tray_event, minimize_to_tray, send_native_notification, set_window_vibrancy,
