@@ -20,6 +20,7 @@ pub mod enhanced_parser;
 pub mod federated;
 pub mod fuzzy;
 pub mod gpu;
+pub mod gpu_v2;  // New architecture implementation
 pub mod help;
 pub mod logging_audit;
 pub mod marketplace;
