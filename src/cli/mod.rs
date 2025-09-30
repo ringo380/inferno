@@ -27,6 +27,7 @@ pub mod help;
 pub mod logging_audit;
 pub mod marketplace;
 pub mod metrics;
+pub mod metrics_v2;  // New architecture implementation
 pub mod model_versioning;
 pub mod models;
 pub mod models_v2;  // New architecture implementation
