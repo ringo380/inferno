@@ -1,14 +1,14 @@
 [package]
-name = "inferno-ai-runner"
-version = "0.1.0"
-description = "A Tauri App for Inferno AI Runner"
+name = "inferno-desktop"
+version = "0.5.0"
+description = "Inferno AI Desktop - Silicon-optimized macOS application for offline AI/ML inference"
 authors = ["Inferno Developers"]
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/inferno-ai/inferno"
 edition = "2021"
 
 [[bin]]
-name = "inferno-ai-runner"
+name = "inferno-desktop"
 path = "src/main.rs"
 
 [build-dependencies]

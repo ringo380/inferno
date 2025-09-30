@@ -13,6 +13,8 @@
 pub mod cli;
 
 // Desktop interface (Tauri v2) - NEW in v0.5.0
+// Only compiled when desktop feature is enabled to avoid dependency conflicts
+#[cfg(feature = "desktop")]
 pub mod desktop;
 
 // Legacy CLI commands (re-export from old locations for backward compatibility)
