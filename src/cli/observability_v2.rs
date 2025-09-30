@@ -45,7 +45,7 @@ impl Command for ObservabilityStatus {
     async fn execute(&self, ctx: &mut CommandContext) -> Result<CommandOutput> {
         info!("Retrieving observability status");
 
-        let _manager = ObservabilityManager::new(ObservabilityConfig::default()).await?;
+        let _manager = ObservabilityManager::new(ObservabilityConfig::default());
 
         // Stub implementation
         let prometheus_enabled = true;
@@ -122,7 +122,7 @@ impl Command for ObservabilityInit {
     async fn execute(&self, ctx: &mut CommandContext) -> Result<CommandOutput> {
         info!("Initializing observability stack");
 
-        let _manager = ObservabilityManager::new(ObservabilityConfig::default()).await?;
+        let _manager = ObservabilityManager::new(ObservabilityConfig::default());
 
         // Human-readable output
         if !ctx.json_output {
@@ -186,7 +186,7 @@ impl Command for ObservabilityMetrics {
     async fn execute(&self, ctx: &mut CommandContext) -> Result<CommandOutput> {
         info!("Retrieving metrics");
 
-        let _manager = ObservabilityManager::new(ObservabilityConfig::default()).await?;
+        let _manager = ObservabilityManager::new(ObservabilityConfig::default());
 
         // Stub implementation
         let metrics = vec![
@@ -258,7 +258,7 @@ impl Command for ObservabilityTracing {
     async fn execute(&self, ctx: &mut CommandContext) -> Result<CommandOutput> {
         info!("Managing tracing");
 
-        let _manager = ObservabilityManager::new(ObservabilityConfig::default()).await?;
+        let _manager = ObservabilityManager::new(ObservabilityConfig::default());
 
         // Human-readable output
         if !ctx.json_output {
@@ -336,7 +336,7 @@ impl Command for ObservabilityExport {
     async fn execute(&self, ctx: &mut CommandContext) -> Result<CommandOutput> {
         info!("Exporting observability data");
 
-        let _manager = ObservabilityManager::new(ObservabilityConfig::default()).await?;
+        let _manager = ObservabilityManager::new(ObservabilityConfig::default());
 
         // Human-readable output
         if !ctx.json_output {
