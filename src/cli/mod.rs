@@ -20,6 +20,7 @@ pub mod convert;
 pub mod convert_v2;  // New architecture implementation
 pub mod dashboard;
 pub mod data_pipeline;
+pub mod data_pipeline_v2;  // New architecture implementation
 pub mod deployment;
 pub mod distributed;
 pub mod distributed_v2;  // New architecture implementation
