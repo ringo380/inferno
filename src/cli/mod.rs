@@ -40,6 +40,7 @@ pub mod marketplace_v2;  // New architecture implementation
 pub mod metrics;
 pub mod metrics_v2;  // New architecture implementation
 pub mod model_versioning;
+pub mod model_versioning_v2;  // New architecture implementation
 pub mod models;
 pub mod models_v2;  // New architecture implementation
 pub mod monitoring;
