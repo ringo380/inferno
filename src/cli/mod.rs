@@ -24,6 +24,7 @@ pub mod marketplace;
 pub mod metrics;
 pub mod model_versioning;
 pub mod models;
+pub mod models_v2;  // New architecture implementation
 pub mod monitoring;
 pub mod multi_tenancy;
 pub mod multimodal;
