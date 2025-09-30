@@ -9,6 +9,7 @@ pub mod batch_queue;
 pub mod bench;
 pub mod bench_v2;  // New architecture implementation
 pub mod cache;
+pub mod cache_v2;  // New architecture implementation
 pub mod config;
 pub mod config_v2;  // New architecture implementation
 pub mod convert;
