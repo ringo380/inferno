@@ -29,6 +29,7 @@ pub mod fuzzy_v2;  // New architecture implementation
 pub mod gpu;
 pub mod gpu_v2;  // New architecture implementation
 pub mod help;
+pub mod help_v2;  // New architecture implementation
 pub mod logging_audit;
 pub mod marketplace;
 pub mod metrics;
