@@ -218,6 +218,43 @@ pub enum MultiModalCommands {
     },
 }
 
+/// Configuration for processing single media files
+/// Reduces function signature from 9 parameters to 2
+pub struct ProcessFileConfig {
+    pub model: String,
+    pub input: PathBuf,
+    pub prompt: Option<String>,
+    pub max_tokens: u32,
+    pub temperature: f32,
+    pub output_format: String,
+    pub output_file: Option<PathBuf>,
+    pub show_progress: bool,
+}
+
+/// Configuration for processing base64-encoded media
+/// Reduces function signature from 8 parameters to 2
+pub struct ProcessBase64Config {
+    pub model: String,
+    pub data: String,
+    pub media_type: String,
+    pub prompt: Option<String>,
+    pub max_tokens: u32,
+    pub temperature: f32,
+    pub output_format: String,
+}
+
+/// Configuration for batch processing media files
+/// Reduces function signature from 8 parameters to 2
+pub struct BatchProcessConfig {
+    pub model: String,
+    pub input_dir: PathBuf,
+    pub pattern: String,
+    pub prompt: Option<String>,
+    pub output_dir: PathBuf,
+    pub max_concurrent: u32,
+    pub continue_on_error: bool,
+}
+
 pub async fn handle_multimodal_command(args: MultiModalArgs) -> Result<(), InfernoError> {
     let config = MultiModalConfig::default();
     let processor = MultiModalProcessor::new(config);
@@ -236,8 +273,7 @@ pub async fn handle_multimodal_command(args: MultiModalArgs) -> Result<(), Infer
             output_file,
             _show_progress,
         } => {
-            handle_process_command(
-                &processor,
+            let config = ProcessFileConfig {
                 model,
                 input,
                 prompt,
@@ -245,9 +281,9 @@ pub async fn handle_multimodal_command(args: MultiModalArgs) -> Result<(), Infer
                 temperature,
                 output_format,
                 output_file,
-                _show_progress,
-            )
-            .await
+                show_progress: _show_progress,
+            };
+            handle_process_command(&processor, config).await
         }
 
         MultiModalCommands::ProcessBase64 {
@@ -259,8 +295,7 @@ pub async fn handle_multimodal_command(args: MultiModalArgs) -> Result<(), Infer
             temperature,
             output_format,
         } => {
-            handle_process_base64_command(
-                &processor,
+            let config = ProcessBase64Config {
                 model,
                 data,
                 media_type,
@@ -268,8 +303,8 @@ pub async fn handle_multimodal_command(args: MultiModalArgs) -> Result<(), Infer
                 max_tokens,
                 temperature,
                 output_format,
-            )
-            .await
+            };
+            handle_process_base64_command(&processor, config).await
         }
 
         MultiModalCommands::Batch {
@@ -281,8 +316,7 @@ pub async fn handle_multimodal_command(args: MultiModalArgs) -> Result<(), Infer
             max_concurrent,
             continue_on_error,
         } => {
-            handle_batch_command(
-                &processor,
+            let config = BatchProcessConfig {
                 model,
                 input_dir,
                 pattern,
@@ -290,8 +324,8 @@ pub async fn handle_multimodal_command(args: MultiModalArgs) -> Result<(), Infer
                 output_dir,
                 max_concurrent,
                 continue_on_error,
-            )
-            .await
+            };
+            handle_batch_command(&processor, config).await
         }
 
         MultiModalCommands::Sessions { detailed, refresh } => {
@@ -339,20 +373,13 @@ pub async fn handle_multimodal_command(args: MultiModalArgs) -> Result<(), Infer
 
 async fn handle_process_command(
     processor: &MultiModalProcessor,
-    model: String,
-    input: PathBuf,
-    prompt: Option<String>,
-    max_tokens: u32,
-    temperature: f32,
-    output_format: String,
-    output_file: Option<PathBuf>,
-    _show_progress: bool,
+    config: ProcessFileConfig,
 ) -> Result<(), InfernoError> {
-    println!("Processing file: {:?}", input);
+    println!("Processing file: {:?}", config.input);
 
     let params = InferenceParams {
-        max_tokens,
-        temperature,
+        max_tokens: config.max_tokens,
+        temperature: config.temperature,
         top_p: 0.9,
         stream: false,
         stop_sequences: vec![],
@@ -360,11 +387,11 @@ async fn handle_process_command(
     };
 
     let result = processor
-        .process_file(&model, &input, prompt, params)
+        .process_file(&config.model, &config.input, config.prompt, params)
         .await
         .map_err(|e| InfernoError::InvalidArgument(format!("Processing failed: {}", e)))?;
 
-    let output_content = match output_format.as_str() {
+    let output_content = match config.output_format.as_str() {
         "json" => serde_json::to_string_pretty(&result).map_err(|e| {
             InfernoError::InvalidArgument(format!("JSON serialization failed: {}", e))
         })?,
@@ -372,12 +399,12 @@ async fn handle_process_command(
         _ => {
             return Err(InfernoError::InvalidArgument(format!(
                 "Unsupported output format: {}",
-                output_format
+                config.output_format
             )))
         }
     };
 
-    if let Some(output_path) = output_file {
+    if let Some(output_path) = config.output_file {
         tokio::fs::write(&output_path, &output_content)
             .await
             ?;
@@ -391,19 +418,13 @@ async fn handle_process_command(
 
 async fn handle_process_base64_command(
     processor: &MultiModalProcessor,
-    model: String,
-    data: String,
-    media_type: String,
-    prompt: Option<String>,
-    max_tokens: u32,
-    temperature: f32,
-    output_format: String,
+    config: ProcessBase64Config,
 ) -> Result<(), InfernoError> {
-    println!("Processing base64 data ({} type)", media_type);
+    println!("Processing base64 data ({} type)", config.media_type);
 
     let params = InferenceParams {
-        max_tokens,
-        temperature,
+        max_tokens: config.max_tokens,
+        temperature: config.temperature,
         top_p: 0.9,
         stream: false,
         stop_sequences: vec![],
@@ -411,11 +432,11 @@ async fn handle_process_base64_command(
     };
 
     let result = processor
-        .process_base64(&model, &data, &media_type, prompt, params)
+        .process_base64(&config.model, &config.data, &config.media_type, config.prompt, params)
         .await
         .map_err(|e| InfernoError::InvalidArgument(format!("Processing failed: {}", e)))?;
 
-    let output_content = match output_format.as_str() {
+    let output_content = match config.output_format.as_str() {
         "json" => serde_json::to_string_pretty(&result).map_err(|e| {
             InfernoError::InvalidArgument(format!("JSON serialization failed: {}", e))
         })?,
@@ -423,7 +444,7 @@ async fn handle_process_base64_command(
         _ => {
             return Err(InfernoError::InvalidArgument(format!(
                 "Unsupported output format: {}",
-                output_format
+                config.output_format
             )))
         }
     };
@@ -434,27 +455,21 @@ async fn handle_process_base64_command(
 
 async fn handle_batch_command(
     processor: &MultiModalProcessor,
-    model: String,
-    input_dir: PathBuf,
-    pattern: String,
-    prompt: Option<String>,
-    output_dir: PathBuf,
-    max_concurrent: u32,
-    continue_on_error: bool,
+    config: BatchProcessConfig,
 ) -> Result<(), InfernoError> {
     println!("Starting batch processing...");
-    println!("Input directory: {:?}", input_dir);
-    println!("Pattern: {}", pattern);
-    println!("Output directory: {:?}", output_dir);
-    println!("Max concurrent jobs: {}", max_concurrent);
+    println!("Input directory: {:?}", config.input_dir);
+    println!("Pattern: {}", config.pattern);
+    println!("Output directory: {:?}", config.output_dir);
+    println!("Max concurrent jobs: {}", config.max_concurrent);
 
     // Create output directory
-    tokio::fs::create_dir_all(&output_dir)
+    tokio::fs::create_dir_all(&config.output_dir)
         .await
         ?;
 
     // Find matching files
-    let files = find_matching_files(&input_dir, &pattern).await?;
+    let files = find_matching_files(&config.input_dir, &config.pattern).await?;
     println!("Found {} files to process", files.len());
 
     if files.is_empty() {
@@ -473,17 +488,18 @@ async fn handle_batch_command(
 
     let mut processed = 0;
     let mut failed = 0;
+    let continue_on_error = config.continue_on_error;
 
     // Process files in batches
-    for chunk in files.chunks(max_concurrent as usize) {
+    for chunk in files.chunks(config.max_concurrent as usize) {
         let mut tasks = Vec::new();
 
         for file_path in chunk {
             let processor_ref = processor;
-            let model_ref = &model;
-            let prompt_ref = &prompt;
+            let model_ref = &config.model;
+            let prompt_ref = &config.prompt;
             let params_ref = params.clone();
-            let output_dir_ref = &output_dir;
+            let output_dir_ref = &config.output_dir;
 
             let task = async move {
                 let result = processor_ref
