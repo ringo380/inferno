@@ -11,6 +11,68 @@ use clap::{Args, Subcommand, ValueEnum};
 use std::{path::PathBuf, sync::Arc};
 use tracing::warn;
 
+/// Configuration for model conversion operations
+/// Reduces function signature from 11 parameters to 2
+pub struct ConvertModelConfig {
+    pub input: PathBuf,
+    pub output: PathBuf,
+    pub format: ModelFormatArg,
+    pub optimization: OptimizationLevelArg,
+    pub quantization: Option<QuantizationTypeArg>,
+    pub precision: Option<PrecisionArg>,
+    pub context_length: Option<u32>,
+    pub batch_size: Option<u32>,
+    pub preserve_metadata: bool,
+    pub verify_output: bool,
+}
+
+impl ConvertModelConfig {
+    /// Convert to internal ConversionConfig type
+    fn into_conversion_config(self) -> ConversionConfig {
+        ConversionConfig {
+            output_format: self.format.into(),
+            optimization_level: self.optimization.into(),
+            quantization: self.quantization.map(Into::into),
+            target_precision: self.precision.map(Into::into),
+            context_length: self.context_length,
+            batch_size: self.batch_size,
+            preserve_metadata: self.preserve_metadata,
+            verify_output: self.verify_output,
+        }
+    }
+}
+
+/// Configuration for model optimization operations
+/// Reduces function signature from 11 parameters to 2
+pub struct OptimizeModelConfig {
+    pub input: PathBuf,
+    pub output: PathBuf,
+    pub remove_unused: bool,
+    pub merge_ops: bool,
+    pub constant_folding: bool,
+    pub dead_code: bool,
+    pub memory_opt: bool,
+    pub inference_opt: bool,
+    pub graph_simplify: bool,
+    pub operator_fusion: bool,
+}
+
+impl OptimizeModelConfig {
+    /// Convert to internal OptimizationOptions type
+    fn into_optimization_options(self) -> OptimizationOptions {
+        OptimizationOptions {
+            remove_unused_layers: self.remove_unused,
+            merge_consecutive_ops: self.merge_ops,
+            constant_folding: self.constant_folding,
+            dead_code_elimination: self.dead_code,
+            memory_optimization: self.memory_opt,
+            inference_optimization: self.inference_opt,
+            graph_simplification: self.graph_simplify,
+            operator_fusion: self.operator_fusion,
+        }
+    }
+}
+
 #[derive(Args)]
 pub struct ConvertArgs {
     #[command(subcommand)]
@@ -278,8 +340,7 @@ pub async fn execute(args: ConvertArgs, config: &Config) -> Result<()> {
             preserve_metadata,
             no_verify,
         } => {
-            convert_model(
-                &converter,
+            let config = ConvertModelConfig {
                 input,
                 output,
                 format,
@@ -289,9 +350,9 @@ pub async fn execute(args: ConvertArgs, config: &Config) -> Result<()> {
                 context_length,
                 batch_size,
                 preserve_metadata,
-                !no_verify,
-            )
-            .await
+                verify_output: !no_verify,
+            };
+            convert_model(&converter, config).await
         }
 
         ConvertCommand::Optimize {
@@ -306,8 +367,7 @@ pub async fn execute(args: ConvertArgs, config: &Config) -> Result<()> {
             graph_simplify,
             operator_fusion,
         } => {
-            optimize_model(
-                &converter,
+            let config = OptimizeModelConfig {
                 input,
                 output,
                 remove_unused,
@@ -318,8 +378,8 @@ pub async fn execute(args: ConvertArgs, config: &Config) -> Result<()> {
                 inference_opt,
                 graph_simplify,
                 operator_fusion,
-            )
-            .await
+            };
+            optimize_model(&converter, config).await
         }
 
         ConvertCommand::Quantize {
@@ -376,42 +436,28 @@ pub async fn execute(args: ConvertArgs, config: &Config) -> Result<()> {
 
 async fn convert_model(
     converter: &ModelConverter,
-    input: PathBuf,
-    output: PathBuf,
-    format: ModelFormatArg,
-    optimization: OptimizationLevelArg,
-    quantization: Option<QuantizationTypeArg>,
-    precision: Option<PrecisionArg>,
-    context_length: Option<u32>,
-    batch_size: Option<u32>,
-    preserve_metadata: bool,
-    verify_output: bool,
+    config: ConvertModelConfig,
 ) -> Result<()> {
     println!(
         "Converting model: {} -> {}",
-        input.display(),
-        output.display()
+        config.input.display(),
+        config.output.display()
     );
-    println!("Target format: {:?}", format);
-    println!("Optimization: {:?}", optimization);
+    println!("Target format: {:?}", config.format);
+    println!("Optimization: {:?}", config.optimization);
 
-    if let Some(ref quant) = quantization {
+    if let Some(ref quant) = config.quantization {
         println!("Quantization: {:?}", quant);
     }
 
-    let conversion_config = ConversionConfig {
-        output_format: format.into(),
-        optimization_level: optimization.into(),
-        quantization: quantization.map(Into::into),
-        target_precision: precision.map(Into::into),
-        context_length,
-        batch_size,
-        preserve_metadata,
-        verify_output,
-    };
+    // Store paths before moving config
+    let input_path = config.input.clone();
+    let output_path = config.output.clone();
+
+    let conversion_config = config.into_conversion_config();
 
     let result = converter
-        .convert_model(&input, &output, &conversion_config)
+        .convert_model(&input_path, &output_path, &conversion_config)
         .await?;
 
     if result.success {
@@ -446,33 +492,19 @@ async fn convert_model(
 
 async fn optimize_model(
     converter: &ModelConverter,
-    input: PathBuf,
-    output: PathBuf,
-    remove_unused: bool,
-    merge_ops: bool,
-    constant_folding: bool,
-    dead_code: bool,
-    memory_opt: bool,
-    inference_opt: bool,
-    graph_simplify: bool,
-    operator_fusion: bool,
+    config: OptimizeModelConfig,
 ) -> Result<()> {
     println!(
         "Optimizing model: {} -> {}",
-        input.display(),
-        output.display()
+        config.input.display(),
+        config.output.display()
     );
 
-    let optimization_options = OptimizationOptions {
-        remove_unused_layers: remove_unused,
-        merge_consecutive_ops: merge_ops,
-        constant_folding,
-        dead_code_elimination: dead_code,
-        memory_optimization: memory_opt,
-        inference_optimization: inference_opt,
-        graph_simplification: graph_simplify,
-        operator_fusion,
-    };
+    // Store paths before moving config
+    let input_path = config.input.clone();
+    let output_path = config.output.clone();
+
+    let optimization_options = config.into_optimization_options();
 
     println!("Optimization options:");
     println!(
@@ -509,7 +541,7 @@ async fn optimize_model(
     );
 
     let result = converter
-        .optimize_model(&input, &output, &optimization_options)
+        .optimize_model(&input_path, &output_path, &optimization_options)
         .await?;
 
     if result.success {
