@@ -7,6 +7,52 @@ use std::io;
 use std::path::PathBuf;
 use tracing::{info, warn};
 
+/// Configuration for deployment operations
+/// Reduces function signature from 12 parameters to 2
+pub struct DeployConfig {
+    pub environment: String,
+    pub version: String,
+    pub namespace: Option<String>,
+    pub replicas: Option<u32>,
+    pub values_file: Option<PathBuf>,
+    pub set_values: Vec<String>,
+    pub gpu: bool,
+    pub skip_checks: bool,
+    pub dry_run: bool,
+    pub wait: bool,
+    pub timeout: u64,
+}
+
+impl DeployConfig {
+    /// Convert to DeploymentArgs, parsing set_values into custom_values HashMap
+    pub fn into_deployment_args(self) -> DeploymentArgs {
+        let mut custom_values = HashMap::new();
+
+        // Parse custom values from CLI format (key=value)
+        for value_pair in self.set_values {
+            if let Some((key, value)) = value_pair.split_once('=') {
+                custom_values.insert(key.to_string(), value.to_string());
+            } else {
+                warn!("Invalid value format: {}. Expected key=value", value_pair);
+            }
+        }
+
+        DeploymentArgs {
+            environment: self.environment,
+            version: self.version,
+            namespace: self.namespace,
+            replicas: self.replicas,
+            gpu_enabled: self.gpu,
+            dry_run: self.dry_run,
+            wait_for_completion: self.wait,
+            timeout_seconds: self.timeout,
+            custom_values,
+            values_file: self.values_file,
+            skip_pre_checks: self.skip_checks,
+        }
+    }
+}
+
 #[derive(Args)]
 pub struct DeploymentCliArgs {
     #[command(subcommand)]
@@ -419,21 +465,20 @@ pub async fn handle_deployment_command(args: DeploymentCliArgs) -> Result<()> {
             wait,
             timeout,
         } => {
-            handle_deploy(
-                &mut manager,
+            let config = DeployConfig {
                 environment,
                 version,
                 namespace,
                 replicas,
                 values_file,
-                set,
+                set_values: set,
                 gpu,
                 skip_checks,
                 dry_run,
                 wait,
                 timeout,
-            )
-            .await
+            };
+            handle_deploy(&mut manager, config).await
         }
 
         DeploymentCommands::Rollback {
@@ -548,52 +593,20 @@ pub async fn handle_deployment_command(args: DeploymentCliArgs) -> Result<()> {
 
 async fn handle_deploy(
     manager: &mut DeploymentManager,
-    environment: String,
-    version: String,
-    namespace: Option<String>,
-    replicas: Option<u32>,
-    values_file: Option<PathBuf>,
-    set_values: Vec<String>,
-    gpu: bool,
-    skip_checks: bool,
-    dry_run: bool,
-    wait: bool,
-    timeout: u64,
+    config: DeployConfig,
 ) -> Result<()> {
-    info!("Starting deployment to {} environment", environment);
+    info!("Starting deployment to {} environment", config.environment);
 
-    let mut deploy_args = DeploymentArgs {
-        environment: environment.clone(),
-        version: version.clone(),
-        namespace: namespace.clone(),
-        replicas,
-        gpu_enabled: gpu,
-        dry_run,
-        wait_for_completion: wait,
-        timeout_seconds: timeout,
-        custom_values: HashMap::new(),
-        values_file,
-        skip_pre_checks: skip_checks,
-    };
+    // Convert config to DeploymentArgs (parses set_values into custom_values)
+    let deploy_args = config.into_deployment_args();
 
-    // Parse custom values
-    for value_pair in set_values {
-        if let Some((key, value)) = value_pair.split_once('=') {
-            deploy_args
-                .custom_values
-                .insert(key.to_string(), value.to_string());
-        } else {
-            warn!("Invalid value format: {}. Expected key=value", value_pair);
-        }
-    }
-
-    if dry_run {
+    if deploy_args.dry_run {
         info!("Performing dry run deployment");
     }
 
     let result = manager.deploy(&deploy_args).await?;
 
-    if dry_run {
+    if deploy_args.dry_run {
         println!("Dry run completed successfully. Generated manifests:");
         println!("{}", result.manifest_preview);
     } else {
