@@ -48,7 +48,7 @@ impl PlatformUpgradeHandler for LinuxUpgradeHandler {
     }
 
     async fn cleanup_after_upgrade(&self) -> Result<()> {
-        self.base.cleanup_temporary_files().await.map_err(Into::into)
+        self.base.cleanup_after_upgrade().await.map_err(Into::into)
     }
 
     fn requires_elevated_privileges(&self) -> bool {
