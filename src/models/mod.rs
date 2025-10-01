@@ -378,10 +378,10 @@ impl ModelManager {
         }
 
         // Read first chunk to check for suspicious content
-        let mut file = async_fs::File::open(path).await.map_err(InfernoError::Io)?;
+        let mut file = async_fs::File::open(path).await?;
         let mut buffer = vec![0u8; 4096];
         use tokio::io::AsyncReadExt;
-        let bytes_read = file.read(&mut buffer).await.map_err(InfernoError::Io)?;
+        let bytes_read = file.read(&mut buffer).await?;
 
         if bytes_read > 0 {
             let content = &buffer[..bytes_read];
