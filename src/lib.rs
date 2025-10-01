@@ -112,10 +112,13 @@ pub mod qa_framework;
 // See: src/interfaces/desktop/ for Tauri v2 command implementations
 
 /// Core error types for the Inferno platform
+///
+/// Large error variants are boxed to reduce overall enum size from ~208 bytes to <64 bytes.
+/// This improves performance by reducing stack copying overhead.
 #[derive(Debug, thiserror::Error)]
 pub enum InfernoError {
     #[error("Configuration error: {0}")]
-    Config(#[from] figment::Error),
+    Config(Box<figment::Error>),
 
     #[error("Backend error: {0}")]
     Backend(String),
@@ -127,10 +130,10 @@ pub enum InfernoError {
     UnsupportedFormat(String),
 
     #[error("I/O error: {0}")]
-    Io(#[from] std::io::Error),
+    Io(Box<std::io::Error>),
 
     #[error("Serialization error: {0}")]
-    Serialization(#[from] serde_json::Error),
+    Serialization(Box<serde_json::Error>),
 
     #[error("Network error: {0}")]
     Network(String),
@@ -179,6 +182,27 @@ pub enum InfernoError {
 
     #[error("Streaming limit exceeded: {0}")]
     StreamingLimit(String),
+}
+
+// Manual From implementations for boxed error types
+// These replace the #[from] attribute to support boxing large variants
+
+impl From<figment::Error> for InfernoError {
+    fn from(err: figment::Error) -> Self {
+        InfernoError::Config(Box::new(err))
+    }
+}
+
+impl From<std::io::Error> for InfernoError {
+    fn from(err: std::io::Error) -> Self {
+        InfernoError::Io(Box::new(err))
+    }
+}
+
+impl From<serde_json::Error> for InfernoError {
+    fn from(err: serde_json::Error) -> Self {
+        InfernoError::Serialization(Box::new(err))
+    }
 }
 
 /// Result type for Inferno operations
