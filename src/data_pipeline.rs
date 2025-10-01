@@ -322,8 +322,7 @@ pub enum RecoveryStrategy {
     ManualIntervention,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ResourceConfig {
     /// Resource limits
     pub limits: ResourceLimits,
@@ -856,8 +855,7 @@ pub enum TransformationType {
     Custom,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct DataTypeConfig {
     /// Type inference
     pub inference: TypeInferenceConfig,
@@ -932,8 +930,7 @@ pub struct TypeValidationRule {
     pub validation_fn: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AggregationConfig {
     /// Aggregation functions
     pub functions: Vec<AggregationFunction>,
@@ -969,8 +966,7 @@ pub enum AggregationType {
     Custom,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct GroupByConfig {
     /// Group by columns
     pub columns: Vec<String>,
@@ -1041,8 +1037,7 @@ pub enum FrameBound {
     UnboundedFollowing,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct JoinConfig {
     /// Join operations
     pub joins: Vec<JoinOperation>,
@@ -1112,8 +1107,7 @@ pub struct JoinOptimization {
     pub sort_merge_joins: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct CustomTransformationConfig {
     /// Custom functions
     pub functions: Vec<CustomFunction>,
@@ -1561,7 +1555,6 @@ impl Default for RecoveryConfig {
     }
 }
 
-
 impl Default for ResourceLimits {
     fn default() -> Self {
         Self {
@@ -1744,7 +1737,6 @@ impl Default for TransformationConfig {
     }
 }
 
-
 impl Default for TypeInferenceConfig {
     fn default() -> Self {
         Self {
@@ -1775,9 +1767,6 @@ impl Default for TypeValidationConfig {
     }
 }
 
-
-
-
 impl Default for JoinOptimization {
     fn default() -> Self {
         Self {
@@ -1787,7 +1776,6 @@ impl Default for JoinOptimization {
         }
     }
 }
-
 
 impl Default for UdfRegistryConfig {
     fn default() -> Self {
@@ -1962,13 +1950,11 @@ impl Default for FeatureStoreConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct TrainingIntegrationConfig {
     pub enabled: bool,
     pub frameworks: Vec<String>,
 }
-
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DataLineageConfig {
@@ -1985,13 +1971,11 @@ impl Default for DataLineageConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct OptimizationConfig {
     pub enabled: bool,
     pub strategies: Vec<String>,
 }
-
 
 /// Data pipeline representation
 #[derive(Debug, Clone, Serialize, Deserialize)]

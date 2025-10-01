@@ -805,8 +805,7 @@ impl Default for ResilienceManager {
 }
 
 /// Graceful shutdown coordinator
-#[derive(Debug)]
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct GracefulShutdown {
     shutdown_tx: Option<mpsc::UnboundedSender<()>>,
     shutdown_complete_rx: Option<oneshot::Receiver<()>>,
@@ -851,4 +850,3 @@ impl GracefulShutdown {
         }
     }
 }
-

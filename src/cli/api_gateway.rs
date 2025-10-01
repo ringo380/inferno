@@ -1796,9 +1796,7 @@ async fn handle_api_key_action(config: &Config, action: ApiKeyAction) -> Result<
 
             if let Some(api_config) = &config.api_gateway.authentication.api_key {
                 for (key, info) in &api_config.keys {
-                    let expired = info
-                        .expires_at
-                        .is_some_and(|exp| exp < chrono::Utc::now());
+                    let expired = info.expires_at.is_some_and(|exp| exp < chrono::Utc::now());
 
                     if !show_expired && expired {
                         continue;

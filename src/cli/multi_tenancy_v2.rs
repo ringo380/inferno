@@ -340,11 +340,11 @@ impl Command for TenantQuotas {
 
         if self.action == "set"
             && self.cpu_limit.is_none()
-                && self.memory_limit.is_none()
-                && self.storage_limit.is_none()
-            {
-                anyhow::bail!("At least one quota limit must be specified for set action");
-            }
+            && self.memory_limit.is_none()
+            && self.storage_limit.is_none()
+        {
+            anyhow::bail!("At least one quota limit must be specified for set action");
+        }
 
         Ok(())
     }

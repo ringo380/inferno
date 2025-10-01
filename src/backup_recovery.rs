@@ -7,8 +7,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct BackupRecoveryConfig {
     pub enabled: bool,
     pub backup_strategy: BackupStrategy,
@@ -25,7 +24,6 @@ pub struct BackupRecoveryConfig {
     pub validation: ValidationConfig,
     pub performance: PerformanceConfig,
 }
-
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BackupStrategy {

@@ -305,8 +305,7 @@ impl Default for SecurityConfig {
 }
 
 /// Monitoring and observability configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct MonitoringConfig {
     /// Prometheus monitoring
     pub prometheus: PrometheusConfig,
@@ -321,7 +320,6 @@ pub struct MonitoringConfig {
     /// Alerting rules
     pub alerting: AlertingConfig,
 }
-
 
 /// Environment-specific configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]

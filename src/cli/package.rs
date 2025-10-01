@@ -709,11 +709,10 @@ async fn handle_update(
             // Implementation would check for updates
             println!("No updates available");
         } else {
-            if !auto_confirm
-                && !confirm(&format!("Update package '{}'?", pkg))? {
-                    println!("Update cancelled");
-                    return Ok(());
-                }
+            if !auto_confirm && !confirm(&format!("Update package '{}'?", pkg))? {
+                println!("Update cancelled");
+                return Ok(());
+            }
 
             match marketplace.package_upgrade(Some(pkg)).await {
                 Ok(download_ids) => {
@@ -746,11 +745,10 @@ async fn handle_update(
                 }
             }
         } else {
-            if !auto_confirm
-                && !confirm("Update all packages?")? {
-                    println!("Update cancelled");
-                    return Ok(());
-                }
+            if !auto_confirm && !confirm("Update all packages?")? {
+                println!("Update cancelled");
+                return Ok(());
+            }
 
             match marketplace.package_upgrade(None).await {
                 Ok(download_ids) => {
@@ -791,11 +789,10 @@ async fn handle_upgrade(
         return Ok(());
     }
 
-    if !auto_confirm
-        && !confirm("Upgrade all packages?")? {
-            println!("Upgrade cancelled");
-            return Ok(());
-        }
+    if !auto_confirm && !confirm("Upgrade all packages?")? {
+        println!("Upgrade cancelled");
+        return Ok(());
+    }
 
     match marketplace.package_upgrade(None).await {
         Ok(download_ids) => {

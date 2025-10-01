@@ -28,8 +28,7 @@ pub struct MarketplaceConfig {
     pub auto_cleanup_unused: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AuthenticationConfig {
     pub api_key: Option<String>,
     pub username: Option<String>,
@@ -417,7 +416,6 @@ impl Default for MarketplaceConfig {
     }
 }
 
-
 impl Default for VerificationConfig {
     fn default() -> Self {
         Self {
@@ -769,12 +767,11 @@ impl ModelMarketplace {
                 .ok_or_else(|| anyhow::anyhow!("Model not installed: {}", model_id))?
         };
 
-        if remove_files
-            && installed_model.local_path.exists() {
-                tokio::fs::remove_dir_all(&installed_model.local_path)
-                    .await
-                    .context("Failed to remove model files")?;
-            }
+        if remove_files && installed_model.local_path.exists() {
+            tokio::fs::remove_dir_all(&installed_model.local_path)
+                .await
+                .context("Failed to remove model files")?;
+        }
 
         info!("Model {} uninstalled successfully", model_id);
         Ok(())
@@ -2218,9 +2215,10 @@ impl VerificationEngine {
         }
 
         if !self.config.allowed_licenses.is_empty()
-            && !self.config.allowed_licenses.contains(&model.license) {
-                return Err(anyhow::anyhow!("License not allowed: {}", model.license));
-            }
+            && !self.config.allowed_licenses.contains(&model.license)
+        {
+            return Err(anyhow::anyhow!("License not allowed: {}", model.license));
+        }
 
         if self.config.blocked_models.contains(&model.id) {
             return Err(anyhow::anyhow!("Model is blocked: {}", model.id));

@@ -5,10 +5,7 @@
 
 use crate::{
     config::Config,
-    upgrade::{
-        ApplicationVersion, UpdateInfo, UpgradeConfig,
-        UpgradeManager, UpgradeStatus,
-    },
+    upgrade::{ApplicationVersion, UpdateInfo, UpgradeConfig, UpgradeManager, UpgradeStatus},
 };
 use anyhow::Result;
 use clap::{Args, Subcommand};
@@ -541,9 +538,11 @@ async fn execute_list(
 
     // Implementation would fetch available versions from GitHub
     // This is a placeholder
-    let versions = [("0.2.1", "2024-01-15", false),
+    let versions = [
+        ("0.2.1", "2024-01-15", false),
         ("0.2.0", "2024-01-10", false),
-        ("0.1.9", "2024-01-05", false)];
+        ("0.1.9", "2024-01-05", false),
+    ];
 
     match format {
         "json" => {

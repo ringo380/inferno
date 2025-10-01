@@ -183,10 +183,7 @@ impl MemoryPool {
             .unwrap_or_else(|| size.next_power_of_two());
 
         // Return to pool
-        self.pools
-            .entry(pool_size)
-            .or_default()
-            .push(ptr);
+        self.pools.entry(pool_size).or_default().push(ptr);
     }
 }
 

@@ -258,9 +258,7 @@ async fn validate_batch_inputs(args: &BatchArgs) -> Result<()> {
             info!("✓ Batch validation complete - ready for processing");
             Ok(())
         }
-        Err(e) => {
-            Err(anyhow::anyhow!("Failed to parse batch inputs: {}", e))
-        }
+        Err(e) => Err(anyhow::anyhow!("Failed to parse batch inputs: {}", e)),
     }
 }
 

@@ -64,7 +64,9 @@ async fn main() -> Result<()> {
         Commands::Config(args) => inferno_ai::cli::config::handle_config_command(args).await,
         Commands::Cache(args) => inferno_ai::cli::cache::execute(args, &config).await,
         Commands::Convert(args) => inferno_ai::cli::convert::execute(args, &config).await,
-        Commands::ResponseCache(args) => inferno_ai::cli::response_cache::execute(args, &config).await,
+        Commands::ResponseCache(args) => {
+            inferno_ai::cli::response_cache::execute(args, &config).await
+        }
         Commands::Monitor(args) => inferno_ai::cli::monitoring::execute(args, &config).await,
         Commands::Distributed(args) => inferno_ai::cli::distributed::execute(args, &config).await,
         Commands::ABTest(args) => inferno_ai::cli::ab_testing::execute(args, &config).await,
@@ -75,7 +77,9 @@ async fn main() -> Result<()> {
         Commands::Resilience(args) => inferno_ai::cli::resilience::execute(args, &config).await,
         Commands::Streaming(args) => inferno_ai::cli::streaming::execute(args, &config).await,
         Commands::Security(args) => inferno_ai::cli::security::execute(args, &config).await,
-        Commands::Observability(args) => inferno_ai::cli::observability::execute(args, &config).await,
+        Commands::Observability(args) => {
+            inferno_ai::cli::observability::execute(args, &config).await
+        }
         Commands::Optimization(args) => {
             inferno_ai::cli::optimization::execute_optimization_command(args).await
         }
@@ -96,8 +100,12 @@ async fn main() -> Result<()> {
         Commands::Search(args) => inferno_ai::cli::package::handle_search_simple(args).await,
         Commands::List(args) => inferno_ai::cli::package::handle_list_simple(args).await,
         Commands::Repo(args) => inferno_ai::cli::repo::handle_repo_command(args).await,
-        Commands::Federated(args) => inferno_ai::cli::federated::handle_federated_command(args).await,
-        Commands::Dashboard(args) => inferno_ai::cli::dashboard::handle_dashboard_command(args).await,
+        Commands::Federated(args) => {
+            inferno_ai::cli::federated::handle_federated_command(args).await
+        }
+        Commands::Dashboard(args) => {
+            inferno_ai::cli::dashboard::handle_dashboard_command(args).await
+        }
         Commands::AdvancedMonitoring(args) => {
             inferno_ai::cli::advanced_monitoring::execute(args, &config).await
         }
@@ -112,12 +120,18 @@ async fn main() -> Result<()> {
         Commands::BackupRecovery(args) => {
             inferno_ai::cli::backup_recovery::execute(args, &config).await
         }
-        Commands::LoggingAudit(args) => inferno_ai::cli::logging_audit::execute(args, &config).await,
+        Commands::LoggingAudit(args) => {
+            inferno_ai::cli::logging_audit::execute(args, &config).await
+        }
         Commands::PerformanceOptimization(args) => {
             inferno_ai::cli::performance_optimization::execute(args, &config).await
         }
-        Commands::MultiTenancy(args) => inferno_ai::cli::multi_tenancy::execute(args, &config).await,
-        Commands::AdvancedCache(args) => inferno_ai::cli::advanced_cache::execute(args, &config).await,
+        Commands::MultiTenancy(args) => {
+            inferno_ai::cli::multi_tenancy::execute(args, &config).await
+        }
+        Commands::AdvancedCache(args) => {
+            inferno_ai::cli::advanced_cache::execute(args, &config).await
+        }
         Commands::QAFramework(args) => inferno_ai::cli::qa_framework::execute(args, &config).await,
         Commands::PerformanceBenchmark(args) => {
             inferno_ai::cli::performance_benchmark::execute_performance_benchmark(args).await

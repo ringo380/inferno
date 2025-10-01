@@ -376,15 +376,13 @@ impl Command for FederatedParticipants {
             anyhow::bail!("Action must be one of: list, info, register, remove");
         }
 
-        if (self.action == "info" || self.action == "remove")
-            && self.node_id.is_none() {
-                anyhow::bail!("Node ID is required for {} action", self.action);
-            }
+        if (self.action == "info" || self.action == "remove") && self.node_id.is_none() {
+            anyhow::bail!("Node ID is required for {} action", self.action);
+        }
 
-        if self.action == "register"
-            && self.endpoint.is_none() {
-                anyhow::bail!("Endpoint is required for register action");
-            }
+        if self.action == "register" && self.endpoint.is_none() {
+            anyhow::bail!("Endpoint is required for register action");
+        }
 
         if let Some(reliability) = self.min_reliability {
             if !(0.0..=1.0).contains(&reliability) {

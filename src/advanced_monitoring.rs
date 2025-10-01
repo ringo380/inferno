@@ -127,8 +127,7 @@ pub struct MetadataConfig {
     pub max_samples_per_send: u32,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ServiceDiscoveryConfig {
     /// Kubernetes service discovery
     pub kubernetes: Option<KubernetesSDConfig>,
@@ -204,8 +203,7 @@ pub struct RecordingRule {
     pub interval: Option<Duration>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct FederationConfig {
     /// Enable federation
     pub enabled: bool,
@@ -217,8 +215,7 @@ pub struct FederationConfig {
     pub match_expressions: Vec<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AlertingConfig {
     /// Alertmanager configuration
     pub alertmanager: AlertmanagerConfig,
@@ -520,8 +517,7 @@ pub enum MetricType {
     Summary,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct DashboardsConfig {
     /// Grafana configuration
     pub grafana: GrafanaConfig,
@@ -785,9 +781,6 @@ impl Default for PrometheusConfig {
     }
 }
 
-
-
-
 impl Default for AlertmanagerConfig {
     fn default() -> Self {
         Self {
@@ -841,7 +834,6 @@ impl Default for RetryConfig {
         }
     }
 }
-
 
 impl Default for GrafanaConfig {
     fn default() -> Self {
