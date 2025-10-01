@@ -12,6 +12,44 @@ use std::path::PathBuf;
 use tokio::time::{interval as tokio_interval, Duration};
 use tracing::{error, info};
 
+/// Configuration for marketplace search operations
+/// Reduces function signature from 16 parameters to 2
+pub struct SearchConfig {
+    pub query: String,
+    pub category: Option<ModelCategoryArg>,
+    pub publisher: Option<String>,
+    pub license: Option<String>,
+    pub min_rating: Option<f32>,
+    pub max_size: Option<f64>,
+    pub tags: Option<String>,
+    pub frameworks: Option<String>,
+    pub languages: Option<String>,
+    pub platforms: Option<String>,
+    pub free_only: bool,
+    pub verified_only: bool,
+    pub page: usize,
+    pub per_page: usize,
+    pub output: OutputFormat,
+}
+
+/// Configuration for marketplace publish operations
+/// Reduces function signature from 14 parameters to 2
+pub struct PublishConfig {
+    pub model_path: PathBuf,
+    pub name: String,
+    pub version: String,
+    pub description: String,
+    pub category: ModelCategoryArg,
+    pub license: String,
+    pub publisher: Option<String>,
+    pub tags: Option<String>,
+    pub visibility: VisibilityArg,
+    pub free: bool,
+    pub price: Option<f64>,
+    pub license_file: Option<PathBuf>,
+    pub readme_file: Option<PathBuf>,
+}
+
 #[derive(Args)]
 pub struct MarketplaceArgs {
     #[command(subcommand)]
@@ -372,8 +410,7 @@ pub async fn handle_marketplace_command(args: MarketplaceArgs) -> Result<()> {
             per_page,
             output,
         } => {
-            handle_search(
-                &marketplace,
+            let config = SearchConfig {
                 query,
                 category,
                 publisher,
@@ -389,8 +426,8 @@ pub async fn handle_marketplace_command(args: MarketplaceArgs) -> Result<()> {
                 page,
                 per_page,
                 output,
-            )
-            .await
+            };
+            handle_search(&marketplace, config).await
         }
 
         MarketplaceCommands::Info { model_id, output } => {
@@ -457,8 +494,7 @@ pub async fn handle_marketplace_command(args: MarketplaceArgs) -> Result<()> {
             license_file,
             readme_file,
         } => {
-            handle_publish(
-                &marketplace,
+            let config = PublishConfig {
                 model_path,
                 name,
                 version,
@@ -472,8 +508,8 @@ pub async fn handle_marketplace_command(args: MarketplaceArgs) -> Result<()> {
                 price,
                 license_file,
                 readme_file,
-            )
-            .await
+            };
+            handle_publish(&marketplace, config).await
         }
 
         MarketplaceCommands::Popular {
@@ -508,51 +544,37 @@ pub async fn handle_marketplace_command(args: MarketplaceArgs) -> Result<()> {
 
 async fn handle_search(
     marketplace: &ModelMarketplace,
-    query: String,
-    category: Option<ModelCategoryArg>,
-    publisher: Option<String>,
-    license: Option<String>,
-    min_rating: Option<f32>,
-    max_size: Option<f64>,
-    tags: Option<String>,
-    frameworks: Option<String>,
-    languages: Option<String>,
-    platforms: Option<String>,
-    free_only: bool,
-    verified_only: bool,
-    page: usize,
-    per_page: usize,
-    output: OutputFormat,
+    config: SearchConfig,
 ) -> Result<()> {
-    info!("Searching marketplace for: {}", query);
+    info!("Searching marketplace for: {}", config.query);
 
     let filters = Some(SearchFilters {
-        category: category.map(|c| c.into()),
-        publisher,
-        license,
-        min_rating,
-        max_size_gb: max_size,
-        tags: tags
+        category: config.category.map(|c| c.into()),
+        publisher: config.publisher,
+        license: config.license,
+        min_rating: config.min_rating,
+        max_size_gb: config.max_size,
+        tags: config.tags
             .map(|t| t.split(',').map(|s| s.trim().to_string()).collect())
             .unwrap_or_default(),
-        frameworks: frameworks
+        frameworks: config.frameworks
             .map(|f| f.split(',').map(|s| s.trim().to_string()).collect())
             .unwrap_or_default(),
-        languages: languages
+        languages: config.languages
             .map(|l| l.split(',').map(|s| s.trim().to_string()).collect())
             .unwrap_or_default(),
-        platforms: platforms
+        platforms: config.platforms
             .map(|p| p.split(',').map(|s| s.trim().to_string()).collect())
             .unwrap_or_default(),
-        free_only,
-        verified_only,
+        free_only: config.free_only,
+        verified_only: config.verified_only,
     });
 
     let results = marketplace
-        .search_models(&query, filters, page, per_page)
+        .search_models(&config.query, filters, config.page, config.per_page)
         .await?;
 
-    match output {
+    match config.output {
         OutputFormat::Table => {
             println!(
                 "Search Results (Page {} of {})",
@@ -1121,39 +1143,27 @@ async fn handle_update(marketplace: &ModelMarketplace, model_id: String, wait: b
 
 async fn handle_publish(
     marketplace: &ModelMarketplace,
-    model_path: PathBuf,
-    name: String,
-    version: String,
-    description: String,
-    category: ModelCategoryArg,
-    license: String,
-    publisher: Option<String>,
-    tags: Option<String>,
-    visibility: VisibilityArg,
-    free: bool,
-    price: Option<f64>,
-    license_file: Option<PathBuf>,
-    readme_file: Option<PathBuf>,
+    config: PublishConfig,
 ) -> Result<()> {
-    info!("Publishing model: {}", name);
+    info!("Publishing model: {}", config.name);
 
-    if !model_path.exists() {
+    if !config.model_path.exists() {
         return Err(anyhow::anyhow!(
             "Model file not found: {}",
-            model_path.display()
+            config.model_path.display()
         ));
     }
 
     // Create basic model metadata
     let metadata = ModelListing {
         id: uuid::Uuid::new_v4().to_string(),
-        name: name.clone(),
-        version,
-        publisher: publisher.unwrap_or_else(|| "unknown".to_string()),
-        description,
-        category: category.into(),
-        license: license.clone(),
-        size_bytes: std::fs::metadata(&model_path)?.len(),
+        name: config.name.clone(),
+        version: config.version,
+        publisher: config.publisher.unwrap_or_else(|| "unknown".to_string()),
+        description: config.description,
+        category: config.category.into(),
+        license: config.license.clone(),
+        size_bytes: std::fs::metadata(&config.model_path)?.len(),
         download_url: String::new(), // Will be set by registry
         checksum: String::new(),     // Will be calculated
         signature: None,
@@ -1196,13 +1206,13 @@ async fn handle_publish(
         updated_at: chrono::Utc::now(),
         downloads: 0,
         rating: None,
-        tags: tags
+        tags: config.tags
             .map(|t| t.split(',').map(|s| s.trim().to_string()).collect())
             .unwrap_or_default(),
         dependencies: vec![],
         pricing: crate::marketplace::PricingInfo {
-            free: true,
-            price_per_download: None,
+            free: config.free,
+            price_per_download: config.price,
             price_per_token: None,
             subscription_tiers: vec![],
             usage_based: None,
@@ -1223,8 +1233,8 @@ async fn handle_publish(
     };
 
     let pricing = PricingInfo {
-        free,
-        price_per_download: price,
+        free: config.free,
+        price_per_download: config.price,
         price_per_token: None,
         subscription_tiers: vec![],
         usage_based: None,
@@ -1232,12 +1242,12 @@ async fn handle_publish(
     };
 
     let request = PublishRequest {
-        model_path,
+        model_path: config.model_path,
         metadata,
-        license_file,
-        readme_file,
+        license_file: config.license_file,
+        readme_file: config.readme_file,
         example_files: vec![],
-        visibility: visibility.into(),
+        visibility: config.visibility.into(),
         pricing,
     };
 
@@ -1245,8 +1255,8 @@ async fn handle_publish(
 
     println!("✓ Model published successfully!");
     println!("Model ID: {}", model_id);
-    println!("Name: {}", name);
-    println!("License: {}", license);
+    println!("Name: {}", config.name);
+    println!("License: {}", config.license);
 
     Ok(())
 }
