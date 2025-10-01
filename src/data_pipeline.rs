@@ -2690,7 +2690,7 @@ impl DataPipelineSystem {
         &self,
         pipeline_id: &str,
         rule_name: &str,
-        updates: HashMap<String, Value>,
+        _updates: HashMap<String, Value>,
     ) -> Result<()> {
         info!(
             "Updating validation rule {} in pipeline {}",
@@ -3027,7 +3027,7 @@ impl DataPipelineSystem {
             "Retrying execution: {} (from_stage: {:?}, params: {:?})",
             execution_id, from_stage, retry_params
         );
-        let new_execution_id = Uuid::new_v4().to_string();
+        let _new_execution_id = Uuid::new_v4().to_string();
 
         // Get original execution to retry
         let executions = self.executions.read().await;
