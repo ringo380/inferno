@@ -562,8 +562,7 @@ pub async fn execute(args: QAFrameworkArgs, _config: &Config) -> Result<()> {
             tags,
             config_file,
         } => {
-            handle_create_test(
-                &qa_system,
+            let config = CreateTestConfig {
                 name,
                 description,
                 test_type,
@@ -573,8 +572,8 @@ pub async fn execute(args: QAFrameworkArgs, _config: &Config) -> Result<()> {
                 timeout,
                 tags,
                 config_file,
-            )
-            .await
+            };
+            handle_create_test(&qa_system, config).await
         }
         QAFrameworkCommands::Run {
             test,
@@ -587,8 +586,7 @@ pub async fn execute(args: QAFrameworkArgs, _config: &Config) -> Result<()> {
             fail_fast,
             detailed_report,
         } => {
-            handle_run_tests(
-                &qa_system,
+            let config = RunTestsConfig {
                 test,
                 name,
                 environment,
@@ -598,8 +596,8 @@ pub async fn execute(args: QAFrameworkArgs, _config: &Config) -> Result<()> {
                 test_type,
                 fail_fast,
                 detailed_report,
-            )
-            .await
+            };
+            handle_run_tests(&qa_system, config).await
         }
         QAFrameworkCommands::List {
             test_type,
@@ -659,6 +657,34 @@ pub async fn execute(args: QAFrameworkArgs, _config: &Config) -> Result<()> {
     }
 }
 
+/// Configuration for creating test cases
+/// Reduces function signature from 10 parameters to 2
+pub struct CreateTestConfig {
+    pub name: String,
+    pub description: Option<String>,
+    pub test_type: String,
+    pub priority: Option<String>,
+    pub environment: Option<String>,
+    pub runner: Option<String>,
+    pub timeout: Option<u64>,
+    pub tags: Option<String>,
+    pub config_file: Option<PathBuf>,
+}
+
+/// Configuration for running test suites
+/// Reduces function signature from 10 parameters to 2
+pub struct RunTestsConfig {
+    pub test: Option<String>,
+    pub name: Option<String>,
+    pub environment: Option<String>,
+    pub mode: Option<String>,
+    pub parallel: Option<usize>,
+    pub tags: Option<String>,
+    pub test_type: Option<String>,
+    pub fail_fast: bool,
+    pub detailed_report: bool,
+}
+
 async fn handle_init(
     _qa_system: &QAFrameworkSystem,
     output: Option<PathBuf>,
@@ -700,17 +726,9 @@ async fn handle_init(
 
 async fn handle_create_test(
     qa_system: &QAFrameworkSystem,
-    name: String,
-    description: Option<String>,
-    test_type: String,
-    priority: Option<String>,
-    environment: Option<String>,
-    runner: Option<String>,
-    timeout: Option<u64>,
-    tags: Option<String>,
-    config_file: Option<PathBuf>,
+    config: CreateTestConfig,
 ) -> Result<()> {
-    let test_type = match test_type.to_lowercase().as_str() {
+    let test_type = match config.test_type.to_lowercase().as_str() {
         "unit" => TestType::Unit,
         "integration" => TestType::Integration,
         "e2e" | "end-to-end" => TestType::E2E,
@@ -718,10 +736,10 @@ async fn handle_create_test(
         "security" => TestType::Security,
         "ml" | "ml_model" => TestType::MLModel,
         "chaos" => TestType::Chaos,
-        _ => return Err(anyhow::anyhow!("Invalid test type: {}", test_type)),
+        _ => return Err(anyhow::anyhow!("Invalid test type: {}", config.test_type)),
     };
 
-    let priority = if let Some(p) = priority {
+    let priority = if let Some(p) = config.priority {
         match p.to_lowercase().as_str() {
             "low" => TestPriority::Low,
             "medium" => TestPriority::Medium,
@@ -733,7 +751,7 @@ async fn handle_create_test(
         TestPriority::Medium
     };
 
-    let environment = if let Some(env) = environment {
+    let environment = if let Some(env) = config.environment {
         match env.to_lowercase().as_str() {
             "development" | "dev" => TestEnvironment::development(),
             "staging" => TestEnvironment::staging(),
@@ -745,7 +763,7 @@ async fn handle_create_test(
         TestEnvironment::testing()
     };
 
-    let runner = if let Some(r) = runner {
+    let runner = if let Some(r) = config.runner {
         match r.to_lowercase().as_str() {
             "local" => TestRunner::Local,
             "docker" => TestRunner::Docker,
@@ -757,16 +775,16 @@ async fn handle_create_test(
         TestRunner::Local
     };
 
-    let parsed_tags: Vec<String> = if let Some(tag_str) = tags {
+    let parsed_tags: Vec<String> = if let Some(tag_str) = config.tags {
         tag_str.split(',').map(|s| s.trim().to_string()).collect()
     } else {
         Vec::new()
     };
 
-    let test_timeout = timeout.map(Duration::from_secs);
+    let test_timeout = config.timeout.map(Duration::from_secs);
 
     let mut test_config = HashMap::new();
-    if let Some(config_path) = config_file {
+    if let Some(config_path) = config.config_file {
         let config_content = tokio::fs::read_to_string(config_path).await?;
         test_config = serde_json::from_str(&config_content)?;
     }
@@ -775,8 +793,8 @@ async fn handle_create_test(
 
     let test_case = TestCase {
         id: Uuid::new_v4(),
-        name,
-        description: description.unwrap_or_else(|| "Test case description".to_string()),
+        name: config.name,
+        description: config.description.unwrap_or_else(|| "Test case description".to_string()),
         test_type,
         category: TestCategory::Functional,
         priority,
@@ -820,19 +838,11 @@ async fn handle_create_test(
 
 async fn handle_run_tests(
     qa_system: &QAFrameworkSystem,
-    _test: Option<String>,
-    name: Option<String>,
-    environment: Option<String>,
-    mode: Option<String>,
-    parallel: Option<usize>,
-    tags: Option<String>,
-    test_type: Option<String>,
-    _fail_fast: bool,
-    detailed_report: bool,
+    config: RunTestsConfig,
 ) -> Result<()> {
     println!("Executing test run...");
 
-    let execution_mode = if let Some(m) = mode {
+    let execution_mode = if let Some(m) = config.mode {
         match m.to_lowercase().as_str() {
             "sequential" => TestExecutionMode::Sequential,
             "parallel" => TestExecutionMode::Parallel,
@@ -843,7 +853,7 @@ async fn handle_run_tests(
         TestExecutionMode::Sequential
     };
 
-    let target_environment = if let Some(env) = environment {
+    let target_environment = if let Some(env) = config.environment {
         match env.to_lowercase().as_str() {
             "development" | "dev" => Some(TestEnvironment::development()),
             "staging" => Some(TestEnvironment::staging()),
@@ -855,13 +865,13 @@ async fn handle_run_tests(
         None
     };
 
-    let filter_tags: Vec<String> = if let Some(tag_str) = tags {
+    let filter_tags: Vec<String> = if let Some(tag_str) = config.tags {
         tag_str.split(',').map(|s| s.trim().to_string()).collect()
     } else {
         Vec::new()
     };
 
-    let filter_type = if let Some(t) = test_type {
+    let filter_type = if let Some(t) = config.test_type {
         match t.to_lowercase().as_str() {
             "unit" => Some(TestType::Unit),
             "integration" => Some(TestType::Integration),
@@ -878,14 +888,14 @@ async fn handle_run_tests(
 
     let test_run = TestRun {
         run_id: Uuid::new_v4(),
-        name: name
+        name: config.name
             .unwrap_or_else(|| format!("Test Run {}", chrono::Utc::now().format("%Y%m%d_%H%M%S"))),
         description: "CLI-generated test run".to_string(),
         trigger: RunTrigger::Manual,
         environment: target_environment.unwrap_or_else(TestEnvironment::testing),
         configuration: RunConfiguration {
             parallel_execution: execution_mode == TestExecutionMode::Parallel,
-            max_concurrency: parallel.unwrap_or(1),
+            max_concurrency: config.parallel.unwrap_or(1),
             timeout: Duration::from_secs(3600),
             retry_policy: RetryPolicy::default(),
             environment_setup: HashMap::new(),
@@ -936,7 +946,7 @@ async fn handle_run_tests(
     let run_id = qa_system.execute_test_run(test_run).await?;
     println!("Test run started with ID: {}", run_id);
 
-    if detailed_report {
+    if config.detailed_report {
         println!("Generating detailed report...");
         let report = qa_system.generate_quality_report().await?;
         println!("Quality Report Generated:");
