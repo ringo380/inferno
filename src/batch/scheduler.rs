@@ -594,6 +594,7 @@ impl JobScheduler {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::Weekday;
     use std::time::SystemTime;
 
     #[test]

@@ -50,6 +50,9 @@ pub struct CommandContext {
 impl CommandContext {
     /// Create new command context with legacy config
     pub fn new(config: Config) -> Self {
+        let (metrics_collector, processor) = MetricsCollector::new();
+        processor.start();
+
         Self {
             config: Arc::new(config),
             core_config: None,
@@ -57,7 +60,7 @@ impl CommandContext {
             state: HashMap::new(),
             execution_id: Uuid::new_v4(),
             start_time: Instant::now(),
-            metrics: Arc::new(MetricsCollector::new()),
+            metrics: Arc::new(metrics_collector),
             json_output: false,
             verbosity: 0,
         }
@@ -65,6 +68,9 @@ impl CommandContext {
 
     /// Create new command context with both configs
     pub fn with_configs(config: Config, core_config: CoreConfig) -> Self {
+        let (metrics_collector, processor) = MetricsCollector::new();
+        processor.start();
+
         Self {
             config: Arc::new(config),
             core_config: Some(Arc::new(core_config)),
@@ -72,7 +78,7 @@ impl CommandContext {
             state: HashMap::new(),
             execution_id: Uuid::new_v4(),
             start_time: Instant::now(),
-            metrics: Arc::new(MetricsCollector::new()),
+            metrics: Arc::new(metrics_collector),
             json_output: false,
             verbosity: 0,
         }
@@ -144,6 +150,9 @@ impl CommandContext {
 impl CommandContext {
     /// Create a mock context for testing
     pub fn mock() -> Self {
+        let (metrics_collector, processor) = MetricsCollector::new();
+        processor.start();
+
         Self {
             config: Arc::new(Config::default()),
             core_config: None,
@@ -151,7 +160,7 @@ impl CommandContext {
             state: HashMap::new(),
             execution_id: Uuid::new_v4(),
             start_time: Instant::now(),
-            metrics: Arc::new(MetricsCollector::new()),
+            metrics: Arc::new(metrics_collector),
             json_output: false,
             verbosity: 0,
         }

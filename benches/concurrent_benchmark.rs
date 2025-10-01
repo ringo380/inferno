@@ -343,8 +343,8 @@ fn bench_metrics_concurrent_collection(c: &mut Criterion) {
             &concurrency,
             |b, &concurrency| {
                 b.to_async(&rt).iter(|| async {
-                    let mut collector = MetricsCollector::new();
-                    collector.start_event_processing().await.unwrap();
+                    let (collector, processor) = MetricsCollector::new();
+                    processor.start();
 
                     let handles: Vec<_> = (0..concurrency)
                         .map(|i| {

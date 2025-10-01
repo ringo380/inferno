@@ -82,9 +82,9 @@ fn bench_profile_inference_pipeline(c: &mut Criterion) {
 
     // Cache removed for now - will be re-added when cache system is stabilized
 
-    let mut metrics_collector = MetricsCollector::new();
+    let (metrics_collector, processor) = MetricsCollector::new();
     rt.block_on(async {
-        metrics_collector.start_event_processing().await.unwrap();
+        metrics_processor.start();
     });
 
     let mut group = c.benchmark_group("profile_inference_pipeline");
@@ -258,8 +258,8 @@ fn bench_profile_metrics_collection(c: &mut Criterion) {
 
     group.bench_function("intensive_metrics_collection_with_profiling", |b| {
         b.to_async(&rt).iter(|| async {
-            let mut collector = MetricsCollector::new();
-            collector.start_event_processing().await.unwrap();
+            let (collector, processor) = MetricsCollector::new();
+            processor.start();
 
             // Generate many events rapidly
             for i in 0..1000 {

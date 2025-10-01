@@ -174,8 +174,8 @@ async fn show_cache_stats(config: &Config) -> Result<()> {
 
     let model_manager = Arc::new(ModelManager::new(&config.models_dir));
     let metrics = Some(Arc::new({
-        let mut collector = MetricsCollector::new();
-        collector.start_event_processing().await?;
+        let (collector, processor) = MetricsCollector::new();
+        processor.start();
         collector
     }));
 
@@ -247,8 +247,8 @@ async fn warmup_models(
 
     let model_manager = Arc::new(ModelManager::new(&config.models_dir));
     let metrics = Some(Arc::new({
-        let mut collector = MetricsCollector::new();
-        collector.start_event_processing().await?;
+        let (collector, processor) = MetricsCollector::new();
+        processor.start();
         collector
     }));
 
@@ -312,8 +312,8 @@ async fn clear_cache(config: &Config, model: Option<String>, force: bool) -> Res
 
     let model_manager = Arc::new(ModelManager::new(&config.models_dir));
     let metrics = Some(Arc::new({
-        let mut collector = MetricsCollector::new();
-        collector.start_event_processing().await?;
+        let (collector, processor) = MetricsCollector::new();
+        processor.start();
         collector
     }));
 
@@ -411,8 +411,8 @@ async fn benchmark_cache(
 
     let model_manager = Arc::new(ModelManager::new(&config.models_dir));
     let metrics = Some(Arc::new({
-        let mut collector = MetricsCollector::new();
-        collector.start_event_processing().await?;
+        let (collector, processor) = MetricsCollector::new();
+        processor.start();
         collector
     }));
 
@@ -481,8 +481,8 @@ async fn monitor_cache(config: &Config, interval: u64, detailed: bool) -> Result
 
     let model_manager = Arc::new(ModelManager::new(&config.models_dir));
     let metrics = Some(Arc::new({
-        let mut collector = MetricsCollector::new();
-        collector.start_event_processing().await?;
+        let (collector, processor) = MetricsCollector::new();
+        processor.start();
         collector
     }));
 

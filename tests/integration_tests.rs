@@ -232,8 +232,8 @@ async fn test_metrics_collector() {
     use std::time::Duration;
     use tokio::time::sleep;
 
-    let mut collector = MetricsCollector::new();
-    collector.start_event_processing().await.unwrap();
+    let (collector, processor) = MetricsCollector::new();
+    processor.start();
 
     // Record model load
     collector.record_model_loaded(

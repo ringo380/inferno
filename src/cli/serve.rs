@@ -51,8 +51,8 @@ pub async fn execute(args: ServeArgs, config: &Config) -> Result<()> {
     info!("Starting HTTP server on {}", args.bind);
 
     // Initialize metrics collector
-    let mut metrics_collector = MetricsCollector::new();
-    metrics_collector.start_event_processing().await?;
+    let (metrics_collector, processor) = MetricsCollector::new();
+    processor.start();
 
     // Initialize model manager
     let model_manager = Arc::new(ModelManager::new(&config.models_dir));

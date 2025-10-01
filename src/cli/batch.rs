@@ -111,8 +111,8 @@ pub async fn execute(args: BatchArgs, config: &Config) -> Result<()> {
 
     // Set up metrics if requested
     let metrics = if args.metrics {
-        let mut collector = MetricsCollector::new();
-        collector.start_event_processing().await?;
+        let (collector, processor) = MetricsCollector::new();
+        processor.start();
         Some(Arc::new(collector))
     } else {
         None

@@ -53,8 +53,8 @@ impl Command for CacheStats {
 
         let model_manager = Arc::new(ModelManager::new(&self.config.models_dir));
         let metrics = Some(Arc::new({
-            let mut collector = MetricsCollector::new();
-            collector.start_event_processing().await?;
+            let (collector, processor) = MetricsCollector::new();
+            processor.start();
             collector
         }));
 
@@ -183,8 +183,8 @@ impl Command for CacheWarmup {
 
         let model_manager = Arc::new(ModelManager::new(&self.config.models_dir));
         let metrics = Some(Arc::new({
-            let mut collector = MetricsCollector::new();
-            collector.start_event_processing().await?;
+            let (collector, processor) = MetricsCollector::new();
+            processor.start();
             collector
         }));
 
@@ -334,8 +334,8 @@ impl Command for CacheClear {
 
         let model_manager = Arc::new(ModelManager::new(&self.config.models_dir));
         let metrics = Some(Arc::new({
-            let mut collector = MetricsCollector::new();
-            collector.start_event_processing().await?;
+            let (collector, processor) = MetricsCollector::new();
+            processor.start();
             collector
         }));
 

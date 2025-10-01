@@ -78,8 +78,8 @@ impl Command for DistributedStart {
 
         let model_manager = Arc::new(ModelManager::new(&self.config.models_dir));
         let metrics = Some(Arc::new({
-            let mut collector = MetricsCollector::new();
-            collector.start_event_processing().await?;
+            let (collector, processor) = MetricsCollector::new();
+            processor.start();
             collector
         }));
 
@@ -205,8 +205,8 @@ impl Command for DistributedBenchmark {
 
         let model_manager = Arc::new(ModelManager::new(&self.config.models_dir));
         let metrics = Some(Arc::new({
-            let mut collector = MetricsCollector::new();
-            collector.start_event_processing().await?;
+            let (collector, processor) = MetricsCollector::new();
+            processor.start();
             collector
         }));
 
@@ -358,8 +358,8 @@ impl Command for DistributedStats {
 
         let model_manager = Arc::new(ModelManager::new(&self.config.models_dir));
         let metrics = Some(Arc::new({
-            let mut collector = MetricsCollector::new();
-            collector.start_event_processing().await?;
+            let (collector, processor) = MetricsCollector::new();
+            processor.start();
             collector
         }));
 
@@ -493,8 +493,8 @@ impl Command for DistributedTest {
 
         let model_manager = Arc::new(ModelManager::new(&self.config.models_dir));
         let metrics = Some(Arc::new({
-            let mut collector = MetricsCollector::new();
-            collector.start_event_processing().await?;
+            let (collector, processor) = MetricsCollector::new();
+            processor.start();
             collector
         }));
 

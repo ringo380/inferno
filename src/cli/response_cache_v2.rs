@@ -47,8 +47,8 @@ impl Command for CacheStats {
         info!("Retrieving response cache statistics");
 
         let metrics = Some(Arc::new({
-            let mut collector = MetricsCollector::new();
-            collector.start_event_processing().await?;
+            let (collector, processor) = MetricsCollector::new();
+            processor.start();
             collector
         }));
 

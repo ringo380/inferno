@@ -1859,6 +1859,7 @@ mod tests {
             timeout_minutes: Some(30),
             retry_count: 0,
             max_retries: 3,
+            retry_config: RetryConfig::default(),
             created_at: SystemTime::now(),
             scheduled_at: None,
             tags: HashMap::new(),

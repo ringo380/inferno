@@ -486,7 +486,7 @@ async fn test_concurrent_operations() {
     use std::sync::Arc;
 
     let collector = Arc::new(MetricsCollector::new());
-    collector.start_event_processing().await.unwrap();
+    processor.start();
 
     // Test concurrent metric recording
     let mut handles = vec![];
