@@ -1170,6 +1170,12 @@ struct RequestPattern {
     cache_worthiness_score: f32,
 }
 
+impl Default for SmartCachingStrategy {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SmartCachingStrategy {
     pub fn new() -> Self {
         Self {
@@ -1183,7 +1189,7 @@ impl SmartCachingStrategy {
         response_time_ms: u64,
         response_size: usize,
     ) -> bool {
-        let pattern_key = format!("{}:{}", key.model_id, key.request_hash[..8].to_string());
+        let pattern_key = format!("{}:{}", key.model_id, &key.request_hash[..8]);
         let mut patterns = self.request_patterns.write().await;
 
         let pattern = patterns.entry(pattern_key).or_insert(RequestPattern {

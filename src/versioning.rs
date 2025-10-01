@@ -772,7 +772,7 @@ impl ModelVersionManager {
 
         // Delete files
         if let Some(parent) = version.file_path.parent() {
-            if parent.file_name().and_then(|n| n.to_str()) == Some(&version_id) {
+            if parent.file_name().and_then(|n| n.to_str()) == Some(version_id) {
                 fs::remove_dir_all(parent).await?;
             }
         }

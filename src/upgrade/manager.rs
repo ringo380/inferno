@@ -155,7 +155,7 @@ impl UpgradeManager {
         // Pre-installation safety checks
         {
             let mut checker = self.safety_checker.write().await;
-            checker.check_pre_installation(&update_info).await?;
+            checker.check_pre_installation(update_info).await?;
         }
 
         // Stage 1: Download the update
@@ -671,7 +671,7 @@ impl UpgradeManager {
         if version_file.exists() {
             match tokio::fs::read_to_string(&version_file).await {
                 Ok(version_str) => {
-                    if let Ok(version) = self.parse_version_from_string(&version_str.trim()) {
+                    if let Ok(version) = self.parse_version_from_string(version_str.trim()) {
                         return Ok(Some(version));
                     }
                 }
@@ -902,12 +902,12 @@ impl UpgradeManager {
         data_dir.exists()
             && tokio::fs::read_dir(data_dir)
                 .await
-                .map_or(false, |mut entries| {
+                .is_ok_and(|mut entries| {
                     futures::executor::block_on(async move {
                         entries
                             .next_entry()
                             .await
-                            .map_or(false, |entry| entry.is_some())
+                            .is_ok_and(|entry| entry.is_some())
                     })
                 })
     }
@@ -960,7 +960,7 @@ impl UpgradeManager {
 
         if binary_path.exists() {
             let output = tokio::process::Command::new(&binary_path)
-                .args(&["--version"])
+                .args(["--version"])
                 .output()
                 .await
                 .map_err(|e| UpgradeError::Internal(format!("Failed to execute binary: {}", e)))?;

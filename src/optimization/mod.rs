@@ -15,6 +15,7 @@ use tokio::sync::RwLock;
 
 /// Global optimization configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct OptimizationConfig {
     pub quantization: quantization::QuantizationConfig,
     pub batching: batching::BatchingConfig,
@@ -23,17 +24,6 @@ pub struct OptimizationConfig {
     pub inference: inference::InferenceConfig,
 }
 
-impl Default for OptimizationConfig {
-    fn default() -> Self {
-        Self {
-            quantization: quantization::QuantizationConfig::default(),
-            batching: batching::BatchingConfig::default(),
-            memory: memory::MemoryConfig::default(),
-            hardware: hardware::HardwareConfig::default(),
-            inference: inference::InferenceConfig::default(),
-        }
-    }
-}
 
 /// Optimization metrics for performance tracking
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

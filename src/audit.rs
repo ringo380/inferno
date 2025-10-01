@@ -599,7 +599,7 @@ impl AuditLogger {
             ExportFormat::Json => serde_json::to_string_pretty(events)?,
             ExportFormat::JsonLines => events
                 .iter()
-                .map(|e| serde_json::to_string(e))
+                .map(serde_json::to_string)
                 .collect::<Result<Vec<_>, _>>()?
                 .join("\n"),
             ExportFormat::Csv => Self::events_to_csv(events)?,
@@ -894,7 +894,7 @@ impl AuditLogger {
                     || e.resource.name.to_lowercase().contains(&search_lower)
                     || e.details.parameters.values().any(|v| {
                         v.as_str()
-                            .map_or(false, |s| s.to_lowercase().contains(&search_lower))
+                            .is_some_and(|s| s.to_lowercase().contains(&search_lower))
                     })
             });
         }
@@ -1037,7 +1037,7 @@ impl AuditLogger {
             ExportFormat::Json => serde_json::to_string_pretty(&events)?,
             ExportFormat::JsonLines => events
                 .iter()
-                .map(|e| serde_json::to_string(e))
+                .map(serde_json::to_string)
                 .collect::<Result<Vec<_>, _>>()?
                 .join("\n"),
             ExportFormat::Csv => Self::events_to_csv(&events)?,
@@ -1116,7 +1116,7 @@ impl AuditLogger {
             }
         }
 
-        stats.success_rate = if buffer.len() > 0 {
+        stats.success_rate = if !buffer.is_empty() {
             success_count as f64 / buffer.len() as f64 * 100.0
         } else {
             0.0
@@ -1513,7 +1513,7 @@ Context:
         let mut key_bytes = [0u8; 32];
         rng.fill(&mut key_bytes)
             .map_err(|e| anyhow::anyhow!("Failed to generate encryption key: {:?}", e))?;
-        Ok(general_purpose::STANDARD.encode(&key_bytes))
+        Ok(general_purpose::STANDARD.encode(key_bytes))
     }
 
     /// Search audit events with advanced query capabilities and timeout handling
@@ -1927,7 +1927,7 @@ Context:
             start_time: date_range.map(|(start, _)| start),
             end_time: date_range.map(|(_, end)| end),
             offset: Some(0),
-            date_range: date_range,
+            date_range,
             ..Default::default()
         };
 
@@ -2025,7 +2025,7 @@ Context:
             if entry
                 .path()
                 .extension()
-                .map_or(false, |ext| ext == "json" || ext == "gz" || ext == "zst")
+                .is_some_and(|ext| ext == "json" || ext == "gz" || ext == "zst")
             {
                 files_checked += 1;
 

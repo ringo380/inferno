@@ -225,7 +225,7 @@ impl SafetyChecker {
 
         let dangerous_processes = vec!["antivirus", "scanner", "backup", "sync", "cloud"];
 
-        for (_, process) in self.system.processes() {
+        for process in self.system.processes().values() {
             let process_name = process.name().to_lowercase();
 
             for dangerous in &dangerous_processes {
@@ -485,7 +485,7 @@ impl SafetyChecker {
     fn verify_tar_format(&self, path: &PathBuf) -> UpgradeResult<()> {
         // Basic tar file validation
         Command::new("tar")
-            .args(&["-tf", path.to_str().unwrap()])
+            .args(["-tf", path.to_str().unwrap()])
             .output()
             .map_err(|e| UpgradeError::InvalidPackage(format!("Tar validation failed: {}", e)))
             .and_then(|output| {
@@ -534,7 +534,7 @@ impl SafetyChecker {
     fn verify_deb_format(&self, path: &PathBuf) -> UpgradeResult<()> {
         // Debian package validation
         Command::new("dpkg")
-            .args(&["--info", path.to_str().unwrap()])
+            .args(["--info", path.to_str().unwrap()])
             .output()
             .map_err(|e| UpgradeError::InvalidPackage(format!("DEB validation failed: {}", e)))
             .and_then(|output| {
@@ -551,7 +551,7 @@ impl SafetyChecker {
     fn verify_rpm_format(&self, path: &PathBuf) -> UpgradeResult<()> {
         // RPM package validation
         Command::new("rpm")
-            .args(&["-qp", path.to_str().unwrap()])
+            .args(["-qp", path.to_str().unwrap()])
             .output()
             .map_err(|e| UpgradeError::InvalidPackage(format!("RPM validation failed: {}", e)))
             .and_then(|output| {

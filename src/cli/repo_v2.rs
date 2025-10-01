@@ -472,11 +472,10 @@ impl Command for RepoRemove {
         let marketplace = ModelMarketplace::new(marketplace_config)?;
 
         // Confirmation check (skip in JSON mode or if forced)
-        if !self.force && !ctx.json_output {
-            if !confirm(&format!("Remove repository '{}'?", self.name))? {
+        if !self.force && !ctx.json_output
+            && !confirm(&format!("Remove repository '{}'?", self.name))? {
                 return Ok(CommandOutput::success("Removal cancelled"));
             }
-        }
 
         marketplace.repo_remove(&self.name).await?;
 

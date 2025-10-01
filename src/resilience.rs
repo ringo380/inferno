@@ -692,7 +692,7 @@ impl ResilienceManager {
                         cb.call(|| {
                             let op = op.clone();
                             let bh = bh.clone();
-                            async move { bh.execute(|| op()).await }
+                            async move { bh.execute(&op).await }
                         })
                         .await
                     }
@@ -704,7 +704,7 @@ impl ResilienceManager {
                 cb.call(|| {
                     let op = operation.clone();
                     let bh = bh.clone();
-                    async move { bh.execute(|| op()).await }
+                    async move { bh.execute(&op).await }
                 })
                 .await
             }
@@ -713,7 +713,7 @@ impl ResilienceManager {
                 rp.execute(|| {
                     let op = operation.clone();
                     let cb = cb.clone();
-                    async move { cb.call(|| op()).await }
+                    async move { cb.call(&op).await }
                 })
                 .await
             }
@@ -722,21 +722,21 @@ impl ResilienceManager {
                 rp.execute(|| {
                     let op = operation.clone();
                     let bh = bh.clone();
-                    async move { bh.execute(|| op()).await }
+                    async move { bh.execute(&op).await }
                 })
                 .await
             }
             (Some(cb), None, None) => {
                 // Circuit breaker only
-                cb.call(|| operation()).await
+                cb.call(&operation).await
             }
             (None, Some(bh), None) => {
                 // Bulkhead only
-                bh.execute(|| operation()).await
+                bh.execute(&operation).await
             }
             (None, None, Some(rp)) => {
                 // Retry only
-                rp.execute(|| operation()).await
+                rp.execute(&operation).await
             }
             (None, None, None) => {
                 // No resilience patterns - execute directly
@@ -806,6 +806,7 @@ impl Default for ResilienceManager {
 
 /// Graceful shutdown coordinator
 #[derive(Debug)]
+#[derive(Default)]
 pub struct GracefulShutdown {
     shutdown_tx: Option<mpsc::UnboundedSender<()>>,
     shutdown_complete_rx: Option<oneshot::Receiver<()>>,
@@ -851,11 +852,3 @@ impl GracefulShutdown {
     }
 }
 
-impl Default for GracefulShutdown {
-    fn default() -> Self {
-        Self {
-            shutdown_tx: None,
-            shutdown_complete_rx: None,
-        }
-    }
-}

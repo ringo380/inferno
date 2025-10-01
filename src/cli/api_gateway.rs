@@ -1798,7 +1798,7 @@ async fn handle_api_key_action(config: &Config, action: ApiKeyAction) -> Result<
                 for (key, info) in &api_config.keys {
                     let expired = info
                         .expires_at
-                        .map_or(false, |exp| exp < chrono::Utc::now());
+                        .is_some_and(|exp| exp < chrono::Utc::now());
 
                     if !show_expired && expired {
                         continue;

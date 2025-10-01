@@ -185,7 +185,7 @@ impl MemoryPool {
         // Return to pool
         self.pools
             .entry(pool_size)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(ptr);
     }
 }
@@ -410,7 +410,7 @@ impl MemoryManager {
         let file_size = metadata.len() as usize;
 
         let chunk_size = self.config.prefetch_size_mb * 1024 * 1024;
-        let chunks = (file_size + chunk_size - 1) / chunk_size;
+        let chunks = file_size.div_ceil(chunk_size);
 
         tracing::debug!(
             "Prefetching {} chunks of {} MB each",

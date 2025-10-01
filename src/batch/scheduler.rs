@@ -1,6 +1,6 @@
 use crate::batch::queue::{BatchJob, JobQueueManager, JobSchedule, QueueStatus, ScheduleType};
 use anyhow::Result;
-use chrono::{DateTime, Datelike, Timelike, Utc, Weekday};
+use chrono::{DateTime, Datelike, Timelike, Utc};
 use cron::Schedule;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -428,7 +428,7 @@ impl JobScheduler {
 
         // If the time has already passed today, start from tomorrow
         if next <= from {
-            next = next + chrono::Duration::days(1);
+            next += chrono::Duration::days(1);
         }
 
         // Find the next day that matches one of the specified weekdays
@@ -437,7 +437,7 @@ impl JobScheduler {
             if weekdays.contains(&weekday) {
                 return Ok(next);
             }
-            next = next + chrono::Duration::days(1);
+            next += chrono::Duration::days(1);
         }
 
         Err(anyhow::anyhow!("No valid weekday found"))
@@ -466,7 +466,7 @@ impl JobScheduler {
 
         // If we're on the target day but the time has passed, go to next week
         if days_until_target == 0 && next <= from {
-            next = next + chrono::Duration::weeks(1);
+            next += chrono::Duration::weeks(1);
         }
 
         Ok(next)

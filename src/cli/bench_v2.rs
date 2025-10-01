@@ -112,7 +112,7 @@ impl Command for BenchCommand {
                 )
             })?;
 
-        let mut backend = Backend::new(backend_type.clone(), &self.config.backend_config)?;
+        let mut backend = Backend::new(backend_type, &self.config.backend_config)?;
 
         // Load model
         if !ctx.json_output {

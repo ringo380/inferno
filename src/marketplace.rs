@@ -29,6 +29,7 @@ pub struct MarketplaceConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct AuthenticationConfig {
     pub api_key: Option<String>,
     pub username: Option<String>,
@@ -416,18 +417,6 @@ impl Default for MarketplaceConfig {
     }
 }
 
-impl Default for AuthenticationConfig {
-    fn default() -> Self {
-        Self {
-            api_key: None,
-            username: None,
-            password: None,
-            token_file: None,
-            oauth_enabled: false,
-            oauth_provider: None,
-        }
-    }
-}
 
 impl Default for VerificationConfig {
     fn default() -> Self {
@@ -600,7 +589,7 @@ impl ModelMarketplace {
 
         // Determine target path
         let local_path = target_path.unwrap_or_else(|| {
-            self.config.local_cache_dir.join(&model.id).join(&format!(
+            self.config.local_cache_dir.join(&model.id).join(format!(
                 "{}.{}",
                 model.name,
                 self.get_file_extension(&model)
@@ -780,13 +769,12 @@ impl ModelMarketplace {
                 .ok_or_else(|| anyhow::anyhow!("Model not installed: {}", model_id))?
         };
 
-        if remove_files {
-            if installed_model.local_path.exists() {
+        if remove_files
+            && installed_model.local_path.exists() {
                 tokio::fs::remove_dir_all(&installed_model.local_path)
                     .await
                     .context("Failed to remove model files")?;
             }
-        }
 
         info!("Model {} uninstalled successfully", model_id);
         Ok(())
@@ -1467,7 +1455,7 @@ impl RegistryClient {
 
         // Apply pagination
         let total_count = all_models.len();
-        let total_pages = (total_count + per_page - 1) / per_page;
+        let total_pages = total_count.div_ceil(per_page);
         let start_idx = (page - 1) * per_page;
         let end_idx = (start_idx + per_page).min(total_count);
 
@@ -1855,7 +1843,7 @@ impl RegistryClient {
         let model_id = format!(
             "{}-{}",
             request.metadata.name.to_lowercase().replace(' ', "-"),
-            uuid::Uuid::new_v4().to_string()[..8].to_string()
+            &uuid::Uuid::new_v4().to_string()[..8]
         );
 
         // In a real implementation, this would:
@@ -1884,7 +1872,7 @@ impl RegistryClient {
                 precision: request.metadata.metadata.precision.clone(),
                 quantization: request.metadata.metadata.quantization.clone(),
                 context_length: request.metadata.metadata.context_length,
-                parameters: request.metadata.metadata.parameters.clone(),
+                parameters: request.metadata.metadata.parameters,
                 vocab_size: request.metadata.metadata.vocab_size,
                 input_types: request.metadata.metadata.input_types.clone(),
                 output_types: request.metadata.metadata.output_types.clone(),
@@ -2229,11 +2217,10 @@ impl VerificationEngine {
             self.scan_for_malware(path).await?;
         }
 
-        if !self.config.allowed_licenses.is_empty() {
-            if !self.config.allowed_licenses.contains(&model.license) {
+        if !self.config.allowed_licenses.is_empty()
+            && !self.config.allowed_licenses.contains(&model.license) {
                 return Err(anyhow::anyhow!("License not allowed: {}", model.license));
             }
-        }
 
         if self.config.blocked_models.contains(&model.id) {
             return Err(anyhow::anyhow!("Model is blocked: {}", model.id));
@@ -2462,7 +2449,7 @@ impl VerificationEngine {
             file_content[7],
         ]);
 
-        if version < 1 || version > 3 {
+        if !(1..=3).contains(&version) {
             return Err(anyhow::anyhow!("Unsupported GGUF version: {}", version));
         }
 

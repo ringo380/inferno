@@ -217,8 +217,8 @@ impl GpuManager {
 
         // Try nvidia-smi command
         match Command::new("nvidia-smi")
-            .args(&["--query-gpu=index,name,driver_version,memory.total,memory.free,memory.used,utilization.gpu,temperature.gpu,power.draw,power.limit,clocks.gr,clocks.mem"])
-            .args(&["--format=csv,noheader,nounits"])
+            .args(["--query-gpu=index,name,driver_version,memory.total,memory.free,memory.used,utilization.gpu,temperature.gpu,power.draw,power.limit,clocks.gr,clocks.mem"])
+            .args(["--format=csv,noheader,nounits"])
             .output()
         {
             Ok(output) if output.status.success() => {
@@ -269,7 +269,7 @@ impl GpuManager {
 
         // Try rocm-smi command
         match Command::new("rocm-smi")
-            .args(&[
+            .args([
                 "--showid",
                 "--showproductname",
                 "--showmeminfo",
@@ -356,7 +356,7 @@ impl GpuManager {
         {
             // Try system_profiler for Apple Silicon detection
             match Command::new("system_profiler")
-                .args(&["SPDisplaysDataType", "-json"])
+                .args(["SPDisplaysDataType", "-json"])
                 .output()
             {
                 Ok(output) if output.status.success() => {
@@ -404,7 +404,7 @@ impl GpuManager {
     }
 
     async fn get_cuda_version(&self) -> Option<String> {
-        match Command::new("nvcc").args(&["--version"]).output() {
+        match Command::new("nvcc").args(["--version"]).output() {
             Ok(output) if output.status.success() => {
                 let stdout = String::from_utf8_lossy(&output.stdout);
                 // Parse CUDA version from nvcc output
@@ -806,7 +806,7 @@ impl GpuManager {
 
         // Use nvidia-ml-py or nvidia-smi for power management
         let output = Command::new("nvidia-smi")
-            .args(&["-i", &gpu_id.to_string(), "-pl", power_limit])
+            .args(["-i", &gpu_id.to_string(), "-pl", power_limit])
             .output();
 
         match output {
@@ -840,7 +840,7 @@ impl GpuManager {
         };
 
         let output = Command::new("rocm-smi")
-            .args(&[
+            .args([
                 "-d",
                 &gpu_id.to_string(),
                 "--setpowerprofile",
@@ -864,7 +864,7 @@ impl GpuManager {
     async fn reset_nvidia_gpu(&self, gpu_id: u32) -> Result<()> {
         // Reset NVIDIA GPU using nvidia-smi
         let output = Command::new("nvidia-smi")
-            .args(&["-i", &gpu_id.to_string(), "--gpu-reset"])
+            .args(["-i", &gpu_id.to_string(), "--gpu-reset"])
             .output();
 
         match output {
@@ -889,7 +889,7 @@ impl GpuManager {
     async fn reset_amd_gpu(&self, gpu_id: u32) -> Result<()> {
         // Reset AMD GPU using rocm-smi
         let output = Command::new("rocm-smi")
-            .args(&["-d", &gpu_id.to_string(), "--resetgpu"])
+            .args(["-d", &gpu_id.to_string(), "--resetgpu"])
             .output();
 
         match output {

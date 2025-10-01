@@ -210,6 +210,12 @@ pub struct PlatformInfo {
     pub interfaces: Vec<String>,
 }
 
+impl Default for PlatformInfo {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PlatformInfo {
     pub fn new() -> Self {
         let backends = Vec::new();

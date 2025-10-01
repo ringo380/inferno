@@ -389,11 +389,10 @@ async fn handle_tracing_command(command: TracingCommand, _config: &Config) -> Re
                         continue;
                     }
                 }
-                if errors_only {
-                    if !matches!(trace.status, crate::observability::SpanStatus::Error(_)) {
+                if errors_only
+                    && !matches!(trace.status, crate::observability::SpanStatus::Error(_)) {
                         continue;
                     }
-                }
 
                 println!("\n  Trace ID: {}", trace.trace_id);
                 println!("  Operation: {}", trace.operation_name);

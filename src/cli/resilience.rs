@@ -237,7 +237,7 @@ async fn handle_circuit_breaker_action(action: CircuitBreakerAction) -> Result<(
             println!("Failure Threshold: 5");
             println!("Recovery Timeout: 60s");
             println!("Success Threshold: 3");
-            println!("");
+            println!();
             println!("Statistics:");
             println!("• Total Requests: 1,234");
             println!("• Successful: 1,220 (98.9%)");
@@ -284,7 +284,7 @@ async fn test_resilience_pattern(pattern: String, requests: u32, failure_rate: f
         requests,
         failure_rate * 100.0
     );
-    println!("");
+    println!();
 
     let manager = ResilienceManager::new();
 

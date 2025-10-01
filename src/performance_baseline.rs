@@ -358,7 +358,7 @@ impl PerformanceBaseline {
 
         let test_id = format!(
             "{}_{}_baseline_{}",
-            backend_type.to_string(),
+            backend_type,
             model.name.replace('.', "_"),
             SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs()
         );

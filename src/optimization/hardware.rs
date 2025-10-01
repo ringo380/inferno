@@ -265,6 +265,12 @@ pub struct SimdOptimizer {
     optimal_vector_size: usize,
 }
 
+impl Default for SimdOptimizer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SimdOptimizer {
     pub fn new() -> Self {
         let supported_instruction_sets = Self::detect_simd_support();
@@ -306,7 +312,7 @@ impl SimdOptimizer {
     }
 
     fn determine_optimal_vector_size(instruction_sets: &[SimdInstructionSet]) -> usize {
-        for instruction_set in instruction_sets.iter().rev() {
+        if let Some(instruction_set) = instruction_sets.iter().next_back() {
             match instruction_set {
                 SimdInstructionSet::AVX512 => return 64, // 512 bits = 64 bytes
                 SimdInstructionSet::AVX2 | SimdInstructionSet::AVX => return 32, // 256 bits = 32 bytes

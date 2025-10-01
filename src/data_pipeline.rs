@@ -323,6 +323,7 @@ pub enum RecoveryStrategy {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct ResourceConfig {
     /// Resource limits
     pub limits: ResourceLimits,
@@ -856,6 +857,7 @@ pub enum TransformationType {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct DataTypeConfig {
     /// Type inference
     pub inference: TypeInferenceConfig,
@@ -931,6 +933,7 @@ pub struct TypeValidationRule {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct AggregationConfig {
     /// Aggregation functions
     pub functions: Vec<AggregationFunction>,
@@ -967,6 +970,7 @@ pub enum AggregationType {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct GroupByConfig {
     /// Group by columns
     pub columns: Vec<String>,
@@ -1038,6 +1042,7 @@ pub enum FrameBound {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct JoinConfig {
     /// Join operations
     pub joins: Vec<JoinOperation>,
@@ -1108,6 +1113,7 @@ pub struct JoinOptimization {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct CustomTransformationConfig {
     /// Custom functions
     pub functions: Vec<CustomFunction>,
@@ -1555,15 +1561,6 @@ impl Default for RecoveryConfig {
     }
 }
 
-impl Default for ResourceConfig {
-    fn default() -> Self {
-        Self {
-            limits: ResourceLimits::default(),
-            scaling: ScalingConfig::default(),
-            monitoring: ResourceMonitoringConfig::default(),
-        }
-    }
-}
 
 impl Default for ResourceLimits {
     fn default() -> Self {
@@ -1747,15 +1744,6 @@ impl Default for TransformationConfig {
     }
 }
 
-impl Default for DataTypeConfig {
-    fn default() -> Self {
-        Self {
-            inference: TypeInferenceConfig::default(),
-            conversion: TypeConversionConfig::default(),
-            validation: TypeValidationConfig::default(),
-        }
-    }
-}
 
 impl Default for TypeInferenceConfig {
     fn default() -> Self {
@@ -1787,34 +1775,8 @@ impl Default for TypeValidationConfig {
     }
 }
 
-impl Default for AggregationConfig {
-    fn default() -> Self {
-        Self {
-            functions: Vec::new(),
-            group_by: GroupByConfig::default(),
-            window_functions: Vec::new(),
-        }
-    }
-}
 
-impl Default for GroupByConfig {
-    fn default() -> Self {
-        Self {
-            columns: Vec::new(),
-            having: None,
-            sort_order: Vec::new(),
-        }
-    }
-}
 
-impl Default for JoinConfig {
-    fn default() -> Self {
-        Self {
-            joins: Vec::new(),
-            optimization: JoinOptimization::default(),
-        }
-    }
-}
 
 impl Default for JoinOptimization {
     fn default() -> Self {
@@ -1826,15 +1788,6 @@ impl Default for JoinOptimization {
     }
 }
 
-impl Default for CustomTransformationConfig {
-    fn default() -> Self {
-        Self {
-            functions: Vec::new(),
-            udf_registry: UdfRegistryConfig::default(),
-            code_execution: CodeExecutionConfig::default(),
-        }
-    }
-}
 
 impl Default for UdfRegistryConfig {
     fn default() -> Self {
@@ -2010,19 +1963,12 @@ impl Default for FeatureStoreConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct TrainingIntegrationConfig {
     pub enabled: bool,
     pub frameworks: Vec<String>,
 }
 
-impl Default for TrainingIntegrationConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            frameworks: Vec::new(),
-        }
-    }
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DataLineageConfig {
@@ -2040,19 +1986,12 @@ impl Default for DataLineageConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct OptimizationConfig {
     pub enabled: bool,
     pub strategies: Vec<String>,
 }
 
-impl Default for OptimizationConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            strategies: Vec::new(),
-        }
-    }
-}
 
 /// Data pipeline representation
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -3539,6 +3478,12 @@ pub struct InMemoryScheduler {
     scheduled_pipelines: Arc<RwLock<HashMap<String, DataPipeline>>>,
 }
 
+impl Default for InMemoryScheduler {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl InMemoryScheduler {
     pub fn new() -> Self {
         Self {
@@ -3590,6 +3535,12 @@ impl PipelineScheduler for InMemoryScheduler {
 
 /// Simple in-memory executor implementation
 pub struct InMemoryExecutor;
+
+impl Default for InMemoryExecutor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl InMemoryExecutor {
     pub fn new() -> Self {
@@ -3659,6 +3610,12 @@ impl PipelineExecutor for InMemoryExecutor {
 
 /// Simple in-memory monitor implementation
 pub struct InMemoryMonitor;
+
+impl Default for InMemoryMonitor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl InMemoryMonitor {
     pub fn new() -> Self {

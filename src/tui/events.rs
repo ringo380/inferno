@@ -39,11 +39,8 @@ impl EventHandler {
     pub async fn poll_terminal_events(&self) -> Result<()> {
         loop {
             if event::poll(Duration::from_millis(100))? {
-                match event::read()? {
-                    Event::Key(key) => {
-                        let _ = self.sender.send(AppEvent::Key(key));
-                    }
-                    _ => {}
+                if let Event::Key(key) = event::read()? {
+                    let _ = self.sender.send(AppEvent::Key(key));
                 }
             }
 

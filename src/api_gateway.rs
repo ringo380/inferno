@@ -362,6 +362,7 @@ pub struct CorsConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct MiddlewareConfig {
     /// Request logging
     pub request_logging: RequestLoggingConfig,
@@ -392,6 +393,7 @@ pub struct RequestLoggingConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct ResponseTransformConfig {
     /// Enable response transformation
     pub enabled: bool,
@@ -400,6 +402,7 @@ pub struct ResponseTransformConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct RequestTransformConfig {
     /// Enable request transformation
     pub enabled: bool,
@@ -776,16 +779,6 @@ impl Default for CorsConfig {
     }
 }
 
-impl Default for MiddlewareConfig {
-    fn default() -> Self {
-        Self {
-            request_logging: RequestLoggingConfig::default(),
-            response_transform: ResponseTransformConfig::default(),
-            request_transform: RequestTransformConfig::default(),
-            custom_middleware: Vec::new(),
-        }
-    }
-}
 
 impl Default for RequestLoggingConfig {
     fn default() -> Self {
@@ -801,23 +794,7 @@ impl Default for RequestLoggingConfig {
     }
 }
 
-impl Default for ResponseTransformConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            rules: Vec::new(),
-        }
-    }
-}
 
-impl Default for RequestTransformConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            rules: Vec::new(),
-        }
-    }
-}
 
 impl Default for HealthCheckConfig {
     fn default() -> Self {
@@ -1215,6 +1192,12 @@ impl LoadBalancer {
 /// Health checker implementation
 pub struct HealthChecker {
     active_checks: Arc<RwLock<HashMap<String, tokio::task::JoinHandle<()>>>>,
+}
+
+impl Default for HealthChecker {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl HealthChecker {

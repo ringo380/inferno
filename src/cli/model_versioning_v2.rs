@@ -370,9 +370,7 @@ impl Command for ModelVersionRollback {
 
         // Stub implementation
         let target_version = self
-            .version_id
-            .as_ref()
-            .map(|s| s.as_str())
+            .version_id.as_deref()
             .unwrap_or("previous");
 
         // Human-readable output

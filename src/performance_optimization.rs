@@ -1589,23 +1589,16 @@ impl Default for ProtocolOptimizationConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct MlOptimizationConfig {
     pub model_optimization: ModelOptimizationConfig,
     pub inference_optimization: InferenceOptimizationConfig,
     pub training_optimization: TrainingOptimizationConfig,
 }
 
-impl Default for MlOptimizationConfig {
-    fn default() -> Self {
-        Self {
-            model_optimization: ModelOptimizationConfig::default(),
-            inference_optimization: InferenceOptimizationConfig::default(),
-            training_optimization: TrainingOptimizationConfig::default(),
-        }
-    }
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct ModelOptimizationConfig {
     pub quantization: QuantizationConfig,
     pub pruning: PruningConfig,
@@ -1613,16 +1606,6 @@ pub struct ModelOptimizationConfig {
     pub fusion: FusionConfig,
 }
 
-impl Default for ModelOptimizationConfig {
-    fn default() -> Self {
-        Self {
-            quantization: QuantizationConfig::default(),
-            pruning: PruningConfig::default(),
-            distillation: DistillationConfig::default(),
-            fusion: FusionConfig::default(),
-        }
-    }
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QuantizationConfig {

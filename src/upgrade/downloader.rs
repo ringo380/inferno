@@ -301,7 +301,7 @@ impl UpdateDownloader {
     /// Extract filename from URL
     fn extract_filename_from_url(&self, url: &str) -> UpgradeResult<String> {
         url.split('/')
-            .last()
+            .next_back()
             .ok_or_else(|| UpgradeError::InvalidPackage("Invalid download URL".to_string()))
             .map(|s| s.to_string())
     }

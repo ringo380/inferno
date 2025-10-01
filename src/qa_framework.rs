@@ -72,6 +72,7 @@ pub struct ExecutionCompat {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct TestingConfig {
     pub test_types: TestTypesConfig,
     pub test_discovery: TestDiscoveryConfig,
@@ -84,6 +85,7 @@ pub struct TestingConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct TestTypesConfig {
     pub unit_tests: UnitTestConfig,
     pub integration_tests: IntegrationTestConfig,
@@ -124,6 +126,7 @@ pub enum QualityRating {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct CodeAnalysisConfig {
     pub static_analysis: StaticAnalysisConfig,
     pub dynamic_analysis: DynamicAnalysisConfig,
@@ -1377,20 +1380,6 @@ impl Default for QAFrameworkConfig {
     }
 }
 
-impl Default for TestingConfig {
-    fn default() -> Self {
-        Self {
-            test_types: TestTypesConfig::default(),
-            test_discovery: TestDiscoveryConfig::default(),
-            test_execution: TestExecutionConfig::default(),
-            test_selection: TestSelectionConfig::default(),
-            parallel_execution: ParallelExecutionConfig::default(),
-            retry_policy: RetryPolicyConfig::default(),
-            timeout_config: TimeoutConfig::default(),
-            isolation: TestIsolationConfig::default(),
-        }
-    }
-}
 
 impl Default for QualityGatesConfig {
     fn default() -> Self {
@@ -1410,19 +1399,6 @@ impl Default for QualityGatesConfig {
     }
 }
 
-impl Default for CodeAnalysisConfig {
-    fn default() -> Self {
-        Self {
-            static_analysis: StaticAnalysisConfig::default(),
-            dynamic_analysis: DynamicAnalysisConfig::default(),
-            code_coverage: CoverageConfig::default(),
-            complexity_analysis: ComplexityConfig::default(),
-            dependency_analysis: DependencyConfig::default(),
-            architecture_analysis: ArchitectureConfig::default(),
-            code_quality_metrics: QualityMetricsConfig::default(),
-        }
-    }
-}
 
 impl Default for StaticAnalysisConfig {
     fn default() -> Self {
@@ -1498,24 +1474,6 @@ impl Default for SecurityTestingConfig {
 }
 
 // Placeholder defaults for complex types
-impl Default for TestTypesConfig {
-    fn default() -> Self {
-        Self {
-            unit_tests: UnitTestConfig::default(),
-            integration_tests: IntegrationTestConfig::default(),
-            end_to_end_tests: E2ETestConfig::default(),
-            performance_tests: PerformanceTestConfig::default(),
-            security_tests: SecurityTestConfig::default(),
-            smoke_tests: SmokeTestConfig::default(),
-            regression_tests: RegressionTestConfig::default(),
-            acceptance_tests: AcceptanceTestConfig::default(),
-            load_tests: LoadTestConfig::default(),
-            stress_tests: StressTestConfig::default(),
-            chaos_tests: ChaosTestConfig::default(),
-            compatibility_tests: CompatibilityTestConfig::default(),
-        }
-    }
-}
 
 // Additional placeholder implementations
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

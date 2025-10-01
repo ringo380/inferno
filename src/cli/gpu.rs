@@ -435,7 +435,7 @@ pub async fn execute(args: GpuArgs, _config: &Config) -> Result<()> {
             vendor,
             gpu_id,
         } => {
-            let preferred_vendor = vendor.map(|v| GpuVendor::from(v));
+            let preferred_vendor = vendor.map(GpuVendor::from);
 
             if let Some(id) = gpu_id {
                 // Allocate specific GPU

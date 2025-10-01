@@ -37,7 +37,7 @@ pub async fn handle_config_command(args: ConfigArgs) -> Result<()> {
         }
         ConfigAction::Init { path } => {
             let config = Config::default();
-            let config_path = path.unwrap_or_else(|| Config::get_default_config_path());
+            let config_path = path.unwrap_or_else(Config::get_default_config_path);
 
             // Create parent directory if it doesn't exist
             if let Some(parent) = config_path.parent() {
@@ -50,7 +50,7 @@ pub async fn handle_config_command(args: ConfigArgs) -> Result<()> {
             println!("Edit this file to customize your settings.");
         }
         ConfigAction::Validate { path } => {
-            let config_path = path.unwrap_or_else(|| Config::get_default_config_path());
+            let config_path = path.unwrap_or_else(Config::get_default_config_path);
 
             if !config_path.exists() {
                 println!("❌ Configuration file not found: {}", config_path.display());

@@ -91,7 +91,7 @@ pub async fn execute(args: ServeArgs, config: &Config) -> Result<()> {
     let (backend, loaded_model) = if !args.distributed {
         if let Some(model_name) = &args.model {
             info!("Loading model on startup: {}", model_name);
-            match load_model_on_startup(model_name, &*model_manager, config).await {
+            match load_model_on_startup(model_name, &model_manager, config).await {
                 Ok((backend_handle, model_name)) => (Some(backend_handle), Some(model_name)),
                 Err(e) => {
                     warn!("Failed to load startup model: {}", e);

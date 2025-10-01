@@ -109,8 +109,8 @@ impl Command for AuditQueryCmd {
         let logger = AuditLogger::new(audit_config).await?;
 
         // Convert DateTime<Utc> to SystemTime for query
-        let start_time = self.start_time.map(|dt| SystemTime::from(dt));
-        let end_time = self.end_time.map(|dt| SystemTime::from(dt));
+        let start_time = self.start_time.map(SystemTime::from);
+        let end_time = self.end_time.map(SystemTime::from);
 
         let query = AuditQuery {
             event_types: self.event_types.clone(),
@@ -379,8 +379,8 @@ impl Command for AuditExport {
         let logger = AuditLogger::new(audit_config).await?;
 
         // Convert DateTime<Utc> to SystemTime for query
-        let start_time = self.start_time.map(|dt| SystemTime::from(dt));
-        let end_time = self.end_time.map(|dt| SystemTime::from(dt));
+        let start_time = self.start_time.map(SystemTime::from);
+        let end_time = self.end_time.map(SystemTime::from);
 
         let query = AuditQuery {
             event_types: self.event_types.clone(),

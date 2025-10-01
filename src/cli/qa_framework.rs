@@ -792,7 +792,7 @@ async fn handle_create_test(
             sensitive_data: false,
             data_sets: Vec::new(),
         },
-        environment: environment,
+        environment,
         metadata: TestMetadata {
             author: "cli_user".to_string(),
             version: "1.0.0".to_string(),
@@ -882,7 +882,7 @@ async fn handle_run_tests(
             .unwrap_or_else(|| format!("Test Run {}", chrono::Utc::now().format("%Y%m%d_%H%M%S"))),
         description: "CLI-generated test run".to_string(),
         trigger: RunTrigger::Manual,
-        environment: target_environment.unwrap_or_else(|| TestEnvironment::testing()),
+        environment: target_environment.unwrap_or_else(TestEnvironment::testing),
         configuration: RunConfiguration {
             parallel_execution: execution_mode == TestExecutionMode::Parallel,
             max_concurrency: parallel.unwrap_or(1),

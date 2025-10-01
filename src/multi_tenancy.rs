@@ -670,6 +670,7 @@ pub enum DataIsolationLevel {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct NetworkIsolationConfig {
     pub vlan_enabled: bool,
     pub network_policies: Vec<NetworkPolicy>,
@@ -949,6 +950,7 @@ pub enum CostAllocationMethod {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct ChargebackConfig {
     pub enabled: bool,
     pub department_mapping: HashMap<String, String>,
@@ -1705,6 +1707,7 @@ pub struct HealthCheckConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct CpuIsolationConfig {
     pub cpu_sets: Vec<u32>,
     pub numa_node: Option<u32>,
@@ -1712,6 +1715,7 @@ pub struct CpuIsolationConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct MemoryIsolationConfig {
     pub numa_binding: bool,
     pub huge_pages: bool,
@@ -2213,16 +2217,6 @@ impl Default for DataIsolationConfig {
     }
 }
 
-impl Default for NetworkIsolationConfig {
-    fn default() -> Self {
-        Self {
-            vlan_enabled: false,
-            network_policies: Vec::new(),
-            firewall_rules: Vec::new(),
-            load_balancing: LoadBalancingConfig::default(),
-        }
-    }
-}
 
 impl Default for PerformanceIsolationConfig {
     fn default() -> Self {
@@ -2402,15 +2396,6 @@ impl Default for CostAllocationConfig {
     }
 }
 
-impl Default for ChargebackConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            department_mapping: HashMap::new(),
-            cost_centers: HashMap::new(),
-        }
-    }
-}
 
 impl Default for BudgetConfig {
     fn default() -> Self {
@@ -2453,25 +2438,7 @@ impl Default for HealthCheckConfig {
     }
 }
 
-impl Default for CpuIsolationConfig {
-    fn default() -> Self {
-        Self {
-            cpu_sets: Vec::new(),
-            numa_node: None,
-            exclusive: false,
-        }
-    }
-}
 
-impl Default for MemoryIsolationConfig {
-    fn default() -> Self {
-        Self {
-            numa_binding: false,
-            huge_pages: false,
-            locked_memory: false,
-        }
-    }
-}
 
 impl Default for IoIsolationConfig {
     fn default() -> Self {

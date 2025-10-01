@@ -216,7 +216,7 @@ impl Command for GpuInfo {
             format!("GPU {} information retrieved", self.gpu_id),
             json!({
                 "gpu": serde_json::to_value(&gpu)?,
-                "metrics": metrics.as_ref().map(|m| serde_json::to_value(m).ok()).flatten(),
+                "metrics": metrics.as_ref().and_then(|m| serde_json::to_value(m).ok()),
             }),
         ))
     }

@@ -6,6 +6,12 @@ pub struct FuzzyMatcher {
     aliases: HashMap<String, String>,
 }
 
+impl Default for FuzzyMatcher {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl FuzzyMatcher {
     pub fn new() -> Self {
         let mut matcher = Self {

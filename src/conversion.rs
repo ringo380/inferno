@@ -696,8 +696,8 @@ impl ModelConverter {
         let input_format = self.detect_model_format(input_path)?;
 
         // Check if conversion is needed
-        if self.formats_compatible(&input_format, &conversion_config.output_format) {
-            if conversion_config.quantization.is_none()
+        if self.formats_compatible(&input_format, &conversion_config.output_format)
+            && conversion_config.quantization.is_none()
                 && conversion_config.optimization_level == OptimizationLevel::None
             {
                 warnings.push("No conversion needed - copying file".to_string());
@@ -717,7 +717,6 @@ impl ModelConverter {
                     metadata_preserved: true,
                 });
             }
-        }
 
         // Perform actual conversion
         match self
@@ -1719,9 +1718,9 @@ impl ModelConverter {
                 architecture.hidden_size = Some(hidden_size);
 
                 // Estimate number of attention heads
-                if hidden_size % 64 == 0 {
+                if hidden_size.is_multiple_of(64) {
                     architecture.num_attention_heads = Some(hidden_size / 64);
-                } else if hidden_size % 128 == 0 {
+                } else if hidden_size.is_multiple_of(128) {
                     architecture.num_attention_heads = Some(hidden_size / 128);
                 }
             }
@@ -1891,11 +1890,11 @@ impl ModelConverter {
             GgmlType::F16 => 2,
             GgmlType::Q4_0 => {
                 // Q4_0 uses 18 bytes per 32 elements
-                ((total_elements + 31) / 32 * 18) as usize
+                (total_elements.div_ceil(32) * 18) as usize
             }
             GgmlType::Q4_1 => {
                 // Q4_1 uses 20 bytes per 32 elements
-                ((total_elements + 31) / 32 * 20) as usize
+                (total_elements.div_ceil(32) * 20) as usize
             }
             _ => tensor.ggml_type.type_size(),
         };

@@ -8,6 +8,7 @@ use tokio::sync::RwLock;
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct BackupRecoveryConfig {
     pub enabled: bool,
     pub backup_strategy: BackupStrategy,
@@ -25,26 +26,6 @@ pub struct BackupRecoveryConfig {
     pub performance: PerformanceConfig,
 }
 
-impl Default for BackupRecoveryConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            backup_strategy: BackupStrategy::default(),
-            retention_policy: RetentionPolicy::default(),
-            compression: CompressionConfig::default(),
-            encryption: EncryptionConfig::default(),
-            destinations: vec![],
-            scheduling: SchedulingConfig::default(),
-            monitoring: MonitoringConfig::default(),
-            disaster_recovery: DisasterRecoveryConfig::default(),
-            replication: ReplicationConfig::default(),
-            notification: NotificationConfig::default(),
-            metadata_storage: MetadataStorageConfig::default(),
-            validation: ValidationConfig::default(),
-            performance: PerformanceConfig::default(),
-        }
-    }
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BackupStrategy {
