@@ -4,10 +4,13 @@
 rustflags = [
     "-C", "target-cpu=apple-m1",
     "-C", "link-arg=-framework", "-C", "link-arg=Metal",
-    "-C", "link-arg=-framework", "-C", "link-arg=MetalPerformanceShaders",
-    "-C", "opt-level=3",
-    "-C", "lto=thin"
+    "-C", "link-arg=-framework", "-C", "link-arg=MetalPerformanceShaders"
 ]
+
+# Profile-specific optimizations
+[profile.release]
+lto = "thin"
+opt-level = 3
 
 [target.x86_64-apple-darwin]
 rustflags = ["-C", "target-cpu=native"]
