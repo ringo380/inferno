@@ -42,7 +42,7 @@
 #[cfg(not(feature = "desktop"))]
 use anyhow::Result;
 #[cfg(feature = "desktop")]
-use inferno::tauri_app::run_tauri_app;
+use inferno_ai::tauri_app::run_tauri_app;
 
 #[cfg(not(feature = "desktop"))]
 fn main() -> Result<()> {

@@ -1,5 +1,5 @@
 // TODO: Implement icon_generator module
-// use inferno::icon_generator::generate_app_icons;
+// use inferno_ai::icon_generator::generate_app_icons;
 
 fn main() -> anyhow::Result<()> {
     println!("Generating Inferno AI Runner app icons...");
