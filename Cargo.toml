@@ -145,8 +145,9 @@ tokio-stream = { version = "0.1", features = ["net"] }
 serde_yaml = "0.9"
 
 # WebSocket support for real-time streaming
-tokio-tungstenite = "0.20"
-axum-tungstenite = "0.1"
+# Updated to fix RUSTSEC-2023-0065 (tungstenite DoS vulnerability, CVSSv3 7.5)
+tokio-tungstenite = "0.24"
+axum-tungstenite = "0.3"
 
 # Security and authentication
 base64 = "0.21"
