@@ -2272,7 +2272,7 @@ impl VerificationEngine {
 
         let algorithm = signature_parts[0];
         let key_id = signature_parts[1];
-        let sig_data = signature_parts[2];
+        let _sig_data = signature_parts[2];
 
         // Validate algorithm
         if algorithm != "ED25519" && algorithm != "RSA-PSS-SHA256" {
@@ -2286,7 +2286,7 @@ impl VerificationEngine {
         let file_content = tokio::fs::read(path)
             .await
             .context("Failed to read file for signature verification")?;
-        let file_hash = sha2::Sha256::digest(&file_content);
+        let _file_hash = sha2::Sha256::digest(&file_content);
 
         // In a real implementation, this would:
         // 1. Fetch the public key for key_id from a trusted keystore
