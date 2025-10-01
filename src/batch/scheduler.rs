@@ -1,6 +1,6 @@
 use crate::batch::queue::{BatchJob, JobQueueManager, JobSchedule, QueueStatus, ScheduleType};
 use anyhow::Result;
-use chrono::{DateTime, Datelike, Timelike, Utc};
+use chrono::{DateTime, Datelike, Timelike, Utc, Weekday};
 use cron::Schedule;
 use serde::{Deserialize, Serialize};
 use std::{

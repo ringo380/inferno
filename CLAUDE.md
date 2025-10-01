@@ -5,6 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Common Development Commands
 
 ### Building and Testing
+- `./verify.sh` - **Recommended**: Full verification (build + test + lint + format + security audit)
 - `cargo build` - Debug build
 - `cargo build --release` - Release build with optimizations
 - `cargo test` - Run unit and integration tests
@@ -16,7 +17,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `cargo clippy` - Run linter
 - `cargo fmt` - Format code
 - `./scripts/build.sh --release` - Build with deployment script
-- `./verify.sh` - Full verification script (build + test + lint + security audit)
 
 ### Running the Application
 - `cargo run -- --help` - Show CLI help
