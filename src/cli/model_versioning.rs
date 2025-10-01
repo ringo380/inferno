@@ -223,6 +223,19 @@ pub enum ModelVersioningCommand {
     },
 }
 
+/// Configuration for creating model versions
+/// Reduces function signature from 9 parameters to 2
+pub struct CreateVersionConfig {
+    pub model: String,
+    pub version: String,
+    pub file: PathBuf,
+    pub description: Option<String>,
+    pub model_type: Option<String>,
+    pub format: Option<String>,
+    pub tags: Option<String>,
+    pub created_by: Option<String>,
+}
+
 #[derive(Debug, Subcommand)]
 pub enum ABTestAction {
     #[command(about = "Create new A/B test experiment")]
@@ -815,8 +828,7 @@ pub async fn execute(args: ModelVersioningArgs, config: &Config) -> Result<()> {
             tags,
             created_by,
         } => {
-            handle_create_command(
-                config,
+            let version_config = CreateVersionConfig {
                 model,
                 version,
                 file,
@@ -825,8 +837,8 @@ pub async fn execute(args: ModelVersioningArgs, config: &Config) -> Result<()> {
                 format,
                 tags,
                 created_by,
-            )
-            .await
+            };
+            handle_create_command(config, version_config).await
         }
 
         ModelVersioningCommand::List {
@@ -926,27 +938,30 @@ pub async fn execute(args: ModelVersioningArgs, config: &Config) -> Result<()> {
 
 async fn handle_create_command(
     config: &Config,
-    model: String,
-    version: String,
-    file: PathBuf,
-    description: Option<String>,
-    model_type: Option<String>,
-    format: Option<String>,
-    tags: Option<String>,
-    created_by: Option<String>,
+    version_config: CreateVersionConfig,
 ) -> Result<()> {
-    info!("Creating new model version: {} v{}", model, version);
+    info!(
+        "Creating new model version: {} v{}",
+        version_config.model, version_config.version
+    );
 
     // Validate file exists
-    if !file.exists() {
-        return Err(anyhow::anyhow!("Model file not found: {}", file.display()));
+    if !version_config.file.exists() {
+        return Err(anyhow::anyhow!(
+            "Model file not found: {}",
+            version_config.file.display()
+        ));
     }
 
     // Create metadata
-    let file_size = std::fs::metadata(&file)?.len();
+    let file_size = std::fs::metadata(&version_config.file)?.len();
     let metadata = crate::model_versioning::ModelMetadata {
-        model_type: model_type.unwrap_or_else(|| "unknown".to_string()),
-        format: format.unwrap_or_else(|| "gguf".to_string()),
+        model_type: version_config
+            .model_type
+            .unwrap_or_else(|| "unknown".to_string()),
+        format: version_config
+            .format
+            .unwrap_or_else(|| "gguf".to_string()),
         size_bytes: file_size,
         checksum: "mock_checksum".to_string(), // Would calculate actual checksum
         training_dataset: None,
@@ -976,20 +991,30 @@ async fn handle_create_command(
     // Create version
     let version_id = versioning_system
         .create_version(
-            &model,
-            &version,
-            &description.unwrap_or_else(|| format!("Version {} of {}", version, model)),
-            file,
+            &version_config.model,
+            &version_config.version,
+            &version_config.description.unwrap_or_else(|| {
+                format!(
+                    "Version {} of {}",
+                    version_config.version, version_config.model
+                )
+            }),
+            version_config.file,
             metadata,
-            &created_by.unwrap_or_else(|| "unknown".to_string()),
+            &version_config
+                .created_by
+                .unwrap_or_else(|| "unknown".to_string()),
         )
         .await?;
 
     println!("Model version created successfully!");
     println!("Version ID: {}", version_id);
-    println!("Model: {} v{}", model, version);
+    println!(
+        "Model: {} v{}",
+        version_config.model, version_config.version
+    );
 
-    if let Some(tag_str) = tags {
+    if let Some(tag_str) = version_config.tags {
         let tag_list: Vec<&str> = tag_str.split(',').collect();
         println!("Tags: {:?}", tag_list);
     }
