@@ -312,7 +312,7 @@ async fn deep_validate_model(path: &PathBuf, config: &Config) -> Result<bool> {
     let backend_type = BackendType::from_model_path(path).ok_or_else(|| {
         anyhow::anyhow!("No suitable backend found for model: {}", path.display())
     })?;
-    let mut backend = Backend::new(backend_type.clone(), &config.backend_config)?;
+    let mut backend = Backend::new(backend_type, &config.backend_config)?;
 
     let model_info = ModelInfo {
         name: path.file_name().unwrap().to_string_lossy().to_string(),

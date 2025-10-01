@@ -10,6 +10,7 @@ use uuid::Uuid;
 
 /// Model versioning and A/B testing configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct ModelVersioningConfig {
     /// Enable model versioning
     pub enabled: bool,
@@ -521,6 +522,7 @@ pub enum RollbackStrategy {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct NotificationConfig {
     /// Enable notifications
     pub enabled: bool,
@@ -626,21 +628,6 @@ pub enum PerformanceStorageBackend {
     Files,
 }
 
-impl Default for ModelVersioningConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            storage: VersionStorageConfig::default(),
-            ab_testing: ModelVersioningABTestingConfig::default(),
-            rollout: RolloutConfig::default(),
-            registry: ModelRegistryConfig::default(),
-            comparison: VersionComparisonConfig::default(),
-            canary: CanaryConfig::default(),
-            rollback: RollbackConfig::default(),
-            performance: PerformanceTrackingConfig::default(),
-        }
-    }
-}
 
 impl Default for VersionStorageConfig {
     fn default() -> Self {
@@ -876,15 +863,6 @@ impl Default for RollbackConfig {
     }
 }
 
-impl Default for NotificationConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            channels: Vec::new(),
-            events: Vec::new(),
-        }
-    }
-}
 
 impl Default for PerformanceTrackingConfig {
     fn default() -> Self {
@@ -1967,6 +1945,12 @@ impl VersionStorage for FileSystemVersionStorage {
 /// In-memory experiment tracker implementation
 pub struct InMemoryExperimentTracker {
     events: Arc<RwLock<HashMap<String, Vec<ExperimentEvent>>>>,
+}
+
+impl Default for InMemoryExperimentTracker {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl InMemoryExperimentTracker {

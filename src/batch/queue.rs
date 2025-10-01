@@ -1768,7 +1768,7 @@ impl ResourceMonitor {
         // Check CPU requirements
         if let Some(required_cpu_cores) = requirements.cpu_cores {
             let available_cpu_percent = 100.0 - self.cpu_usage;
-            if available_cpu_percent < (required_cpu_cores as f64 * 20.0) {
+            if available_cpu_percent < (required_cpu_cores * 20.0) {
                 // Approximate 20% per core
                 return Err(anyhow::anyhow!(
                     "Insufficient CPU: required {} cores, current usage {:.1}%",

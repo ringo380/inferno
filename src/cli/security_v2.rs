@@ -165,11 +165,10 @@ impl Command for SecurityUserManage {
         }
 
         // Validate delete/modify operations
-        if ["delete", "modify"].contains(&self.operation.as_str()) {
-            if self.user_id.is_none() {
+        if ["delete", "modify"].contains(&self.operation.as_str())
+            && self.user_id.is_none() {
                 anyhow::bail!("User ID is required for {} operation", self.operation);
             }
-        }
 
         // Validate role if provided
         if let Some(ref role) = self.role {

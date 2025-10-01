@@ -2075,7 +2075,7 @@ async fn handle_compliance_command(
                         std::time::SystemTime::now()
                             - std::time::Duration::from_secs(30 * 24 * 3600)
                     }),
-                    end: end.unwrap_or_else(|| std::time::SystemTime::now()),
+                    end: end.unwrap_or_else(std::time::SystemTime::now),
                 }
             } else {
                 parse_time_range("30d")?

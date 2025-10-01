@@ -699,17 +699,14 @@ impl App {
     }
 
     async fn handle_running_keys(&mut self, key: KeyCode) -> Result<bool> {
-        match key {
-            KeyCode::Esc => {
-                // Cancel inference
-                self.add_log("warn", "Inference cancelled by user");
-                self.state = AppState::InputPrompt;
-                self.stream_receiver = None;
-                self.inference_start_time = None;
-                self.output_buffer.clear();
-                self.streaming_tokens.clear();
-            }
-            _ => {}
+        if key == KeyCode::Esc {
+            // Cancel inference
+            self.add_log("warn", "Inference cancelled by user");
+            self.state = AppState::InputPrompt;
+            self.stream_receiver = None;
+            self.inference_start_time = None;
+            self.output_buffer.clear();
+            self.streaming_tokens.clear();
         }
 
         Ok(false)

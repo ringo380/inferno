@@ -895,7 +895,7 @@ async fn stress_test(
                 last_request_time = std::time::Instant::now();
 
                 // Monitor memory usage periodically
-                if client_requests % 10 == 0 {
+                if client_requests.is_multiple_of(10) {
                     let memory_usage = get_current_memory_usage();
                     if memory_usage.rss > peak_memory {
                         peak_memory = memory_usage.rss;
@@ -1453,7 +1453,7 @@ async fn save_memory_profile(
         "Generated: {}",
         chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC")
     )?;
-    writeln!(file, "")?;
+    writeln!(file)?;
 
     // Write analysis summary
     writeln!(file, "## Analysis Summary")?;
@@ -1497,7 +1497,7 @@ async fn save_memory_profile(
         "- Memory Leak Detected: {}",
         analysis.memory_leak_detected
     )?;
-    writeln!(file, "")?;
+    writeln!(file)?;
 
     // Write detailed snapshots
     writeln!(file, "## Memory Snapshots")?;

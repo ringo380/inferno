@@ -1503,7 +1503,7 @@ impl SecurityScanner {
             file_content[7],
         ]);
 
-        if version < 1 || version > 3 {
+        if !(1..=3).contains(&version) {
             threats.push(ThreatDetection {
                 threat_type: ThreatType::InvalidFileStructure,
                 severity: ThreatSeverity::Medium,

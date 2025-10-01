@@ -123,7 +123,7 @@ impl Command for ConfigInit {
         let config_path = self
             .path
             .clone()
-            .unwrap_or_else(|| Config::get_default_config_path());
+            .unwrap_or_else(Config::get_default_config_path);
 
         info!("Creating configuration file at: {}", config_path.display());
 
@@ -181,7 +181,7 @@ impl Command for ConfigValidate {
         let config_path = self
             .path
             .clone()
-            .unwrap_or_else(|| Config::get_default_config_path());
+            .unwrap_or_else(Config::get_default_config_path);
 
         // Validate path exists
         if !config_path.exists() {
@@ -195,7 +195,7 @@ impl Command for ConfigValidate {
         let config_path = self
             .path
             .clone()
-            .unwrap_or_else(|| Config::get_default_config_path());
+            .unwrap_or_else(Config::get_default_config_path);
 
         info!("Validating configuration file: {}", config_path.display());
 

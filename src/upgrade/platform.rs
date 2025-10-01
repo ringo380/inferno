@@ -123,11 +123,11 @@ impl PlatformInfo {
                     && self
                         .distribution
                         .as_ref()
-                        .map_or(false, |d| d.contains("ubuntu") || d.contains("debian"))
+                        .is_some_and(|d| d.contains("ubuntu") || d.contains("debian"))
             }
             InstallationMethod::RPM => {
                 self.os == "linux"
-                    && self.distribution.as_ref().map_or(false, |d| {
+                    && self.distribution.as_ref().is_some_and(|d| {
                         d.contains("fedora") || d.contains("centos") || d.contains("rhel")
                     })
             }
@@ -388,7 +388,7 @@ impl BasePlatformHandler {
         let mut stopped = vec![];
 
         // Check for launchd services
-        if let Ok(output) = Command::new("launchctl").args(&["list"]).output() {
+        if let Ok(output) = Command::new("launchctl").args(["list"]).output() {
             let output_str = String::from_utf8_lossy(&output.stdout);
             for line in output_str.lines() {
                 if line.contains("inferno") {
@@ -398,7 +398,7 @@ impl BasePlatformHandler {
                         debug!("Stopping macOS service: {}", service_name);
 
                         let _ = Command::new("launchctl")
-                            .args(&["unload", service_name])
+                            .args(["unload", service_name])
                             .output();
 
                         stopped.push(service_name.to_string());
@@ -487,7 +487,7 @@ impl BasePlatformHandler {
         for service in stopped_services {
             if service != "inferno-instances" {
                 debug!("Starting macOS service: {}", service);
-                let _ = Command::new("launchctl").args(&["load", service]).output();
+                let _ = Command::new("launchctl").args(["load", service]).output();
             }
         }
         Ok(())

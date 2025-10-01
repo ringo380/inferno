@@ -520,7 +520,7 @@ impl BatchProcessor {
             BatchOutputFormat::Json => serde_json::to_string_pretty(results)?,
             BatchOutputFormat::JsonLines => results
                 .iter()
-                .map(|r| serde_json::to_string(r))
+                .map(serde_json::to_string)
                 .collect::<Result<Vec<_>, _>>()?
                 .join("\n"),
             BatchOutputFormat::Csv => self.results_to_csv(results)?,
@@ -535,7 +535,7 @@ impl BatchProcessor {
         let mut wtr = csv::Writer::from_writer(vec![]);
 
         // Write header
-        wtr.write_record(&[
+        wtr.write_record([
             "id",
             "input",
             "output",
@@ -547,11 +547,11 @@ impl BatchProcessor {
 
         // Write data
         for result in results {
-            wtr.write_record(&[
+            wtr.write_record([
                 &result.id,
                 &result.input,
                 result.output.as_deref().unwrap_or(""),
-                &result.error.as_deref().unwrap_or(""),
+                result.error.as_deref().unwrap_or(""),
                 &result.duration_ms.to_string(),
                 &result
                     .tokens_generated
@@ -571,7 +571,7 @@ impl BatchProcessor {
             .from_writer(vec![]);
 
         // Write header
-        wtr.write_record(&[
+        wtr.write_record([
             "id",
             "input",
             "output",
@@ -583,11 +583,11 @@ impl BatchProcessor {
 
         // Write data
         for result in results {
-            wtr.write_record(&[
+            wtr.write_record([
                 &result.id,
                 &result.input,
                 result.output.as_deref().unwrap_or(""),
-                &result.error.as_deref().unwrap_or(""),
+                result.error.as_deref().unwrap_or(""),
                 &result.duration_ms.to_string(),
                 &result
                     .tokens_generated

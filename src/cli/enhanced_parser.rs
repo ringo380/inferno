@@ -7,6 +7,12 @@ pub struct EnhancedCliParser {
     fuzzy_matcher: FuzzyMatcher,
 }
 
+impl Default for EnhancedCliParser {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl EnhancedCliParser {
     pub fn new() -> Self {
         Self {
@@ -151,12 +157,11 @@ pub async fn execute_with_prerequisites(
             eprintln!("❓ Continue anyway? (y/N): ");
 
             let mut input = String::new();
-            if std::io::stdin().read_line(&mut input).is_ok() {
-                if !input.trim().to_lowercase().starts_with('y') {
+            if std::io::stdin().read_line(&mut input).is_ok()
+                && !input.trim().to_lowercase().starts_with('y') {
                     eprintln!("Operation cancelled.");
                     return Ok(());
                 }
-            }
         }
     }
 

@@ -2386,7 +2386,7 @@ async fn handle_anomaly_command(
                     "TIMESTAMP", "TYPE", "DESCRIPTION", "SEVERITY"
                 );
                 println!("{}", "-".repeat(75));
-                for (_i, anomaly) in anomalies.iter().enumerate() {
+                for anomaly in anomalies.iter() {
                     println!(
                         "{:<20} {:<15} {:<30} {:<10}",
                         anomaly.timestamp.format("%Y-%m-%d %H:%M:%S"),
@@ -2644,7 +2644,7 @@ async fn handle_schedule_command(
                                 pipeline_id,
                                 schedule.enabled,
                                 truncate_string(&schedule_str, 30),
-                                truncate_string(&timezone, 20),
+                                truncate_string(timezone, 20),
                                 "TBD"
                             );
                         } else {
@@ -2653,7 +2653,7 @@ async fn handle_schedule_command(
                                 pipeline_id,
                                 schedule.enabled,
                                 truncate_string(&schedule_str, 30),
-                                truncate_string(&timezone, 20)
+                                truncate_string(timezone, 20)
                             );
                         }
                     }
@@ -3378,7 +3378,7 @@ fn validate_no_circular_dependencies(stages: &[crate::data_pipeline::Stage]) -> 
 
 fn validate_cron_expression(cron_expr: &str) -> Result<()> {
     // Basic cron validation - split into parts and check format
-    let parts: Vec<&str> = cron_expr.trim().split_whitespace().collect();
+    let parts: Vec<&str> = cron_expr.split_whitespace().collect();
 
     if parts.len() != 5 && parts.len() != 6 {
         return Err(anyhow::anyhow!(
@@ -3680,13 +3680,12 @@ fn validate_no_circular_dependencies_tasks(
     let mut rec_stack = HashSet::new();
 
     for task in tasks {
-        if !visited.contains(&task.name) {
-            if has_cycle(&task.name, &graph, &mut visited, &mut rec_stack) {
+        if !visited.contains(&task.name)
+            && has_cycle(&task.name, &graph, &mut visited, &mut rec_stack) {
                 return Err(anyhow::anyhow!(
                     "Circular dependency detected in pipeline tasks"
                 ));
             }
-        }
     }
 
     Ok(())

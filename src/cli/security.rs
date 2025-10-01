@@ -656,7 +656,7 @@ async fn execute_audit(
     let mut filtered_entries = entries;
 
     if let Some(user_filter) = user {
-        filtered_entries.retain(|e| e.user_id.as_ref().map_or(false, |u| u == &user_filter));
+        filtered_entries.retain(|e| e.user_id.as_ref() == Some(&user_filter));
     }
 
     if failures_only {

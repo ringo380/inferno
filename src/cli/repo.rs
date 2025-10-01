@@ -207,12 +207,11 @@ async fn handle_add(
 async fn handle_remove(marketplace: &ModelMarketplace, name: &str, force: bool) -> Result<()> {
     info!("Removing repository: {}", name);
 
-    if !force {
-        if !confirm(&format!("Remove repository '{}'?", name))? {
+    if !force
+        && !confirm(&format!("Remove repository '{}'?", name))? {
             println!("Removal cancelled");
             return Ok(());
         }
-    }
 
     match marketplace.repo_remove(name).await {
         Ok(_) => {

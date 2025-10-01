@@ -201,7 +201,7 @@ impl UpdateChecker {
             if let Ok(release_version) = self.parse_github_version(&release.tag_name) {
                 if release_version.is_newer_than(current_version) {
                     return Ok(Some(
-                        self.create_update_info_from_github(&release, release_version)?,
+                        self.create_update_info_from_github(release, release_version)?,
                     ));
                 }
             }

@@ -197,7 +197,7 @@ impl MetricsCollector {
     }
 
     pub fn record_inference(&self, event: InferenceEvent) {
-        if let Err(_) = self.event_sender.send(event) {
+        if self.event_sender.send(event).is_err() {
             tracing::warn!("Failed to send inference event - metrics collector may be shutdown");
         }
     }

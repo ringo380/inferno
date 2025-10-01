@@ -128,6 +128,7 @@ pub struct MetadataConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct ServiceDiscoveryConfig {
     /// Kubernetes service discovery
     pub kubernetes: Option<KubernetesSDConfig>,
@@ -204,6 +205,7 @@ pub struct RecordingRule {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct FederationConfig {
     /// Enable federation
     pub enabled: bool,
@@ -216,6 +218,7 @@ pub struct FederationConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct AlertingConfig {
     /// Alertmanager configuration
     pub alertmanager: AlertmanagerConfig,
@@ -518,6 +521,7 @@ pub enum MetricType {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct DashboardsConfig {
     /// Grafana configuration
     pub grafana: GrafanaConfig,
@@ -781,40 +785,8 @@ impl Default for PrometheusConfig {
     }
 }
 
-impl Default for ServiceDiscoveryConfig {
-    fn default() -> Self {
-        Self {
-            kubernetes: None,
-            file: None,
-            dns: None,
-            consul: None,
-        }
-    }
-}
 
-impl Default for FederationConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            external_labels: HashMap::new(),
-            honor_labels: false,
-            match_expressions: vec![],
-        }
-    }
-}
 
-impl Default for AlertingConfig {
-    fn default() -> Self {
-        Self {
-            alertmanager: AlertmanagerConfig::default(),
-            rules: vec![],
-            routing: RoutingConfig::default(),
-            channels: vec![],
-            inhibition: vec![],
-            silences: vec![],
-        }
-    }
-}
 
 impl Default for AlertmanagerConfig {
     fn default() -> Self {
@@ -870,15 +842,6 @@ impl Default for RetryConfig {
     }
 }
 
-impl Default for DashboardsConfig {
-    fn default() -> Self {
-        Self {
-            grafana: GrafanaConfig::default(),
-            dashboards: vec![],
-            auto_import: AutoImportConfig::default(),
-        }
-    }
-}
 
 impl Default for GrafanaConfig {
     fn default() -> Self {

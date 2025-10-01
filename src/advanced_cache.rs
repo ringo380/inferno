@@ -401,6 +401,7 @@ pub struct CacheOptimizationConfig {
 
 // Cache Security Configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct CacheSecurityConfig {
     pub encryption_at_rest: bool,
     pub encryption_in_transit: bool,
@@ -1273,18 +1274,6 @@ impl Default for CacheOptimizationConfig {
     }
 }
 
-impl Default for CacheSecurityConfig {
-    fn default() -> Self {
-        Self {
-            encryption_at_rest: false,
-            encryption_in_transit: false,
-            authentication_required: false,
-            authorization_enabled: false,
-            audit_logging: false,
-            secure_deletion: false,
-        }
-    }
-}
 
 impl Default for TieringConfig {
     fn default() -> Self {
@@ -1604,6 +1593,12 @@ pub struct MockCacheBackend {
     data: Arc<RwLock<HashMap<String, Vec<u8>>>>,
 }
 
+impl Default for MockCacheBackend {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MockCacheBackend {
     pub fn new() -> Self {
         Self {
@@ -1649,6 +1644,12 @@ pub struct MockEvictionPolicy {
     access_counts: HashMap<String, u64>,
 }
 
+impl Default for MockEvictionPolicy {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MockEvictionPolicy {
     pub fn new() -> Self {
         Self {
@@ -1680,6 +1681,12 @@ impl EvictionPolicyTrait for MockEvictionPolicy {
 
 pub struct MockPrefetchStrategy;
 
+impl Default for MockPrefetchStrategy {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MockPrefetchStrategy {
     pub fn new() -> Self {
         Self
@@ -1702,6 +1709,12 @@ impl PrefetchStrategyTrait for MockPrefetchStrategy {
 }
 
 pub struct MockCompressionEngine;
+
+impl Default for MockCompressionEngine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl MockCompressionEngine {
     pub fn new() -> Self {
@@ -1727,6 +1740,12 @@ impl CompressionEngine for MockCompressionEngine {
 pub struct MockCacheMonitor {
     hits: u64,
     misses: u64,
+}
+
+impl Default for MockCacheMonitor {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl MockCacheMonitor {
@@ -1774,6 +1793,12 @@ impl CacheMonitor for MockCacheMonitor {
 }
 
 pub struct MockCacheOptimizer;
+
+impl Default for MockCacheOptimizer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl MockCacheOptimizer {
     pub fn new() -> Self {

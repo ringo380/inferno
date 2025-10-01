@@ -306,6 +306,7 @@ impl Default for SecurityConfig {
 
 /// Monitoring and observability configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct MonitoringConfig {
     /// Prometheus monitoring
     pub prometheus: PrometheusConfig,
@@ -321,18 +322,6 @@ pub struct MonitoringConfig {
     pub alerting: AlertingConfig,
 }
 
-impl Default for MonitoringConfig {
-    fn default() -> Self {
-        Self {
-            prometheus: PrometheusConfig::default(),
-            grafana: GrafanaConfig::default(),
-            tracing: TracingConfig::default(),
-            logging: LoggingConfig::default(),
-            health_checks: HealthCheckConfig::default(),
-            alerting: AlertingConfig::default(),
-        }
-    }
-}
 
 /// Environment-specific configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]

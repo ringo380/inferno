@@ -274,7 +274,7 @@ impl Command for ModelsValidate {
 
     async fn execute(&self, ctx: &mut CommandContext) -> Result<CommandOutput> {
         let model_manager =
-            ModelManager::new(&self.path.parent().unwrap_or(std::path::Path::new(".")));
+            ModelManager::new(self.path.parent().unwrap_or(std::path::Path::new(".")));
 
         // Perform comprehensive validation
         let validation_result = model_manager

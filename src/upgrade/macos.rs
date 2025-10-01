@@ -93,14 +93,14 @@ impl MacOSUpgradeHandler {
 
         // Install or upgrade the package
         let output = Command::new("brew")
-            .args(&["upgrade", package_name])
+            .args(["upgrade", package_name])
             .output()
             .map_err(|e| UpgradeError::InstallationFailed(e.to_string()))?;
 
         if !output.status.success() {
             // If upgrade fails, try install
             let output = Command::new("brew")
-                .args(&["install", package_name])
+                .args(["install", package_name])
                 .output()
                 .map_err(|e| UpgradeError::InstallationFailed(e.to_string()))?;
 
@@ -121,7 +121,7 @@ impl MacOSUpgradeHandler {
         debug!("Verifying code signature for: {:?}", app_path);
 
         let output = Command::new("codesign")
-            .args(&["--verify", "--deep", "--strict"])
+            .args(["--verify", "--deep", "--strict"])
             .arg(app_path)
             .output()
             .map_err(|e| UpgradeError::VerificationFailed(e.to_string()))?;
@@ -135,7 +135,7 @@ impl MacOSUpgradeHandler {
 
         // Check if the signature is from a trusted developer
         let output = Command::new("codesign")
-            .args(&["-dv", "--verbose=4"])
+            .args(["-dv", "--verbose=4"])
             .arg(app_path)
             .output()
             .map_err(|e| UpgradeError::VerificationFailed(e.to_string()))?;
@@ -182,7 +182,7 @@ impl MacOSUpgradeHandler {
 
         // Try to quit via AppleScript first
         let output = Command::new("osascript")
-            .args(&["-e", "tell application \"Inferno\" to quit"])
+            .args(["-e", "tell application \"Inferno\" to quit"])
             .output();
 
         if let Ok(output) = output {
@@ -194,7 +194,7 @@ impl MacOSUpgradeHandler {
         }
 
         // Fallback to force quit
-        let output = Command::new("pkill").args(&["-f", "Inferno"]).output();
+        let output = Command::new("pkill").args(["-f", "Inferno"]).output();
 
         if let Ok(output) = output {
             if output.status.success() {
@@ -211,7 +211,7 @@ impl MacOSUpgradeHandler {
 
         // Use rm -rf for complete removal
         let output = Command::new("rm")
-            .args(&["-rf", app_path.to_str().unwrap()])
+            .args(["-rf", app_path.to_str().unwrap()])
             .output()
             .map_err(|e| UpgradeError::InstallationFailed(e.to_string()))?;
 
@@ -230,7 +230,7 @@ impl MacOSUpgradeHandler {
         debug!("Copying app bundle from {:?} to {:?}", source, target);
 
         let output = Command::new("cp")
-            .args(&["-R", source.to_str().unwrap(), target.to_str().unwrap()])
+            .args(["-R", source.to_str().unwrap(), target.to_str().unwrap()])
             .output()
             .map_err(|e| UpgradeError::InstallationFailed(e.to_string()))?;
 
@@ -249,7 +249,7 @@ impl MacOSUpgradeHandler {
         debug!("Updating Launch Services database");
 
         let output = Command::new("/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister")
-            .args(&["-kill", "-r", "-domain", "local", "-domain", "system", "-domain", "user"])
+            .args(["-kill", "-r", "-domain", "local", "-domain", "system", "-domain", "user"])
             .output();
 
         if let Ok(output) = output {
@@ -280,7 +280,7 @@ impl MacOSUpgradeHandler {
         let info_plist = app_path.join("Contents/Info.plist");
 
         let output = Command::new("plutil")
-            .args(&["-convert", "json", "-o", "-"])
+            .args(["-convert", "json", "-o", "-"])
             .arg(&info_plist)
             .output()
             .map_err(|e| UpgradeError::InvalidPackage(e.to_string()))?;
@@ -318,7 +318,7 @@ impl MacOSUpgradeHandler {
         debug!("Checking for macOS system updates");
 
         let output = Command::new("softwareupdate")
-            .args(&["--list", "--no-scan"])
+            .args(["--list", "--no-scan"])
             .output()
             .map_err(|e| UpgradeError::Internal(e.to_string()))?;
 
@@ -337,7 +337,7 @@ impl MacOSUpgradeHandler {
         if disable {
             debug!("Temporarily disabling Gatekeeper");
             let output = Command::new("sudo")
-                .args(&["spctl", "--master-disable"])
+                .args(["spctl", "--master-disable"])
                 .output();
 
             if let Ok(output) = output {
@@ -351,7 +351,7 @@ impl MacOSUpgradeHandler {
         } else {
             debug!("Re-enabling Gatekeeper");
             let output = Command::new("sudo")
-                .args(&["spctl", "--master-enable"])
+                .args(["spctl", "--master-enable"])
                 .output();
 
             if let Ok(output) = output {
@@ -404,7 +404,7 @@ impl PlatformUpgradeHandler for MacOSUpgradeHandler {
             "pkg" => {
                 // Use macOS installer for PKG files
                 let output = Command::new("installer")
-                    .args(&["-pkg", package_path.to_str().unwrap(), "-target", "/"])
+                    .args(["-pkg", package_path.to_str().unwrap(), "-target", "/"])
                     .output()
                     .map_err(|e| anyhow::anyhow!("PKG installation failed: {}", e))?;
 

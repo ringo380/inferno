@@ -1447,7 +1447,7 @@ async fn api_metrics_history(
     let start_time = query
         .start_time
         .unwrap_or_else(|| Utc::now() - chrono::Duration::hours(24));
-    let end_time = query.end_time.unwrap_or_else(|| Utc::now());
+    let end_time = query.end_time.unwrap_or_else(Utc::now);
     let interval = query.interval.unwrap_or_else(|| "5m".to_string());
 
     // Validate time range
@@ -1492,7 +1492,7 @@ async fn api_metrics_history(
             "active_connections": ((cpu_usage / 10.0) as u32).max(1)
         }));
 
-        current_time = current_time + step;
+        current_time += step;
     }
 
     let response = serde_json::json!({
@@ -1513,7 +1513,7 @@ async fn api_export_metrics(
     let start_time = query
         .start_time
         .unwrap_or_else(|| Utc::now() - chrono::Duration::hours(24));
-    let end_time = query.end_time.unwrap_or_else(|| Utc::now());
+    let end_time = query.end_time.unwrap_or_else(Utc::now);
 
     let metrics = state.metrics.read().await;
 
@@ -2219,7 +2219,7 @@ fn generate_mock_deployment_logs(
         let timestamp = base_time + chrono::Duration::minutes(i as i64);
 
         // Filter by log level
-        if !should_include_log_level(&template.0, level) {
+        if !should_include_log_level(template.0, level) {
             continue;
         }
 
@@ -2741,7 +2741,7 @@ async fn api_update_config(
     // Validate inputs
     if let Some(ref dashboard) = request.dashboard {
         if let Some(port) = dashboard.port {
-            if port < 1024 || port > 65535 {
+            if !(1024..=65535).contains(&port) {
                 let error = ApiError {
                     error: "Port must be between 1024 and 65535".to_string(),
                     details: None,
@@ -2783,7 +2783,7 @@ async fn api_update_config(
         }
 
         if let Some(token_expiry) = security.token_expiry_hours {
-            if token_expiry < 1 || token_expiry > 168 {
+            if !(1..=168).contains(&token_expiry) {
                 // 1 hour to 1 week
                 let error = ApiError {
                     error: "Token expiry must be between 1 and 168 hours".to_string(),

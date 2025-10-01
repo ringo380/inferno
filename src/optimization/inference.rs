@@ -364,6 +364,12 @@ pub struct OperatorFuser {
     fused_operations: Arc<RwLock<HashMap<String, Duration>>>,
 }
 
+impl Default for OperatorFuser {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl OperatorFuser {
     pub fn new() -> Self {
         let mut fusion_patterns = HashMap::new();
@@ -399,7 +405,7 @@ impl OperatorFuser {
         let mut fused_ops = Vec::new();
 
         // Simulate operator fusion
-        for (pattern_name, _ops) in &self.fusion_patterns {
+        for pattern_name in self.fusion_patterns.keys() {
             // Simulate fusion time
             let fusion_time = Duration::from_millis(10);
             tokio::time::sleep(fusion_time).await;
@@ -432,6 +438,12 @@ impl OperatorFuser {
 /// Model compilation optimizer
 pub struct ModelCompiler {
     compiled_models: Arc<RwLock<HashMap<String, CompiledModel>>>,
+}
+
+impl Default for ModelCompiler {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ModelCompiler {

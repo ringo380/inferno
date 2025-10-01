@@ -444,7 +444,7 @@ impl ModelQuantizer {
                 ((sign << 15) | 0x7C00) as u16 // Overflow to infinity
             } else {
                 let new_mantissa = mantissa >> 13;
-                ((sign << 15) | ((new_exp as u32) << 10) | (new_mantissa as u32)) as u16
+                ((sign << 15) | ((new_exp as u32) << 10) | new_mantissa) as u16
             }
         }
     }

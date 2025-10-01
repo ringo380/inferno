@@ -27,6 +27,7 @@ pub struct BackgroundUpdateService {
 
 /// Status of the background update service
 #[derive(Debug, Clone)]
+#[derive(Default)]
 pub struct ServiceStatus {
     pub running: bool,
     pub last_check: Option<DateTime<Utc>>,
@@ -36,18 +37,6 @@ pub struct ServiceStatus {
     pub available_update: Option<UpdateInfo>,
 }
 
-impl Default for ServiceStatus {
-    fn default() -> Self {
-        Self {
-            running: false,
-            last_check: None,
-            next_check: None,
-            check_count: 0,
-            last_error: None,
-            available_update: None,
-        }
-    }
-}
 
 impl BackgroundUpdateService {
     /// Create a new background update service
@@ -322,7 +311,7 @@ impl BackgroundUpdateService {
 
         // Apply backoff if we've had recent errors
         status.last_error.is_some()
-            && status.last_check.map_or(false, |last| {
+            && status.last_check.is_some_and(|last| {
                 Utc::now().signed_duration_since(last) < chrono::Duration::hours(1)
             })
     }

@@ -233,7 +233,7 @@ async fn validate_batch_inputs(args: &BatchArgs) -> Result<()> {
 
             if args.verbose {
                 info!("Sample inputs:");
-                for (_i, input) in inputs.iter().take(3).enumerate() {
+                for input in inputs.iter().take(3) {
                     info!(
                         "  {}: {} ({})",
                         input.id,
@@ -259,7 +259,7 @@ async fn validate_batch_inputs(args: &BatchArgs) -> Result<()> {
             Ok(())
         }
         Err(e) => {
-            return Err(anyhow::anyhow!("Failed to parse batch inputs: {}", e));
+            Err(anyhow::anyhow!("Failed to parse batch inputs: {}", e))
         }
     }
 }
