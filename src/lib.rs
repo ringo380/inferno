@@ -107,9 +107,9 @@ pub mod data_pipeline;
 pub mod marketplace;
 pub mod qa_framework;
 
-// Conditional Tauri app support
-#[cfg(feature = "desktop")]
-pub mod tauri_app;
+// REMOVED: Deprecated Tauri v1 module
+// Desktop app now lives in dashboard/src-tauri/
+// See: src/interfaces/desktop/ for Tauri v2 command implementations
 
 /// Core error types for the Inferno platform
 #[derive(Debug, thiserror::Error)]
