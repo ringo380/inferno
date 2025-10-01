@@ -369,9 +369,7 @@ impl Command for ModelVersionRollback {
         info!("Rolling back deployment in {}", self.environment);
 
         // Stub implementation
-        let target_version = self
-            .version_id.as_deref()
-            .unwrap_or("previous");
+        let target_version = self.version_id.as_deref().unwrap_or("previous");
 
         // Human-readable output
         if !ctx.json_output {

@@ -158,10 +158,11 @@ pub async fn execute_with_prerequisites(
 
             let mut input = String::new();
             if std::io::stdin().read_line(&mut input).is_ok()
-                && !input.trim().to_lowercase().starts_with('y') {
-                    eprintln!("Operation cancelled.");
-                    return Ok(());
-                }
+                && !input.trim().to_lowercase().starts_with('y')
+            {
+                eprintln!("Operation cancelled.");
+                return Ok(());
+            }
         }
     }
 

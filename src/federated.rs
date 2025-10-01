@@ -341,8 +341,7 @@ pub enum AnonymizationTechnique {
     Generalization,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AttestationConfig {
     /// Require hardware attestation
     pub hardware_required: bool,
@@ -772,7 +771,6 @@ impl Default for DataMinimizationConfig {
         }
     }
 }
-
 
 impl Default for AggregationConfig {
     fn default() -> Self {

@@ -218,10 +218,9 @@ impl Command for ApiGatewayRoutes {
             anyhow::bail!("Action must be one of: list, add, remove");
         }
 
-        if self.action == "add"
-            && (self.path.is_none() || self.backend.is_none()) {
-                anyhow::bail!("Path and backend are required for add action");
-            }
+        if self.action == "add" && (self.path.is_none() || self.backend.is_none()) {
+            anyhow::bail!("Path and backend are required for add action");
+        }
 
         if self.action == "remove" && self.path.is_none() {
             anyhow::bail!("Path is required for remove action");
@@ -438,10 +437,9 @@ impl Command for ApiGatewayServices {
             anyhow::bail!("Action must be one of: list, add, remove, health");
         }
 
-        if self.action == "add"
-            && (self.service_name.is_none() || self.url.is_none()) {
-                anyhow::bail!("Service name and URL are required for add action");
-            }
+        if self.action == "add" && (self.service_name.is_none() || self.url.is_none()) {
+            anyhow::bail!("Service name and URL are required for add action");
+        }
 
         if (self.action == "remove" || self.action == "health") && self.service_name.is_none() {
             anyhow::bail!("Service name is required for {} action", self.action);

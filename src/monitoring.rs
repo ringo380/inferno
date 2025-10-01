@@ -21,8 +21,7 @@ pub struct MonitoringConfig {
     pub prometheus: PrometheusConfig,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct PrometheusConfig {
     pub global: PrometheusGlobal,
 }
@@ -47,7 +46,6 @@ impl Default for MonitoringConfig {
         }
     }
 }
-
 
 impl Default for PrometheusGlobal {
     fn default() -> Self {

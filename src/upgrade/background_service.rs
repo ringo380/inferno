@@ -26,8 +26,7 @@ pub struct BackgroundUpdateService {
 }
 
 /// Status of the background update service
-#[derive(Debug, Clone)]
-#[derive(Default)]
+#[derive(Debug, Clone, Default)]
 pub struct ServiceStatus {
     pub running: bool,
     pub last_check: Option<DateTime<Utc>>,
@@ -36,7 +35,6 @@ pub struct ServiceStatus {
     pub last_error: Option<String>,
     pub available_update: Option<UpdateInfo>,
 }
-
 
 impl BackgroundUpdateService {
     /// Create a new background update service

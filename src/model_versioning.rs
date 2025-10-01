@@ -9,8 +9,7 @@ use tracing::{info, warn};
 use uuid::Uuid;
 
 /// Model versioning and A/B testing configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ModelVersioningConfig {
     /// Enable model versioning
     pub enabled: bool,
@@ -521,8 +520,7 @@ pub enum RollbackStrategy {
     Staged,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct NotificationConfig {
     /// Enable notifications
     pub enabled: bool,
@@ -627,7 +625,6 @@ pub enum PerformanceStorageBackend {
     TimeSeries,
     Files,
 }
-
 
 impl Default for VersionStorageConfig {
     fn default() -> Self {
@@ -862,7 +859,6 @@ impl Default for RollbackConfig {
         }
     }
 }
-
 
 impl Default for PerformanceTrackingConfig {
     fn default() -> Self {

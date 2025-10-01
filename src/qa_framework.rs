@@ -71,8 +71,7 @@ pub struct ExecutionCompat {
     pub default_timeout: Duration,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct TestingConfig {
     pub test_types: TestTypesConfig,
     pub test_discovery: TestDiscoveryConfig,
@@ -84,8 +83,7 @@ pub struct TestingConfig {
     pub isolation: TestIsolationConfig,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct TestTypesConfig {
     pub unit_tests: UnitTestConfig,
     pub integration_tests: IntegrationTestConfig,
@@ -125,8 +123,7 @@ pub enum QualityRating {
     E,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct CodeAnalysisConfig {
     pub static_analysis: StaticAnalysisConfig,
     pub dynamic_analysis: DynamicAnalysisConfig,
@@ -1380,7 +1377,6 @@ impl Default for QAFrameworkConfig {
     }
 }
 
-
 impl Default for QualityGatesConfig {
     fn default() -> Self {
         Self {
@@ -1398,7 +1394,6 @@ impl Default for QualityGatesConfig {
         }
     }
 }
-
 
 impl Default for StaticAnalysisConfig {
     fn default() -> Self {

@@ -361,8 +361,7 @@ pub struct CorsConfig {
     pub max_age: u64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct MiddlewareConfig {
     /// Request logging
     pub request_logging: RequestLoggingConfig,
@@ -392,8 +391,7 @@ pub struct RequestLoggingConfig {
     pub exclude_paths: Vec<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ResponseTransformConfig {
     /// Enable response transformation
     pub enabled: bool,
@@ -401,8 +399,7 @@ pub struct ResponseTransformConfig {
     pub rules: Vec<TransformRule>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct RequestTransformConfig {
     /// Enable request transformation
     pub enabled: bool,
@@ -779,7 +776,6 @@ impl Default for CorsConfig {
     }
 }
 
-
 impl Default for RequestLoggingConfig {
     fn default() -> Self {
         Self {
@@ -793,8 +789,6 @@ impl Default for RequestLoggingConfig {
         }
     }
 }
-
-
 
 impl Default for HealthCheckConfig {
     fn default() -> Self {

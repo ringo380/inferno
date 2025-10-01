@@ -1588,24 +1588,20 @@ impl Default for ProtocolOptimizationConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct MlOptimizationConfig {
     pub model_optimization: ModelOptimizationConfig,
     pub inference_optimization: InferenceOptimizationConfig,
     pub training_optimization: TrainingOptimizationConfig,
 }
 
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ModelOptimizationConfig {
     pub quantization: QuantizationConfig,
     pub pruning: PruningConfig,
     pub distillation: DistillationConfig,
     pub fusion: FusionConfig,
 }
-
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QuantizationConfig {

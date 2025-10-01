@@ -3681,11 +3681,12 @@ fn validate_no_circular_dependencies_tasks(
 
     for task in tasks {
         if !visited.contains(&task.name)
-            && has_cycle(&task.name, &graph, &mut visited, &mut rec_stack) {
-                return Err(anyhow::anyhow!(
-                    "Circular dependency detected in pipeline tasks"
-                ));
-            }
+            && has_cycle(&task.name, &graph, &mut visited, &mut rec_stack)
+        {
+            return Err(anyhow::anyhow!(
+                "Circular dependency detected in pipeline tasks"
+            ));
+        }
     }
 
     Ok(())

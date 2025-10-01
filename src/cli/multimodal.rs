@@ -1038,9 +1038,7 @@ async fn handle_convert_command(
     }
 
     // Mock conversion - in real implementation would use media processing libraries
-    let input_data = tokio::fs::read(&input)
-        .await
-        .map_err(InfernoError::Io)?;
+    let input_data = tokio::fs::read(&input).await.map_err(InfernoError::Io)?;
 
     // Simulate conversion process
     println!("🔄 Converting...");
@@ -1059,20 +1057,13 @@ async fn handle_convert_command(
 
 async fn find_matching_files(dir: &PathBuf, pattern: &str) -> Result<Vec<PathBuf>, InfernoError> {
     let mut files = Vec::new();
-    let mut entries = tokio::fs::read_dir(dir)
-        .await
-        .map_err(InfernoError::Io)?;
+    let mut entries = tokio::fs::read_dir(dir).await.map_err(InfernoError::Io)?;
 
-    while let Some(entry) = entries
-        .next_entry()
-        .await
-        .map_err(InfernoError::Io)?
-    {
+    while let Some(entry) = entries.next_entry().await.map_err(InfernoError::Io)? {
         let path = entry.path();
-        if path.is_file()
-            && (pattern == "*" || path.to_string_lossy().contains(pattern)) {
-                files.push(path);
-            }
+        if path.is_file() && (pattern == "*" || path.to_string_lossy().contains(pattern)) {
+            files.push(path);
+        }
     }
 
     Ok(files)

@@ -669,8 +669,7 @@ pub enum DataIsolationLevel {
     Encrypted,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct NetworkIsolationConfig {
     pub vlan_enabled: bool,
     pub network_policies: Vec<NetworkPolicy>,
@@ -949,8 +948,7 @@ pub enum CostAllocationMethod {
     Custom,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ChargebackConfig {
     pub enabled: bool,
     pub department_mapping: HashMap<String, String>,
@@ -1706,16 +1704,14 @@ pub struct HealthCheckConfig {
     pub healthy_threshold: u32,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct CpuIsolationConfig {
     pub cpu_sets: Vec<u32>,
     pub numa_node: Option<u32>,
     pub exclusive: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct MemoryIsolationConfig {
     pub numa_binding: bool,
     pub huge_pages: bool,
@@ -2217,7 +2213,6 @@ impl Default for DataIsolationConfig {
     }
 }
 
-
 impl Default for PerformanceIsolationConfig {
     fn default() -> Self {
         Self {
@@ -2396,7 +2391,6 @@ impl Default for CostAllocationConfig {
     }
 }
 
-
 impl Default for BudgetConfig {
     fn default() -> Self {
         Self {
@@ -2437,8 +2431,6 @@ impl Default for HealthCheckConfig {
         }
     }
 }
-
-
 
 impl Default for IoIsolationConfig {
     fn default() -> Self {

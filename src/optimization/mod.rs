@@ -14,8 +14,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 /// Global optimization configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct OptimizationConfig {
     pub quantization: quantization::QuantizationConfig,
     pub batching: batching::BatchingConfig,
@@ -23,7 +22,6 @@ pub struct OptimizationConfig {
     pub hardware: hardware::HardwareConfig,
     pub inference: inference::InferenceConfig,
 }
-
 
 /// Optimization metrics for performance tracking
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

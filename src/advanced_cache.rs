@@ -400,8 +400,7 @@ pub struct CacheOptimizationConfig {
 }
 
 // Cache Security Configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct CacheSecurityConfig {
     pub encryption_at_rest: bool,
     pub encryption_in_transit: bool,
@@ -1273,7 +1272,6 @@ impl Default for CacheOptimizationConfig {
         }
     }
 }
-
 
 impl Default for TieringConfig {
     fn default() -> Self {

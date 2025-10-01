@@ -698,25 +698,25 @@ impl ModelConverter {
         // Check if conversion is needed
         if self.formats_compatible(&input_format, &conversion_config.output_format)
             && conversion_config.quantization.is_none()
-                && conversion_config.optimization_level == OptimizationLevel::None
-            {
-                warnings.push("No conversion needed - copying file".to_string());
-                async_fs::copy(input_path, output_path).await?;
-                let output_size = async_fs::metadata(output_path).await?.len();
+            && conversion_config.optimization_level == OptimizationLevel::None
+        {
+            warnings.push("No conversion needed - copying file".to_string());
+            async_fs::copy(input_path, output_path).await?;
+            let output_size = async_fs::metadata(output_path).await?.len();
 
-                return Ok(ConversionResult {
-                    success: true,
-                    input_path: input_path.to_path_buf(),
-                    output_path: output_path.to_path_buf(),
-                    input_size,
-                    output_size,
-                    compression_ratio: input_size as f32 / output_size as f32,
-                    conversion_time: start_time.elapsed(),
-                    warnings,
-                    errors,
-                    metadata_preserved: true,
-                });
-            }
+            return Ok(ConversionResult {
+                success: true,
+                input_path: input_path.to_path_buf(),
+                output_path: output_path.to_path_buf(),
+                input_size,
+                output_size,
+                compression_ratio: input_size as f32 / output_size as f32,
+                conversion_time: start_time.elapsed(),
+                warnings,
+                errors,
+                metadata_preserved: true,
+            });
+        }
 
         // Perform actual conversion
         match self
