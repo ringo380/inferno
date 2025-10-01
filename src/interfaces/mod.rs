@@ -25,6 +25,5 @@ pub use crate::api;
 pub use crate::dashboard;
 pub use crate::tui;
 
-// Deprecated: Old Tauri v1 implementation (will be removed in Phase 1.5)
-#[cfg(feature = "desktop")]
-pub use crate::tauri_app;
+// REMOVED: Tauri v1 implementation has been removed
+// Desktop app is now in dashboard/src-tauri/ (Tauri v2)
