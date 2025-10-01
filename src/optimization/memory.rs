@@ -111,6 +111,14 @@ unsafe impl GlobalAlloc for TrackedAllocator {
 }
 
 /// Memory pool for efficient allocation
+///
+/// # Thread Safety
+/// This struct contains raw pointers (`*mut u8`) which are not Send/Sync by default.
+/// However, it is safe to use across threads when wrapped in `Arc<RwLock<MemoryPool>>`:
+/// - Raw pointers are never dereferenced outside of RwLock-protected code
+/// - All mutations require exclusive lock (`write()`)
+/// - All reads require shared lock (`read()`)
+/// - AtomicUsize provides thread-safe counter operations
 #[derive(Debug)]
 pub struct MemoryPool {
     pools: HashMap<usize, Vec<*mut u8>>,
@@ -118,6 +126,18 @@ pub struct MemoryPool {
     total_allocated: AtomicUsize,
     max_size: usize,
 }
+
+// SAFETY: MemoryPool is safe to Send across threads because:
+// - Raw pointers are never dereferenced without synchronization
+// - Used exclusively through Arc<RwLock<>> which provides synchronization
+// - Atomic operations are inherently thread-safe
+unsafe impl Send for MemoryPool {}
+
+// SAFETY: MemoryPool is safe to Sync (share references across threads) because:
+// - All access is synchronized through RwLock
+// - Internal state is protected by atomic operations or lock guards
+// - Raw pointers are implementation details, never exposed unsafely
+unsafe impl Sync for MemoryPool {}
 
 impl MemoryPool {
     pub fn new(max_size_mb: usize) -> Self {
