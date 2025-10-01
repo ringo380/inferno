@@ -64,27 +64,74 @@ pub struct InferenceEvent {
     pub success: bool,
 }
 
+/// Handles async event processing for metrics collection.
+/// This type owns the event receiver and is consumed when starting event processing.
+/// Separated from MetricsCollector to maintain Send + Sync bounds on MetricsCollector.
 #[derive(Debug)]
+pub struct MetricsEventProcessor {
+    receiver: mpsc::UnboundedReceiver<InferenceEvent>,
+    counters: Arc<InferenceCounters>,
+    model_stats: Arc<RwLock<HashMap<String, ModelStats>>>,
+}
+
+impl MetricsEventProcessor {
+    /// Start processing metrics events. Consumes self and spawns a background task.
+    pub fn start(mut self) {
+        tokio::spawn(async move {
+            while let Some(event) = self.receiver.recv().await {
+                // Update global counters
+                self.counters.total_requests.fetch_add(1, Ordering::Relaxed);
+
+                if event.success {
+                    self.counters.successful_requests.fetch_add(1, Ordering::Relaxed);
+                    self.counters
+                        .total_tokens_generated
+                        .fetch_add(event.output_length as u64, Ordering::Relaxed);
+                } else {
+                    self.counters.failed_requests.fetch_add(1, Ordering::Relaxed);
+                }
+
+                self.counters
+                    .total_inference_time_ms
+                    .fetch_add(event.duration.as_millis() as u64, Ordering::Relaxed);
+
+                // Update model-specific stats
+                if let Ok(mut stats) = self.model_stats.write() {
+                    let model_stat = stats.entry(event.model_name.clone()).or_insert_with(|| {
+                        ModelStats {
+                            name: event.model_name.clone(),
+                            size_bytes: 0, // Will be updated when model is loaded
+                            load_time_ms: 0,
+                            inference_count: 0,
+                            total_inference_time_ms: 0,
+                            backend_type: "unknown".to_string(),
+                        }
+                    });
+
+                    model_stat.inference_count += 1;
+                    model_stat.total_inference_time_ms += event.duration.as_millis() as u64;
+                }
+            }
+        });
+
+        info!("Metrics event processing started");
+    }
+}
+
+/// Thread-safe metrics collector for inference operations.
+///
+/// # Thread Safety
+/// This type is Send + Sync because all fields are thread-safe:
+/// - Instant is Send (not Sync, but that's okay for containing type)
+/// - Arc<InferenceCounters> contains only atomics (Send + Sync)
+/// - Arc<RwLock<HashMap>> is Send + Sync (standard pattern)
+/// - mpsc::UnboundedSender is Send + Sync
+#[derive(Debug, Clone)]
 pub struct MetricsCollector {
     start_time: Instant,
     inference_counters: Arc<InferenceCounters>,
     model_stats: Arc<RwLock<HashMap<String, ModelStats>>>,
     event_sender: mpsc::UnboundedSender<InferenceEvent>,
-    event_receiver: Option<mpsc::UnboundedReceiver<InferenceEvent>>,
-}
-
-impl Clone for MetricsCollector {
-    fn clone(&self) -> Self {
-        // We can't clone the receiver, so create a new one that won't be used
-        let (_tx, _rx) = mpsc::unbounded_channel::<InferenceEvent>();
-        Self {
-            start_time: self.start_time,
-            inference_counters: self.inference_counters.clone(),
-            model_stats: self.model_stats.clone(),
-            event_sender: self.event_sender.clone(),
-            event_receiver: None, // Can't clone receiver
-        }
-    }
 }
 
 #[derive(Debug)]
@@ -109,69 +156,41 @@ impl Default for InferenceCounters {
 }
 
 impl MetricsCollector {
-    pub fn new() -> Self {
+    /// Create a new metrics collector and event processor.
+    ///
+    /// Returns a tuple of (MetricsCollector, MetricsEventProcessor).
+    /// The MetricsCollector can be cloned and shared across threads.
+    /// The MetricsEventProcessor should have `.start()` called to begin processing events.
+    ///
+    /// # Example
+    /// ```no_run
+    /// let (collector, processor) = MetricsCollector::new();
+    /// processor.start(); // Start background event processing
+    /// // Use collector.record_inference(...) from any thread
+    /// ```
+    pub fn new() -> (Self, MetricsEventProcessor) {
         let (event_sender, event_receiver) = mpsc::unbounded_channel();
+        let inference_counters = Arc::new(InferenceCounters::default());
+        let model_stats = Arc::new(RwLock::new(HashMap::new()));
 
-        Self {
+        let collector = Self {
             start_time: Instant::now(),
-            inference_counters: Arc::new(InferenceCounters::default()),
-            model_stats: Arc::new(RwLock::new(HashMap::new())),
+            inference_counters: Arc::clone(&inference_counters),
+            model_stats: Arc::clone(&model_stats),
             event_sender,
-            event_receiver: Some(event_receiver),
-        }
+        };
+
+        let processor = MetricsEventProcessor {
+            receiver: event_receiver,
+            counters: inference_counters,
+            model_stats,
+        };
+
+        (collector, processor)
     }
 
     pub fn get_event_sender(&self) -> mpsc::UnboundedSender<InferenceEvent> {
         self.event_sender.clone()
-    }
-
-    pub async fn start_event_processing(&mut self) -> Result<()> {
-        if let Some(mut receiver) = self.event_receiver.take() {
-            let counters = Arc::clone(&self.inference_counters);
-            let model_stats = Arc::clone(&self.model_stats);
-
-            tokio::spawn(async move {
-                while let Some(event) = receiver.recv().await {
-                    // Update global counters
-                    counters.total_requests.fetch_add(1, Ordering::Relaxed);
-
-                    if event.success {
-                        counters.successful_requests.fetch_add(1, Ordering::Relaxed);
-                        counters
-                            .total_tokens_generated
-                            .fetch_add(event.output_length as u64, Ordering::Relaxed);
-                    } else {
-                        counters.failed_requests.fetch_add(1, Ordering::Relaxed);
-                    }
-
-                    counters
-                        .total_inference_time_ms
-                        .fetch_add(event.duration.as_millis() as u64, Ordering::Relaxed);
-
-                    // Update model-specific stats
-                    if let Ok(mut stats) = model_stats.write() {
-                        let model_stat =
-                            stats
-                                .entry(event.model_name.clone())
-                                .or_insert_with(|| ModelStats {
-                                    name: event.model_name.clone(),
-                                    size_bytes: 0, // Will be updated when model is loaded
-                                    load_time_ms: 0,
-                                    inference_count: 0,
-                                    total_inference_time_ms: 0,
-                                    backend_type: "unknown".to_string(),
-                                });
-
-                        model_stat.inference_count += 1;
-                        model_stat.total_inference_time_ms += event.duration.as_millis() as u64;
-                    }
-                }
-            });
-
-            info!("Metrics event processing started");
-        }
-
-        Ok(())
     }
 
     pub fn record_model_loaded(
@@ -464,7 +483,9 @@ impl MetricsCollector {
 
 impl Default for MetricsCollector {
     fn default() -> Self {
-        Self::new()
+        let (collector, processor) = Self::new();
+        processor.start();
+        collector
     }
 }
 
@@ -475,8 +496,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_metrics_collector() {
-        let mut collector = MetricsCollector::new();
-        collector.start_event_processing().await.unwrap();
+        let (collector, processor) = MetricsCollector::new();
+        processor.start();
 
         // Record a model load
         collector.record_model_loaded(
@@ -508,8 +529,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_metrics_export() {
-        let mut collector = MetricsCollector::new();
-        collector.start_event_processing().await.unwrap();
+        let (collector, processor) = MetricsCollector::new();
+        processor.start();
 
         let json_export = collector.export_metrics_json().await.unwrap();
         assert!(json_export.contains("inference_metrics"));

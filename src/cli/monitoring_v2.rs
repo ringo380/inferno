@@ -88,8 +88,8 @@ impl Command for MonitoringStatus {
         info!("Retrieving monitoring status");
 
         let metrics = Some(Arc::new({
-            let mut collector = MetricsCollector::new();
-            collector.start_event_processing().await?;
+            let (collector, processor) = MetricsCollector::new();
+            processor.start();
             collector
         }));
 
@@ -189,8 +189,8 @@ impl Command for MonitoringAlerts {
         info!("Listing monitoring alerts");
 
         let metrics = Some(Arc::new({
-            let mut collector = MetricsCollector::new();
-            collector.start_event_processing().await?;
+            let (collector, processor) = MetricsCollector::new();
+            processor.start();
             collector
         }));
 
@@ -404,8 +404,8 @@ impl Command for MonitoringTrends {
         info!("Retrieving performance trends");
 
         let metrics = Some(Arc::new({
-            let mut collector = MetricsCollector::new();
-            collector.start_event_processing().await?;
+            let (collector, processor) = MetricsCollector::new();
+            processor.start();
             collector
         }));
 
@@ -500,8 +500,8 @@ impl Command for MonitoringReport {
         info!("Generating performance report");
 
         let metrics = Some(Arc::new({
-            let mut collector = MetricsCollector::new();
-            collector.start_event_processing().await?;
+            let (collector, processor) = MetricsCollector::new();
+            processor.start();
             collector
         }));
 

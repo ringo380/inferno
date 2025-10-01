@@ -47,8 +47,8 @@ impl Command for MetricsJson {
     async fn execute(&self, ctx: &mut CommandContext) -> Result<CommandOutput> {
         info!("Exporting metrics in JSON format");
 
-        let mut collector = MetricsCollector::new();
-        collector.start_event_processing().await?;
+        let (collector, processor) = MetricsCollector::new();
+        processor.start();
 
         let json_output = collector.export_metrics_json().await?;
 
@@ -103,8 +103,8 @@ impl Command for MetricsPrometheus {
     async fn execute(&self, ctx: &mut CommandContext) -> Result<CommandOutput> {
         info!("Exporting metrics in Prometheus format");
 
-        let mut collector = MetricsCollector::new();
-        collector.start_event_processing().await?;
+        let (collector, processor) = MetricsCollector::new();
+        processor.start();
 
         let prometheus_output = collector.export_prometheus_format().await?;
 
@@ -159,8 +159,8 @@ impl Command for MetricsSnapshot {
     async fn execute(&self, ctx: &mut CommandContext) -> Result<CommandOutput> {
         info!("Creating metrics snapshot");
 
-        let mut collector = MetricsCollector::new();
-        collector.start_event_processing().await?;
+        let (collector, processor) = MetricsCollector::new();
+        processor.start();
 
         let snapshot = collector.get_snapshot().await?;
 

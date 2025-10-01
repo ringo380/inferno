@@ -172,8 +172,8 @@ impl Command for BatchProcess {
 
         // Set up metrics if requested
         let metrics = if self.enable_metrics {
-            let mut collector = MetricsCollector::new();
-            collector.start_event_processing().await?;
+            let (collector, processor) = MetricsCollector::new();
+            processor.start();
             Some(Arc::new(collector))
         } else {
             None

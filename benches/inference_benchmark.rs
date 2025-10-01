@@ -339,7 +339,7 @@ fn bench_metrics_operations(c: &mut Criterion) {
     group.bench_function("inference_event_recording", |b| {
         b.to_async(&rt).iter(|| async {
             let mut collector = inferno::metrics::MetricsCollector::new();
-            collector.start_event_processing().await.unwrap();
+            processor.start();
 
             let event = inferno::metrics::InferenceEvent {
                 model_name: "test_model".to_string(),

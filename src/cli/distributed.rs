@@ -127,8 +127,8 @@ async fn start_distributed_server(
 
     let model_manager = Arc::new(ModelManager::new(&config.models_dir));
     let metrics = Some(Arc::new({
-        let mut collector = MetricsCollector::new();
-        collector.start_event_processing().await?;
+        let (collector, processor) = MetricsCollector::new();
+        processor.start();
         collector
     }));
 
@@ -189,8 +189,8 @@ async fn benchmark_distributed_inference(
 
     let model_manager = Arc::new(ModelManager::new(&config.models_dir));
     let metrics = Some(Arc::new({
-        let mut collector = MetricsCollector::new();
-        collector.start_event_processing().await?;
+        let (collector, processor) = MetricsCollector::new();
+        processor.start();
         collector
     }));
 
@@ -351,8 +351,8 @@ async fn test_inference(
 
     let model_manager = Arc::new(ModelManager::new(&config.models_dir));
     let metrics = Some(Arc::new({
-        let mut collector = MetricsCollector::new();
-        collector.start_event_processing().await?;
+        let (collector, processor) = MetricsCollector::new();
+        processor.start();
         collector
     }));
 

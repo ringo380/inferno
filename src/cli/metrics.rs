@@ -42,24 +42,24 @@ pub enum MetricsCommand {
 pub async fn execute(args: MetricsArgs, _config: &Config) -> Result<()> {
     match args.command {
         MetricsCommand::Json => {
-            let mut collector = MetricsCollector::new();
-            collector.start_event_processing().await?;
+            let (collector, processor) = MetricsCollector::new();
+            processor.start();
 
             let json_output = collector.export_metrics_json().await?;
             println!("{}", json_output);
         }
 
         MetricsCommand::Prometheus => {
-            let mut collector = MetricsCollector::new();
-            collector.start_event_processing().await?;
+            let (collector, processor) = MetricsCollector::new();
+            processor.start();
 
             let prometheus_output = collector.export_prometheus_format().await?;
             println!("{}", prometheus_output);
         }
 
         MetricsCommand::Snapshot { pretty } => {
-            let mut collector = MetricsCollector::new();
-            collector.start_event_processing().await?;
+            let (collector, processor) = MetricsCollector::new();
+            processor.start();
 
             let snapshot = collector.get_snapshot().await?;
 
@@ -88,8 +88,8 @@ async fn start_metrics_server(bind_addr: &str) -> Result<()> {
     use tower_http::{cors::CorsLayer, trace::TraceLayer};
 
     // Initialize metrics collector
-    let mut metrics_collector = MetricsCollector::new();
-    metrics_collector.start_event_processing().await?;
+    let (metrics_collector, processor) = MetricsCollector::new();
+    processor.start();
 
     let state = Arc::new(MetricsServerState {
         metrics: metrics_collector,

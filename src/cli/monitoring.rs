@@ -242,8 +242,8 @@ async fn show_monitoring_status(_config: &Config) -> Result<()> {
 
     let monitoring_config = MonitoringConfig::default(); // In real implementation, load from config
     let metrics_collector = Some(Arc::new({
-        let mut collector = MetricsCollector::new();
-        collector.start_event_processing().await?;
+        let (collector, processor) = MetricsCollector::new();
+        processor.start();
         collector
     }));
 
@@ -371,8 +371,8 @@ async fn start_dashboard(_config: &Config, port: u16, interval: u64, detailed: b
 
     let monitoring_config = MonitoringConfig::default();
     let metrics_collector = Some(Arc::new({
-        let mut collector = MetricsCollector::new();
-        collector.start_event_processing().await?;
+        let (collector, processor) = MetricsCollector::new();
+        processor.start();
         collector
     }));
 
