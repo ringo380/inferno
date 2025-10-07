@@ -7,7 +7,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.6.0] - 2025-01-07
+## [0.6.1] - 2025-01-07
+
+### 🎉 Highlights
+
+This maintenance release focuses on code quality, repository optimization, and Phase 3 architectural improvements.
+
+### 🚀 Code Quality & Refactoring
+
+- **Function Signature Simplification**: Reduced complexity across multiple modules
+  - `convert.rs`: 22 args → 4 args
+  - `deployment.rs`: 12 args → 2 args
+  - `marketplace.rs`: 30 args → 4 args
+  - `multimodal.rs`, `model_versioning.rs`, `qa_framework.rs`: Significant reductions
+- **Error Handling**: Boxed large InfernoError variants to reduce enum size
+- **Thread Safety**: Fixed MetricsCollector Arc<T> Send+Sync issues
+- **Memory Management**: Enhanced MemoryPool Send/Sync implementation
+
+### 🧹 Repository Optimization
+
+- **Disk Space Reduction**: 30GB → 2.1GB (93% reduction, 27.9GB saved)
+  - Cleaned Rust build artifacts (16.8GB)
+  - Cleaned Tauri build artifacts (12.6GB)
+  - Removed node_modules and build outputs (785MB)
+  - Deleted test models and obsolete directories (95MB)
+- **Improved .gitignore**: Added missing entries for gen/, test directories, build outputs
+
+### 📚 Documentation
+
+- **Phase 3 Tracking**: Complete documentation for Week 1 (High-Impact Fixes)
+- **Arc Audit**: Comprehensive Send+Sync audit documentation
+- **Error Optimization**: Documented error enum size reduction strategy
+
+### 🔧 Developer Experience
+
+- Automated clippy fixes applied across codebase
+- Cleanup of unused variables and imports
+- Enhanced code maintainability and readability
+
+### 📊 Statistics
+
+- **37 commits** since v0.6.0
+- **137 files changed** in repository cleanup
+- **+2,998 insertions, -1,314 deletions**
+
+## [0.6.0] - 2025-09-30
 
 ### 🎉 Major Features
 
