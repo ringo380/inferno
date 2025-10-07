@@ -7,6 +7,96 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2025-01-07
+
+### 🎉 Major Features
+
+#### Desktop Interface Evolution
+- **Phase 1-2 Complete**: Consolidated all 51 Tauri commands into unified desktop interface
+- **Platform Integration**: Enhanced macOS integration with menu, tray, and notifications
+- **Desktop Bridge**: New React component for seamless Tauri ↔ TypeScript communication
+- **State Management**: Complete AppState persistence with activity logging
+
+#### Codebase Modernization
+- **Architectural Refactoring** (v0.4.0): Reorganized 40+ root modules into 6 logical categories:
+  - `core/` - Core platform functionality (config, backends, models, I/O, security)
+  - `infrastructure/` - Observability and caching
+  - `operations/` - DevOps and deployment
+  - `ai_features/` - AI/ML specialized features
+  - `enterprise/` - Enterprise capabilities
+  - `interfaces/` - User interfaces (CLI, API, TUI, dashboard, desktop)
+- **Package Rename**: Migrated from `inferno` to `inferno-ai` for better npm/crates.io compatibility
+- **Desktop Feature**: Replaced `tauri-app` feature with `desktop` for clarity
+
+### 🚀 Performance & Optimization
+
+#### Code Quality Improvements
+- **Function Signature Reduction**: Simplified complex signatures across codebase
+  - `convert.rs`: 22 args → 4 args
+  - `deployment.rs`: 12 args → 2 args
+  - `marketplace.rs`: 30 args → 4 args
+  - `multimodal.rs`, `model_versioning.rs`, `qa_framework.rs`: Significant complexity reduction
+- **Error Handling**: Boxed large InfernoError variants to reduce enum size from 200+ bytes
+- **Thread Safety**: Fixed MetricsCollector Arc<T> Send+Sync issues for concurrent access
+- **Memory Management**: Enhanced MemoryPool Send/Sync implementation
+
+#### Repository Optimization
+- **Disk Space**: Reduced repository from 30GB → 2.1GB (93% reduction, 27.9GB saved)
+- **Build Artifacts**: Comprehensive cleanup of target directories (29.4GB)
+- **Dependencies**: Removed node_modules and temporary files (785MB)
+- **Test Cleanup**: Removed obsolete test models and directories (95MB)
+
+### 🔒 Security
+
+- **CVE Remediation**: Fixed RUSTSEC-2023-0065 tungstenite DoS vulnerability (CVSSv3 7.5)
+- **Dependency Cleanup**: Removed unused axum-tungstenite dependency
+- **Input Validation**: Enhanced security across all modified components
+
+### 🐛 Bug Fixes
+
+- **Build System**: Resolved critical CI/CD build issues with LTO and opt-level configuration
+- **Platform Handlers**: Properly implemented PlatformUpgradeHandler trait for Linux/Windows
+- **Tauri Migration**: Removed deprecated Tauri v1 implementation
+- **Naming Consistency**: Fixed crate name references across all bin files
+- **DMG Packaging**: Universal installer with proper icon support
+- **ARM64 Compilation**: Extended build timeout and optimized Apple Silicon builds
+
+### 📚 Documentation
+
+- **Phase Tracking**: Complete documentation for Phase 1-3 development milestones
+- **Architecture Guides**: Updated for v0.4.0 modular reorganization
+- **CI/CD Analysis**: Comprehensive deployment and post-deployment documentation
+- **Security Remediation**: Detailed vulnerability fix reports
+- **Metal GPU Status**: Clarified implementation status in README
+
+### 🔧 Developer Experience
+
+- **Verification Infrastructure**: New `verify.sh` script for comprehensive testing
+- **Build Scripts**: Enhanced universal binary builds for macOS (ARM64 + x86_64)
+- **GitHub Workflows**: Improved DMG packaging and release automation
+- **Project Organization**: Comprehensive GitHub project structure and issue templates
+- **Clippy Integration**: Automated code cleanup and quality improvements
+
+### ⚡ Performance
+
+- **Apple Silicon**: Enabled platform-specific optimizations for M1/M2/M3/M4 chips
+- **Binary Naming**: Standardized ARM binary naming (aarch64 → arm64)
+- **Compilation Speed**: Optimized build configuration for faster iteration
+
+### 📊 Statistics
+
+- **Commits**: 102 commits since v0.3.1
+- **Files Modified**: 137 files in latest commit
+- **Code Changes**: +2,998 insertions, -1,314 deletions
+- **Phases Completed**: Phase 1 (Desktop), Phase 2 (Security), Phase 3 Week 1 (Refactoring)
+
+### 🔄 Migration Notes
+
+- **Crate Name**: Update imports from `inferno::` to `inferno_ai::` (backward compatible re-exports available)
+- **Feature Flags**: Replace `tauri-app` with `desktop` in Cargo.toml
+- **Build Cleanup**: Run `cargo clean` to clear old build artifacts
+- **Dependencies**: Run `npm install` in dashboard/ if node_modules was cleared
+
 ## [0.2.0] - 2024-12-27
 
 ### 🎉 Major Infrastructure Improvements
