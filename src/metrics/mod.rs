@@ -83,12 +83,16 @@ impl MetricsEventProcessor {
                 self.counters.total_requests.fetch_add(1, Ordering::Relaxed);
 
                 if event.success {
-                    self.counters.successful_requests.fetch_add(1, Ordering::Relaxed);
+                    self.counters
+                        .successful_requests
+                        .fetch_add(1, Ordering::Relaxed);
                     self.counters
                         .total_tokens_generated
                         .fetch_add(event.output_length as u64, Ordering::Relaxed);
                 } else {
-                    self.counters.failed_requests.fetch_add(1, Ordering::Relaxed);
+                    self.counters
+                        .failed_requests
+                        .fetch_add(1, Ordering::Relaxed);
                 }
 
                 self.counters

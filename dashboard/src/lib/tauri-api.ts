@@ -1,4 +1,4 @@
-import { ModelInfo, SystemInfo, MetricsSnapshot, InferenceParams, InfernoMetrics, ActiveProcessInfo, AppSettings, Notification, BatchJob, ApiKey, SecurityEvent, SecurityMetrics, CreateApiKeyRequest, CreateApiKeyResponse } from '../types/inferno';
+import { ModelInfo, SystemInfo, MetricsSnapshot, InferenceParams, InfernoMetrics, ActiveProcessInfo, AppSettings, Notification, BatchJob, ApiKey, SecurityEvent, SecurityMetrics, CreateApiKeyRequest, CreateApiKeyResponse, NativeNotificationPayload } from '../types/inferno';
 
 // Check if we're in a Tauri environment
 const isTauri = typeof window !== 'undefined' && (window as any).__TAURI_INTERNALS__;
@@ -134,6 +134,17 @@ export class TauriApiService {
     } catch (error) {
       console.error('Failed to start streaming inference:', error);
       throw new Error(`Failed to start streaming inference: ${error}`);
+    }
+  }
+
+  async sendNativeNotification(payload: NativeNotificationPayload): Promise<void> {
+    if (!invoke) return;
+
+    try {
+      await invoke('send_native_notification', payload);
+    } catch (error) {
+      console.error('Failed to send native notification:', error);
+      throw new Error(`Failed to send native notification: ${error}`);
     }
   }
 

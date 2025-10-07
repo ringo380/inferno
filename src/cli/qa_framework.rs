@@ -1,3 +1,4 @@
+#![allow(dead_code, unused_imports, unused_variables)]
 use crate::config::Config;
 use crate::qa_framework::{
     ChaosFaultType, ChaosTarget, ChaosTest, DataCleanupStrategy, DataGenerationStrategy,
@@ -615,8 +616,7 @@ pub async fn execute(args: QAFrameworkArgs, _config: &Config) -> Result<()> {
             include_performance,
             include_security,
         } => {
-            handle_generate_report(
-                &qa_system,
+            let config = GenerateReportConfig {
                 report_type,
                 run_id,
                 output,
@@ -624,8 +624,8 @@ pub async fn execute(args: QAFrameworkArgs, _config: &Config) -> Result<()> {
                 include_history,
                 include_performance,
                 include_security,
-            )
-            .await
+            };
+            handle_generate_report(&qa_system, config).await
         }
         QAFrameworkCommands::Performance { command } => {
             handle_performance_commands(&qa_system, command).await
@@ -685,6 +685,18 @@ pub struct RunTestsConfig {
     pub detailed_report: bool,
 }
 
+/// Configuration for generating quality reports
+/// Reduces function signature from 8 parameters to 2
+pub struct GenerateReportConfig {
+    pub report_type: Option<String>,
+    pub run_id: Option<String>,
+    pub output: Option<PathBuf>,
+    pub format: Option<String>,
+    pub include_history: bool,
+    pub include_performance: bool,
+    pub include_security: bool,
+}
+
 async fn handle_init(
     _qa_system: &QAFrameworkSystem,
     output: Option<PathBuf>,
@@ -724,10 +736,7 @@ async fn handle_init(
     Ok(())
 }
 
-async fn handle_create_test(
-    qa_system: &QAFrameworkSystem,
-    config: CreateTestConfig,
-) -> Result<()> {
+async fn handle_create_test(qa_system: &QAFrameworkSystem, config: CreateTestConfig) -> Result<()> {
     let test_type = match config.test_type.to_lowercase().as_str() {
         "unit" => TestType::Unit,
         "integration" => TestType::Integration,
@@ -794,7 +803,9 @@ async fn handle_create_test(
     let test_case = TestCase {
         id: Uuid::new_v4(),
         name: config.name,
-        description: config.description.unwrap_or_else(|| "Test case description".to_string()),
+        description: config
+            .description
+            .unwrap_or_else(|| "Test case description".to_string()),
         test_type,
         category: TestCategory::Functional,
         priority,
@@ -836,10 +847,7 @@ async fn handle_create_test(
     Ok(())
 }
 
-async fn handle_run_tests(
-    qa_system: &QAFrameworkSystem,
-    config: RunTestsConfig,
-) -> Result<()> {
+async fn handle_run_tests(qa_system: &QAFrameworkSystem, config: RunTestsConfig) -> Result<()> {
     println!("Executing test run...");
 
     let execution_mode = if let Some(m) = config.mode {
@@ -888,7 +896,8 @@ async fn handle_run_tests(
 
     let test_run = TestRun {
         run_id: Uuid::new_v4(),
-        name: config.name
+        name: config
+            .name
             .unwrap_or_else(|| format!("Test Run {}", chrono::Utc::now().format("%Y%m%d_%H%M%S"))),
         description: "CLI-generated test run".to_string(),
         trigger: RunTrigger::Manual,
@@ -992,19 +1001,13 @@ async fn handle_list_tests(
 
 async fn handle_generate_report(
     qa_system: &QAFrameworkSystem,
-    _report_type: Option<String>,
-    _run_id: Option<String>,
-    output: Option<PathBuf>,
-    format: Option<String>,
-    _include_history: bool,
-    _include_performance: bool,
-    _include_security: bool,
+    config: GenerateReportConfig,
 ) -> Result<()> {
     println!("Generating quality report...");
 
     let report = qa_system.generate_quality_report().await?;
 
-    let report_format = format.unwrap_or_else(|| "json".to_string());
+    let report_format = config.format.unwrap_or_else(|| "json".to_string());
 
     let report_content = match report_format.to_lowercase().as_str() {
         "json" => serde_json::to_string_pretty(&report)?,
@@ -1012,7 +1015,7 @@ async fn handle_generate_report(
         _ => serde_json::to_string_pretty(&report)?,
     };
 
-    if let Some(output_path) = output {
+    if let Some(output_path) = config.output {
         tokio::fs::write(&output_path, &report_content).await?;
         println!("Report saved to: {}", output_path.display());
     } else {

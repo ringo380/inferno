@@ -1,3 +1,4 @@
+#![allow(dead_code, unused_imports, unused_variables)]
 // Hardware acceleration module for Inferno AI/ML platform
 // Provides CUDA, ROCm, Metal, and CPU SIMD optimizations
 

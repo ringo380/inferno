@@ -1,3 +1,4 @@
+#![allow(dead_code, unused_imports, unused_variables)]
 //! Optimization Command - New Architecture
 //!
 //! This module provides model optimization features including quantization, pruning, and distillation.

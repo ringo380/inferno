@@ -1,3 +1,4 @@
+#![allow(dead_code, unused_imports, unused_variables)]
 use crate::config::Config;
 use crate::federated::{AggregationStrategy, DeploymentStrategy, FederatedNode, NodeRole};
 use anyhow::{Context, Result};

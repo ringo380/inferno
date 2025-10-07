@@ -1,3 +1,4 @@
+#![allow(dead_code, unused_imports, unused_variables)]
 use crate::{
     config::Config,
     model_versioning::{ExperimentVariant, ModelVersioningSystem, RolloutStrategy},
@@ -936,10 +937,7 @@ pub async fn execute(args: ModelVersioningArgs, config: &Config) -> Result<()> {
     }
 }
 
-async fn handle_create_command(
-    config: &Config,
-    version_config: CreateVersionConfig,
-) -> Result<()> {
+async fn handle_create_command(config: &Config, version_config: CreateVersionConfig) -> Result<()> {
     info!(
         "Creating new model version: {} v{}",
         version_config.model, version_config.version
@@ -959,9 +957,7 @@ async fn handle_create_command(
         model_type: version_config
             .model_type
             .unwrap_or_else(|| "unknown".to_string()),
-        format: version_config
-            .format
-            .unwrap_or_else(|| "gguf".to_string()),
+        format: version_config.format.unwrap_or_else(|| "gguf".to_string()),
         size_bytes: file_size,
         checksum: "mock_checksum".to_string(), // Would calculate actual checksum
         training_dataset: None,

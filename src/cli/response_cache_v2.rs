@@ -1,3 +1,4 @@
+#![allow(dead_code, unused_imports, unused_variables)]
 //! Response Cache Command - New Architecture
 //!
 //! This module provides response caching and deduplication management commands.

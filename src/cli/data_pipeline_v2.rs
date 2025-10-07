@@ -1,3 +1,4 @@
+#![allow(dead_code, unused_imports, unused_variables)]
 //! Data Pipeline Command - New Architecture
 //!
 //! This module provides data pipeline and ETL system management for model training.

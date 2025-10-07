@@ -1,3 +1,4 @@
+#![allow(dead_code, unused_imports, unused_variables)]
 //! # Background Update Service
 //!
 //! Persistent background service that automatically checks for updates and notifies

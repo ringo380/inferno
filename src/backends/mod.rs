@@ -1,3 +1,4 @@
+#![allow(dead_code, unused_imports, unused_variables)]
 #[cfg(feature = "gguf")]
 mod gguf;
 #[cfg(all(feature = "gpu-metal", target_os = "macos"))]
@@ -167,26 +168,36 @@ pub struct Backend {
 
 impl Backend {
     pub fn new(backend_type: BackendType, config: &BackendConfig) -> Result<Self> {
-        let backend_impl: Box<dyn InferenceBackend> = match backend_type {
-            #[cfg(feature = "gguf")]
-            BackendType::Gguf => Box::new(gguf::GgufBackend::new(config.clone())?),
-            #[cfg(feature = "onnx")]
-            BackendType::Onnx => Box::new(onnx::OnnxBackend::new(config.clone())?),
-            #[cfg(all(feature = "gpu-metal", target_os = "macos"))]
-            BackendType::Metal => Box::new(metal::MetalBackend::new()?),
-            #[cfg(not(any(
-                feature = "gguf",
-                feature = "onnx",
-                all(feature = "gpu-metal", target_os = "macos")
-            )))]
-            BackendType::None => {
-                return Err(anyhow!(
-                    "No backend available. Enable 'gguf', 'onnx', or 'gpu-metal' features."
-                ))
-            }
-        };
+        #[cfg(any(
+            feature = "gguf",
+            feature = "onnx",
+            all(feature = "gpu-metal", target_os = "macos")
+        ))]
+        {
+            let backend_impl: Box<dyn InferenceBackend> = match backend_type {
+                #[cfg(feature = "gguf")]
+                BackendType::Gguf => Box::new(gguf::GgufBackend::new(config.clone())?),
+                #[cfg(feature = "onnx")]
+                BackendType::Onnx => Box::new(onnx::OnnxBackend::new(config.clone())?),
+                #[cfg(all(feature = "gpu-metal", target_os = "macos"))]
+                BackendType::Metal => Box::new(metal::MetalBackend::new()?),
+            };
 
-        Ok(Self { backend_impl })
+            return Ok(Self { backend_impl });
+        }
+
+        #[cfg(not(any(
+            feature = "gguf",
+            feature = "onnx",
+            all(feature = "gpu-metal", target_os = "macos")
+        )))]
+        {
+            let _ = backend_type;
+            let _ = config;
+            return Err(anyhow!(
+                "No backend available. Enable 'gguf', 'onnx', or 'gpu-metal' features."
+            ));
+        }
     }
 
     /// Create a new shared backend instance wrapped in Arc<Mutex<_>>

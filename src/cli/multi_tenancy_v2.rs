@@ -1,3 +1,4 @@
+#![allow(dead_code, unused_imports, unused_variables)]
 //! Multi-Tenancy Command - New Architecture
 //!
 //! This module provides multi-tenant resource isolation and management.

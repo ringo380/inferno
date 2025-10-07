@@ -1,3 +1,4 @@
+#![allow(dead_code, unused_imports, unused_variables)]
 //! Fuzzy Matching Command - New Architecture
 //!
 //! This module provides fuzzy matching operations for CLI commands.

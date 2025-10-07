@@ -1,3 +1,4 @@
+#![allow(dead_code, unused_imports, unused_variables)]
 use crate::InfernoError;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};

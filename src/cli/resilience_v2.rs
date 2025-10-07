@@ -1,3 +1,4 @@
+#![allow(dead_code, unused_imports, unused_variables)]
 //! Resilience Command - New Architecture
 //!
 //! This module provides resilience patterns and error recovery management.

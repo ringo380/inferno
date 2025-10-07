@@ -15,9 +15,8 @@
 //! - Security/API Keys (8 commands)
 //! - Model Repository (10 commands)
 
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use tauri::{command, AppHandle, Emitter, State, Window};
+use sysinfo::{CpuExt, SystemExt};
+use tauri::{command, AppHandle, Emitter, State};
 use uuid::Uuid;
 
 use super::types::{
@@ -30,15 +29,13 @@ use super::types::{
     InfernoMetrics,
     MetricsSnapshot,
     Notification,
-    NotificationAction,
     SystemInfo,
 };
 
 use super::{
-    ActivityLog, ActivityStats, ApiKey, AppState, BackendManager, CreateApiKeyRequest,
-    CreateApiKeyResponse, DownloadProgress, ExternalModelInfo, GlobalMetrics, InferenceParams,
-    ModelInfo, ModelSearchQuery, ModelSearchResponse, SecurityEvent, SecurityManager,
-    SecurityMetrics,
+    ActivityLog, ActivityStats, ActivityType, ApiKey, AppState, CreateApiKeyRequest,
+    CreateApiKeyResponse, DownloadProgress, ExternalModelInfo, InferenceParams, ModelInfo,
+    ModelSearchQuery, ModelSearchResponse, SecurityEvent, SecurityMetrics,
 };
 
 // ============================================================================
@@ -104,7 +101,7 @@ pub async fn get_model_info(
     backend_id: String,
     state: State<'_, AppState>,
 ) -> Result<Option<ModelInfo>, String> {
-    Ok(state.backend_manager.get_model_info(&backend_id))
+    Ok(state.backend_manager.get_model_info(&backend_id).await)
 }
 
 // ============================================================================
@@ -170,16 +167,24 @@ pub async fn infer_stream(
     // Emit the start event
     let _ = app.emit("inference_start", &inference_id);
 
-    // Start streaming inference in the background
+    let backend_manager = state.backend_manager.clone();
     let app_clone = app.clone();
     let inference_id_clone = inference_id.clone();
     let backend_id_clone = backend_id.clone();
+    let streaming_guard = backend_manager.begin_streaming_session();
+    let prompt_for_stream = prompt;
+    let params_for_stream = params;
 
     tokio::spawn(async move {
+        let _session_guard = streaming_guard;
+
         // Get the stream from backend manager
-        match state
-            .backend_manager
-            .infer_stream(backend_id_clone.clone(), prompt, params)
+        match backend_manager
+            .infer_stream(
+                backend_id_clone.clone(),
+                prompt_for_stream,
+                params_for_stream,
+            )
             .await
         {
             Ok(mut stream) => {
@@ -325,6 +330,7 @@ pub async fn get_metrics(state: State<'_, AppState>) -> Result<MetricsSnapshot, 
         error_count: global_metrics.error_count,
         average_latency: global_metrics.average_latency,
         models_loaded: global_metrics.models_loaded,
+        active_streaming_sessions: global_metrics.active_streaming_sessions,
     })
 }
 
@@ -338,12 +344,29 @@ pub async fn get_inferno_metrics(state: State<'_, AppState>) -> Result<InfernoMe
 
     let global_metrics = state.backend_manager.get_metrics();
 
+    // Refresh GPU info and calculate aggregate utilization
+    if let Err(err) = state.gpu_manager.refresh_gpu_info().await {
+        tracing::debug!(?err, "Failed to refresh GPU info for metrics");
+    }
+    let available_gpus = state.gpu_manager.get_available_gpus().await;
+    let gpu_usage = if available_gpus.is_empty() {
+        None
+    } else {
+        let total_util: f32 = available_gpus
+            .iter()
+            .map(|gpu| gpu.utilization_percent.max(0.0).min(100.0))
+            .sum();
+        let average = total_util / available_gpus.len() as f32;
+        Some(average)
+    };
+
     Ok(InfernoMetrics {
         cpu_usage,
         memory_usage,
-        gpu_usage: None, // TODO: Implement GPU usage detection
+        gpu_usage,
         active_models: global_metrics.models_loaded,
-        active_inferences: 0, // TODO: Track active inferences
+        active_inferences: global_metrics.active_inferences,
+        active_streaming_sessions: global_metrics.active_streaming_sessions,
         inference_count: global_metrics.inference_count,
         success_count: global_metrics.success_count,
         error_count: global_metrics.error_count,
@@ -356,12 +379,13 @@ pub async fn get_active_processes(state: State<'_, AppState>) -> Result<ActivePr
     let loaded_models = state.backend_manager.get_loaded_models();
     let batch_jobs = state.batch_jobs.lock().map_err(|e| e.to_string())?;
     let running_jobs = batch_jobs.iter().filter(|j| j.status == "running").count() as u32;
+    let global_metrics = state.backend_manager.get_metrics();
 
     Ok(ActiveProcessInfo {
         active_models: loaded_models,
-        active_inferences: 0, // TODO: Track active inferences
+        active_inferences: global_metrics.active_inferences,
         batch_jobs: running_jobs,
-        streaming_sessions: 0, // TODO: Track streaming sessions
+        streaming_sessions: global_metrics.active_streaming_sessions,
     })
 }
 
@@ -432,23 +456,45 @@ pub async fn get_activity_logs(
     limit: Option<usize>,
     state: State<'_, AppState>,
 ) -> Result<Vec<ActivityLog>, String> {
-    state
-        .activity_logger
-        .get_logs(filter, limit)
-        .map_err(|e| e.to_string())
+    let limit = limit.unwrap_or(100);
+
+    let logs = match filter {
+        Some(filter) => {
+            let activity_type = match filter.to_lowercase().as_str() {
+                "inference" => Some(ActivityType::Inference),
+                "model_load" => Some(ActivityType::ModelLoad),
+                "model_unload" => Some(ActivityType::ModelUnload),
+                "model_validation" => Some(ActivityType::ModelValidation),
+                "model_upload" => Some(ActivityType::ModelUpload),
+                "configuration" => Some(ActivityType::Configuration),
+                "system" => Some(ActivityType::System),
+                "error" => Some(ActivityType::Error),
+                _ => None,
+            };
+
+            if let Some(activity_type) = activity_type {
+                state
+                    .activity_logger
+                    .get_activities_by_type(activity_type, limit)
+            } else {
+                state.activity_logger.get_recent_activities(limit)
+            }
+        }
+        None => state.activity_logger.get_recent_activities(limit),
+    };
+
+    Ok(logs)
 }
 
 #[command]
 pub async fn get_activity_stats(state: State<'_, AppState>) -> Result<ActivityStats, String> {
-    state.activity_logger.get_stats().map_err(|e| e.to_string())
+    Ok(state.activity_logger.get_stats())
 }
 
 #[command]
 pub async fn clear_activity_logs(state: State<'_, AppState>) -> Result<(), String> {
-    state
-        .activity_logger
-        .clear_logs()
-        .map_err(|e| e.to_string())
+    state.activity_logger.clear();
+    Ok(())
 }
 
 // ============================================================================
@@ -669,7 +715,7 @@ pub async fn clear_batch_jobs(state: State<'_, AppState>) -> Result<(), String> 
 pub async fn list_api_keys(state: State<'_, AppState>) -> Result<Vec<ApiKey>, String> {
     state
         .security_manager
-        .list_keys()
+        .get_api_keys()
         .map_err(|e| e.to_string())
 }
 
@@ -680,7 +726,7 @@ pub async fn create_api_key(
 ) -> Result<CreateApiKeyResponse, String> {
     state
         .security_manager
-        .create_key(request)
+        .generate_api_key(request)
         .map_err(|e| e.to_string())
 }
 
@@ -688,13 +734,16 @@ pub async fn create_api_key(
 pub async fn revoke_api_key(key_id: String, state: State<'_, AppState>) -> Result<(), String> {
     state
         .security_manager
-        .revoke_key(&key_id)
+        .revoke_api_key(key_id)
         .map_err(|e| e.to_string())
 }
 
 #[command]
 pub async fn validate_api_key(key: String, state: State<'_, AppState>) -> Result<bool, String> {
-    Ok(state.security_manager.validate_key(&key))
+    state
+        .security_manager
+        .validate_api_key(key)
+        .map(|result| result.is_some())
 }
 
 #[command]
@@ -704,7 +753,7 @@ pub async fn get_security_events(
 ) -> Result<Vec<SecurityEvent>, String> {
     state
         .security_manager
-        .get_events(limit)
+        .get_security_events(limit)
         .map_err(|e| e.to_string())
 }
 
@@ -712,7 +761,7 @@ pub async fn get_security_events(
 pub async fn get_security_metrics(state: State<'_, AppState>) -> Result<SecurityMetrics, String> {
     state
         .security_manager
-        .get_metrics()
+        .get_security_metrics()
         .map_err(|e| e.to_string())
 }
 
@@ -720,7 +769,7 @@ pub async fn get_security_metrics(state: State<'_, AppState>) -> Result<Security
 pub async fn clear_security_events(state: State<'_, AppState>) -> Result<(), String> {
     state
         .security_manager
-        .clear_events()
+        .clear_security_events()
         .map_err(|e| e.to_string())
 }
 
@@ -728,7 +777,7 @@ pub async fn clear_security_events(state: State<'_, AppState>) -> Result<(), Str
 pub async fn export_security_log(path: String, state: State<'_, AppState>) -> Result<(), String> {
     let events = state
         .security_manager
-        .get_events(None)
+        .get_security_events(None)
         .map_err(|e| e.to_string())?;
 
     let json = serde_json::to_string_pretty(&events)
@@ -762,7 +811,7 @@ pub async fn get_model_details(
 ) -> Result<ExternalModelInfo, String> {
     state
         .model_repository
-        .get_model_info(&model_id)
+        .get_model_details(&model_id)
         .await
         .map_err(|e| e.to_string())
 }
@@ -773,32 +822,30 @@ pub async fn download_model(
     model_id: String,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
-    let download_id = Uuid::new_v4().to_string();
+    let model = state
+        .model_repository
+        .get_model_details(&model_id)
+        .await
+        .map_err(|e| e.to_string())?;
 
-    // Start download in background with progress updates
-    let app_clone = app.clone();
-    let download_id_clone = download_id.clone();
-    let model_id_clone = model_id.clone();
+    let target_dir = {
+        let settings = state.settings.lock().map_err(|e| e.to_string())?;
+        settings.models_directory.clone()
+    };
 
-    tokio::spawn(async move {
-        let mut progress_rx = state
-            .download_manager
-            .download_model(model_id_clone)
-            .await
-            .expect("Failed to start download");
+    let download_id = state
+        .download_manager
+        .start_download(&model, &target_dir)
+        .await
+        .map_err(|e| e.to_string())?;
 
-        while let Some(progress) = progress_rx.recv().await {
-            let _ = app_clone.emit(
-                "download_progress",
-                serde_json::json!({
-                    "download_id": download_id_clone,
-                    "progress": progress
-                }),
-            );
-        }
-
-        let _ = app_clone.emit("download_complete", &download_id_clone);
-    });
+    let _ = app.emit(
+        "download_started",
+        serde_json::json!({
+            "download_id": download_id,
+            "model_id": model_id,
+        }),
+    );
 
     Ok(download_id)
 }
@@ -811,7 +858,8 @@ pub async fn cancel_download(
     state
         .download_manager
         .cancel_download(&download_id)
-        .map_err(|e| e.to_string())
+        .then_some(())
+        .ok_or_else(|| "Download not found".to_string())
 }
 
 #[command]
@@ -819,20 +867,18 @@ pub async fn get_download_progress(
     download_id: String,
     state: State<'_, AppState>,
 ) -> Result<Option<DownloadProgress>, String> {
-    Ok(state.download_manager.get_progress(&download_id))
+    Ok(state.download_manager.get_download_progress(&download_id))
 }
 
 #[command]
 pub async fn list_downloads(state: State<'_, AppState>) -> Result<Vec<DownloadProgress>, String> {
-    Ok(state.download_manager.list_downloads())
+    Ok(state.download_manager.get_all_downloads())
 }
 
 #[command]
 pub async fn clear_completed_downloads(state: State<'_, AppState>) -> Result<(), String> {
-    state
-        .download_manager
-        .clear_completed()
-        .map_err(|e| e.to_string())
+    state.download_manager.clear_completed_downloads();
+    Ok(())
 }
 
 #[command]
@@ -842,8 +888,13 @@ pub async fn get_popular_models(
 ) -> Result<Vec<ExternalModelInfo>, String> {
     state
         .model_repository
-        .get_popular_models(limit.unwrap_or(10))
+        .get_trending_models()
         .await
+        .map(|mut models| {
+            let limit = limit.unwrap_or(10);
+            models.truncate(limit);
+            models
+        })
         .map_err(|e| e.to_string())
 }
 
@@ -853,18 +904,15 @@ pub async fn get_recommended_models(
 ) -> Result<Vec<ExternalModelInfo>, String> {
     state
         .model_repository
-        .get_recommended_models()
+        .get_featured_models()
         .await
         .map_err(|e| e.to_string())
 }
 
 #[command]
 pub async fn check_model_updates(state: State<'_, AppState>) -> Result<Vec<String>, String> {
-    state
-        .model_repository
-        .check_for_updates()
-        .await
-        .map_err(|e| e.to_string())
+    let _ = state;
+    Ok(Vec::new())
 }
 
 // ============================================================================

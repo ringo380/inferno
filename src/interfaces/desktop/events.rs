@@ -3,7 +3,7 @@
 //! This module handles event emission from the Rust backend to the frontend.
 //! Events are used for real-time updates, notifications, and state changes.
 
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter};
 
 /// Event manager for emitting events to the frontend
 pub struct EventManager {
@@ -19,7 +19,7 @@ impl EventManager {
     /// Emit a model loaded event
     pub fn emit_model_loaded(&self, model_name: String, backend_id: String) -> Result<(), String> {
         self.app_handle
-            .emit_all(
+            .emit(
                 "model_loaded",
                 serde_json::json!({
                     "model_name": model_name,
@@ -36,7 +36,7 @@ impl EventManager {
         backend_id: String,
     ) -> Result<(), String> {
         self.app_handle
-            .emit_all(
+            .emit(
                 "model_unloaded",
                 serde_json::json!({
                     "model_name": model_name,
@@ -53,7 +53,7 @@ impl EventManager {
         backend_id: String,
     ) -> Result<(), String> {
         self.app_handle
-            .emit_all(
+            .emit(
                 "inference_started",
                 serde_json::json!({
                     "inference_id": inference_id,
@@ -71,7 +71,7 @@ impl EventManager {
         latency_ms: u64,
     ) -> Result<(), String> {
         self.app_handle
-            .emit_all(
+            .emit(
                 "inference_completed",
                 serde_json::json!({
                     "inference_id": inference_id,
@@ -85,7 +85,7 @@ impl EventManager {
     /// Emit an inference error event
     pub fn emit_inference_error(&self, inference_id: String, error: String) -> Result<(), String> {
         self.app_handle
-            .emit_all(
+            .emit(
                 "inference_error",
                 serde_json::json!({
                     "inference_id": inference_id,
@@ -98,7 +98,7 @@ impl EventManager {
     /// Emit a notification event
     pub fn emit_notification(&self, notification: serde_json::Value) -> Result<(), String> {
         self.app_handle
-            .emit_all("notification", notification)
+            .emit("notification", notification)
             .map_err(|e| e.to_string())
     }
 
@@ -110,7 +110,7 @@ impl EventManager {
         permissions: Vec<String>,
     ) -> Result<(), String> {
         self.app_handle
-            .emit_all(
+            .emit(
                 "api_key_created",
                 serde_json::json!({
                     "key_id": key_id,
@@ -124,7 +124,7 @@ impl EventManager {
     /// Emit a metrics update event (periodic)
     pub fn emit_metrics_update(&self, metrics: serde_json::Value) -> Result<(), String> {
         self.app_handle
-            .emit_all("metrics_update", metrics)
+            .emit("metrics_update", metrics)
             .map_err(|e| e.to_string())
     }
 

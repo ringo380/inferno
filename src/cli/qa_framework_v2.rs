@@ -1,3 +1,4 @@
+#![allow(dead_code, unused_imports, unused_variables)]
 //! QA Framework Command - New Architecture
 //!
 //! This module provides comprehensive testing and quality assurance capabilities.

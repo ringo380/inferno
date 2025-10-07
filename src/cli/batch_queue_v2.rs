@@ -1,3 +1,4 @@
+#![allow(dead_code, unused_imports, unused_variables)]
 //! Batch Queue Command - New Architecture
 //!
 //! This module provides advanced batch processing with job queues and scheduling.

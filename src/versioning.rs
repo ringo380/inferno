@@ -1,3 +1,4 @@
+#![allow(dead_code, unused_imports, unused_variables)]
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -329,6 +330,16 @@ pub struct RegistryMetadata {
     pub storage_path: PathBuf,
 }
 
+/// Configuration for creating a new model version
+/// Reduces create_version() signature from 8 parameters to 4
+pub struct CreateVersionConfig {
+    pub version: Option<SemanticVersion>,
+    pub metadata: ModelMetadata,
+    pub description: Option<String>,
+    pub tags: Vec<String>,
+    pub created_by: String,
+}
+
 pub struct ModelVersionManager {
     registry: Arc<RwLock<ModelRegistry>>,
     storage_path: PathBuf,
@@ -405,11 +416,7 @@ impl ModelVersionManager {
         &self,
         model_name: &str,
         model_file: &Path,
-        version: Option<SemanticVersion>,
-        metadata: ModelMetadata,
-        description: Option<String>,
-        tags: Vec<String>,
-        created_by: String,
+        config: CreateVersionConfig,
     ) -> Result<String> {
         // Calculate checksum
         let checksum = self.calculate_checksum(model_file).await?;
@@ -418,7 +425,7 @@ impl ModelVersionManager {
         let size_bytes = fs::metadata(model_file).await?.len();
 
         // Determine version number
-        let semantic_version = if let Some(v) = version {
+        let semantic_version = if let Some(v) = config.version {
             v
         } else {
             self.auto_increment_version(model_name).await?
@@ -447,11 +454,11 @@ impl ModelVersionManager {
             file_path: stored_file_path,
             checksum,
             size_bytes,
-            metadata,
+            metadata: config.metadata,
             created_at: SystemTime::now(),
-            created_by,
-            description,
-            tags,
+            created_by: config.created_by,
+            description: config.description,
+            tags: config.tags,
             status: VersionStatus::Draft,
             parent_version: self.get_latest_version(model_name).await.ok(),
             deployment_info: None,

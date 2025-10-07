@@ -58,7 +58,19 @@ export function DashboardOverview() {
     memory_usage: systemInfo?.used_memory || 0,
   };
 
-  const isLoading = systemLoading || metricsLoading || modelsLoading || processesLoading || batchCountLoading || activeBatchCountLoading;
+  const streamingSessions = infernoMetrics?.active_streaming_sessions ?? activeProcesses?.streaming_sessions ?? 0;
+  const gpuUsage =
+    typeof infernoMetrics?.gpu_usage === 'number' && Number.isFinite(infernoMetrics.gpu_usage)
+      ? infernoMetrics.gpu_usage
+      : undefined;
+
+  const isLoading =
+    systemLoading ||
+    metricsLoading ||
+    modelsLoading ||
+    processesLoading ||
+    batchCountLoading ||
+    activeBatchCountLoading;
 
   return (
     <div className="space-y-6">
@@ -99,7 +111,11 @@ export function DashboardOverview() {
         <MetricCard
           title="Total Inferences"
           value={metricsLoading ? "..." : (infernoMetrics?.inference_count?.toLocaleString() || "0")}
-          description={metricsLoading ? "Loading..." : `${activeInferenceCount} active (real-time)`}
+          description={
+            metricsLoading
+              ? "Loading..."
+              : `${activeInferenceCount} active (real-time) • ${streamingSessions} streaming`
+          }
           icon={TrendingUp}
           trend="up"
           color="green"
@@ -115,7 +131,11 @@ export function DashboardOverview() {
         <MetricCard
           title="System Load"
           value={systemLoading ? "..." : `${currentSystemMetrics.cpu_usage?.toFixed(1) || 0}%`}
-          description={realTimeSystemMetrics ? "Real-time CPU" : "CPU utilization"}
+          description={
+            realTimeSystemMetrics
+              ? `Real-time CPU${gpuUsage !== undefined ? ` • GPU ${gpuUsage.toFixed(1)}%` : ''}`
+              : `CPU utilization${gpuUsage !== undefined ? ` • GPU ${gpuUsage.toFixed(1)}%` : ''}`
+          }
           icon={Cpu}
           trend="stable"
           color="blue"
@@ -277,7 +297,7 @@ export function DashboardOverview() {
               {batchCountLoading ? (
                 <Skeleton className="h-3 w-32" />
               ) : (
-                `${batchJobCount || 0} total jobs • ${infernoMetrics?.active_inferences || 0} inferences`
+                `${batchJobCount || 0} total jobs • ${infernoMetrics?.active_inferences || 0} inferences • ${streamingSessions} streaming`
               )}
             </p>
           </CardContent>

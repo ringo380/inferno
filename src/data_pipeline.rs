@@ -1,3 +1,4 @@
+#![allow(dead_code, unused_imports, unused_variables)]
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};

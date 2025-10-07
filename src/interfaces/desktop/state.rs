@@ -5,14 +5,16 @@
 
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
-use sysinfo::System;
+use sysinfo::{System, SystemExt};
 use tauri::AppHandle;
+use tokio::runtime::Runtime;
 
 use super::events::EventManager;
 use super::types::{AppSettings, BatchJob, MetricsSnapshot, Notification};
 use super::{
     ActivityLogger, BackendManager, ModelDownloadManager, ModelRepositoryService, SecurityManager,
 };
+use crate::gpu::{GpuConfiguration, GpuManager};
 
 /// Global application state for the desktop application
 ///
@@ -22,6 +24,9 @@ use super::{
 pub struct AppState {
     /// System information (CPU, memory, etc.)
     pub system: Arc<Mutex<System>>,
+
+    /// GPU detection and telemetry manager
+    pub gpu_manager: Arc<GpuManager>,
 
     /// Backend manager for model loading and inference
     pub backend_manager: Arc<BackendManager>,
@@ -68,42 +73,33 @@ impl AppState {
         // Load settings from disk or use defaults
         let settings = Self::load_settings().await.unwrap_or_default();
 
-        // Initialize backend manager with config from settings
-        let config = inferno::core::config::Config {
-            models_dir: Some(PathBuf::from(&settings.models_directory)),
-            backend_config: Some(inferno::core::backends::BackendConfig {
-                prefer_gpu: settings.prefer_gpu,
-                context_size: Some(2048), // Default context size
-                batch_size: Some(512),    // Default batch size
-                ..Default::default()
-            }),
+        const MAX_ACTIVITY_LOGS: usize = 500;
+
+        // Initialize subsystems shared across the desktop interface
+        let activity_logger = Arc::new(ActivityLogger::new(MAX_ACTIVITY_LOGS));
+
+        let models_dir = PathBuf::from(&settings.models_directory);
+        let backend_manager = Arc::new(
+            BackendManager::new(Arc::clone(&activity_logger), models_dir)
+                .await
+                .map_err(|e| format!("Failed to initialize backend manager: {}", e))?,
+        );
+
+        let gpu_manager = Arc::new(GpuManager::new(GpuConfiguration {
+            enabled: settings.prefer_gpu,
+            preferred_vendor: None,
             ..Default::default()
-        };
+        }));
+        if let Err(err) = gpu_manager.initialize().await {
+            tracing::warn!(
+                error = ?err,
+                "Failed to initialize GPU manager; GPU metrics will be unavailable"
+            );
+        }
 
-        let backend_manager = BackendManager::new(config)
-            .map_err(|e| format!("Failed to initialize backend manager: {}", e))?;
-
-        // Initialize activity logger with settings path
-        let activity_logger = ActivityLogger::new(
-            PathBuf::from(".inferno-activity.json"),
-            settings.enable_audit_log,
-        )
-        .map_err(|e| format!("Failed to initialize activity logger: {}", e))?;
-
-        // Initialize security manager
-        let security_manager = SecurityManager::new(
-            PathBuf::from(".inferno-keys.json"),
-            settings.require_authentication,
-        )
-        .map_err(|e| format!("Failed to initialize security manager: {}", e))?;
-
-        // Initialize model repository service
-        let model_repository = ModelRepositoryService::new()
-            .map_err(|e| format!("Failed to initialize model repository: {}", e))?;
-
-        // Initialize download manager with models directory
-        let download_manager = ModelDownloadManager::new(PathBuf::from(&settings.models_directory))
-            .map_err(|e| format!("Failed to initialize download manager: {}", e))?;
+        let security_manager = Arc::new(SecurityManager::new());
+        let model_repository = Arc::new(ModelRepositoryService::new());
+        let download_manager = Arc::new(ModelDownloadManager::new());
 
         // Initialize event manager if app handle is provided
         let event_manager = if let Some(handle) = app_handle {
@@ -114,16 +110,17 @@ impl AppState {
 
         Ok(Self {
             system: Arc::new(Mutex::new(system)),
-            backend_manager: Arc::new(backend_manager),
+            gpu_manager,
+            backend_manager,
             metrics: Arc::new(Mutex::new(MetricsSnapshot::default())),
-            activity_logger: Arc::new(activity_logger),
+            activity_logger,
             settings: Arc::new(Mutex::new(settings)),
             notifications: Arc::new(Mutex::new(Vec::new())),
             batch_jobs: Arc::new(Mutex::new(Vec::new())),
-            security_manager: Arc::new(security_manager),
+            security_manager,
             event_manager: Arc::new(Mutex::new(event_manager)),
-            model_repository: Arc::new(model_repository),
-            download_manager: Arc::new(download_manager),
+            model_repository,
+            download_manager,
         })
     }
 
@@ -176,16 +173,14 @@ impl AppState {
             .await
             .map_err(|e| format!("Failed to write settings file: {}", e))?;
 
-        // Flush activity logs
-        self.activity_logger
-            .flush()
-            .map_err(|e| format!("Failed to flush activity logs: {}", e))?;
-
         // Unload all models
         let loaded_models = self.backend_manager.get_loaded_models();
         for model_id in loaded_models {
             let _ = self.backend_manager.unload_model(model_id).await;
         }
+
+        // Stop GPU monitoring tasks (if any)
+        self.gpu_manager.shutdown().await;
 
         Ok(())
     }
@@ -193,43 +188,9 @@ impl AppState {
 
 impl Default for AppState {
     fn default() -> Self {
-        // This is a fallback for situations where async initialization isn't available
-        // Typically you should use AppState::new() instead
-        let system = System::new_all();
-        let settings = AppSettings::default();
-
-        let config = inferno::core::config::Config {
-            models_dir: Some(PathBuf::from(&settings.models_directory)),
-            ..Default::default()
-        };
-
-        let backend_manager =
-            BackendManager::new(config).expect("Failed to initialize backend manager");
-
-        let activity_logger = ActivityLogger::new(PathBuf::from(".inferno-activity.json"), true)
-            .expect("Failed to initialize activity logger");
-
-        let security_manager = SecurityManager::new(PathBuf::from(".inferno-keys.json"), false)
-            .expect("Failed to initialize security manager");
-
-        let model_repository =
-            ModelRepositoryService::new().expect("Failed to initialize model repository");
-
-        let download_manager = ModelDownloadManager::new(PathBuf::from(&settings.models_directory))
-            .expect("Failed to initialize download manager");
-
-        Self {
-            system: Arc::new(Mutex::new(system)),
-            backend_manager: Arc::new(backend_manager),
-            metrics: Arc::new(Mutex::new(MetricsSnapshot::default())),
-            activity_logger: Arc::new(activity_logger),
-            settings: Arc::new(Mutex::new(settings)),
-            notifications: Arc::new(Mutex::new(Vec::new())),
-            batch_jobs: Arc::new(Mutex::new(Vec::new())),
-            security_manager: Arc::new(security_manager),
-            event_manager: Arc::new(Mutex::new(None)),
-            model_repository: Arc::new(model_repository),
-            download_manager: Arc::new(download_manager),
-        }
+        Runtime::new()
+            .expect("Failed to create Tokio runtime for AppState::default")
+            .block_on(Self::new(None))
+            .expect("Failed to initialize AppState")
     }
 }

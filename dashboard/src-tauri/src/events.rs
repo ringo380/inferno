@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter};
 use uuid::Uuid;
 use std::sync::{Arc, Mutex};
 use sysinfo::System;
@@ -368,13 +368,6 @@ impl EventManager {
         // Emit initial connection status
         self.emit_connection_status(ConnectionStatus::Connected)
     }
-}
-
-// Event subscription management for frontend
-#[derive(Serialize, Deserialize)]
-pub struct EventSubscription {
-    pub client_id: String,
-    pub event_types: Vec<String>,
 }
 
 impl EventManager {

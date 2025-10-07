@@ -352,16 +352,17 @@ pub async fn execute(args: VersioningArgs, _config: &Config) -> Result<()> {
                 .unwrap_or_default();
 
             println!("Creating new version for model '{}'...", model_name);
+
+            let version_config = crate::versioning::CreateVersionConfig {
+                version: semantic_version,
+                metadata,
+                description,
+                tags: tag_list,
+                created_by,
+            };
+
             let version_id = manager
-                .create_version(
-                    &model_name,
-                    &model_file,
-                    semantic_version,
-                    metadata,
-                    description,
-                    tag_list,
-                    created_by,
-                )
+                .create_version(&model_name, &model_file, version_config)
                 .await?;
 
             println!("Model version created successfully!");

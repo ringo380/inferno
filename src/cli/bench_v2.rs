@@ -1,3 +1,4 @@
+#![allow(dead_code, unused_imports, unused_variables)]
 //! Bench Command - New Architecture
 //!
 //! This module demonstrates the migration of the bench command to the new

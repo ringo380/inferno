@@ -1,3 +1,4 @@
+#![allow(dead_code, unused_imports, unused_variables)]
 use crate::{advanced_monitoring::AdvancedMonitoringSystem, config::Config};
 use anyhow::Result;
 use clap::{Args, Subcommand};

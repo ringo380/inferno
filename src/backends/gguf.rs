@@ -141,7 +141,6 @@ impl GgufBackend {
 
         // Use spawn_blocking for CPU-intensive inference
         let model_clone = Arc::clone(model);
-        let backend_clone = self.backend.as_ref().unwrap().clone();
         let input_str = input.to_string();
         let context_size = self.config.context_size;
         let batch_size = self.config.batch_size;

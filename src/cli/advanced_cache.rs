@@ -1,3 +1,4 @@
+#![allow(dead_code, unused_imports, unused_variables)]
 use crate::advanced_cache::{
     AdvancedCacheConfig, AdvancedCacheSystem, MockCacheBackend, MockCacheMonitor,
     MockCacheOptimizer, MockCompressionEngine, SourceType, WarmingSource,

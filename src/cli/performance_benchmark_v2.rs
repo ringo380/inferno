@@ -1,3 +1,4 @@
+#![allow(dead_code, unused_imports, unused_variables)]
 //! Performance Benchmark Command - New Architecture
 //!
 //! This module provides performance benchmarking and baseline establishment.

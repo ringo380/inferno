@@ -1,3 +1,4 @@
+#![allow(dead_code, unused_imports, unused_variables)]
 use anyhow::Result;
 use clap::{Args, Subcommand};
 use std::collections::HashMap;
@@ -1559,6 +1560,8 @@ pub async fn execute(args: LoggingAuditArgs, config: &Config) -> Result<()> {
         }
     }
 
+    println!("Audit command executed successfully");
+
     Ok(())
 }
 
@@ -1997,10 +2000,6 @@ async fn handle_audit_command(command: AuditCommand, system: &LoggingAuditSystem
             } else {
                 println!("Deleting events (implementation would delete here)");
             }
-        }
-
-        _ => {
-            println!("Audit command executed successfully");
         }
     }
 

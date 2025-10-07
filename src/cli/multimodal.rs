@@ -405,9 +405,7 @@ async fn handle_process_command(
     };
 
     if let Some(output_path) = config.output_file {
-        tokio::fs::write(&output_path, &output_content)
-            .await
-            ?;
+        tokio::fs::write(&output_path, &output_content).await?;
         println!("Results saved to: {:?}", output_path);
     } else {
         println!("{}", output_content);
@@ -432,7 +430,13 @@ async fn handle_process_base64_command(
     };
 
     let result = processor
-        .process_base64(&config.model, &config.data, &config.media_type, config.prompt, params)
+        .process_base64(
+            &config.model,
+            &config.data,
+            &config.media_type,
+            config.prompt,
+            params,
+        )
         .await
         .map_err(|e| InfernoError::InvalidArgument(format!("Processing failed: {}", e)))?;
 
@@ -464,9 +468,7 @@ async fn handle_batch_command(
     println!("Max concurrent jobs: {}", config.max_concurrent);
 
     // Create output directory
-    tokio::fs::create_dir_all(&config.output_dir)
-        .await
-        ?;
+    tokio::fs::create_dir_all(&config.output_dir).await?;
 
     // Find matching files
     let files = find_matching_files(&config.input_dir, &config.pattern).await?;
@@ -974,9 +976,7 @@ async fn handle_register_model_command(
     model: String,
     config_file: PathBuf,
 ) -> Result<(), InfernoError> {
-    let config_content = tokio::fs::read_to_string(&config_file)
-        .await
-        ?;
+    let config_content = tokio::fs::read_to_string(&config_file).await?;
 
     let capabilities: ModelCapabilities = serde_json::from_str(&config_content)
         .map_err(|e| InfernoError::InvalidArgument(format!("Invalid JSON config: {}", e)))?;
@@ -999,9 +999,7 @@ async fn handle_analyze_command(
     println!("Analyzing file: {:?}", input);
 
     // Mock analysis - in real implementation would extract actual metadata
-    let file_metadata = tokio::fs::metadata(&input)
-        .await
-        ?;
+    let file_metadata = tokio::fs::metadata(&input).await?;
 
     let file_extension = input
         .extension()
@@ -1061,9 +1059,7 @@ async fn handle_convert_command(
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     // Write mock converted data
-    tokio::fs::write(&output, &input_data)
-        .await
-        ?;
+    tokio::fs::write(&output, &input_data).await?;
 
     println!("✅ Conversion completed: {:?}", output);
     Ok(())

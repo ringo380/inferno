@@ -1,11 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
+import { Progress } from '@/components/ui/progress';
 import { useStreamingInference } from '@/hooks/use-streaming-inference';
 import { useLoadedModels } from '@/hooks/use-tauri-api';
 import { Play, Square, Loader2, AlertCircle, CheckCircle } from 'lucide-react';
@@ -13,6 +14,7 @@ import { Play, Square, Loader2, AlertCircle, CheckCircle } from 'lucide-react';
 export function StreamingInference() {
   const [prompt, setPrompt] = useState('Explain the concept of artificial intelligence in simple terms.');
   const [selectedBackend, setSelectedBackend] = useState<string>('');
+  const promptInputRef = useRef<HTMLTextAreaElement>(null);
 
   const { data: loadedModels, isLoading: modelsLoading } = useLoadedModels();
   const {
@@ -21,6 +23,7 @@ export function StreamingInference() {
     isComplete,
     error,
     inferenceId,
+    progress,
     startStreaming,
     stopStreaming,
   } = useStreamingInference();
@@ -42,6 +45,33 @@ export function StreamingInference() {
   const handleStop = () => {
     stopStreaming();
   };
+
+  useEffect(() => {
+    const handleQuickInference = () => {
+      setTimeout(() => {
+        if (promptInputRef.current) {
+          promptInputRef.current.focus();
+          promptInputRef.current.select();
+        }
+      }, 50);
+    };
+
+    const handleStopInference = () => {
+      stopStreaming();
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('inferno:quick-inference', handleQuickInference);
+      window.addEventListener('inferno:stop-inference', handleStopInference);
+    }
+
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('inferno:quick-inference', handleQuickInference);
+        window.removeEventListener('inferno:stop-inference', handleStopInference);
+      }
+    };
+  }, [stopStreaming]);
 
   return (
     <div className="space-y-6">
@@ -92,6 +122,7 @@ export function StreamingInference() {
           <div className="space-y-2">
             <label className="text-sm font-medium">Prompt</label>
             <Textarea
+              ref={promptInputRef}
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
               placeholder="Enter your prompt here..."
@@ -157,6 +188,16 @@ export function StreamingInference() {
           <Separator />
 
           {/* Output */}
+          {isStreaming && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <span>Streaming progress</span>
+                <span>{Math.round(progress * 100)}%</span>
+              </div>
+              <Progress value={Math.min(progress * 100, 100)} className="h-2" />
+            </div>
+          )}
+
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <label className="text-sm font-medium">Output</label>

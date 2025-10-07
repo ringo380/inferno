@@ -1,3 +1,4 @@
+#![allow(dead_code, unused_imports, unused_variables)]
 //! Backup & Recovery Command - New Architecture
 //!
 //! This module provides enterprise-grade backup and disaster recovery.

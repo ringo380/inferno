@@ -1,3 +1,4 @@
+#![allow(dead_code, unused_imports, unused_variables)]
 //! Package Command v2 - Model package manager operations
 //!
 //! Streamlined package management system for installing, removing, searching,

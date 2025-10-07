@@ -103,6 +103,18 @@ pub enum ResponseCacheCommand {
     },
 }
 
+/// Configuration for cache settings
+/// Reduces function signature from 8 parameters to 2
+pub struct CacheSettingsConfig {
+    pub enabled: Option<bool>,
+    pub max_entries: Option<usize>,
+    pub max_memory_mb: Option<u64>,
+    pub ttl_seconds: Option<u64>,
+    pub deduplication: Option<bool>,
+    pub compression: Option<bool>,
+    pub hash_algorithm: Option<HashAlgorithmArg>,
+}
+
 #[derive(Clone, Debug, ValueEnum)]
 pub enum HashAlgorithmArg {
     Sha256,
@@ -146,8 +158,7 @@ pub async fn execute(args: ResponseCacheArgs, config: &Config) -> Result<()> {
             compression,
             hash_algorithm,
         } => {
-            configure_cache(
-                config,
+            let settings = CacheSettingsConfig {
                 enabled,
                 max_entries,
                 max_memory_mb,
@@ -155,8 +166,8 @@ pub async fn execute(args: ResponseCacheArgs, config: &Config) -> Result<()> {
                 deduplication,
                 compression,
                 hash_algorithm,
-            )
-            .await
+            };
+            configure_cache(config, settings).await
         }
         ResponseCacheCommand::Benchmark {
             iterations,
@@ -363,37 +374,28 @@ async fn invalidate_cache(config: &Config, pattern: String) -> Result<()> {
     Ok(())
 }
 
-async fn configure_cache(
-    _config: &Config,
-    enabled: Option<bool>,
-    max_entries: Option<usize>,
-    max_memory_mb: Option<u64>,
-    ttl_seconds: Option<u64>,
-    deduplication: Option<bool>,
-    compression: Option<bool>,
-    hash_algorithm: Option<HashAlgorithmArg>,
-) -> Result<()> {
+async fn configure_cache(_config: &Config, settings: CacheSettingsConfig) -> Result<()> {
     println!("=== Response Cache Configuration Update ===");
 
-    if let Some(e) = enabled {
+    if let Some(e) = settings.enabled {
         println!("Enabled: {}", e);
     }
-    if let Some(max) = max_entries {
+    if let Some(max) = settings.max_entries {
         println!("Max entries: {}", max);
     }
-    if let Some(mem) = max_memory_mb {
+    if let Some(mem) = settings.max_memory_mb {
         println!("Max memory: {} MB", mem);
     }
-    if let Some(ttl) = ttl_seconds {
+    if let Some(ttl) = settings.ttl_seconds {
         println!("TTL: {} seconds", ttl);
     }
-    if let Some(dedup) = deduplication {
+    if let Some(dedup) = settings.deduplication {
         println!("Deduplication: {}", dedup);
     }
-    if let Some(comp) = compression {
+    if let Some(comp) = settings.compression {
         println!("Compression: {}", comp);
     }
-    if let Some(hash) = hash_algorithm {
+    if let Some(hash) = settings.hash_algorithm {
         println!("Hash algorithm: {:?}", hash);
     }
 

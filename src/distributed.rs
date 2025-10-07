@@ -1,3 +1,4 @@
+#![allow(dead_code, unused_imports, unused_variables)]
 use crate::{
     backends::{BackendConfig, BackendHandle, BackendType, InferenceParams},
     metrics::MetricsCollector,

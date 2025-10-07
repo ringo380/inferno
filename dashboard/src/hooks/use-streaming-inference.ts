@@ -11,6 +11,7 @@ interface StreamingInferenceState {
   isComplete: boolean;
   error: string | null;
   inferenceId: string | null;
+  progress: number;
 }
 
 interface StreamingTokenEvent {
@@ -28,6 +29,12 @@ interface StreamingErrorEvent {
   error: string;
 }
 
+interface StreamingProgressEvent {
+  inference_id: string;
+  progress: number;
+  partial_response?: string;
+}
+
 export function useStreamingInference() {
   const [state, setState] = useState<StreamingInferenceState>({
     isStreaming: false,
@@ -35,7 +42,14 @@ export function useStreamingInference() {
     isComplete: false,
     error: null,
     inferenceId: null,
+    progress: 0,
   });
+
+  const notifyNative = useCallback((title: string, body: string) => {
+    void tauriApi
+      .sendNativeNotification({ title, body })
+      .catch((error) => console.warn('Native notification failed:', error));
+  }, []);
 
   // Start streaming inference
   const startStreaming = useCallback(async (
@@ -50,6 +64,7 @@ export function useStreamingInference() {
         isComplete: false,
         error: null,
         inferenceId: null,
+        progress: 0,
       });
 
       const inferenceId = await tauriApi.inferStream(backendId, prompt, params);
@@ -57,6 +72,7 @@ export function useStreamingInference() {
       setState(prev => ({
         ...prev,
         inferenceId,
+        progress: 0,
       }));
 
       return inferenceId;
@@ -78,6 +94,7 @@ export function useStreamingInference() {
       isComplete: false,
       error: null,
       inferenceId: null,
+      progress: 0,
     });
   }, []);
 
@@ -87,6 +104,7 @@ export function useStreamingInference() {
     let unlistenComplete: (() => void) | null = null;
     let unlistenError: (() => void) | null = null;
     let unlistenStart: (() => void) | null = null;
+    let unlistenProgress: (() => void) | null = null;
 
     const setupListeners = async () => {
       // Listen for streaming start
@@ -96,6 +114,7 @@ export function useStreamingInference() {
           ...prev,
           inferenceId,
           isStreaming: true,
+          progress: 0,
         }));
       });
 
@@ -125,10 +144,13 @@ export function useStreamingInference() {
               isStreaming: false,
               isComplete: true,
               currentText: completeEvent.response, // Use final response
+              progress: 1,
             };
           }
           return prev;
         });
+
+        notifyNative('Inference Complete', 'Streaming response finished successfully.');
       });
 
       // Listen for errors
@@ -141,6 +163,25 @@ export function useStreamingInference() {
               ...prev,
               isStreaming: false,
               error: errorEvent.error,
+              progress: prev.progress > 0 ? prev.progress : 0,
+            };
+          }
+          return prev;
+        });
+
+        notifyNative('Inference Failed', errorEvent.error);
+      });
+
+      // Listen for progress updates
+      unlistenProgress = await listen('inference_progress', (event) => {
+        const progressEvent = event.payload as StreamingProgressEvent;
+        setState(prev => {
+          if (prev.inferenceId === progressEvent.inference_id) {
+            const progressValue = Math.min(Math.max(progressEvent.progress ?? 0, 0), 1);
+            return {
+              ...prev,
+              progress: progressValue,
+              currentText: progressEvent.partial_response ?? prev.currentText,
             };
           }
           return prev;
@@ -156,8 +197,9 @@ export function useStreamingInference() {
       if (unlistenToken) unlistenToken();
       if (unlistenComplete) unlistenComplete();
       if (unlistenError) unlistenError();
+      if (unlistenProgress) unlistenProgress();
     };
-  }, []);
+  }, [notifyNative]);
 
   return {
     ...state,

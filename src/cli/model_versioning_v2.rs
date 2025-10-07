@@ -1,3 +1,4 @@
+#![allow(dead_code, unused_imports, unused_variables)]
 //! Model Versioning Command - New Architecture
 //!
 //! This module provides model version management and rollback capabilities.

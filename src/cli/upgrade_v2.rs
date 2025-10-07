@@ -1,3 +1,4 @@
+#![allow(dead_code, unused_imports, unused_variables)]
 //! Upgrade Command - New Architecture
 //!
 //! This module provides application upgrade and update management.

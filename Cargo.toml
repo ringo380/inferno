@@ -186,6 +186,9 @@ assert_cmd = "2.0"
 predicates = "3.0"
 criterion = { version = "0.5", features = ["html_reports"] }
 
+[build-dependencies]
+tauri-build = { git = "https://github.com/tauri-apps/tauri", tag = "tauri-v2.8.5", package = "tauri-build" }
+
 [features]
 default = ["reqwest"]  # Minimal default - exclude heavy ML backends for fast development builds
 gguf = ["llama-cpp-2"]     # Enable GGUF/llama.cpp backend

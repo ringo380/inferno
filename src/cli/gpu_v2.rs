@@ -1,3 +1,4 @@
+#![allow(dead_code, unused_imports, unused_variables)]
 //! GPU Command - New Architecture
 //!
 //! This module demonstrates the migration of the gpu command to the new

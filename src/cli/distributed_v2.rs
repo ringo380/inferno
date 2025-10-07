@@ -1,3 +1,4 @@
+#![allow(dead_code, unused_imports, unused_variables)]
 //! Distributed Command - New Architecture
 //!
 //! This module provides distributed inference and worker pool management.

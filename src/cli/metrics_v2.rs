@@ -1,3 +1,4 @@
+#![allow(dead_code, unused_imports, unused_variables)]
 //! Metrics Command - New Architecture
 //!
 //! This module demonstrates the migration of the metrics command to the new

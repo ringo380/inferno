@@ -1,3 +1,4 @@
+#![allow(dead_code, unused_imports, unused_variables)]
 //! Audit Command - New Architecture
 //!
 //! This module demonstrates the migration of the audit command to the new

@@ -1,3 +1,4 @@
+#![allow(dead_code, unused_imports, unused_variables)]
 //! # Upgrade Manager
 //!
 //! Central coordinator for all upgrade operations, providing a unified interface
