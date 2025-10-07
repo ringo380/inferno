@@ -1,3 +1,4 @@
+#![allow(dead_code, unused_imports, unused_variables)]
 //! A/B Testing Command - New Architecture
 //!
 //! This module provides A/B testing functionality for model comparison.

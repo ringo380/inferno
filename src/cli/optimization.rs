@@ -1,3 +1,4 @@
+#![allow(dead_code, unused_imports, unused_variables)]
 // CLI module for optimization commands
 // Provides command-line interface for ML optimization features
 

@@ -1,3 +1,4 @@
+#![allow(dead_code, unused_imports, unused_variables)]
 //! Advanced Monitoring Command - New Architecture
 //!
 //! This module provides advanced monitoring and APM features with Prometheus integration.

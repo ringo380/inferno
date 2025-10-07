@@ -8,14 +8,14 @@ import { RecentActivity } from './recent-activity';
 import { SystemChart } from './system-chart';
 import { ModelStatus } from './model-status';
 import { QuickActions } from './quick-actions';
-import { useDashboardData, useSystemInfo, useMetrics, useInfernoMetrics } from '@/hooks/use-tauri-api';
+import { useDashboardData, useSystemInfo, useMetrics, useInfernoMetrics, useActiveProcesses } from '@/hooks/use-tauri-api';
 import { MetricsToggle, useMetricsScope } from '@/components/ui/metrics-toggle';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AnimatedCounter } from '@/components/ui/animated-counter';
-import { FlameSpinner } from '@/components/ui/loading-spinner';
 import { ErrorBoundary } from '@/components/ui/error-boundary';
 import { useRouter } from 'next/navigation';
 // import { PageTransition, StaggerContainer, div } from '@/components/ui/page-transition';
+import type { ReactNode } from 'react';
 import {
   Brain,
   Cpu,
@@ -42,11 +42,105 @@ export function DashboardOverviewTauri() {
   const { systemInfo, metrics, isLoading, error } = useDashboardData();
   const { metricsScope, setMetricsScope, isInfernoMode } = useMetricsScope();
   const { data: infernoMetrics, isLoading: infernoLoading } = useInfernoMetrics();
+  const { data: activeProcesses } = useActiveProcesses();
   const router = useRouter();
 
   // Use appropriate metrics based on toggle
   const currentMetrics = isInfernoMode ? infernoMetrics : metrics?.data;
   const isMetricsLoading = isInfernoMode ? infernoLoading : metrics?.isLoading;
+  const streamingSessions = activeProcesses?.streaming_sessions ?? 0;
+  const metricCards: ReactNode[] = [];
+
+  if (!isLoading && !isMetricsLoading) {
+    metricCards.push(
+      <MetricCard
+        key="metric-active-models"
+        title={isInfernoMode ? 'Active Models' : 'Models Loaded'}
+        value={
+          <AnimatedCounter
+            value={isInfernoMode ? (currentMetrics?.active_models || 0) : (currentMetrics?.models_loaded || 0)}
+          />
+        }
+        description={isInfernoMode ? 'Inferno active models' : 'Currently loaded models'}
+        icon={Brain}
+        trend="stable"
+        color="blue"
+      />
+    );
+
+    metricCards.push(
+      <MetricCard
+        key="metric-total-inferences"
+        title="Total Inferences"
+        value={<AnimatedCounter value={currentMetrics?.inference_count || 0} />}
+        description={`${currentMetrics?.success_count || 0} successful`}
+        icon={TrendingUp}
+        trend="up"
+        color="green"
+      />
+    );
+
+    metricCards.push(
+      <MetricCard
+        key="metric-latency"
+        title="Avg Response Time"
+        value={<AnimatedCounter value={Math.round(currentMetrics?.average_latency || 0)} suffix="ms" />}
+        description="Average inference latency"
+        icon={Zap}
+        trend="stable"
+        color="yellow"
+      />
+    );
+
+    metricCards.push(
+      <MetricCard
+        key="metric-cpu"
+        title={isInfernoMode ? 'Inferno CPU' : 'System CPU'}
+        value={
+          <AnimatedCounter
+            value={isInfernoMode ? (currentMetrics?.cpu_usage || 0) : (systemInfo?.data?.cpu_usage || 0)}
+            suffix="%"
+          />
+        }
+        description={isInfernoMode ? 'Inferno process usage' : (systemInfo?.data?.platform || 'System usage')}
+        icon={Cpu}
+        trend="stable"
+        color="blue"
+      />
+    );
+
+    if (isInfernoMode && typeof infernoMetrics?.gpu_usage === 'number') {
+      const gpuValue = Number.isFinite(infernoMetrics.gpu_usage)
+        ? `${infernoMetrics.gpu_usage.toFixed(1)}%`
+        : '0%';
+
+      metricCards.push(
+        <MetricCard
+          key="metric-gpu"
+          title="GPU Utilization"
+          value={gpuValue}
+          description="Current GPU load"
+          icon={Activity}
+          trend="stable"
+          color="purple"
+        />
+      );
+    }
+
+    if (isInfernoMode) {
+      metricCards.push(
+        <MetricCard
+          key="metric-streaming"
+          title="Streaming Sessions"
+          value={<AnimatedCounter value={streamingSessions} />}
+          description="Active streaming outputs"
+          icon={Play}
+          trend={streamingSessions > 0 ? 'up' : 'stable'}
+          color="green"
+        />
+      );
+    }
+  }
 
   if (error) {
     return (
@@ -72,12 +166,9 @@ export function DashboardOverviewTauri() {
   }
 
   return (
-    <div>
-      <div className="space-y-6">
-        {/* Page Header */}
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
         <div>
-          <div className="flex items-center justify-between">
-            <div>
           <h1 className="text-3xl font-bold tracking-tight">Dashboard Overview</h1>
           <p className="text-muted-foreground">
             Welcome to your Inferno AI/ML platform command center
@@ -89,26 +180,21 @@ export function DashboardOverviewTauri() {
             onChange={setMetricsScope}
             className="hidden sm:flex"
           />
-          <Badge variant={systemInfo?.data ? "success" : "secondary"} className="flex items-center gap-1">
+          <Badge variant={systemInfo?.data ? 'success' : 'secondary'} className="flex items-center gap-1">
             <Activity className="h-3 w-3" />
-            {systemInfo?.data ? "All Systems Operational" : "Connecting..."}
+            {systemInfo?.data ? 'All Systems Operational' : 'Connecting...'}
           </Badge>
           <Button onClick={() => router.push('/inference')}>
             <Play className="h-4 w-4 mr-2" />
             Run Inference
           </Button>
-          </div>
-            </div>
-          </div>
         </div>
+      </div>
 
-        {/* Key Metrics Grid */}
-        <div>
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {isLoading || isMetricsLoading ? (
-          <>
-            {[...Array(4)].map((_, i) => (
-              <Card key={i}>
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5">
+        {isLoading || isMetricsLoading
+          ? Array.from({ length: 4 }).map((_, i) => (
+              <Card key={`metric-skeleton-${i}`}>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                   <Skeleton className="h-4 w-24" />
                   <Skeleton className="h-4 w-4" />
@@ -118,58 +204,18 @@ export function DashboardOverviewTauri() {
                   <Skeleton className="h-3 w-20" />
                 </CardContent>
               </Card>
-            ))}
-          </>
-        ) : (
-          <>
-            <MetricCard
-              title={isInfernoMode ? "Active Models" : "Models Loaded"}
-              value={<AnimatedCounter value={isInfernoMode ? (currentMetrics?.active_models || 0) : (currentMetrics?.models_loaded || 0)} />}
-              description={isInfernoMode ? "Inferno active models" : "Currently loaded models"}
-              icon={Brain}
-              trend="stable"
-              color="blue"
-            />
-            <MetricCard
-              title="Total Inferences"
-              value={<AnimatedCounter value={currentMetrics?.inference_count || 0} />}
-              description={`${currentMetrics?.success_count || 0} successful`}
-              icon={TrendingUp}
-              trend="up"
-              color="green"
-            />
-            <MetricCard
-              title="Avg Response Time"
-              value={<AnimatedCounter value={Math.round(currentMetrics?.average_latency || 0)} suffix="ms" />}
-              description="Average inference latency"
-              icon={Zap}
-              trend="stable"
-              color="yellow"
-            />
-            <MetricCard
-              title={isInfernoMode ? "Inferno CPU" : "System CPU"}
-              value={<AnimatedCounter value={isInfernoMode ? (currentMetrics?.cpu_usage || 0) : (systemInfo?.data?.cpu_usage || 0)} suffix="%" />}
-              description={isInfernoMode ? "Inferno process usage" : (systemInfo?.data?.platform || "System usage")}
-              icon={Cpu}
-              trend="stable"
-              color="blue"
-            />
-          </>
-        )}
-        </div>
+            ))
+          : metricCards}
+      </div>
 
-        {/* Main Content Grid */}
-        <div>
-          <div className="grid gap-6 lg:grid-cols-3">
-        {/* System Performance Chart */}
+      <div className="grid gap-6 lg:grid-cols-3">
         <Card className="lg:col-span-2">
           <CardHeader>
-            <CardTitle>{isInfernoMode ? "Inferno Performance" : "System Performance"}</CardTitle>
+            <CardTitle>{isInfernoMode ? 'Inferno Performance' : 'System Performance'}</CardTitle>
             <CardDescription>
               {isInfernoMode
-                ? "Real-time Inferno-specific metrics and inference performance"
-                : "Real-time system metrics and inference performance"
-              }
+                ? 'Real-time Inferno-specific metrics and inference performance'
+                : 'Real-time system metrics and inference performance'}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -179,7 +225,6 @@ export function DashboardOverviewTauri() {
           </CardContent>
         </Card>
 
-        {/* Quick Actions */}
         <Card>
           <CardHeader>
             <CardTitle>Quick Actions</CardTitle>
@@ -192,12 +237,8 @@ export function DashboardOverviewTauri() {
           </CardContent>
         </Card>
       </div>
-        </div>
 
-        {/* Secondary Content Grid */}
-        <div>
-          <div className="grid gap-6 lg:grid-cols-2">
-        {/* Model Status */}
+      <div className="grid gap-6 lg:grid-cols-2">
         <Card>
           <CardHeader>
             <CardTitle>Model Status</CardTitle>
@@ -210,7 +251,6 @@ export function DashboardOverviewTauri() {
           </CardContent>
         </Card>
 
-        {/* Recent Activity */}
         <Card>
           <CardHeader>
             <CardTitle>Recent Activity</CardTitle>
@@ -223,11 +263,8 @@ export function DashboardOverviewTauri() {
           </CardContent>
         </Card>
       </div>
-        </div>
 
-        {/* System Resource Overview */}
-        <div>
-          <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-3">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">CPU Usage</CardTitle>
@@ -239,7 +276,7 @@ export function DashboardOverviewTauri() {
             ) : (
               <>
                 <div className="text-2xl font-bold">
-                  {systemInfo?.data ? formatCpuUsage(systemInfo.data.cpu_usage) : "0%"}
+                  {systemInfo?.data ? formatCpuUsage(systemInfo.data.cpu_usage) : '0%'}
                 </div>
                 <div className="w-full bg-secondary rounded-full h-2 mt-2">
                   <div
@@ -248,7 +285,7 @@ export function DashboardOverviewTauri() {
                   ></div>
                 </div>
                 <p className="text-xs text-muted-foreground mt-2">
-                  {systemInfo?.data ? `${systemInfo.data.cpu_cores} cores • ${systemInfo.data.arch}` : "Loading..."}
+                  {systemInfo?.data ? `${systemInfo.data.cpu_cores} cores • ${systemInfo.data.arch}` : 'Loading...'}
                 </p>
               </>
             )}
@@ -266,7 +303,7 @@ export function DashboardOverviewTauri() {
             ) : (
               <>
                 <div className="text-2xl font-bold">
-                  {systemInfo?.data ? formatMemorySize(systemInfo.data.used_memory) : "0 GB"}
+                  {systemInfo?.data ? formatMemorySize(systemInfo.data.used_memory) : '0 GB'}
                 </div>
                 <div className="w-full bg-secondary rounded-full h-2 mt-2">
                   <div
@@ -277,10 +314,9 @@ export function DashboardOverviewTauri() {
                   ></div>
                 </div>
                 <p className="text-xs text-muted-foreground mt-2">
-                  {systemInfo?.data ?
-                    `${Math.round((systemInfo.data.used_memory / systemInfo.data.total_memory) * 100)}% of ${formatMemorySize(systemInfo.data.total_memory)}`
-                    : "Loading..."
-                  }
+                  {systemInfo?.data
+                    ? `${Math.round((systemInfo.data.used_memory / systemInfo.data.total_memory) * 100)}% of ${formatMemorySize(systemInfo.data.total_memory)}`
+                    : 'Loading...'}
                 </p>
               </>
             )}
@@ -315,8 +351,6 @@ export function DashboardOverviewTauri() {
             )}
           </CardContent>
         </Card>
-      </div>
-        </div>
       </div>
     </div>
   );

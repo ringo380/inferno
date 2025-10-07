@@ -434,10 +434,7 @@ pub async fn execute(args: ConvertArgs, config: &Config) -> Result<()> {
     }
 }
 
-async fn convert_model(
-    converter: &ModelConverter,
-    config: ConvertModelConfig,
-) -> Result<()> {
+async fn convert_model(converter: &ModelConverter, config: ConvertModelConfig) -> Result<()> {
     println!(
         "Converting model: {} -> {}",
         config.input.display(),
@@ -490,10 +487,7 @@ async fn convert_model(
     Ok(())
 }
 
-async fn optimize_model(
-    converter: &ModelConverter,
-    config: OptimizeModelConfig,
-) -> Result<()> {
+async fn optimize_model(converter: &ModelConverter, config: OptimizeModelConfig) -> Result<()> {
     println!(
         "Optimizing model: {} -> {}",
         config.input.display(),

@@ -315,6 +315,7 @@ impl ModelRepositoryService {
 pub struct ModelDownloadManager {
     downloads: std::sync::Arc<std::sync::Mutex<HashMap<String, DownloadProgress>>>,
     client: reqwest::Client,
+    default_target: Option<String>,
 }
 
 impl ModelDownloadManager {
@@ -322,7 +323,13 @@ impl ModelDownloadManager {
         Self {
             downloads: std::sync::Arc::new(std::sync::Mutex::new(HashMap::new())),
             client: reqwest::Client::new(),
+            default_target: None,
         }
+    }
+
+    pub fn with_default_target(mut self, target: String) -> Self {
+        self.default_target = Some(target);
+        self
     }
 
     pub async fn start_download(&self, model: &ExternalModelInfo, target_dir: &str) -> Result<String> {
@@ -357,7 +364,12 @@ impl ModelDownloadManager {
         let downloads_ref = self.downloads.clone();
         let client = self.client.clone();
         let download_url = file_to_download.download_url.clone();
-        let target_path = format!("{}/{}", target_dir, file_to_download.filename);
+        let target_root = if target_dir.trim().is_empty() {
+            self.default_target.clone().unwrap_or_else(|| ".".to_string())
+        } else {
+            target_dir.to_string()
+        };
+        let target_path = format!("{}/{}", target_root, file_to_download.filename);
         let download_id_clone = download_id.clone();
 
         tokio::spawn(async move {

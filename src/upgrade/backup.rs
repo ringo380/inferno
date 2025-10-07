@@ -1,3 +1,4 @@
+#![allow(dead_code, unused_imports, unused_variables)]
 //! # Backup Manager
 //!
 //! Comprehensive backup and restore system for safe application upgrades

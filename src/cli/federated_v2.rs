@@ -1,3 +1,4 @@
+#![allow(dead_code, unused_imports, unused_variables)]
 //! Federated Learning Command - New Architecture
 //!
 //! This module provides federated learning and edge deployment management.

@@ -1,3 +1,4 @@
+#![allow(dead_code, unused_imports, unused_variables)]
 //! API Gateway Command - New Architecture
 //!
 //! This module provides API gateway management with rate limiting and load balancing.

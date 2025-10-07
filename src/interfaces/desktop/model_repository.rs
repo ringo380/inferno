@@ -460,6 +460,12 @@ impl ModelDownloadManager {
         false
     }
 
+    pub fn clear_completed_downloads(&self) {
+        if let Ok(mut downloads) = self.downloads.lock() {
+            downloads.retain(|_, progress| progress.status != "completed");
+        }
+    }
+
     async fn download_file_with_progress(
         client: reqwest::Client,
         url: String,

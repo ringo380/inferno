@@ -1,3 +1,4 @@
+#![allow(dead_code, unused_imports, unused_variables)]
 // Model quantization module for Inferno AI/ML platform
 // Supports INT8, INT4, FP16 quantization for GGUF and ONNX models
 

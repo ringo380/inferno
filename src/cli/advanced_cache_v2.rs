@@ -1,3 +1,4 @@
+#![allow(dead_code, unused_imports, unused_variables)]
 //! Advanced Cache Command - New Architecture
 //!
 //! This module provides advanced caching and memory management features.

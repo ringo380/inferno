@@ -159,6 +159,18 @@ pub enum ApiGatewayCommand {
     },
 }
 
+/// Configuration for starting API gateway
+/// Reduces function signature from 8 parameters to 2
+pub struct StartGatewayConfig {
+    pub config_override: Option<PathBuf>,
+    pub daemon: bool,
+    pub bind_address: Option<String>,
+    pub port: Option<u16>,
+    pub debug: bool,
+    pub no_rate_limiting: bool,
+    pub no_auth: bool,
+}
+
 #[derive(Debug, Subcommand)]
 pub enum RouteAction {
     #[command(about = "List all routes")]
@@ -1040,8 +1052,7 @@ pub async fn execute(args: ApiGatewayArgs, config: &Config) -> Result<()> {
             no_rate_limiting,
             no_auth,
         } => {
-            handle_start_command(
-                config,
+            let start_config = StartGatewayConfig {
                 config_override,
                 daemon,
                 bind_address,
@@ -1049,8 +1060,8 @@ pub async fn execute(args: ApiGatewayArgs, config: &Config) -> Result<()> {
                 debug,
                 no_rate_limiting,
                 no_auth,
-            )
-            .await
+            };
+            handle_start_command(config, start_config).await
         }
 
         ApiGatewayCommand::Stop { force, timeout } => handle_stop_command(force, timeout).await,
@@ -1103,38 +1114,29 @@ pub async fn execute(args: ApiGatewayArgs, config: &Config) -> Result<()> {
     }
 }
 
-async fn handle_start_command(
-    config: &Config,
-    _config_override: Option<PathBuf>,
-    daemon: bool,
-    bind_address: Option<String>,
-    port: Option<u16>,
-    debug: bool,
-    no_rate_limiting: bool,
-    no_auth: bool,
-) -> Result<()> {
+async fn handle_start_command(config: &Config, start_config: StartGatewayConfig) -> Result<()> {
     info!("Starting API Gateway");
 
     // Load configuration with overrides
     let mut gateway_config = config.api_gateway.clone();
 
-    if let Some(addr) = bind_address {
+    if let Some(addr) = start_config.bind_address {
         gateway_config.bind_address = addr;
     }
 
-    if let Some(p) = port {
+    if let Some(p) = start_config.port {
         gateway_config.port = p;
     }
 
-    if no_rate_limiting {
+    if start_config.no_rate_limiting {
         gateway_config.rate_limiting.enabled = false;
     }
 
-    if no_auth {
+    if start_config.no_auth {
         gateway_config.authentication.enabled = false;
     }
 
-    if debug {
+    if start_config.debug {
         info!("Debug mode enabled");
     }
 
@@ -1142,7 +1144,7 @@ async fn handle_start_command(
     let gateway = ApiGateway::new(gateway_config).await?;
     gateway.start().await?;
 
-    if daemon {
+    if start_config.daemon {
         info!("Running in daemon mode");
         // In daemon mode, we would typically detach from the terminal
         // For now, we'll just run in the background

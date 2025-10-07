@@ -1,3 +1,4 @@
+#![allow(dead_code, unused_imports, unused_variables)]
 //! # Update Downloader
 //!
 //! Secure download system for application updates with cryptographic verification,

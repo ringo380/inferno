@@ -49,6 +49,7 @@ pub struct MetricsSnapshot {
     pub error_count: u64,
     pub average_latency: f64,
     pub models_loaded: u32,
+    pub active_streaming_sessions: u32,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -58,6 +59,7 @@ pub struct InfernoMetrics {
     pub gpu_usage: Option<f32>,
     pub active_models: u32,
     pub active_inferences: u32,
+    pub active_streaming_sessions: u32,
     pub inference_count: u64,
     pub success_count: u64,
     pub error_count: u64,

@@ -1,3 +1,4 @@
+#![allow(dead_code, unused_imports, unused_variables)]
 use crate::logging_audit::{
     ComplianceReport, ComplianceStandard, IntegrityReport, IntegrityStatus,
 };

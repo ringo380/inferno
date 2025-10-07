@@ -1,13 +1,13 @@
 use anyhow::Result;
-use inferno::backends::{Backend, BackendHandle, BackendType, BackendConfig, InferenceParams as InfernoInferenceParams, InferenceMetrics};
-use inferno::models::{ModelInfo as InfernoModelInfo, ModelManager};
+use inferno::backends::{BackendHandle, BackendType, BackendConfig, InferenceParams as InfernoInferenceParams, TokenStream};
+use inferno::models::ModelManager;
 use inferno::config::Config;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicU32, Ordering};
 use tokio::sync::RwLock;
 use uuid::Uuid;
-use std::path::PathBuf;
 use crate::activity_logger::{ActivityLogger, ActivityType, ActivityStatus};
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -28,14 +28,34 @@ pub struct InferenceParams {
     pub top_p: Option<f32>,
     pub max_tokens: Option<u32>,
     pub stream: Option<bool>,
+    pub stop_sequences: Option<Vec<String>>,
+    pub seed: Option<u64>,
 }
 
 pub struct BackendManager {
-    config: Arc<RwLock<Config>>,
     model_manager: Arc<RwLock<ModelManager>>,
     loaded_backends: Arc<Mutex<HashMap<String, BackendHandle>>>,
     global_metrics: Arc<Mutex<GlobalMetrics>>,
     activity_logger: Arc<ActivityLogger>,
+    active_inferences: Arc<AtomicU32>,
+}
+
+#[derive(Clone)]
+pub struct ActiveInferenceGuard {
+    counter: Arc<AtomicU32>,
+}
+
+impl ActiveInferenceGuard {
+    fn new(counter: Arc<AtomicU32>) -> Self {
+        counter.fetch_add(1, Ordering::SeqCst);
+        Self { counter }
+    }
+}
+
+impl Drop for ActiveInferenceGuard {
+    fn drop(&mut self) {
+        self.counter.fetch_sub(1, Ordering::SeqCst);
+    }
 }
 
 #[derive(Debug, Clone, Default)]
@@ -75,11 +95,11 @@ impl BackendManager {
         let model_manager = ModelManager::new(&models_dir);
 
         Ok(Self {
-            config: Arc::new(RwLock::new(config)),
             model_manager: Arc::new(RwLock::new(model_manager)),
             loaded_backends: Arc::new(Mutex::new(HashMap::new())),
             global_metrics: Arc::new(Mutex::new(GlobalMetrics::default())),
             activity_logger,
+            active_inferences: Arc::new(AtomicU32::new(0)),
         })
     }
 
@@ -233,87 +253,139 @@ impl BackendManager {
 
     pub async fn infer(&self, backend_id: String, prompt: String, params: InferenceParams) -> Result<String> {
         let start_time = std::time::Instant::now();
+        let _guard = self.begin_inference();
 
-        // Log the start of inference
         let prompt_tokens = prompt.split_whitespace().count() as u32;
         self.activity_logger.log_inference(
             &backend_id,
             prompt_tokens,
-            0, // completion_tokens not known yet
-            0, // duration not known yet
-            ActivityStatus::InProgress
+            0,
+            0,
+            ActivityStatus::InProgress,
         );
 
-        // Get the backend handle
         let backend_handle = {
             let loaded_backends = self.loaded_backends.lock().unwrap();
-            loaded_backends.get(&backend_id)
+            loaded_backends
+                .get(&backend_id)
                 .ok_or_else(|| {
                     self.activity_logger.log_inference(
                         &backend_id,
                         prompt_tokens,
-                        0, // no completion tokens for error
+                        0,
                         start_time.elapsed().as_millis() as u64,
-                        ActivityStatus::Error
+                        ActivityStatus::Error,
                     );
                     anyhow::anyhow!("Backend not found: {}", backend_id)
                 })?
                 .clone()
         };
 
-        // Convert parameters
         let inferno_params = InfernoInferenceParams {
             max_tokens: params.max_tokens.unwrap_or(512),
             temperature: params.temperature.unwrap_or(0.7),
             top_p: params.top_p.unwrap_or(0.9),
             stream: params.stream.unwrap_or(false),
+            stop_sequences: params.stop_sequences.clone().unwrap_or_default(),
+            seed: params.seed,
         };
 
-        // Perform inference
         let result = backend_handle.infer(&prompt, &inferno_params).await;
+        let duration_ms = start_time.elapsed().as_millis() as u64;
 
-        // Update metrics and log result
-        {
-            let mut metrics = self.global_metrics.lock().unwrap();
-            let elapsed = start_time.elapsed().as_millis() as f64;
-
-            match &result {
-                Ok(output) => {
-                    metrics.inference_count += 1;
-                    metrics.success_count += 1;
-
-                    // Update rolling average latency
-                    let current_avg = metrics.average_latency;
-                    let count = metrics.inference_count as f64;
-                    metrics.average_latency = ((current_avg * (count - 1.0)) + elapsed) / count;
-
-                    // Log successful inference
-                    let completion_tokens = output.split_whitespace().count() as u32;
-                    self.activity_logger.log_inference(
-                        &backend_id,
-                        prompt_tokens,
-                        completion_tokens,
-                        elapsed as u64,
-                        ActivityStatus::Success
-                    );
-                }
-                Err(e) => {
-                    metrics.inference_count += 1;
-                    metrics.error_count += 1;
-
-                    // Log failed inference
-                    self.activity_logger.log_inference(
-                        &backend_id,
-                        prompt_tokens,
-                        0, // no completion tokens for error
-                        elapsed as u64,
-                        ActivityStatus::Error
-                    );
-                }
+        match &result {
+            Ok(output) => {
+                let completion_tokens = output.split_whitespace().count() as u32;
+                self.record_inference_result(
+                    &backend_id,
+                    prompt_tokens,
+                    completion_tokens,
+                    duration_ms,
+                    ActivityStatus::Success,
+                );
+            }
+            Err(_) => {
+                self.record_inference_result(
+                    &backend_id,
+                    prompt_tokens,
+                    0,
+                    duration_ms,
+                    ActivityStatus::Error,
+                );
             }
         }
 
         result
+    }
+
+    pub fn begin_inference(&self) -> ActiveInferenceGuard {
+        ActiveInferenceGuard::new(self.active_inferences.clone())
+    }
+
+    pub fn get_active_inference_count(&self) -> u32 {
+        self.active_inferences.load(Ordering::SeqCst)
+    }
+
+    pub fn record_inference_result(
+        &self,
+        backend_id: &str,
+        prompt_tokens: u32,
+        completion_tokens: u32,
+        duration_ms: u64,
+        status: ActivityStatus,
+    ) {
+        {
+            let mut metrics = self.global_metrics.lock().unwrap();
+            metrics.inference_count += 1;
+
+            match status {
+                ActivityStatus::Success => {
+                    metrics.success_count += 1;
+                    let elapsed = duration_ms as f64;
+                    let current_avg = metrics.average_latency;
+                    let count = metrics.inference_count as f64;
+                    metrics.average_latency = ((current_avg * (count - 1.0)) + elapsed) / count;
+                }
+                ActivityStatus::Error => {
+                    metrics.error_count += 1;
+                }
+                _ => {}
+            }
+        }
+
+        self.activity_logger.log_inference(
+            backend_id,
+            prompt_tokens,
+            completion_tokens,
+            duration_ms,
+            status,
+        );
+    }
+
+    pub async fn infer_stream(
+        &self,
+        backend_id: &str,
+        prompt: &str,
+        params: &InferenceParams,
+    ) -> Result<TokenStream> {
+        let backend_handle = {
+            let loaded_backends = self.loaded_backends.lock().unwrap();
+            loaded_backends
+                .get(backend_id)
+                .ok_or_else(|| anyhow::anyhow!("Backend not found: {}", backend_id))?
+                .clone()
+        };
+
+        let inferno_params = InfernoInferenceParams {
+            max_tokens: params.max_tokens.unwrap_or(512),
+            temperature: params.temperature.unwrap_or(0.7),
+            top_p: params.top_p.unwrap_or(0.9),
+            stream: true,
+            stop_sequences: params.stop_sequences.clone().unwrap_or_default(),
+            seed: params.seed,
+        };
+
+        backend_handle.infer_stream(prompt, &inferno_params).await
     }
 
     pub fn get_metrics(&self) -> GlobalMetrics {

@@ -1,3 +1,4 @@
+#![allow(dead_code, unused_imports, unused_variables)]
 //! Marketplace Command v2 - Model marketplace and registry management
 //!
 //! Streamlined marketplace operations for discovering, publishing, and managing models.

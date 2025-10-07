@@ -1,3 +1,4 @@
+#![allow(dead_code, unused_imports, unused_variables)]
 //! Performance Optimization Command - New Architecture
 //!
 //! This module provides enterprise performance optimization and auto-tuning.

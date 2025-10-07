@@ -8,6 +8,7 @@ import { KeyboardShortcutsProvider } from '@/components/providers/keyboard-short
 import { RealTimeUpdateProvider } from '@/components/providers/real-time-updates';
 import { NavigationProvider } from '@/contexts/navigation-context';
 import { ExitConfirmation } from '@/components/ui/exit-confirmation';
+import { DesktopBridge } from '@/components/providers/desktop-bridge';
 import { useState } from 'react';
 
 export function Providers({ children }: { children: React.ReactNode }) {
@@ -25,21 +26,29 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <ThemeProvider
-        attribute="class"
-        defaultTheme="dark"
-        enableSystem
-        disableTransitionOnChange
-      >
-        {children}
-        <Toaster
-          position="top-right"
-          toastOptions={{
-            duration: 4000,
-            className: 'dark:bg-gray-800 dark:text-white',
-          }}
-        />
-      </ThemeProvider>
+      <NavigationProvider>
+        <KeyboardShortcutsProvider>
+          <RealTimeUpdateProvider>
+            <ThemeProvider
+              attribute="class"
+              defaultTheme="dark"
+              enableSystem
+              disableTransitionOnChange
+            >
+              <DesktopBridge />
+              {children}
+              <Toaster
+                position="top-right"
+                toastOptions={{
+                  duration: 4000,
+                  className: 'dark:bg-gray-800 dark:text-white',
+                }}
+              />
+              <ExitConfirmation />
+            </ThemeProvider>
+          </RealTimeUpdateProvider>
+        </KeyboardShortcutsProvider>
+      </NavigationProvider>
       <ReactQueryDevtools initialIsOpen={false} />
     </QueryClientProvider>
   );

@@ -527,6 +527,17 @@ impl Command for SecurityToken {
 // SecurityRateLimit - Rate limiting management
 // ============================================================================
 
+/// Configuration for rate limit settings
+/// Reduces SecurityRateLimit::new() signature from 8 parameters to 3
+pub struct RateLimitSettings {
+    pub identifier: Option<String>,
+    pub ip: Option<IpAddr>,
+    pub per_minute: Option<u32>,
+    pub per_hour: Option<u32>,
+    pub per_day: Option<u32>,
+    pub test_requests: Option<u32>,
+}
+
 /// Manage rate limits (status, set, reset, test)
 pub struct SecurityRateLimit {
     config: Config,
@@ -540,25 +551,16 @@ pub struct SecurityRateLimit {
 }
 
 impl SecurityRateLimit {
-    pub fn new(
-        config: Config,
-        operation: String,
-        identifier: Option<String>,
-        ip: Option<IpAddr>,
-        per_minute: Option<u32>,
-        per_hour: Option<u32>,
-        per_day: Option<u32>,
-        test_requests: Option<u32>,
-    ) -> Self {
+    pub fn new(config: Config, operation: String, settings: RateLimitSettings) -> Self {
         Self {
             config,
             operation,
-            identifier,
-            ip,
-            per_minute,
-            per_hour,
-            per_day,
-            test_requests,
+            identifier: settings.identifier,
+            ip: settings.ip,
+            per_minute: settings.per_minute,
+            per_hour: settings.per_hour,
+            per_day: settings.per_day,
+            test_requests: settings.test_requests,
         }
     }
 }
@@ -1123,16 +1125,15 @@ mod tests {
     #[tokio::test]
     async fn test_security_ratelimit_validation_invalid_operation() {
         let config = Config::default();
-        let cmd = SecurityRateLimit::new(
-            config.clone(),
-            "invalid".to_string(),
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-        );
+        let settings = RateLimitSettings {
+            identifier: None,
+            ip: None,
+            per_minute: None,
+            per_hour: None,
+            per_day: None,
+            test_requests: None,
+        };
+        let cmd = SecurityRateLimit::new(config.clone(), "invalid".to_string(), settings);
         let ctx = CommandContext::new(config);
 
         let result = cmd.validate(&ctx).await;

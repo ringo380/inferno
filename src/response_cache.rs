@@ -1,3 +1,4 @@
+#![allow(dead_code, unused_imports, unused_variables)]
 use crate::metrics::MetricsCollector;
 use anyhow::{Context, Result};
 use blake3;
@@ -1163,7 +1164,7 @@ pub struct SmartCachingStrategy {
 }
 
 #[derive(Debug, Clone)]
-struct RequestPattern {
+pub(crate) struct RequestPattern {
     frequency: u64,
     last_seen: SystemTime,
     response_time_ms: u64,
@@ -1214,7 +1215,7 @@ impl SmartCachingStrategy {
         pattern.cache_worthiness_score > 0.3 && response_time_ms > 100
     }
 
-    pub async fn get_pattern_stats(&self) -> HashMap<String, RequestPattern> {
+    pub(crate) async fn get_pattern_stats(&self) -> HashMap<String, RequestPattern> {
         self.request_patterns.read().await.clone()
     }
 }

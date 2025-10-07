@@ -1,55 +1,15 @@
 {
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Inferno AI Runner",
+  "version": "0.1.0",
+  "identifier": "com.inferno.ai.runner",
   "build": {
     "beforeDevCommand": "cd dashboard && npm run dev",
     "beforeBuildCommand": "cd dashboard && npm run build",
-    "devPath": "http://localhost:3457",
-    "distDir": "../dashboard/out",
-    "withGlobalTauri": false
+    "devUrl": "http://localhost:3457",
+    "frontendDist": "../dashboard/out"
   },
-  "package": {
-    "productName": "Inferno AI Runner",
-    "version": "0.1.0"
-  },
-  "tauri": {
-    "bundle": {
-      "active": true,
-      "targets": "all",
-      "identifier": "com.inferno.ai.runner",
-      "icon": [
-        "icons/32x32.png",
-        "icons/128x128.png",
-        "icons/128x128@2x.png",
-        "icons/icon.icns",
-        "icons/icon.ico"
-      ],
-      "resources": [],
-      "externalBin": [],
-      "copyright": "",
-      "category": "DeveloperTool",
-      "shortDescription": "Offline AI/ML model runner for GGUF and ONNX models",
-      "longDescription": "An enterprise-grade offline AI/ML model runner with support for GGUF and ONNX models, featuring performance optimization, distributed inference, and comprehensive monitoring.",
-      "macOS": {
-        "frameworks": [],
-        "minimumSystemVersion": "11.0",
-        "exceptionDomain": "",
-        "signingIdentity": null,
-        "providerShortName": null,
-        "entitlements": "entitlements.plist"
-      },
-      "windows": {
-        "certificateThumbprint": null,
-        "digestAlgorithm": "sha256",
-        "timestampUrl": ""
-      },
-      "linux": {
-        "deb": {
-          "depends": []
-        }
-      }
-    },
-    "security": {
-      "csp": null
-    },
+  "app": {
     "windows": [
       {
         "fullscreen": false,
@@ -68,18 +28,54 @@
         "titleBarStyle": "Transparent",
         "transparent": false,
         "hiddenTitle": false,
-        "acceptFirstMouse": false,
-        "tabbingIdentifier": null,
-        "userAgent": null,
         "label": "main"
       }
     ],
-    "systemTray": {
+    "security": {
+      "csp": null
+    },
+    "macOSPrivateApi": true,
+    "trayIcon": {
       "iconPath": "icons/icon.png",
       "iconAsTemplate": true,
       "menuOnLeftClick": false,
       "tooltip": "Inferno AI Runner"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "resources": [],
+    "externalBin": [],
+    "copyright": "",
+    "category": "DeveloperTool",
+    "shortDescription": "Offline AI/ML model runner for GGUF and ONNX models",
+    "longDescription": "An enterprise-grade offline AI/ML model runner with support for GGUF and ONNX models, featuring performance optimization, distributed inference, and comprehensive monitoring.",
+    "macOS": {
+      "frameworks": [],
+      "minimumSystemVersion": "11.0",
+      "exceptionDomain": "",
+      "signingIdentity": null,
+      "providerShortName": null,
+      "entitlements": "entitlements.plist"
     },
-    "macOSPrivateApi": true
-  }
+    "windows": {
+      "certificateThumbprint": null,
+      "digestAlgorithm": "sha256",
+      "timestampUrl": ""
+    },
+    "linux": {
+      "deb": {
+        "depends": []
+      }
+    }
+  },
+  "plugins": {}
 }

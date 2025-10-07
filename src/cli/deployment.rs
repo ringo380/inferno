@@ -591,10 +591,7 @@ pub async fn handle_deployment_command(args: DeploymentCliArgs) -> Result<()> {
     }
 }
 
-async fn handle_deploy(
-    manager: &mut DeploymentManager,
-    config: DeployConfig,
-) -> Result<()> {
+async fn handle_deploy(manager: &mut DeploymentManager, config: DeployConfig) -> Result<()> {
     info!("Starting deployment to {} environment", config.environment);
 
     // Convert config to DeploymentArgs (parses set_values into custom_values)

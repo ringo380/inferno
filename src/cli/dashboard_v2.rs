@@ -1,3 +1,4 @@
+#![allow(dead_code, unused_imports, unused_variables)]
 //! Dashboard Command - New Architecture
 //!
 //! This module provides web-based admin dashboard functionality.

@@ -1,3 +1,4 @@
+#![allow(dead_code, unused_imports, unused_variables)]
 //! Serve Command - New Architecture
 //!
 //! This module provides HTTP API server management for local inference endpoints.

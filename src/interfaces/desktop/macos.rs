@@ -12,7 +12,7 @@
 use serde::{Deserialize, Serialize};
 use tauri::{
     command,
-    menu::{Menu, MenuItem, Submenu},
+    menu::Menu,
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     AppHandle, Manager, Runtime, Window,
 };
@@ -63,7 +63,7 @@ pub enum VibrancyEffect {
 /// - Inference menu (Run, Stream, Stop, Batch)
 /// - Window menu (Minimize, Zoom, Bring All to Front)
 /// - Help menu (Documentation, Report Issue, About)
-pub fn create_app_menu<R: Runtime>(app: &AppHandle<R>) -> Result<Menu<R>, String> {
+pub fn create_app_menu<R: Runtime>(_app: &AppHandle<R>) -> Result<Menu<R>, String> {
     // TODO: Implement Tauri v2 menu API
     // This will replace the old Tauri v1 Menu API
     //
@@ -109,7 +109,7 @@ pub fn create_system_tray<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> 
 }
 
 /// Create the system tray menu
-fn create_tray_menu<R: Runtime>(app: &AppHandle<R>) -> Result<Menu<R>, String> {
+fn create_tray_menu<R: Runtime>(_app: &AppHandle<R>) -> Result<Menu<R>, String> {
     // TODO: Implement Tauri v2 tray menu
     //
     // Example Tauri v2 API:
@@ -241,7 +241,7 @@ pub async fn get_system_appearance() -> Result<String, String> {
 /// This creates the native macOS "frosted glass" effect on the window.
 #[command]
 pub async fn set_window_vibrancy<R: Runtime>(
-    window: Window<R>,
+    _window: Window<R>,
     effect: VibrancyEffect,
 ) -> Result<(), String> {
     // TODO: Implement using Tauri window effects API

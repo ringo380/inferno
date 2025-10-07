@@ -1,3 +1,4 @@
+#![allow(dead_code, unused_imports, unused_variables)]
 //! # Update Checker Service
 //!
 //! Background service that periodically checks for application updates from

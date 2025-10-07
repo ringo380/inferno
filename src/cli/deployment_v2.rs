@@ -1,3 +1,4 @@
+#![allow(dead_code, unused_imports, unused_variables)]
 //! Deployment Command - New Architecture
 //!
 //! This module provides deployment automation with Kubernetes and Helm support.

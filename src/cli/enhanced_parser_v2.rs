@@ -1,3 +1,4 @@
+#![allow(dead_code, unused_imports, unused_variables)]
 //! Enhanced Parser Command - New Architecture
 //!
 //! This module provides CLI parser utilities and command validation.

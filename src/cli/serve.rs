@@ -1,3 +1,4 @@
+#![allow(dead_code, unused_imports, unused_variables)]
 use crate::{
     api::{openai, websocket},
     backends::{BackendHandle, BackendType},

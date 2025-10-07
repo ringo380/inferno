@@ -1,3 +1,4 @@
+#![allow(dead_code, unused_imports, unused_variables)]
 //! Observability Command - New Architecture
 //!
 //! This module provides observability stack management for metrics, tracing, and dashboards.

@@ -45,15 +45,26 @@ async fn test_metrics_collector_concurrent_access() {
     tokio::time::sleep(Duration::from_millis(100)).await;
 
     // Verify metrics were collected
-    let snapshot = collector.get_snapshot().await.expect("Failed to get snapshot");
+    let snapshot = collector
+        .get_snapshot()
+        .await
+        .expect("Failed to get snapshot");
 
     // We sent 10 tasks * 100 events = 1000 events
-    assert!(snapshot.total_requests >= 1000, "Expected at least 1000 requests, got {}", snapshot.total_requests);
+    assert!(
+        snapshot.total_requests >= 1000,
+        "Expected at least 1000 requests, got {}",
+        snapshot.total_requests
+    );
 
     // Success rate should be around 90% (j % 10 != 0)
-    let success_rate = (snapshot.successful_requests as f64) / (snapshot.total_requests as f64) * 100.0;
-    assert!(success_rate >= 85.0 && success_rate <= 95.0,
-        "Expected ~90% success rate, got {:.2}%", success_rate);
+    let success_rate =
+        (snapshot.successful_requests as f64) / (snapshot.total_requests as f64) * 100.0;
+    assert!(
+        success_rate >= 85.0 && success_rate <= 95.0,
+        "Expected ~90% success rate, got {:.2}%",
+        success_rate
+    );
 
     println!("✅ Thread safety test passed!");
     println!("   Total requests: {}", snapshot.total_requests);
@@ -91,9 +102,15 @@ async fn test_metrics_collector_clone_safety() {
     tokio::time::sleep(Duration::from_millis(50)).await;
 
     // Both events should be recorded in shared state
-    let snapshot = collector.get_snapshot().await.expect("Failed to get snapshot");
+    let snapshot = collector
+        .get_snapshot()
+        .await
+        .expect("Failed to get snapshot");
     assert_eq!(snapshot.total_requests, 2, "Expected 2 requests");
-    assert_eq!(snapshot.successful_requests, 2, "Expected 2 successful requests");
+    assert_eq!(
+        snapshot.successful_requests, 2,
+        "Expected 2 successful requests"
+    );
 
     println!("✅ Clone safety test passed!");
 }

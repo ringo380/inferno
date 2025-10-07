@@ -1,3 +1,4 @@
+#![allow(dead_code, unused_imports, unused_variables)]
 //! # Safety Checker
 //!
 //! Pre-installation safety checks to ensure system compatibility,

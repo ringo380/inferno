@@ -1,3 +1,4 @@
+#![allow(dead_code, unused_imports, unused_variables)]
 //! # Upgrade CLI Commands
 //!
 //! Command-line interface for managing application upgrades, checking for updates,

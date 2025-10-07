@@ -1,3 +1,4 @@
+#![allow(dead_code, unused_imports, unused_variables)]
 use crate::backends::{Backend, BackendType};
 use crate::config::Config;
 use crate::io::{InputFormat, OutputFormat};

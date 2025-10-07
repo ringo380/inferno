@@ -1,3 +1,4 @@
+#![allow(dead_code, unused_imports, unused_variables)]
 //! Config Command - New Architecture
 //!
 //! This module demonstrates the migration of the config command to the new
@@ -226,10 +227,6 @@ impl Command for ConfigValidate {
                 // Check server config
                 if config.server.port == 0 {
                     errors.push("Server port cannot be 0".to_string());
-                }
-
-                if config.server.port > 65535 {
-                    errors.push("Server port must be 65535 or less".to_string());
                 }
 
                 // Determine validation result

@@ -1,3 +1,4 @@
+#![allow(dead_code, unused_imports, unused_variables)]
 //! Logging and Audit Command - New Architecture
 //!
 //! This module provides comprehensive logging and audit trail system.

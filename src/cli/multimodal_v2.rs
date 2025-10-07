@@ -1,3 +1,4 @@
+#![allow(dead_code, unused_imports, unused_variables)]
 //! Multimodal Command - New Architecture
 //!
 //! This module provides multi-modal inference with vision, audio, and mixed media support.

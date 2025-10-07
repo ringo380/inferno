@@ -1,3 +1,4 @@
+#![allow(dead_code, unused_imports, unused_variables)]
 // Memory optimization module for Inferno AI/ML platform
 // Provides advanced memory management techniques for efficient model execution
 

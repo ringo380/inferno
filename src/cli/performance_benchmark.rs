@@ -1,11 +1,13 @@
+#![allow(dead_code, unused_imports, unused_variables)]
 use crate::{
-    backends::{Backend, BackendConfig, BackendType, InferenceParams},
+    backends::{Backend, BackendConfig, BackendHandle, BackendType, InferenceParams},
     models::ModelInfo,
     performance_baseline::{PerformanceBaseline, PerformanceTarget},
 };
 use anyhow::Result;
 use clap::{Args, Subcommand};
 use std::{
+    collections::HashMap,
     path::PathBuf,
     time::{Duration, Instant},
 };
@@ -301,13 +303,18 @@ async fn run_inference_benchmark(
     // Create test model
     tokio::fs::write(&model_path, b"GGUF\x00\x00\x00\x01test model").await?;
 
+    let file_path = model_path.clone();
     let model = ModelInfo {
         name: "benchmark.gguf".to_string(),
-        path: model_path,
+        path: model_path.clone(),
+        file_path,
         size: 1024 * 1024, // 1MB
+        size_bytes: 1024 * 1024,
         modified: chrono::Utc::now(),
         backend_type: "gguf".to_string(),
+        format: "gguf".to_string(),
         checksum: None,
+        metadata: HashMap::new(),
     };
 
     let backend_config = BackendConfig::default();
@@ -320,6 +327,8 @@ async fn run_inference_benchmark(
         temperature: 0.7,
         top_p: 0.9,
         stream: false,
+        stop_sequences: vec![],
+        seed: None,
     };
 
     let test_prompts = vec![
@@ -440,13 +449,19 @@ async fn run_memory_benchmark(
         content.extend(vec![0u8; size_mb * 1024 * 1024 - content.len()]);
         tokio::fs::write(&model_path, content).await?;
 
+        let model_size_bytes = (size_mb * 1024 * 1024) as u64;
+        let model_path_clone = model_path.clone();
         let model = ModelInfo {
             name: format!("model_{}mb.gguf", size_mb),
-            path: model_path,
-            size: (size_mb * 1024 * 1024) as u64,
+            path: model_path_clone.clone(),
+            file_path: model_path_clone,
+            size: model_size_bytes,
+            size_bytes: model_size_bytes,
             modified: chrono::Utc::now(),
             backend_type: "gguf".to_string(),
+            format: "gguf".to_string(),
             checksum: None,
+            metadata: HashMap::new(),
         };
 
         let backend_config = BackendConfig::default();
@@ -470,6 +485,8 @@ async fn run_memory_benchmark(
                 temperature: 0.7,
                 top_p: 0.9,
                 stream: false,
+                stop_sequences: vec![],
+                seed: None,
             };
 
             for _ in 0..5 {
@@ -562,13 +579,18 @@ async fn run_concurrent_benchmark(
     let model_path = temp_dir.path().join("concurrent_test.gguf");
     tokio::fs::write(&model_path, b"GGUF\x00\x00\x00\x01test model").await?;
 
+    let model_path_clone = model_path.clone();
     let model = ModelInfo {
         name: "concurrent_test.gguf".to_string(),
-        path: model_path,
+        path: model_path_clone.clone(),
+        file_path: model_path_clone,
         size: 1024 * 1024,
+        size_bytes: 1024 * 1024,
         modified: chrono::Utc::now(),
         backend_type: "gguf".to_string(),
+        format: "gguf".to_string(),
         checksum: None,
+        metadata: HashMap::new(),
     };
 
     let concurrency_levels = vec![1, 2, 4, 8, 16, 32];
@@ -587,6 +609,8 @@ async fn run_concurrent_benchmark(
             temperature: 0.7,
             top_p: 0.9,
             stream: false,
+            stop_sequences: vec![],
+            seed: None,
         };
 
         let start_time = Instant::now();
@@ -917,8 +941,6 @@ async fn stress_test(
 
     // Monitor progress
     let progress_handle = tokio::spawn(async move {
-        let mut last_report = std::time::Instant::now();
-
         loop {
             tokio::time::sleep(std::time::Duration::from_secs(5)).await;
             let elapsed = start_time.elapsed();
@@ -933,7 +955,6 @@ async fn stress_test(
                 progress,
                 elapsed.as_secs_f64()
             );
-            last_report = std::time::Instant::now();
         }
     });
 

@@ -1,3 +1,4 @@
+#![allow(dead_code, unused_imports, unused_variables)]
 use crate::config::Config;
 use crate::marketplace::{
     DownloadStatus, MarketplaceConfig, ModelCategory, ModelListing, ModelMarketplace,
@@ -542,10 +543,7 @@ pub async fn handle_marketplace_command(args: MarketplaceArgs) -> Result<()> {
     }
 }
 
-async fn handle_search(
-    marketplace: &ModelMarketplace,
-    config: SearchConfig,
-) -> Result<()> {
+async fn handle_search(marketplace: &ModelMarketplace, config: SearchConfig) -> Result<()> {
     info!("Searching marketplace for: {}", config.query);
 
     let filters = Some(SearchFilters {
@@ -554,16 +552,20 @@ async fn handle_search(
         license: config.license,
         min_rating: config.min_rating,
         max_size_gb: config.max_size,
-        tags: config.tags
+        tags: config
+            .tags
             .map(|t| t.split(',').map(|s| s.trim().to_string()).collect())
             .unwrap_or_default(),
-        frameworks: config.frameworks
+        frameworks: config
+            .frameworks
             .map(|f| f.split(',').map(|s| s.trim().to_string()).collect())
             .unwrap_or_default(),
-        languages: config.languages
+        languages: config
+            .languages
             .map(|l| l.split(',').map(|s| s.trim().to_string()).collect())
             .unwrap_or_default(),
-        platforms: config.platforms
+        platforms: config
+            .platforms
             .map(|p| p.split(',').map(|s| s.trim().to_string()).collect())
             .unwrap_or_default(),
         free_only: config.free_only,
@@ -1141,10 +1143,7 @@ async fn handle_update(marketplace: &ModelMarketplace, model_id: String, wait: b
     Ok(())
 }
 
-async fn handle_publish(
-    marketplace: &ModelMarketplace,
-    config: PublishConfig,
-) -> Result<()> {
+async fn handle_publish(marketplace: &ModelMarketplace, config: PublishConfig) -> Result<()> {
     info!("Publishing model: {}", config.name);
 
     if !config.model_path.exists() {
@@ -1206,7 +1205,8 @@ async fn handle_publish(
         updated_at: chrono::Utc::now(),
         downloads: 0,
         rating: None,
-        tags: config.tags
+        tags: config
+            .tags
             .map(|t| t.split(',').map(|s| s.trim().to_string()).collect())
             .unwrap_or_default(),
         dependencies: vec![],

@@ -1,3 +1,4 @@
+#![allow(dead_code, unused_imports, unused_variables)]
 //! Help Command - New Architecture
 //!
 //! This module provides user-friendly help and guidance commands.

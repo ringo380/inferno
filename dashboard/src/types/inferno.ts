@@ -25,6 +25,7 @@ export interface InferenceParams {
   max_tokens?: number;
   stream?: boolean;
   stop_sequences?: string[];
+  seed?: number;
   context_length?: number;
   batch_size?: number;
 }
@@ -244,6 +245,7 @@ export interface MetricsSnapshot {
   error_count: number;
   average_latency: number;
   models_loaded: number;
+  active_streaming_sessions?: number;
   active_models?: number;
   cpu_usage?: number;
   memory_usage?: number;
@@ -256,6 +258,7 @@ export interface InfernoMetrics {
   active_models: number;
   models_loaded?: number;
   active_inferences: number;
+  active_streaming_sessions: number;
   inference_count: number;
   success_count: number;
   error_count: number;
@@ -285,6 +288,13 @@ export interface Notification {
   source: 'system' | 'inference' | 'security' | 'batch' | 'model';
   priority: 'low' | 'medium' | 'high' | 'critical';
   metadata?: Record<string, any>;
+}
+
+export interface NativeNotificationPayload {
+  title: string;
+  body: string;
+  icon?: string;
+  sound?: string;
 }
 
 export interface NotificationSettings {

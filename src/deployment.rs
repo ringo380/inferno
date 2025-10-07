@@ -1,3 +1,4 @@
+#![allow(dead_code, unused_imports, unused_variables)]
 use crate::{config::Config, InfernoError};
 use anyhow::Result;
 use chrono::{DateTime, Utc};

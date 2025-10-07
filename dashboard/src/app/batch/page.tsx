@@ -543,6 +543,34 @@ export default function BatchPage() {
                         </div>
                       ))}
                     </div>
+                    {selectedJob.results.errors && selectedJob.results.errors.length > 0 && (
+                      <div className="space-y-1">
+                        <h5 className="text-xs font-semibold text-destructive">Errors</h5>
+                        <div className="space-y-1 max-h-32 overflow-y-auto">
+                          {selectedJob.results.errors.map((msg, index) => (
+                            <div key={`error-${index}`} className="p-2 text-xs bg-destructive/10 text-destructive rounded">
+                              {msg}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {selectedJob.results.metrics && (
+                      <div className="grid grid-cols-3 gap-2 text-xs text-muted-foreground">
+                        <div className="p-2 bg-accent/40 rounded">
+                          <div className="font-medium text-foreground">Total Time</div>
+                          <div>{selectedJob.results.metrics.total_time.toFixed(2)}s</div>
+                        </div>
+                        <div className="p-2 bg-accent/40 rounded">
+                          <div className="font-medium text-foreground">Avg / Task</div>
+                          <div>{selectedJob.results.metrics.avg_time_per_task.toFixed(2)}s</div>
+                        </div>
+                        <div className="p-2 bg-accent/40 rounded">
+                          <div className="font-medium text-foreground">Throughput</div>
+                          <div>{selectedJob.results.metrics.throughput.toFixed(2)} req/s</div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </CardContent>

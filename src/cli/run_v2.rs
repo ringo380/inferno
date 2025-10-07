@@ -1,3 +1,4 @@
+#![allow(dead_code, unused_imports, unused_variables)]
 //! Run Command - New Architecture
 //!
 //! This module demonstrates the migration of the run command to the new

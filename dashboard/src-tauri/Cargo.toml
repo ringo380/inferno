@@ -29,7 +29,7 @@ sha2 = "0.10"
 rand = "0.8"
 toml = "0.8"
 rfd = "0.14"
-inferno = { path = "../..", features = ["gguf"] }
+inferno = { path = "../..", package = "inferno-ai", features = ["gguf"] }
 rusqlite = { version = "0.31", features = ["bundled", "chrono", "serde_json"] }
 r2d2 = "0.8"
 r2d2_sqlite = "0.24"

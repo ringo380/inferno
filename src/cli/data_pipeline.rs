@@ -1,3 +1,4 @@
+#![allow(dead_code, unused_imports, unused_variables)]
 use anyhow::Result;
 use chrono::Utc;
 use clap::{Args, Subcommand};
@@ -3218,17 +3219,6 @@ fn validate_pipeline_config(config: &DataPipelineConfig) -> Result<()> {
         if description.len() > 500 {
             return Err(anyhow::anyhow!(
                 "Pipeline description is too long. Maximum length is 500 characters"
-            ));
-        }
-    }
-
-    // Validate pipeline type
-    match config.pipeline_type {
-        PipelineType::Batch | PipelineType::Streaming | PipelineType::Hybrid => {}
-        _ => {
-            return Err(anyhow::anyhow!(
-                "Invalid pipeline type: {:?}. Must be Batch, Streaming, or Hybrid",
-                config.pipeline_type
             ));
         }
     }

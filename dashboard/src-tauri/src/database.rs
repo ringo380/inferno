@@ -1,12 +1,12 @@
-use std::sync::Arc;
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use r2d2::{Pool, PooledConnection};
 use r2d2_sqlite::SqliteConnectionManager;
-use rusqlite::{params, Connection, Row};
+use rusqlite::{params, Row};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use uuid::Uuid;
+use crate::BatchJobResults;
 
 // Database connection pool type
 pub type DbPool = Pool<SqliteConnectionManager>;
@@ -547,6 +547,16 @@ impl DatabaseManager {
         conn.execute(
             "UPDATE batch_jobs SET progress = ?1, completed_tasks = ?2, failed_tasks = ?3 WHERE id = ?4",
             params![progress, completed_tasks, failed_tasks, id],
+        )?;
+        Ok(())
+    }
+
+    pub async fn update_batch_job_results(&self, id: &str, results: &BatchJobResults) -> Result<()> {
+        let conn = self.get_connection()?;
+        let results_json = serde_json::to_string(results)?;
+        conn.execute(
+            "UPDATE batch_jobs SET results = ?1 WHERE id = ?2",
+            params![results_json, id],
         )?;
         Ok(())
     }

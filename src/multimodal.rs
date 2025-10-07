@@ -1,3 +1,4 @@
+#![allow(dead_code, unused_imports, unused_variables)]
 use crate::{backends::InferenceParams, InfernoError};
 use anyhow::Result;
 use base64::{engine::general_purpose, Engine as _};

@@ -1,3 +1,4 @@
+#![allow(dead_code, unused_imports, unused_variables)]
 // Inference optimization module for Inferno AI/ML platform
 // Provides advanced inference optimization techniques for maximum performance
 

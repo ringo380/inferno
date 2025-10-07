@@ -1,3 +1,4 @@
+#![allow(dead_code, unused_imports, unused_variables)]
 //! # macOS-Specific Upgrade Handler
 //!
 //! Handles macOS-specific upgrade operations including App Bundle management,
