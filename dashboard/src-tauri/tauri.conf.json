@@ -24,8 +24,10 @@
         "alwaysOnTop": false,
         "center": true,
         "titleBarStyle": "Transparent",
-        "transparent": false,
-        "label": "main"
+        "transparent": true,
+        "label": "main",
+        "hiddenTitle": true,
+        "visibleOnAllWorkspaces": false
       }
     ],
     "security": {

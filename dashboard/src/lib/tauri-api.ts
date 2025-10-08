@@ -1,18 +1,10 @@
 import { ModelInfo, SystemInfo, MetricsSnapshot, InferenceParams, InfernoMetrics, ActiveProcessInfo, AppSettings, Notification, BatchJob, ApiKey, SecurityEvent, SecurityMetrics, CreateApiKeyRequest, CreateApiKeyResponse, NativeNotificationPayload } from '../types/inferno';
 
+// Import Tauri APIs
+import { invoke } from '@tauri-apps/api/core';
+
 // Check if we're in a Tauri environment
 const isTauri = typeof window !== 'undefined' && (window as any).__TAURI_INTERNALS__;
-
-// Conditionally import Tauri APIs
-let invoke: any = null;
-if (isTauri) {
-  try {
-    const tauriCore = require('@tauri-apps/api/core');
-    invoke = tauriCore.invoke;
-  } catch (error) {
-    console.warn('Tauri APIs not available, running in browser mode');
-  }
-}
 
 // Mock data for browser mode
 const mockModels: ModelInfo[] = [

@@ -1,3 +1,5 @@
+'use client';
+
 import { MainLayout } from '@/components/layout/main-layout';
 import { StreamingInference } from '@/components/inference/streaming-inference';
 import { PageHeader } from '@/components/layout/page-header';
