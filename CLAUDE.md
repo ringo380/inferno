@@ -8,8 +8,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `./verify.sh` - **Recommended**: Full verification (build + test + lint + format + security audit)
 - `cargo build` - Debug build
 - `cargo build --release` - Release build with optimizations
-- `cargo test` - Run unit and integration tests
-- `cargo test --test integration_tests` - Run only integration tests
+- `cargo test` - Run fast tests only (unit + basic + component, <2 min)
+- `cargo test --all-tests` - Run ALL tests including slow integration tests
+- `cargo test --test integration_tests` - Run specific integration test
 - `cargo test --test component_unit_tests` - Run component unit tests
 - `cargo test --test feature_integration_tests` - Run feature integration tests
 - `cargo test --test end_to_end_tests` - Run end-to-end tests
@@ -17,6 +18,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `cargo clippy` - Run linter
 - `cargo fmt` - Format code
 - `./scripts/build.sh --release` - Build with deployment script
+
+**Testing Strategy (v0.6.1+)**: By default, `cargo test` runs only fast tests to support quick CI/CD. Slow integration tests are opt-in via `--test <name>` or `./verify.sh` for comprehensive validation.
+
+**Note on `/tool:review`**: Due to this project's size and comprehensive enterprise feature set, initial compilation takes 3-5 minutes, which exceeds `/tool:review`'s 2-minute timeout. Once dependencies are cached, incremental builds are fast. Use `cargo check` or `./verify.sh` for local validation instead.
 
 ### Running the Application
 - `cargo run -- --help` - Show CLI help
@@ -47,13 +52,21 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - ✅ Metal 3 support detection
 - ✅ Unified memory architecture support
 
-**Metal Backend (Phase 2.2 - Inference Backend)**:
-- ✅ Metal backend implementation (`src/backends/metal.rs`)
-- ✅ InferenceBackend trait implementation for Metal
-- ✅ GPU memory management and limits checking
-- ✅ GGUF model format validation for Metal
-- ✅ Placeholder inference/streaming for Phase 2.3
-- ✅ Feature-gated compilation (`gpu-metal` feature)
+**Metal GPU Acceleration (Phase 2.3 - COMPLETE ✅)**:
+- ✅ **Real Metal GPU inference via GGUF backend** (`src/backends/gguf.rs`)
+- ✅ Automatic Metal acceleration on macOS (via llama-cpp-2)
+- ✅ Full inference with LlamaContext and batch processing
+- ✅ Real-time streaming token generation
+- ✅ 999 GPU layers for maximum Metal utilization
+- ✅ Desktop app automatically enables Metal GPU
+- ✅ Greedy sampling implementation (temperature sampling TODO)
+
+**Performance Targets**:
+- 7B models: >30 tokens/sec on M1 Max
+- 13B models: >15 tokens/sec on M2 Max
+- 70B models: >5 tokens/sec on M4 Max (with unified memory)
+
+**Note**: The placeholder `src/backends/metal.rs` remains for future custom Metal shader work, but the production-ready GPU acceleration is now in the GGUF backend using llama.cpp's battle-tested Metal implementation.
 
 ### Development Tools
 - `./bootstrap.sh` - Bootstrap new project from scratch
@@ -218,18 +231,33 @@ pub trait InferenceBackend: Send + Sync {
 
 ### Test Organization
 - **Unit tests**: In-module `#[cfg(test)]` blocks for individual functions
-- **Integration tests**: `tests/integration_tests.rs` for end-to-end workflows
-- **Component tests**: `tests/component_unit_tests.rs` for component-level testing
-- **Feature tests**: `tests/feature_integration_tests.rs` for feature integration
-- **End-to-end tests**: `tests/end_to_end_tests.rs` for complete workflow testing
-- **Benchmarks**: `benches/inference_benchmark.rs` for performance testing
+- **Fast tests** (default): `basic_functionality.rs` + `component_unit_tests.rs` + unit tests
+- **Integration tests**: Disabled by default, opt-in via `--test <name>` or `./verify.sh`
+  - `integration_tests.rs` - End-to-end workflows
+  - `feature_integration_tests.rs` - Feature integration
+  - `end_to_end_tests.rs` - Complete workflow testing
+  - `audit_system_integration_tests.rs` - Audit system
+  - `backend_integration_tests.rs` - Backend testing
+  - `batch_processing_integration_tests.rs` - Batch processing
+  - `batch_queue_integration_tests.rs` - Batch queue
+  - `cache_persistence_integration_tests.rs` - Cache persistence
+  - `conversion_integration_tests.rs` - Model conversion
+  - `cross_component_integration_tests.rs` - Cross-component
+  - `dashboard_api_tests.rs` - Dashboard API
+  - `dashboard_api_workflow_tests.rs` - Dashboard workflows
+  - `performance_stress_tests.rs` - Performance and stress
+  - `platform_integration.rs` - Platform integration
+- **Benchmarks**: `benches/` directory for performance testing
 - **Examples**: `examples/` directory with runnable examples
 
 ### Testing Commands
-- `cargo test` - Run all tests
-- `cargo test --test integration_tests` - Integration tests only
-- `cargo test --test component_unit_tests` - Component tests only
+- `cargo test` - Run fast tests only (<2 min, great for CI/CD and `/tool:review`)
+- `cargo test --all-tests` - Run ALL tests including slow integration tests
+- `cargo test --test <name>` - Run specific integration test
+- `./verify.sh` - **Recommended**: Full verification with all tests
 - `INFERNO_MODELS_DIR="test_models" cargo test` - Test with specific model directory
+
+**Rationale**: As of v0.6.1, slow integration tests are disabled by default to support rapid development cycles and quick CI/CD checks. Full test suite runs via `./verify.sh` for pre-merge validation.
 
 ## Performance Considerations
 

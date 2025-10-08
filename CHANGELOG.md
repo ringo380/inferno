@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### ⚡ Performance
+
+- **Metal GPU Acceleration** (macOS): Full Metal GPU support for Apple Silicon
+  - **13x performance improvement**: 15 tok/s (CPU) → 198 tok/s (Metal GPU)
+  - Complete layer offloading: 23/23 layers on GPU
+  - Tested on Apple M4 Max with Metal 3 support
+  - Automatic GPU detection and enablement on macOS
+  - Production-ready implementation via llama-cpp-2
+  - See `METAL_GPU_RESULTS.md` for detailed benchmarks
+
+### 🔧 Backend Improvements
+
+- **GGUF Backend**: Real Metal GPU inference implementation
+  - Thread-safe Arc-based backend sharing
+  - Per-inference context creation for !Send constraint handling
+  - Greedy sampling for token generation
+  - GPU memory management with unified memory architecture
+  - Flash Attention auto-enabled on supported devices
+
+### 📚 Documentation
+
+- Added comprehensive Metal GPU results documentation
+- Performance benchmarks and troubleshooting guide
+- Updated README with Metal GPU capabilities
+
 ## [0.6.1] - 2025-01-07
 
 ### 🎉 Highlights

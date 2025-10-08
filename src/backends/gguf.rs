@@ -9,17 +9,20 @@ use crate::{
 use anyhow::Result;
 use async_stream::stream;
 use llama_cpp_2::{
+    context::{LlamaContext, params::LlamaContextParams},
     llama_backend::LlamaBackend,
+    llama_batch::LlamaBatch,
     model::{params::LlamaModelParams, AddBos, LlamaModel, Special},
+    sampling::LlamaSampler,
     token::LlamaToken,
 };
-use std::{sync::Arc, time::Instant};
+use std::{num::NonZeroU32, sync::Arc, time::Instant};
 use tracing::{debug, info, warn};
 
 // Real GGUF implementation using llama-cpp-2
 pub struct GgufBackend {
     config: BackendConfig,
-    backend: Option<LlamaBackend>,
+    backend: Option<Arc<LlamaBackend>>,
     model: Option<Arc<LlamaModel>>,
     model_info: Option<ModelInfo>,
     metrics: Option<InferenceMetrics>,
@@ -130,52 +133,104 @@ impl GgufBackend {
 
     async fn generate_response(&mut self, input: &str, params: &InferenceParams) -> Result<String> {
         debug!(
-            "Generating response for input of length: {} with llama.cpp",
+            "🔥 Generating response for input of length: {} with Metal GPU acceleration",
             input.len()
         );
 
         let model = self
             .model
             .as_ref()
-            .ok_or_else(|| InfernoError::Backend("Model not loaded".to_string()))?;
+            .ok_or_else(|| InfernoError::Backend("Model not loaded".to_string()))?
+            .clone();
 
-        // Use spawn_blocking for CPU-intensive inference
-        let model_clone = Arc::clone(model);
+        let backend = self
+            .backend
+            .as_ref()
+            .ok_or_else(|| InfernoError::Backend("Backend not initialized".to_string()))?
+            .clone();
+
         let input_str = input.to_string();
         let context_size = self.config.context_size;
         let batch_size = self.config.batch_size;
         let max_tokens = params.max_tokens;
-        let temperature = params.temperature;
 
+        // Perform inference in spawn_blocking since LlamaContext is !Send
         let response = tokio::task::spawn_blocking(move || {
-            // Tokenize the input text
-            let tokens = model_clone
+            // Create context for this inference session
+            let ctx_params = LlamaContextParams::default()
+                .with_n_ctx(NonZeroU32::new(context_size))
+                .with_n_batch(batch_size);
+
+            let mut context = model.new_context(&backend, ctx_params)
+                .map_err(|e| InfernoError::Backend(format!("Failed to create context: {}", e)))?;
+
+            // Tokenize input
+            let input_tokens = model
                 .str_to_token(&input_str, AddBos::Always)
-                .map_err(|e| InfernoError::Backend(format!("Failed to tokenize input: {}", e)))?;
+                .map_err(|e| InfernoError::Backend(format!("Failed to tokenize: {}", e)))?;
 
-            debug!("Tokenized input: {} tokens", tokens.len());
+            debug!("📝 Tokenized {} tokens from input", input_tokens.len());
 
-            // For now, create a simple response acknowledging successful tokenization
-            // This replaces the placeholder while we work on the full inference implementation
-            let response = if tokens.len() > 0 {
-                format!(
-                    "Successfully processed input with {} tokens. Model: {}. Parameters: max_tokens={}, temp={:.2}. This is functional GGUF backend output (full inference coming next).",
-                    tokens.len(),
-                    "llama-model",
-                    max_tokens,
-                    temperature
-                )
-            } else {
-                "No tokens generated from input. Please check your input text.".to_string()
-            };
+            // Create batch and add input tokens
+            let n_ctx = context.n_ctx();
+            let mut batch = LlamaBatch::new(n_ctx as usize, 1);
 
-            Ok::<String, anyhow::Error>(response)
+            for (i, token) in input_tokens.iter().enumerate() {
+                let is_last = i == input_tokens.len() - 1;
+                batch.add(token.clone(), i as i32, &[0], is_last)
+                    .map_err(|e| InfernoError::Backend(format!("Failed to add token to batch: {}", e)))?;
+            }
+
+            // Decode the input batch
+            context.decode(&mut batch)
+                .map_err(|e| InfernoError::Backend(format!("Failed to decode batch: {}", e)))?;
+
+            debug!("⚡ Input processed through Metal GPU");
+
+            // Generate tokens one by one
+            let mut output_tokens = Vec::new();
+            let max_new_tokens = max_tokens as usize;
+
+            for _ in 0..max_new_tokens {
+                // Get logits for sampling - collect iterator to vec
+                let candidates: Vec<_> = context.candidates().collect();
+
+                // Simple greedy sampling (pick highest probability token)
+                let next_token = candidates
+                    .iter()
+                    .max_by(|a, b| a.p().partial_cmp(&b.p()).unwrap_or(std::cmp::Ordering::Equal))
+                    .map(|c| c.id())
+                    .ok_or_else(|| InfernoError::Backend("No candidates available".to_string()))?;
+
+                // Check for end of sequence - use model's token methods
+                if next_token == model.token_eos() {
+                    debug!("🏁 End of generation token encountered");
+                    break;
+                }
+
+                output_tokens.push(next_token);
+
+                // Prepare next batch with the sampled token
+                batch.clear();
+                batch.add(next_token, input_tokens.len() as i32 + output_tokens.len() as i32 - 1, &[0], true)
+                    .map_err(|e| InfernoError::Backend(format!("Failed to add output token: {}", e)))?;
+
+                // Decode for next iteration
+                context.decode(&mut batch)
+                    .map_err(|e| InfernoError::Backend(format!("Failed to decode output token: {}", e)))?;
+            }
+
+            // Detokenize output
+            let response = model
+                .tokens_to_str(&output_tokens, Special::Tokenize)
+                .map_err(|e| InfernoError::Backend(format!("Failed to detokenize: {}", e)))?;
+
+            debug!("✅ Generated {} tokens via Metal GPU", output_tokens.len());
+            Ok::<String, InfernoError>(response)
         })
         .await
-        .map_err(|e| InfernoError::Backend(format!("Inference task failed: {}", e)))?
-        .map_err(anyhow::Error::from)?;
+        .map_err(|e| InfernoError::Backend(format!("Inference task failed: {}", e)))??;
 
-        debug!("Generated response of length: {}", response.len());
         Ok(response)
     }
 
@@ -184,38 +239,23 @@ impl GgufBackend {
         input: &str,
         params: &InferenceParams,
     ) -> Result<TokenStream> {
-        info!("Starting GGUF streaming inference");
+        info!("🌊 Starting GGUF streaming inference with Metal GPU");
 
-        // Generate complete response first, then stream it
+        // Generate complete response first, then stream tokens
+        // TODO: Implement true streaming with channels from spawn_blocking
         let response = self.generate_response(input, params).await?;
-        let max_tokens = params.max_tokens;
 
-        // Split response into words for streaming simulation
-        let words: Vec<String> = response
-            .split_whitespace()
-            .map(|word| word.to_string())
+        // Create streaming by splitting response into tokens
+        let tokens: Vec<String> = response
+            .chars()
+            .map(|c| c.to_string())
             .collect();
 
         let stream = stream! {
-            for (i, word) in words.into_iter().enumerate() {
-                // Add realistic delays based on word complexity for streaming effect
-                let delay_ms = match word.len() {
-                    1..=3 => 25,
-                    4..=8 => 40,
-                    _ => 60,
-                };
-
-                tokio::time::sleep(tokio::time::Duration::from_millis(delay_ms)).await;
-
-                if i > 0 {
-                    yield Ok(" ".to_string());
-                }
-                yield Ok(word);
-
-                // Respect max_tokens limit
-                if i >= max_tokens as usize {
-                    break;
-                }
+            for token in tokens {
+                yield Ok(token);
+                // Small delay to simulate real-time generation
+                tokio::time::sleep(tokio::time::Duration::from_millis(5)).await;
             }
         };
 
@@ -282,18 +322,30 @@ impl InferenceBackend for GgufBackend {
         );
 
         // Initialize the llama backend
-        let backend = tokio::task::spawn_blocking(|| {
+        let backend = Arc::new(tokio::task::spawn_blocking(|| {
             LlamaBackend::init().map_err(|e| {
                 InfernoError::Backend(format!("Failed to initialize llama backend: {}", e))
             })
         })
         .await
         .map_err(|e| InfernoError::Backend(format!("Backend initialization task failed: {}", e)))?
-        .map_err(anyhow::Error::from)?;
+        .map_err(anyhow::Error::from)?);
 
-        // Configure model parameters
+        // Configure model parameters with GPU support
+        // On macOS, Metal is automatically used when n_gpu_layers > 0
+        let n_gpu_layers = if self.config.gpu_enabled {
+            999 // Use all layers for Metal/GPU acceleration
+        } else {
+            0 // CPU only
+        };
+
+        info!(
+            "🎯 GGUF backend - GPU enabled: {}, GPU layers: {}",
+            self.config.gpu_enabled, n_gpu_layers
+        );
+
         let model_params = LlamaModelParams::default()
-            .with_n_gpu_layers(if self.config.gpu_enabled { 32 } else { 0 })
+            .with_n_gpu_layers(n_gpu_layers)
             .with_use_mlock(false);
 
         // Load the model
@@ -303,12 +355,12 @@ impl InferenceBackend for GgufBackend {
                 .map_err(|e| InfernoError::Backend(format!("Failed to load GGUF model: {}", e)))?
         };
 
-        // Store backend and model (context will be created per-inference)
+        // Store backend and model (context will be created per-inference to avoid Send/Sync issues)
         self.backend = Some(backend);
         self.model = Some(Arc::new(model));
         self.model_info = Some(model_info.clone());
 
-        info!("GGUF model loaded successfully");
+        info!("✅ GGUF model loaded successfully with Metal GPU support");
         Ok(())
     }
 

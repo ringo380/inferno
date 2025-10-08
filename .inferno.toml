@@ -2,9 +2,9 @@ models_dir = "test_models"
 log_level = "info"
 
 [backend_config]
-gpu_enabled = false
+gpu_enabled = true
 context_size = 2048
-batch_size = 32
+batch_size = 512
 
 [security]
 verify_checksums = false

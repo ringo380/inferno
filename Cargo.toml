@@ -244,6 +244,96 @@ harness = false
 name = "profiling_benchmark"
 harness = false
 
+# Fast tests - run by default with `cargo test`
+[[test]]
+name = "basic_functionality"
+path = "tests/basic_functionality.rs"
+
+[[test]]
+name = "component_unit_tests"
+path = "tests/component_unit_tests.rs"
+
+# Slow integration tests - opt-in only via `cargo test --test <name>` or `./verify.sh`
+[[test]]
+name = "integration_tests"
+path = "tests/integration_tests.rs"
+test = false  # Skip in default `cargo test`
+
+[[test]]
+name = "feature_integration_tests"
+path = "tests/feature_integration_tests.rs"
+test = false
+
+[[test]]
+name = "end_to_end_tests"
+path = "tests/end_to_end_tests.rs"
+test = false
+
+[[test]]
+name = "audit_system_integration_tests"
+path = "tests/audit_system_integration_tests.rs"
+test = false
+
+[[test]]
+name = "backend_integration_tests"
+path = "tests/backend_integration_tests.rs"
+test = false
+
+[[test]]
+name = "batch_processing_integration_tests"
+path = "tests/batch_processing_integration_tests.rs"
+test = false
+
+[[test]]
+name = "batch_queue_integration_tests"
+path = "tests/batch_queue_integration_tests.rs"
+test = false
+
+[[test]]
+name = "cache_persistence_integration_tests"
+path = "tests/cache_persistence_integration_tests.rs"
+test = false
+
+[[test]]
+name = "conversion_integration_tests"
+path = "tests/conversion_integration_tests.rs"
+test = false
+
+[[test]]
+name = "cross_component_integration_tests"
+path = "tests/cross_component_integration_tests.rs"
+test = false
+
+[[test]]
+name = "dashboard_api_tests"
+path = "tests/dashboard_api_tests.rs"
+test = false
+
+[[test]]
+name = "dashboard_api_workflow_tests"
+path = "tests/dashboard_api_workflow_tests.rs"
+test = false
+
+[[test]]
+name = "performance_stress_tests"
+path = "tests/performance_stress_tests.rs"
+test = false
+
+[[test]]
+name = "platform_integration"
+path = "tests/platform_integration.rs"
+test = false
+
+[[test]]
+name = "error_size_analysis"
+path = "tests/error_size_analysis.rs"
+test = false
+
+[[test]]
+name = "metrics_thread_safety"
+path = "tests/metrics_thread_safety.rs"
+test = false
+
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]

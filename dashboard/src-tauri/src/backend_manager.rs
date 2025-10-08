@@ -146,8 +146,15 @@ impl BackendManager {
             _ => BackendType::Gguf, // Default fallback (ONNX support disabled)
         };
 
-        // Create backend config
-        let backend_config = BackendConfig::default();
+        // Create backend config with GPU enabled on macOS
+        let backend_config = BackendConfig {
+            gpu_enabled: cfg!(target_os = "macos"), // Enable Metal GPU on macOS
+            gpu_device: None,
+            cpu_threads: None,
+            context_size: 2048,
+            batch_size: 512,
+            memory_map: true,
+        };
 
         // Create and load backend
         let backend_handle = BackendHandle::new_shared(backend_type, &backend_config).map_err(|e| {
