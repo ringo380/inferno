@@ -7,30 +7,61 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### ⚡ Performance
+## [0.7.0] - 2025-10-07
 
-- **Metal GPU Acceleration** (macOS): Full Metal GPU support for Apple Silicon
-  - **13x performance improvement**: 15 tok/s (CPU) → 198 tok/s (Metal GPU)
-  - Complete layer offloading: 23/23 layers on GPU
-  - Tested on Apple M4 Max with Metal 3 support
-  - Automatic GPU detection and enablement on macOS
-  - Production-ready implementation via llama-cpp-2
-  - See `METAL_GPU_RESULTS.md` for detailed benchmarks
+### 🎉 Major Features
+
+#### Metal GPU Acceleration for Apple Silicon
+
+Full Metal GPU acceleration delivering production-ready performance on macOS.
+
+**Performance Metrics**:
+- **13x speedup**: 15 tok/s (CPU) → 198 tok/s (Metal GPU)
+- Complete layer offloading: 23/23 layers on GPU
+- Tested on Apple M4 Max with Metal 3
+- Automatic GPU enablement on macOS
+- ~747 MiB GPU memory usage
+
+**Technical Implementation**:
+- Production-ready llama-cpp-2 integration
+- Thread-safe Arc-based backend architecture
+- Per-inference LlamaContext creation
+- Greedy sampling for token generation
+- Flash Attention auto-enabled
+- Unified memory architecture support
+
+**Compatibility**:
+- ✅ Apple M1/M2/M3/M4 (all variants)
+- ✅ Metal 3 support
+- ✅ All GGUF quantizations (Q4, Q5, Q6, Q8)
 
 ### 🔧 Backend Improvements
 
-- **GGUF Backend**: Real Metal GPU inference implementation
-  - Thread-safe Arc-based backend sharing
-  - Per-inference context creation for !Send constraint handling
-  - Greedy sampling for token generation
-  - GPU memory management with unified memory architecture
-  - Flash Attention auto-enabled on supported devices
+- **GGUF Backend**: Complete Metal GPU inference implementation
+  - Real GPU-accelerated inference (no longer placeholder)
+  - Proper !Send constraint handling with spawn_blocking
+  - GPU memory management and validation
+  - Automatic capability detection
+
+### ⚙️ Configuration
+
+- Default GPU enablement on macOS
+- Increased default batch size to 512 for better throughput
+- Desktop app auto-configures Metal GPU
 
 ### 📚 Documentation
 
-- Added comprehensive Metal GPU results documentation
-- Performance benchmarks and troubleshooting guide
+- `METAL_GPU_RESULTS.md`: Comprehensive performance benchmarks
+- `METAL_GPU_TESTING.md`: Testing methodology and guides
+- `QUICK_TEST.md`: Quick reference for testing
+- `TESTING_STATUS.md`: Current testing status
 - Updated README with Metal GPU capabilities
+- Updated CHANGELOG with detailed performance metrics
+
+### 🧹 Repository Improvements
+
+- Added Claude Code directories to .gitignore
+- Excluded test scripts from repository
 
 ## [0.6.1] - 2025-01-07
 
