@@ -9,6 +9,7 @@ import { RealTimeUpdateProvider } from '@/components/providers/real-time-updates
 import { NavigationProvider } from '@/contexts/navigation-context';
 import { ExitConfirmation } from '@/components/ui/exit-confirmation';
 import { DesktopBridge } from '@/components/providers/desktop-bridge';
+import { VibrancyWrapper } from '@/components/vibrancy-wrapper';
 import { useState } from 'react';
 
 export function Providers({ children }: { children: React.ReactNode }) {
@@ -36,6 +37,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
               disableTransitionOnChange
             >
               <DesktopBridge />
+              <VibrancyWrapper />
               {children}
               <Toaster
                 position="top-right"

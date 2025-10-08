@@ -46,6 +46,15 @@ export function DashboardOverview() {
   const { data: batchJobCount, isLoading: batchCountLoading } = useBatchJobCount();
   const { data: activeBatchJobCount, isLoading: activeBatchCountLoading } = useActiveBatchJobCount();
 
+  // Debug logging
+  console.log('📊 Dashboard Data:', {
+    systemInfo,
+    infernoMetrics,
+    loadedModels,
+    activeProcesses,
+    isLoading: systemLoading || metricsLoading
+  });
+
   // Real-time event hooks
   const { metrics: realTimeSystemMetrics } = useRealTimeSystemMetrics();
   const { connectionStatus } = useRealTimeEvents();
@@ -86,10 +95,22 @@ export function DashboardOverview() {
           <ConnectionStatus compact />
           <Badge
             variant={connectionStatus === 'Connected' ? 'success' : 'destructive'}
-            className="flex items-center gap-1"
+            className="flex items-center gap-1.5"
           >
-            <Activity className="h-3 w-3" />
-            {connectionStatus === 'Connected' ? 'Real-time Active' : 'Polling Mode'}
+            {connectionStatus === 'Connected' ? (
+              <>
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                </span>
+                Real-time Active
+              </>
+            ) : (
+              <>
+                <Activity className="h-3 w-3" />
+                Polling Mode
+              </>
+            )}
           </Badge>
           <Button>
             <Play className="h-4 w-4 mr-2" />
@@ -147,10 +168,23 @@ export function DashboardOverview() {
         {/* System Performance Chart */}
         <Card className="lg:col-span-2">
           <CardHeader>
-            <CardTitle>System Performance</CardTitle>
-            <CardDescription>
-              Real-time system metrics over the last 24 hours
-            </CardDescription>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>System Performance</CardTitle>
+                <CardDescription>
+                  Real-time system metrics over the last 24 hours
+                </CardDescription>
+              </div>
+              {realTimeSystemMetrics && (
+                <Badge variant="outline" className="flex items-center gap-1 bg-green-50 dark:bg-green-950 border-green-200 dark:border-green-800 text-green-700 dark:text-green-400">
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                  </span>
+                  Updating
+                </Badge>
+              )}
+            </div>
           </CardHeader>
           <CardContent>
             <SystemChart />
@@ -205,26 +239,29 @@ export function DashboardOverview() {
             {systemLoading ? (
               <Skeleton className="h-8 w-16 mb-2" />
             ) : (
-              <div className="text-2xl font-bold flex items-center gap-2">
+              <div className="text-2xl font-bold flex items-center gap-2 transition-all duration-300">
                 {currentSystemMetrics.cpu_usage?.toFixed(1) || 0}%
                 {realTimeSystemMetrics && (
-                  <span className="text-xs bg-green-100 text-green-800 px-1.5 py-0.5 rounded">LIVE</span>
+                  <span className="text-xs bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-400 px-1.5 py-0.5 rounded flex items-center gap-1 animate-pulse">
+                    <span className="inline-block w-1.5 h-1.5 bg-green-600 dark:bg-green-400 rounded-full animate-ping"></span>
+                    LIVE
+                  </span>
                 )}
               </div>
             )}
-            <div className="w-full bg-secondary rounded-full h-2 mt-2">
+            <div className="w-full bg-secondary rounded-full h-2 mt-2 overflow-hidden">
               <div
-                className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+                className="bg-blue-500 h-2 rounded-full transition-all duration-500 ease-out"
                 style={{ width: `${Math.min(currentSystemMetrics.cpu_usage || 0, 100)}%` }}
               ></div>
             </div>
-            <p className="text-xs text-muted-foreground mt-2">
+            <div className="text-xs text-muted-foreground mt-2">
               {systemLoading ? (
                 <Skeleton className="h-3 w-32" />
               ) : (
                 `${systemInfo?.cpu_cores || 0} cores • ${systemInfo?.cpu_frequency || '0'}GHz`
               )}
-            </p>
+            </div>
           </CardContent>
         </Card>
 
@@ -237,16 +274,19 @@ export function DashboardOverview() {
             {systemLoading ? (
               <Skeleton className="h-8 w-20 mb-2" />
             ) : (
-              <div className="text-2xl font-bold flex items-center gap-2">
+              <div className="text-2xl font-bold flex items-center gap-2 transition-all duration-300">
                 {((currentSystemMetrics.memory_usage || 0) / (1024 ** 3)).toFixed(1)} GB
                 {realTimeSystemMetrics && (
-                  <span className="text-xs bg-green-100 text-green-800 px-1.5 py-0.5 rounded">LIVE</span>
+                  <span className="text-xs bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-400 px-1.5 py-0.5 rounded flex items-center gap-1 animate-pulse">
+                    <span className="inline-block w-1.5 h-1.5 bg-green-600 dark:bg-green-400 rounded-full animate-ping"></span>
+                    LIVE
+                  </span>
                 )}
               </div>
             )}
-            <div className="w-full bg-secondary rounded-full h-2 mt-2">
+            <div className="w-full bg-secondary rounded-full h-2 mt-2 overflow-hidden">
               <div
-                className="bg-green-500 h-2 rounded-full transition-all duration-300"
+                className="bg-green-500 h-2 rounded-full transition-all duration-500 ease-out"
                 style={{
                   width: `${Math.min(
                     ((currentSystemMetrics.memory_usage || 0) / (systemInfo?.total_memory || 1)) * 100,
@@ -255,13 +295,13 @@ export function DashboardOverview() {
                 }}
               ></div>
             </div>
-            <p className="text-xs text-muted-foreground mt-2">
+            <div className="text-xs text-muted-foreground mt-2">
               {systemLoading ? (
                 <Skeleton className="h-3 w-40" />
               ) : (
                 `${(((currentSystemMetrics.memory_usage || 0) / (systemInfo?.total_memory || 1)) * 100).toFixed(0)}% of ${((systemInfo?.total_memory || 0) / (1024 ** 3)).toFixed(0)}GB`
               )}
-            </p>
+            </div>
           </CardContent>
         </Card>
 
@@ -293,13 +333,13 @@ export function DashboardOverview() {
                 </>
               )}
             </div>
-            <p className="text-xs text-muted-foreground mt-2">
+            <div className="text-xs text-muted-foreground mt-2">
               {batchCountLoading ? (
                 <Skeleton className="h-3 w-32" />
               ) : (
                 `${batchJobCount || 0} total jobs • ${infernoMetrics?.active_inferences || 0} inferences • ${streamingSessions} streaming`
               )}
-            </p>
+            </div>
           </CardContent>
         </Card>
       </div>
