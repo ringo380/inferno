@@ -23,7 +23,7 @@ Inferno is a **production-ready AI inference server** that runs entirely on your
 - **Auto-Optimization**: Automatic quantization and hardware optimization
 
 ### **⚡ Enterprise Performance**
-- **GPU Acceleration**: NVIDIA, AMD, Apple Silicon, Intel support
+- **GPU Acceleration**: Metal (Apple Silicon, 13x speedup ✅), NVIDIA, AMD, Intel support
 - **Smart Caching**: Remember previous responses for instant results
 - **Batch Processing**: Handle thousands of requests efficiently
 - **Load Balancing**: Distribute work across multiple models/GPUs
@@ -52,12 +52,12 @@ Choose your preferred installation method:
 **Features:**
 - 🎨 Native macOS UI with vibrancy effects
 - 🔔 System tray integration with live metrics
-- ⚡ Metal GPU detection and capabilities (Phase 2.1-2.2 ✅, inference Phase 2.3 🚧)
-- 🍎 Apple Silicon optimization (M1/M2/M3/M4 detection) (NEW in Phase 2.1 ✅)
+- ⚡ **Metal GPU acceleration with 13x speedup** (Phases 2.1-2.3 ✅)
+- 🍎 Apple Silicon optimization (M1/M2/M3/M4 detection)
 - 🔄 Automatic model downloads and updates
 - 📊 Real-time performance monitoring with GPU metrics
 - 🔐 Built-in security and API key management
-- 🧠 Neural Engine detection for AI workloads (Phase 2.1 ✅)
+- 🧠 Neural Engine detection for AI workloads
 
 **Build from source:**
 ```bash

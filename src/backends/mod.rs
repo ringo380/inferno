@@ -101,7 +101,8 @@ pub struct BackendConfig {
 impl Default for BackendConfig {
     fn default() -> Self {
         Self {
-            gpu_enabled: false,
+            // Enable GPU by default on macOS (Metal), disable on other platforms
+            gpu_enabled: cfg!(target_os = "macos"),
             gpu_device: None,
             cpu_threads: None,
             context_size: 2048,
