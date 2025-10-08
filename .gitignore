@@ -47,6 +47,10 @@ Thumbs.db
 .env
 .env.local
 
+# Claude Code
+.claude/
+.claude-code/
+
 # Model files (too large for git)
 /models/*.gguf
 /models/*.onnx
