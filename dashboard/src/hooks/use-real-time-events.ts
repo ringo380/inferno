@@ -1,5 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
-import { listen, UnlistenFn } from '@tauri-apps/api/event';
+
+// Check if we're in a Tauri environment
+const isTauri = typeof window !== 'undefined' && (window as any).__TAURI_INTERNALS__;
 
 // Event types that match the Rust InfernoEvent enum
 export interface SystemMetricsEvent {
@@ -81,10 +83,17 @@ export function useRealTimeEvents() {
   const [connectionStatus, setConnectionStatus] = useState<'Connected' | 'Disconnected' | 'Connecting' | 'Reconnecting' | 'Error'>('Disconnected');
 
   useEffect(() => {
-    let unlistenFn: UnlistenFn | null = null;
+    // Skip in browser mode
+    if (!isTauri) {
+      setConnectionStatus('Disconnected');
+      return;
+    }
+
+    let unlistenFn: (() => void) | null = null;
 
     const setupListener = async () => {
       try {
+        const { listen } = await import('@tauri-apps/api/event');
         // Listen to the main inferno_event channel
         unlistenFn = await listen('inferno_event', (event) => {
           const infernoEvent = event.payload as InfernoEvent;
@@ -139,10 +148,16 @@ export function useRealTimeEventsByType<T extends InfernoEvent['type']>(eventTyp
   const [latestEvent, setLatestEvent] = useState<Extract<InfernoEvent, { type: T }> | null>(null);
 
   useEffect(() => {
-    let unlistenFn: UnlistenFn | null = null;
+    // Skip in browser mode
+    if (!isTauri) {
+      return;
+    }
+
+    let unlistenFn: (() => void) | null = null;
 
     const setupListener = async () => {
       try {
+        const { listen } = await import('@tauri-apps/api/event');
         unlistenFn = await listen('inferno_event', (event) => {
           const infernoEvent = event.payload as InfernoEvent;
 
@@ -187,10 +202,16 @@ export function useRealTimeModelEvents() {
   const [modelEvents, setModelEvents] = useState<ModelEvent[]>([]);
 
   useEffect(() => {
-    let unlistenFn: UnlistenFn | null = null;
+    // Skip in browser mode
+    if (!isTauri) {
+      return;
+    }
+
+    let unlistenFn: (() => void) | null = null;
 
     const setupListener = async () => {
       try {
+        const { listen } = await import('@tauri-apps/api/event');
         unlistenFn = await listen('model_updated', (event) => {
           const infernoEvent = event.payload as InfernoEvent;
 
@@ -223,10 +244,16 @@ export function useRealTimeInferenceEvents() {
   const [activeInferences, setActiveInferences] = useState<Map<string, InferenceEvent>>(new Map());
 
   useEffect(() => {
-    let unlistenFn: UnlistenFn | null = null;
+    // Skip in browser mode
+    if (!isTauri) {
+      return;
+    }
+
+    let unlistenFn: (() => void) | null = null;
 
     const setupListener = async () => {
       try {
+        const { listen } = await import('@tauri-apps/api/event');
         unlistenFn = await listen('inference_updated', (event) => {
           const infernoEvent = event.payload as InfernoEvent;
 
@@ -273,10 +300,16 @@ export function useRealTimeSecurityEvents() {
   const [apiKeyEvents, setApiKeyEvents] = useState<ApiKeyEvent[]>([]);
 
   useEffect(() => {
-    let unlistenFn: UnlistenFn | null = null;
+    // Skip in browser mode
+    if (!isTauri) {
+      return;
+    }
+
+    let unlistenFn: (() => void) | null = null;
 
     const setupListener = async () => {
       try {
+        const { listen } = await import('@tauri-apps/api/event');
         unlistenFn = await listen('security_updated', (event) => {
           const infernoEvent = event.payload as InfernoEvent;
 
@@ -312,10 +345,16 @@ export function useRealTimeBatchJobEvents() {
   const [activeBatchJobs, setActiveBatchJobs] = useState<Map<string, BatchJobEvent>>(new Map());
 
   useEffect(() => {
-    let unlistenFn: UnlistenFn | null = null;
+    // Skip in browser mode
+    if (!isTauri) {
+      return;
+    }
+
+    let unlistenFn: (() => void) | null = null;
 
     const setupListener = async () => {
       try {
+        const { listen } = await import('@tauri-apps/api/event');
         unlistenFn = await listen('batch_job_updated', (event) => {
           const infernoEvent = event.payload as InfernoEvent;
 
