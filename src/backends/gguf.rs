@@ -1,5 +1,6 @@
 use crate::{
     ai_features::sampling::{Sampler, SamplingConfig, SamplingStrategy},
+    ai_features::streaming::{create_stream_channel, StreamConfig, StreamToken},
     backends::{
         BackendConfig, BackendType, InferenceBackend, InferenceMetrics, InferenceParams,
         TokenStream,
@@ -277,25 +278,225 @@ impl GgufBackend {
     ) -> Result<TokenStream> {
         info!("🌊 Starting GGUF streaming inference with Metal GPU");
 
-        // Generate complete response first, then stream tokens
-        // TODO: Implement true streaming with channels from spawn_blocking
-        let response = self.generate_response(input, params).await?;
+        let model = self
+            .model
+            .as_ref()
+            .ok_or_else(|| InfernoError::Backend("Model not loaded".to_string()))?
+            .clone();
 
-        // Create streaming by splitting response into tokens
-        let tokens: Vec<String> = response
-            .chars()
-            .map(|c| c.to_string())
-            .collect();
+        let backend = self
+            .backend
+            .as_ref()
+            .ok_or_else(|| InfernoError::Backend("Backend not initialized".to_string()))?
+            .clone();
 
-        let stream = stream! {
-            for token in tokens {
-                yield Ok(token);
-                // Small delay to simulate real-time generation
-                tokio::time::sleep(tokio::time::Duration::from_millis(5)).await;
+        let input_str = input.to_string();
+        let context_size = self.config.context_size;
+        let batch_size = self.config.batch_size;
+        let max_tokens = params.max_tokens;
+        let temperature = params.temperature;
+        let top_k = params.top_k;
+        let top_p = params.top_p;
+        let seed = params.seed;
+
+        // Create streaming channel
+        let stream_config = StreamConfig {
+            buffer_size: 64,
+            include_timing: false,
+            max_tokens_per_sec: 0,
+        };
+        let (tx, rx) = create_stream_channel(stream_config);
+
+        // Spawn blocking task for inference with token streaming
+        tokio::task::spawn_blocking(move || {
+            let start_time = std::time::Instant::now();
+
+            // Create context for this inference session
+            let ctx_params = LlamaContextParams::default()
+                .with_n_ctx(std::num::NonZeroU32::new(context_size))
+                .with_n_batch(batch_size);
+
+            let mut context = match model.new_context(&backend, ctx_params) {
+                Ok(ctx) => ctx,
+                Err(e) => {
+                    let _ = tx.blocking_send(StreamToken {
+                        content: format!("Error: Failed to create context: {}", e),
+                        sequence: 0,
+                        is_valid: false,
+                        timestamp_ms: Some(start_time.elapsed().as_millis() as u64),
+                    });
+                    return;
+                }
+            };
+
+            // Tokenize input
+            let input_tokens = match model.str_to_token(&input_str, llama_cpp_2::model::AddBos::Always) {
+                Ok(tokens) => tokens,
+                Err(e) => {
+                    let _ = tx.blocking_send(StreamToken {
+                        content: format!("Error: Tokenization failed: {}", e),
+                        sequence: 0,
+                        is_valid: false,
+                        timestamp_ms: Some(start_time.elapsed().as_millis() as u64),
+                    });
+                    return;
+                }
+            };
+
+            debug!("📝 Tokenized {} tokens from input", input_tokens.len());
+
+            // Create batch and add input tokens
+            let n_ctx = context.n_ctx();
+            let mut batch = match llama_cpp_2::llama_batch::LlamaBatch::new(n_ctx as usize, 1) {
+                batch => batch,
+            };
+
+            for (i, token) in input_tokens.iter().enumerate() {
+                let is_last = i == input_tokens.len() - 1;
+                if let Err(e) = batch.add(token.clone(), i as i32, &[0], is_last) {
+                    let _ = tx.blocking_send(StreamToken {
+                        content: format!("Error: Failed to add token to batch: {}", e),
+                        sequence: 0,
+                        is_valid: false,
+                        timestamp_ms: Some(start_time.elapsed().as_millis() as u64),
+                    });
+                    return;
+                }
+            }
+
+            // Decode the input batch
+            if let Err(e) = context.decode(&mut batch) {
+                let _ = tx.blocking_send(StreamToken {
+                    content: format!("Error: Failed to decode batch: {}", e),
+                    sequence: 0,
+                    is_valid: false,
+                    timestamp_ms: Some(start_time.elapsed().as_millis() as u64),
+                });
+                return;
+            }
+
+            debug!("⚡ Input processed through Metal GPU");
+
+            // Create sampler with configuration from params
+            let sampling_config = SamplingConfig {
+                strategy: if input_str.is_empty() {
+                    SamplingStrategy::Greedy
+                } else if temperature.abs() < 0.01 {
+                    SamplingStrategy::Greedy
+                } else {
+                    SamplingStrategy::TopKP
+                },
+                temperature: temperature.max(0.1).min(2.0),
+                top_k: top_k.max(1),
+                top_p: top_p.max(0.0).min(1.0),
+                repeat_penalty: 1.1,
+                seed,
+            };
+
+            let strategy = sampling_config.strategy;
+            let temp = sampling_config.temperature;
+
+            let mut sampler = Sampler::new(sampling_config);
+
+            // Generate tokens and stream them one by one
+            let max_new_tokens = max_tokens as usize;
+            let mut sequence = 0u32;
+
+            debug!(
+                "🔀 Starting streaming token generation with strategy: {:?}, temp: {:.2}",
+                strategy, temp
+            );
+
+            for _ in 0..max_new_tokens {
+                // Get logits for sampling
+                let candidates_llama: Vec<_> = context.candidates().collect();
+
+                // Convert LlamaTokenData to our sampling format
+                let candidates: Vec<(i32, f32, f32)> = candidates_llama
+                    .iter()
+                    .map(|c| (c.id().0, c.logit(), c.p()))
+                    .collect();
+
+                // Sample next token
+                let next_token = match sampler.sample_from_candidates(&candidates) {
+                    Some(token) => token,
+                    None => {
+                        let _ = tx.blocking_send(StreamToken {
+                            content: "[ERROR: No candidates available]".to_string(),
+                            sequence,
+                            is_valid: false,
+                            timestamp_ms: Some(start_time.elapsed().as_millis() as u64),
+                        });
+                        break;
+                    }
+                };
+
+                // Check for end of sequence
+                if next_token == model.token_eos().0 {
+                    debug!("🏁 End of generation token encountered");
+                    break;
+                }
+
+                // Detokenize immediately and send
+                match model.token_to_str(llama_cpp_2::token::LlamaToken(next_token), llama_cpp_2::model::Special::Tokenize) {
+                    Ok(token_str) => {
+                        let stream_token = StreamToken {
+                            content: token_str.clone(),
+                            sequence,
+                            is_valid: true,
+                            timestamp_ms: Some(start_time.elapsed().as_millis() as u64),
+                        };
+                        if tx.blocking_send(stream_token).is_err() {
+                            // Receiver dropped, stop generating
+                            debug!("🛑 Stream receiver disconnected, stopping generation");
+                            break;
+                        }
+                    }
+                    Err(_) => {
+                        // Send error token but continue
+                        let stream_token = StreamToken::invalid(sequence)
+                            .with_timing(start_time.elapsed().as_millis() as u64);
+                        let _ = tx.blocking_send(stream_token);
+                    }
+                }
+
+                sequence += 1;
+
+                // Prepare next batch with the sampled token
+                batch.clear();
+                if let Err(e) = batch.add(
+                    llama_cpp_2::token::LlamaToken(next_token),
+                    input_tokens.len() as i32 + sequence as i32 - 1,
+                    &[0],
+                    true,
+                ) {
+                    debug!("Failed to add output token: {}", e);
+                    break;
+                }
+
+                // Decode for next iteration
+                if let Err(e) = context.decode(&mut batch) {
+                    debug!("Failed to decode output token: {}", e);
+                    break;
+                }
+            }
+
+            debug!(
+                "✅ Streaming complete: generated {} tokens in {:?}",
+                sequence,
+                start_time.elapsed()
+            );
+        });
+
+        // Return stream that yields from channel receiver
+        let result_stream = stream! {
+            let mut rx = rx;
+            while let Some(stream_token) = rx.recv().await {
+                yield Ok(stream_token.content);
             }
         };
 
-        Ok(Box::pin(stream))
+        Ok(Box::pin(result_stream))
     }
 }
 
