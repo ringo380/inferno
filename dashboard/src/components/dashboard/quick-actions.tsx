@@ -1,5 +1,6 @@
 'use client';
 
+import { useState, useMemo, useCallback, memo } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   Play,
@@ -15,10 +16,14 @@ import { useRouter } from 'next/navigation';
 import { useDashboardData, useActiveProcesses, useInfernoMetrics, useRecentActivities } from '@/hooks/use-tauri-api';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-hot-toast';
+import { QuickInferenceModal } from '@/components/modals/quick-inference-modal';
+import { ModelUploadModal } from '@/components/modals/model-upload-modal';
 
-export function QuickActions() {
+export const QuickActions = memo(function QuickActions() {
   const router = useRouter();
   const queryClient = useQueryClient();
+  const [quickInferenceOpen, setQuickInferenceOpen] = useState(false);
+  const [modelUploadOpen, setModelUploadOpen] = useState(false);
 
   // Fetch data for export functionality
   const dashboardData = useDashboardData();
@@ -26,7 +31,7 @@ export function QuickActions() {
   const { data: infernoMetrics } = useInfernoMetrics();
   const { data: recentActivities } = useRecentActivities(100);
 
-  const handleRefreshAll = async () => {
+  const handleRefreshAll = useCallback(async () => {
     try {
       await queryClient.invalidateQueries();
       toast.success('All data refreshed successfully');
@@ -34,9 +39,9 @@ export function QuickActions() {
       console.error('Refresh failed:', error);
       toast.error('Failed to refresh data');
     }
-  };
+  }, [queryClient]);
 
-  const handleExportData = async () => {
+  const handleExportData = useCallback(async () => {
     try {
       const exportData = {
         timestamp: new Date().toISOString(),
@@ -75,22 +80,22 @@ export function QuickActions() {
       console.error('Export failed:', error);
       toast.error('Failed to export data');
     }
-  };
+  }, [dashboardData, activeProcesses, infernoMetrics, recentActivities]);
 
-  const actions = [
+  const actions = useMemo(() => [
     {
       title: 'Run Inference',
       description: 'Test model with custom input',
       icon: Play,
       color: 'bg-green-500 hover:bg-green-600',
-      onClick: () => router.push('/inference'),
+      onClick: () => setQuickInferenceOpen(true),
     },
     {
       title: 'Upload Model',
       description: 'Add new AI model',
       icon: Upload,
       color: 'bg-blue-500 hover:bg-blue-600',
-      onClick: () => router.push('/models'),
+      onClick: () => setModelUploadOpen(true),
     },
     {
       title: 'View Metrics',
@@ -120,7 +125,7 @@ export function QuickActions() {
       color: 'bg-gray-500 hover:bg-gray-600',
       onClick: handleExportData,
     },
-  ];
+  ], [router, handleExportData]);
 
   return (
     <div className="space-y-3">
@@ -152,6 +157,18 @@ export function QuickActions() {
           Refresh All Data
         </Button>
       </div>
+
+      {/* Quick Inference Modal */}
+      <QuickInferenceModal
+        open={quickInferenceOpen}
+        onOpenChange={setQuickInferenceOpen}
+      />
+
+      {/* Model Upload Modal */}
+      <ModelUploadModal
+        open={modelUploadOpen}
+        onOpenChange={setModelUploadOpen}
+      />
     </div>
   );
-}
+});

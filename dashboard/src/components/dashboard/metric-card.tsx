@@ -1,5 +1,6 @@
 'use client';
 
+import { memo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { LucideIcon, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -27,7 +28,7 @@ const trendVariants = {
   stable: { icon: Minus, color: 'text-gray-600 dark:text-gray-400' },
 };
 
-export function MetricCard({
+export const MetricCard = memo(function MetricCard({
   title,
   value,
   description,
@@ -53,4 +54,4 @@ export function MetricCard({
       </CardContent>
     </Card>
   );
-}
+});

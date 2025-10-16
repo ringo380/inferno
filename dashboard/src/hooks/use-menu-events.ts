@@ -1,9 +1,11 @@
 'use client';
 
 import { useEffect } from 'react';
-import { listen } from '@tauri-apps/api/event';
 import { useRouter } from 'next/navigation';
 import { toast } from 'react-hot-toast';
+
+// Check if we're in a Tauri environment
+const isTauri = typeof window !== 'undefined' && (window as any).__TAURI_INTERNALS__;
 
 /**
  * Hook to listen for menu and tray events from the native macOS menu bar
@@ -28,13 +30,20 @@ export function useMenuEvents(handlers?: {
   const router = useRouter();
 
   useEffect(() => {
+    // Skip event listeners in browser mode
+    if (!isTauri) {
+      return;
+    }
+
     const unlisteners: (() => void)[] = [];
 
-    // Menu: Preferences
-    listen('menu://open-preferences', () => {
-      console.log('📋 Menu: Open Preferences');
-      handlers?.onOpenPreferences?.() || router.push('/settings');
-    }).then((unlisten) => unlisteners.push(unlisten));
+    // Dynamic import of Tauri event API
+    import('@tauri-apps/api/event').then(({ listen }) => {
+      // Menu: Preferences
+      listen('menu://open-preferences', () => {
+        console.log('📋 Menu: Open Preferences');
+        handlers?.onOpenPreferences?.() || router.push('/settings');
+      }).then((unlisten) => unlisteners.push(unlisten));
 
     // Menu: New Inference
     listen('menu://new-inference', () => {
@@ -145,12 +154,15 @@ export function useMenuEvents(handlers?: {
       handlers?.onQuickInference?.();
     }).then((unlisten) => unlisteners.push(unlisten));
 
-    // System: Appearance Changed
-    listen<string>('appearance-changed', (event) => {
-      const appearance = event.payload;
-      console.log(`🎨 System appearance changed: ${appearance}`);
-      toast.success(`Switched to ${appearance} mode`, { duration: 2000 });
-    }).then((unlisten) => unlisteners.push(unlisten));
+      // System: Appearance Changed
+      listen<string>('appearance-changed', (event) => {
+        const appearance = event.payload;
+        console.log(`🎨 System appearance changed: ${appearance}`);
+        toast.success(`Switched to ${appearance} mode`, { duration: 2000 });
+      }).then((unlisten) => unlisteners.push(unlisten));
+    }).catch((error) => {
+      console.error('Failed to setup menu event listeners:', error);
+    });
 
     // Cleanup
     return () => {
