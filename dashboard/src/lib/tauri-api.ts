@@ -76,20 +76,19 @@ const mockInfernoMetrics: InfernoMetrics = {
   success_count: 1180,
   error_count: 70,
   average_latency: 245.5,
-  models_loaded: 1,
-  active_streaming_sessions: 0,
+  cpu_usage: 45.2,
+  memory_usage: 8 * 1024 * 1024 * 1024,
   gpu_usage: 65.3,
-  cache_hits: 850,
-  cache_misses: 400,
-  uptime_seconds: 86400
+  active_models: 1,
+  active_inferences: 2,
+  active_streaming_sessions: 0
 };
 
 const mockActiveProcesses: ActiveProcessInfo = {
   active_models: [],
   active_inferences: 0,
-  streaming_sessions: 0,
   batch_jobs: 2,
-  background_tasks: 3
+  streaming_sessions: 0
 };
 
 // Tauri API service layer for communicating with the Rust backend
@@ -217,7 +216,7 @@ export class TauriApiService {
         success_count: mockInfernoMetrics.success_count,
         error_count: mockInfernoMetrics.error_count,
         average_latency: mockInfernoMetrics.average_latency,
-        models_loaded: mockInfernoMetrics.models_loaded,
+        models_loaded: mockInfernoMetrics.active_models,
       });
     }
     try {
@@ -229,7 +228,7 @@ export class TauriApiService {
         success_count: mockInfernoMetrics.success_count,
         error_count: mockInfernoMetrics.error_count,
         average_latency: mockInfernoMetrics.average_latency,
-        models_loaded: mockInfernoMetrics.models_loaded,
+        models_loaded: mockInfernoMetrics.active_models,
       };
     }
   }
@@ -406,7 +405,13 @@ export class TauriApiService {
         logLevel: 'info',
         notifications: {
           enabled: true,
-          types: ['inference_complete', 'error'],
+          types: {
+            system: true,
+            inference: true,
+            security: true,
+            batch: true,
+            model: true,
+          },
           priority_filter: 'high',
           auto_dismiss_after: 5000,
           max_notifications: 10
@@ -681,9 +686,21 @@ export class TauriApiService {
   async createApiKey(request: CreateApiKeyRequest): Promise<CreateApiKeyResponse> {
     if (!isTauri) {
       console.log('[Browser Mode] Would create API key');
+      const rawKey = 'inferno_mock_key_' + Math.random().toString(36).substring(2);
       return Promise.resolve({
-        key_id: `mock-key-${Date.now()}`,
-        raw_key: 'inferno_mock_key_' + Math.random().toString(36).substring(2)
+        api_key: {
+          id: `mock-key-${Date.now()}`,
+          name: request.name,
+          permissions: request.permissions,
+          created_at: new Date().toISOString(),
+          expires_at: undefined,
+          is_active: true,
+          key_hash: 'mock_hash_' + rawKey.substring(0, 8),
+          key_prefix: rawKey.substring(0, 8),
+          usage_count: 0,
+          created_by: 'test-user'
+        },
+        raw_key: rawKey
       });
     }
     try {
@@ -759,23 +776,13 @@ export class TauriApiService {
 
   async getSecurityMetrics(): Promise<SecurityMetrics> {
     if (!isTauri) {
-      return Promise.resolve({
-        total_api_calls: 1250,
-        failed_auth_attempts: 3,
-        active_api_keys: 2,
-        recent_security_events: []
-      });
+      return Promise.resolve({} as SecurityMetrics);
     }
     try {
       return await safeInvoke('get_security_metrics');
     } catch (error) {
       console.error('Failed to get security metrics:', error);
-      return {
-        total_api_calls: 0,
-        failed_auth_attempts: 0,
-        active_api_keys: 0,
-        recent_security_events: []
-      };
+      return {} as SecurityMetrics;
     }
   }
 

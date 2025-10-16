@@ -187,6 +187,22 @@ export function DesktopBridge() {
             break;
         }
       });
+
+      // Phase 3: Listen for system appearance changes (light/dark mode)
+      await addListener<string>('appearance-changed', (event) => {
+        const appearance = event.payload;
+        console.log(`🎨 System appearance changed: ${appearance}`);
+
+        // Update theme based on system appearance
+        const themeElement = document.documentElement;
+        if (appearance === 'dark') {
+          themeElement.classList.add('dark');
+        } else {
+          themeElement.classList.remove('dark');
+        }
+
+        toast.success(`Switched to ${appearance} mode`, { duration: 2000 });
+      });
     };
 
     registerListeners().catch(error => {
