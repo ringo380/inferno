@@ -10,6 +10,9 @@
 //!
 //! Operations modules handle production deployment and maintenance tasks.
 
+// New queue module for Phase 4A
+pub mod queue;
+
 // Re-export from existing locations for now
 pub use crate::backup_recovery;
 pub use crate::batch;
