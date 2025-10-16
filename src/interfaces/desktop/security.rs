@@ -86,14 +86,17 @@ pub struct SecurityManager {
 }
 
 impl SecurityManager {
-    pub fn new() -> Self {
+    pub fn new<T>(_database_manager: T) -> Self
+    where
+        T: Send + Sync + 'static,
+    {
         Self {
             api_keys: Arc::new(Mutex::new(Vec::new())),
             security_events: Arc::new(Mutex::new(Vec::new())),
         }
     }
 
-    pub fn generate_api_key(
+    pub async fn generate_api_key(
         &self,
         request: CreateApiKeyRequest,
     ) -> Result<CreateApiKeyResponse, String> {
@@ -140,12 +143,12 @@ impl SecurityManager {
         Ok(CreateApiKeyResponse { api_key, raw_key })
     }
 
-    pub fn get_api_keys(&self) -> Result<Vec<ApiKey>, String> {
+    pub async fn get_api_keys(&self) -> Result<Vec<ApiKey>, String> {
         let keys = self.api_keys.lock().map_err(|e| e.to_string())?;
         Ok(keys.clone())
     }
 
-    pub fn revoke_api_key(&self, key_id: String) -> Result<(), String> {
+    pub async fn revoke_api_key(&self, key_id: String) -> Result<(), String> {
         let mut keys = self.api_keys.lock().map_err(|e| e.to_string())?;
 
         if let Some(key) = keys.iter_mut().find(|k| k.id == key_id) {
@@ -170,7 +173,7 @@ impl SecurityManager {
         }
     }
 
-    pub fn delete_api_key(&self, key_id: String) -> Result<(), String> {
+    pub async fn delete_api_key(&self, key_id: String) -> Result<(), String> {
         let mut keys = self.api_keys.lock().map_err(|e| e.to_string())?;
         let initial_len = keys.len();
         keys.retain(|k| k.id != key_id);
@@ -195,7 +198,7 @@ impl SecurityManager {
         }
     }
 
-    pub fn validate_api_key(&self, raw_key: String) -> Result<Option<ApiKey>, String> {
+    pub async fn validate_api_key(&self, raw_key: String) -> Result<Option<ApiKey>, String> {
         let key_hash = self.hash_key(&raw_key);
         let mut keys = self.api_keys.lock().map_err(|e| e.to_string())?;
 
@@ -247,7 +250,7 @@ impl SecurityManager {
         }
     }
 
-    pub fn get_security_events(&self, limit: Option<usize>) -> Result<Vec<SecurityEvent>, String> {
+    pub async fn get_security_events(&self, limit: Option<usize>) -> Result<Vec<SecurityEvent>, String> {
         let events = self.security_events.lock().map_err(|e| e.to_string())?;
         let limit = limit.unwrap_or(100);
 
@@ -259,7 +262,7 @@ impl SecurityManager {
         Ok(sorted_events)
     }
 
-    pub fn get_security_metrics(&self) -> Result<SecurityMetrics, String> {
+    pub async fn get_security_metrics(&self) -> Result<SecurityMetrics, String> {
         let keys = self.api_keys.lock().map_err(|e| e.to_string())?;
         let events = self.security_events.lock().map_err(|e| e.to_string())?;
 
@@ -309,7 +312,7 @@ impl SecurityManager {
         })
     }
 
-    pub fn clear_security_events(&self) -> Result<(), String> {
+    pub async fn clear_security_events(&self) -> Result<(), String> {
         let mut events = self.security_events.lock().map_err(|e| e.to_string())?;
         events.clear();
         Ok(())
@@ -350,7 +353,7 @@ impl SecurityManager {
     }
 
     // Initialize with some sample data for testing
-    pub fn initialize_with_sample_data(&self) -> Result<(), String> {
+    pub async fn initialize_with_sample_data(&self) -> Result<(), String> {
         // Create a sample API key
         let sample_request = CreateApiKeyRequest {
             name: "Dashboard Access".to_string(),
@@ -358,7 +361,7 @@ impl SecurityManager {
             expires_in_days: Some(30),
         };
 
-        self.generate_api_key(sample_request)?;
+        self.generate_api_key(sample_request).await?;
 
         // Add some sample security events
         let sample_events = vec![
@@ -396,6 +399,6 @@ impl SecurityManager {
 
 impl Default for SecurityManager {
     fn default() -> Self {
-        Self::new()
+        Self::new(())
     }
 }

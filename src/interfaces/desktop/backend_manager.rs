@@ -30,6 +30,8 @@ pub struct InferenceParams {
     pub top_p: Option<f32>,
     pub max_tokens: Option<u32>,
     pub stream: Option<bool>,
+    pub stop_sequences: Option<Vec<String>>,
+    pub seed: Option<u64>,
 }
 
 pub struct BackendManager {
@@ -75,8 +77,48 @@ impl Drop for StreamingSessionGuard {
     }
 }
 
+/// Guard that tracks active inference operations and auto-decrements when dropped.
+pub struct InferenceGuard {
+    metrics: Arc<Mutex<GlobalMetrics>>,
+}
+
+impl InferenceGuard {
+    fn new(metrics: Arc<Mutex<GlobalMetrics>>) -> Self {
+        {
+            let mut guard_metrics = metrics.lock().unwrap();
+            guard_metrics.active_inferences += 1;
+            guard_metrics.inference_count += 1;
+        }
+
+        Self { metrics }
+    }
+}
+
+impl Drop for InferenceGuard {
+    fn drop(&mut self) {
+        let mut metrics = self.metrics.lock().unwrap();
+        if metrics.active_inferences > 0 {
+            metrics.active_inferences -= 1;
+        }
+    }
+}
+
 impl BackendManager {
-    pub async fn new(activity_logger: Arc<ActivityLogger>, models_dir: PathBuf) -> Result<Self> {
+    pub async fn new(activity_logger: Arc<ActivityLogger>) -> Result<Self> {
+        // Use default models directory (will be overridden by settings)
+        let default_models_dir = std::path::PathBuf::from("test_models/test_models");
+        let model_manager = ModelManager::new(&default_models_dir);
+
+        Ok(Self {
+            model_manager: Arc::new(RwLock::new(model_manager)),
+            loaded_backends: Arc::new(Mutex::new(HashMap::new())),
+            global_metrics: Arc::new(Mutex::new(GlobalMetrics::default())),
+            activity_logger,
+        })
+    }
+
+    /// Create BackendManager with custom models directory
+    pub async fn with_models_dir(activity_logger: Arc<ActivityLogger>, models_dir: PathBuf) -> Result<Self> {
         let model_manager = ModelManager::new(&models_dir);
 
         Ok(Self {
@@ -287,8 +329,8 @@ impl BackendManager {
             temperature: params.temperature.unwrap_or(0.7),
             top_p: params.top_p.unwrap_or(0.9),
             stream: params.stream.unwrap_or(false),
-            stop_sequences: Vec::new(),
-            seed: None,
+            stop_sequences: params.stop_sequences.clone().unwrap_or_default(),
+            seed: params.seed,
         };
 
         // Track active inference count while the request is in-flight
@@ -378,14 +420,14 @@ impl BackendManager {
 
     pub async fn infer_stream(
         &self,
-        backend_id: String,
-        prompt: String,
-        params: InferenceParams,
+        backend_id: &str,
+        prompt: &str,
+        params: &InferenceParams,
     ) -> Result<TokenStream> {
         let backend_handle = {
             let loaded_backends = self.loaded_backends.lock().unwrap();
             loaded_backends
-                .get(&backend_id)
+                .get(backend_id)
                 .ok_or_else(|| anyhow::anyhow!("Backend not found: {}", backend_id))?
                 .clone()
         };
@@ -395,11 +437,11 @@ impl BackendManager {
             temperature: params.temperature.unwrap_or(0.7),
             top_p: params.top_p.unwrap_or(0.9),
             stream: true,
-            stop_sequences: Vec::new(),
-            seed: None,
+            stop_sequences: params.stop_sequences.clone().unwrap_or_default(),
+            seed: params.seed,
         };
 
-        backend_handle.infer_stream(&prompt, &inferno_params).await
+        backend_handle.infer_stream(prompt, &inferno_params).await
     }
 
     pub fn get_metrics(&self) -> GlobalMetrics {
@@ -412,5 +454,45 @@ impl BackendManager {
         Ok(model_manager
             .validate_model(&std::path::PathBuf::from(model_path))
             .await?)
+    }
+
+    /// Begin tracking an inference operation (returns a guard that auto-decrements on drop)
+    pub fn begin_inference(&self) -> InferenceGuard {
+        InferenceGuard::new(Arc::clone(&self.global_metrics))
+    }
+
+    /// Record the result of an inference operation
+    pub fn record_inference_result(
+        &self,
+        _backend_id: &str,
+        _prompt_tokens: u32,
+        _completion_tokens: u32,
+        latency_ms: u64,
+        status: ActivityStatus,
+    ) {
+        let mut metrics = self.global_metrics.lock().unwrap();
+
+        match status {
+            ActivityStatus::Success => {
+                metrics.success_count += 1;
+
+                // Update rolling average latency
+                let current_avg = metrics.average_latency;
+                let count = metrics.inference_count as f64;
+                if count > 0.0 {
+                    metrics.average_latency = ((current_avg * (count - 1.0)) + latency_ms as f64) / count;
+                }
+            }
+            ActivityStatus::Error => {
+                metrics.error_count += 1;
+            }
+            _ => {}
+        }
+    }
+
+    /// Get the current number of active inferences
+    pub fn get_active_inference_count(&self) -> u32 {
+        let metrics = self.global_metrics.lock().unwrap();
+        metrics.active_inferences
     }
 }
