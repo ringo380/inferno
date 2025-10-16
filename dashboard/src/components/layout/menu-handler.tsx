@@ -46,7 +46,7 @@ export function MenuHandler() {
     },
 
     onShowShortcuts: () => {
-      toast.info('Keyboard shortcuts:\n⌘N New Inference\n⌘O Open Model\n⌘1-4 Navigate', {
+      toast('Keyboard shortcuts:\n⌘N New Inference\n⌘O Open Model\n⌘1-4 Navigate', {
         duration: 5000,
         style: { whiteSpace: 'pre-line' }
       });
