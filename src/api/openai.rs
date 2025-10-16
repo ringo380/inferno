@@ -21,8 +21,10 @@ pub struct ChatCompletionRequest {
     pub max_tokens: u32,
     #[serde(default = "default_temperature")]
     pub temperature: f32,
+                    top_k: 40,
     #[serde(default = "default_top_p")]
     pub top_p: f32,
+                    top_k: 40,
     #[serde(default)]
     pub n: Option<u32>,
     #[serde(default)]
@@ -77,8 +79,10 @@ pub struct CompletionRequest {
     pub max_tokens: u32,
     #[serde(default = "default_temperature")]
     pub temperature: f32,
+                    top_k: 40,
     #[serde(default = "default_top_p")]
     pub top_p: f32,
+                    top_k: 40,
     #[serde(default)]
     pub n: Option<u32>,
     #[serde(default)]
@@ -247,6 +251,7 @@ pub async fn chat_completions(
     let inference_params = InferenceParams {
         max_tokens: request.max_tokens,
         temperature: request.temperature,
+                    top_k: 40,
         top_p: request.top_p,
         stream: request.stream,
         stop_sequences,
@@ -300,6 +305,7 @@ pub async fn completions(
     let inference_params = InferenceParams {
         max_tokens: request.max_tokens,
         temperature: request.temperature,
+                    top_k: 40,
         top_p: request.top_p,
         stream: request.stream,
         stop_sequences,

@@ -325,6 +325,7 @@ async fn run_inference_benchmark(
     let inference_params = InferenceParams {
         max_tokens: 50,
         temperature: 0.7,
+                    top_k: 40,
         top_p: 0.9,
         stream: false,
         stop_sequences: vec![],
@@ -483,6 +484,7 @@ async fn run_memory_benchmark(
             let inference_params = InferenceParams {
                 max_tokens: 20,
                 temperature: 0.7,
+                    top_k: 40,
                 top_p: 0.9,
                 stream: false,
                 stop_sequences: vec![],
@@ -607,6 +609,7 @@ async fn run_concurrent_benchmark(
         let inference_params = InferenceParams {
             max_tokens: 30,
             temperature: 0.7,
+                    top_k: 40,
             top_p: 0.9,
             stream: false,
             stop_sequences: vec![],
@@ -1144,6 +1147,7 @@ async fn memory_profile(
     let params = InferenceParams {
         max_tokens: 50,
         temperature: 0.7,
+                    top_k: 40,
         top_p: 0.9,
         stream: false,
         stop_sequences: vec![],

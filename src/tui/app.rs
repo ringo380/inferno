@@ -888,6 +888,7 @@ impl App {
         let inference_params = InferenceParams {
             max_tokens: 512,
             temperature: 0.7,
+                    top_k: 40,
             top_p: 0.9,
             stream: true,
             seed: None,

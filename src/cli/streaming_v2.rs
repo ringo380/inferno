@@ -127,6 +127,7 @@ impl Command for StreamingBenchmark {
         let inference_params = InferenceParams {
             max_tokens: 100, // Shorter responses for benchmarking
             temperature: 0.7,
+                    top_k: 40,
             top_p: 0.9,
             stream: true,
             stop_sequences: vec![],
