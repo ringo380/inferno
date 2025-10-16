@@ -17,3 +17,6 @@ pub use crate::streaming;
 
 // Optimization consolidation
 pub mod optimization;
+
+// Sampling strategies and configuration
+pub mod sampling;

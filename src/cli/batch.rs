@@ -29,9 +29,11 @@ pub struct BatchArgs {
 
     #[arg(long, help = "Temperature for text generation", default_value = "0.7")]
     pub temperature: f32,
+                    top_k: 40,
 
     #[arg(long, help = "Top-p for text generation", default_value = "0.9")]
     pub top_p: f32,
+                    top_k: 40,
 
     #[arg(long, help = "Number of concurrent requests", default_value = "4")]
     pub concurrency: usize,
@@ -179,6 +181,7 @@ pub async fn execute(args: BatchArgs, config: &Config) -> Result<()> {
     let inference_params = InferenceParams {
         max_tokens: args.max_tokens,
         temperature: args.temperature,
+                    top_k: 40,
         top_p: args.top_p,
         stream: false, // Batch processing uses non-streaming
         stop_sequences: vec![],

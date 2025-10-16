@@ -31,7 +31,9 @@ pub struct BatchProcess {
     output_format: BatchOutputFormat,
     max_tokens: u32,
     temperature: f32,
+                    top_k: 40,
     top_p: f32,
+                    top_k: 40,
     concurrency: usize,
     timeout: u64,
     retries: u32,
@@ -54,7 +56,9 @@ impl BatchProcess {
         output_format: BatchOutputFormat,
         max_tokens: u32,
         temperature: f32,
+                    top_k: 40,
         top_p: f32,
+                    top_k: 40,
         concurrency: usize,
         timeout: u64,
         retries: u32,
@@ -252,6 +256,7 @@ impl Command for BatchProcess {
         let inference_params = InferenceParams {
             max_tokens: self.max_tokens,
             temperature: self.temperature,
+                    top_k: 40,
             top_p: self.top_p,
             stream: false, // Batch processing uses non-streaming
             stop_sequences: vec![],

@@ -1,4 +1,5 @@
 use crate::{
+    ai_features::sampling::{Sampler, SamplingConfig, SamplingStrategy},
     backends::{
         BackendConfig, BackendType, InferenceBackend, InferenceMetrics, InferenceParams,
         TokenStream,
@@ -187,20 +188,40 @@ impl GgufBackend {
 
             debug!("⚡ Input processed through Metal GPU");
 
+            // Create sampler with configuration from params
+            let sampling_config = SamplingConfig {
+                strategy: if input_str.is_empty() {
+                    SamplingStrategy::Greedy
+                } else if params.temperature.abs() < 0.01 {
+                    SamplingStrategy::Greedy
+                } else {
+                    SamplingStrategy::TopKP
+                },
+                temperature: params.temperature.max(0.1).min(2.0),
+                top_k: params.top_k.max(1),
+                top_p: params.top_p.max(0.0).min(1.0),
+                repeat_penalty: 1.1,
+                seed: params.seed,
+            };
+
+            let mut sampler = Sampler::new(sampling_config);
+
             // Generate tokens one by one
             let mut output_tokens = Vec::new();
             let max_new_tokens = max_tokens as usize;
+
+            debug!(
+                "🔀 Starting token generation with sampling strategy: {:?}, temp: {:.2}",
+                sampling_config.strategy, sampling_config.temperature
+            );
 
             for _ in 0..max_new_tokens {
                 // Get logits for sampling - collect iterator to vec
                 let candidates: Vec<_> = context.candidates().collect();
 
-                // Simple greedy sampling (pick highest probability token)
-                let next_token = candidates
-                    .iter()
-                    .max_by(|a, b| a.p().partial_cmp(&b.p()).unwrap_or(std::cmp::Ordering::Equal))
-                    .map(|c| c.id())
-                    .ok_or_else(|| InfernoError::Backend("No candidates available".to_string()))?;
+                // Use configured sampling strategy
+                let next_token = sampler.sample(&candidates)
+                    .ok_or_else(|| InfernoError::Backend("No candidates available for sampling".to_string()))?;
 
                 // Check for end of sequence - use model's token methods
                 if next_token == model.token_eos() {

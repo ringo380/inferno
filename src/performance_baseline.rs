@@ -243,6 +243,7 @@ impl PerformanceBaseline {
         let inference_params = InferenceParams {
             max_tokens: 50,
             temperature: 0.7,
+                    top_k: 40,
             top_p: 0.9,
             stream: false,
             stop_sequences: vec![],

@@ -63,6 +63,7 @@ pub async fn execute(args: BenchArgs, config: &Config) -> Result<()> {
     let inference_params = InferenceParams {
         max_tokens: args.tokens,
         temperature: 0.7,
+                    top_k: 40,
         top_p: 0.9,
         stream: false,
         stop_sequences: vec![],

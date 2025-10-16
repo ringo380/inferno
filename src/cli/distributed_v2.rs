@@ -245,6 +245,7 @@ impl Command for DistributedBenchmark {
                     let params = InferenceParams {
                         max_tokens: 50,
                         temperature: 0.7,
+                    top_k: 40,
                         top_p: 0.9,
                         stream: false,
                         stop_sequences: vec![],
@@ -437,6 +438,7 @@ pub struct DistributedTest {
     stream: bool,
     max_tokens: u32,
     temperature: f32,
+                    top_k: 40,
 }
 
 impl DistributedTest {
@@ -447,6 +449,7 @@ impl DistributedTest {
         stream: bool,
         max_tokens: u32,
         temperature: f32,
+                    top_k: 40,
     ) -> Self {
         Self {
             config,
@@ -510,6 +513,7 @@ impl Command for DistributedTest {
         let params = InferenceParams {
             max_tokens: self.max_tokens,
             temperature: self.temperature,
+                    top_k: 40,
             top_p: 0.9,
             stream: self.stream,
             stop_sequences: vec![],
