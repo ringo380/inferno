@@ -154,6 +154,10 @@ impl GgufBackend {
         let context_size = self.config.context_size;
         let batch_size = self.config.batch_size;
         let max_tokens = params.max_tokens;
+        let temperature = params.temperature;
+        let top_k = params.top_k;
+        let top_p = params.top_p;
+        let seed = params.seed;
 
         // Perform inference in spawn_blocking since LlamaContext is !Send
         let response = tokio::task::spawn_blocking(move || {
@@ -192,17 +196,21 @@ impl GgufBackend {
             let sampling_config = SamplingConfig {
                 strategy: if input_str.is_empty() {
                     SamplingStrategy::Greedy
-                } else if params.temperature.abs() < 0.01 {
+                } else if temperature.abs() < 0.01 {
                     SamplingStrategy::Greedy
                 } else {
                     SamplingStrategy::TopKP
                 },
-                temperature: params.temperature.max(0.1).min(2.0),
-                top_k: params.top_k.max(1),
-                top_p: params.top_p.max(0.0).min(1.0),
+                temperature: temperature.max(0.1).min(2.0),
+                top_k: top_k.max(1),
+                top_p: top_p.max(0.0).min(1.0),
                 repeat_penalty: 1.1,
-                seed: params.seed,
+                seed,
             };
+
+            // Log before sampler takes ownership
+            let strategy = sampling_config.strategy;
+            let temperature = sampling_config.temperature;
 
             let mut sampler = Sampler::new(sampling_config);
 
@@ -212,19 +220,25 @@ impl GgufBackend {
 
             debug!(
                 "🔀 Starting token generation with sampling strategy: {:?}, temp: {:.2}",
-                sampling_config.strategy, sampling_config.temperature
+                strategy, temperature
             );
 
             for _ in 0..max_new_tokens {
                 // Get logits for sampling - collect iterator to vec
-                let candidates: Vec<_> = context.candidates().collect();
+                let candidates_llama: Vec<_> = context.candidates().collect();
+
+                // Convert LlamaTokenData to our TokenCandidate format
+                let candidates: Vec<(i32, f32, f32)> = candidates_llama
+                    .iter()
+                    .map(|c| (c.id().0, c.logit(), c.p()))
+                    .collect();
 
                 // Use configured sampling strategy
-                let next_token = sampler.sample(&candidates)
+                let next_token = sampler.sample_from_candidates(&candidates)
                     .ok_or_else(|| InfernoError::Backend("No candidates available for sampling".to_string()))?;
 
                 // Check for end of sequence - use model's token methods
-                if next_token == model.token_eos() {
+                if next_token == model.token_eos().0 {
                     debug!("🏁 End of generation token encountered");
                     break;
                 }
@@ -233,7 +247,7 @@ impl GgufBackend {
 
                 // Prepare next batch with the sampled token
                 batch.clear();
-                batch.add(next_token, input_tokens.len() as i32 + output_tokens.len() as i32 - 1, &[0], true)
+                batch.add(LlamaToken(next_token), input_tokens.len() as i32 + output_tokens.len() as i32 - 1, &[0], true)
                     .map_err(|e| InfernoError::Backend(format!("Failed to add output token: {}", e)))?;
 
                 // Decode for next iteration
@@ -241,9 +255,10 @@ impl GgufBackend {
                     .map_err(|e| InfernoError::Backend(format!("Failed to decode output token: {}", e)))?;
             }
 
-            // Detokenize output
+            // Detokenize output - convert i32 tokens to LlamaToken
+            let llama_tokens: Vec<LlamaToken> = output_tokens.iter().map(|&t| LlamaToken(t)).collect();
             let response = model
-                .tokens_to_str(&output_tokens, Special::Tokenize)
+                .tokens_to_str(&llama_tokens, Special::Tokenize)
                 .map_err(|e| InfernoError::Backend(format!("Failed to detokenize: {}", e)))?;
 
             debug!("✅ Generated {} tokens via Metal GPU", output_tokens.len());

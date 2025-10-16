@@ -29,11 +29,12 @@ pub enum StreamingCommand {
 
         #[arg(long, help = "Temperature for generation", default_value = "0.7")]
         temperature: f32,
-                    top_k: 40,
+
+        #[arg(long, help = "Top-K for generation", default_value = "40")]
+        top_k: u32,
 
         #[arg(long, help = "Top-p for generation", default_value = "0.9")]
         top_p: f32,
-                    top_k: 40,
 
         #[arg(long, help = "Enable verbose output")]
         verbose: bool,
@@ -108,9 +109,10 @@ pub async fn execute(args: StreamingArgs, config: &Config) -> Result<()> {
             model,
             max_tokens,
             temperature,
+            top_k,
             top_p,
             verbose,
-        } => execute_interactive(model, max_tokens, temperature, top_p, verbose, config).await,
+        } => execute_interactive(model, max_tokens, temperature, top_k, top_p, verbose, config).await,
         StreamingCommand::Benchmark {
             model,
             concurrent,
@@ -133,9 +135,8 @@ async fn execute_interactive(
     model_name: String,
     max_tokens: u32,
     temperature: f32,
-                    top_k: 40,
+    top_k: u32,
     top_p: f32,
-                    top_k: 40,
     verbose: bool,
     config: &Config,
 ) -> Result<()> {
@@ -170,6 +171,7 @@ async fn execute_interactive(
     let inference_params = InferenceParams {
         max_tokens,
         temperature,
+        top_k,
         top_p,
         stream: true,
         stop_sequences: vec![],
@@ -286,7 +288,7 @@ async fn execute_benchmark(
     let inference_params = InferenceParams {
         max_tokens: 100, // Shorter responses for benchmarking
         temperature: 0.7,
-                    top_k: 40,
+        top_k: 40,
         top_p: 0.9,
         stream: true,
         stop_sequences: vec![],

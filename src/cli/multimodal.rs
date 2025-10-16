@@ -380,6 +380,7 @@ async fn handle_process_command(
     let params = InferenceParams {
         max_tokens: config.max_tokens,
         temperature: config.temperature,
+        top_k: 40,
         top_p: 0.9,
         stream: false,
         stop_sequences: vec![],
@@ -423,6 +424,7 @@ async fn handle_process_base64_command(
     let params = InferenceParams {
         max_tokens: config.max_tokens,
         temperature: config.temperature,
+        top_k: 40,
         top_p: 0.9,
         stream: false,
         stop_sequences: vec![],
@@ -482,6 +484,7 @@ async fn handle_batch_command(
     let params = InferenceParams {
         max_tokens: 500,
         temperature: 0.7,
+        top_k: 40,
         top_p: 0.9,
         stream: false,
         stop_sequences: vec![],
