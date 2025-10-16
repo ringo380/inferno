@@ -17,5 +17,8 @@ pub mod audit;
 pub mod cache;
 pub mod monitoring;
 
+// System monitoring and performance profiling
+pub mod sys_monitor;
+
 // Keep direct access to metrics for now
 pub use crate::metrics;
