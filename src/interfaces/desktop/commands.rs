@@ -181,9 +181,9 @@ pub async fn infer_stream(
         // Get the stream from backend manager
         match backend_manager
             .infer_stream(
-                backend_id_clone.clone(),
-                prompt_for_stream,
-                params_for_stream,
+                &backend_id_clone,
+                &prompt_for_stream,
+                &params_for_stream,
             )
             .await
         {
@@ -716,6 +716,7 @@ pub async fn list_api_keys(state: State<'_, AppState>) -> Result<Vec<ApiKey>, St
     state
         .security_manager
         .get_api_keys()
+        .await
         .map_err(|e| e.to_string())
 }
 
@@ -727,6 +728,7 @@ pub async fn create_api_key(
     state
         .security_manager
         .generate_api_key(request)
+        .await
         .map_err(|e| e.to_string())
 }
 
@@ -735,6 +737,7 @@ pub async fn revoke_api_key(key_id: String, state: State<'_, AppState>) -> Resul
     state
         .security_manager
         .revoke_api_key(key_id)
+        .await
         .map_err(|e| e.to_string())
 }
 
@@ -743,6 +746,7 @@ pub async fn validate_api_key(key: String, state: State<'_, AppState>) -> Result
     state
         .security_manager
         .validate_api_key(key)
+        .await
         .map(|result| result.is_some())
 }
 
@@ -754,6 +758,7 @@ pub async fn get_security_events(
     state
         .security_manager
         .get_security_events(limit)
+        .await
         .map_err(|e| e.to_string())
 }
 
@@ -762,6 +767,7 @@ pub async fn get_security_metrics(state: State<'_, AppState>) -> Result<Security
     state
         .security_manager
         .get_security_metrics()
+        .await
         .map_err(|e| e.to_string())
 }
 
@@ -770,6 +776,7 @@ pub async fn clear_security_events(state: State<'_, AppState>) -> Result<(), Str
     state
         .security_manager
         .clear_security_events()
+        .await
         .map_err(|e| e.to_string())
 }
 
@@ -778,6 +785,7 @@ pub async fn export_security_log(path: String, state: State<'_, AppState>) -> Re
     let events = state
         .security_manager
         .get_security_events(None)
+        .await
         .map_err(|e| e.to_string())?;
 
     let json = serde_json::to_string_pretty(&events)

@@ -18,20 +18,22 @@ use sysinfo::System;
 use uuid::Uuid;
 use futures_util::StreamExt;
 use tauri_plugin_notification::NotificationExt;
+use tracing;
 
-mod backend_manager;
-mod activity_logger;
-mod security;
-mod events;
+// Use consolidated desktop modules from src/interfaces/desktop
+use inferno::interfaces::desktop::{
+    BackendManager, ModelInfo, InferenceParams,
+    ActivityLogger, ActivityLog, ActivityStats, ActivityStatus, ActivityType,
+    SecurityManager, ApiKey, SecurityEvent, SecurityMetrics, CreateApiKeyRequest, CreateApiKeyResponse,
+    ModelRepositoryService, ModelDownloadManager, ExternalModelInfo, ModelSearchQuery, ModelSearchResponse, DownloadProgress,
+};
+
+// Keep dashboard-specific modules
 mod database;
-mod model_repository;
+mod events;
 
-use backend_manager::{BackendManager, ModelInfo, InferenceParams};
-use activity_logger::{ActivityLogger, ActivityLog, ActivityStats, ActivityStatus, ActivityType};
-use security::{SecurityManager, ApiKey, SecurityEvent, SecurityMetrics, CreateApiKeyRequest, CreateApiKeyResponse};
-use events::{EventManager, InfernoEvent};
 use database::{DatabaseManager, DbBatchJob, DbNotification};
-use model_repository::{ModelRepositoryService, ModelDownloadManager, ExternalModelInfo, ModelSearchQuery, ModelSearchResponse, DownloadProgress};
+use events::{EventManager, InfernoEvent};
 
 const SETTINGS_FILE_NAME: &str = "inferno-settings.json";
 
@@ -876,6 +878,72 @@ fn greet(name: &str) -> String {
     format!("Hello, {}! You've been greeted from Rust!", name)
 }
 
+// Phase 3: Window vibrancy command for macOS
+#[tauri::command]
+async fn apply_vibrancy(window: tauri::Window, effect: String) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial};
+
+        let material = match effect.as_str() {
+            "sidebar" => NSVisualEffectMaterial::Sidebar,
+            "titlebar" => NSVisualEffectMaterial::Titlebar,
+            "menu" => NSVisualEffectMaterial::Menu,
+            "popover" => NSVisualEffectMaterial::Popover,
+            "sheet" => NSVisualEffectMaterial::Sheet,
+            "hudWindow" => NSVisualEffectMaterial::HudWindow,
+            "fullScreen" => NSVisualEffectMaterial::FullScreenUI,
+            "tooltip" => NSVisualEffectMaterial::Tooltip,
+            "contentBackground" => NSVisualEffectMaterial::ContentBackground,
+            "underWindowBackground" => NSVisualEffectMaterial::UnderWindowBackground,
+            "underPageBackground" => NSVisualEffectMaterial::UnderPageBackground,
+            _ => NSVisualEffectMaterial::Sidebar, // Default to sidebar instead of deprecated AppearanceBased
+        };
+
+        apply_vibrancy(&window, material, None, None)
+            .map_err(|e| format!("Failed to apply vibrancy: {}", e))?;
+
+        tracing::info!("🎨 Applied vibrancy effect: {}", effect);
+        Ok(())
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        Err("Vibrancy effects are only available on macOS".to_string())
+    }
+}
+
+// Phase 3: Get current system appearance (light/dark mode)
+#[tauri::command]
+async fn get_system_appearance() -> Result<String, String> {
+    #[cfg(target_os = "macos")]
+    {
+        use std::process::Command;
+
+        let output = Command::new("defaults")
+            .args(&["read", "-g", "AppleInterfaceStyle"])
+            .output()
+            .map_err(|e| format!("Failed to check appearance: {}", e))?;
+
+        if output.status.success() {
+            let appearance = String::from_utf8_lossy(&output.stdout);
+            if appearance.trim().eq_ignore_ascii_case("dark") {
+                Ok("dark".to_string())
+            } else {
+                Ok("light".to_string())
+            }
+        } else {
+            // If the key doesn't exist, system is in light mode
+            Ok("light".to_string())
+        }
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        Ok("light".to_string())
+    }
+}
+
 #[tauri::command]
 async fn get_system_info(state: State<'_, AppState>) -> Result<SystemInfo, String> {
     let mut system = state.system.lock().map_err(|e| e.to_string())?;
@@ -1085,6 +1153,7 @@ async fn infer_stream(
         while let Some(chunk) = stream.next().await {
             match chunk {
                 Ok(token) => {
+                    let token: String = token;
                     response.push_str(&token);
                     let _ = app_clone.emit(
                         "inference_token",
@@ -1258,9 +1327,9 @@ async fn upload_model(
 
     // Log the upload
     state.activity_logger.log_model_operation(
-        crate::activity_logger::ActivityType::ModelUpload,
+        ActivityType::ModelUpload,
         &target_filename,
-        crate::activity_logger::ActivityStatus::Success,
+        ActivityStatus::Success,
         Some(&format!("Uploaded from {}", source_path))
     );
 
@@ -2114,6 +2183,7 @@ async fn main() {
                 .icon(app.default_window_icon().unwrap().clone())
                 .menu(&tray_menu)
                 .show_menu_on_left_click(false)
+                .tooltip("Inferno AI - Initializing...")
                 .on_menu_event(|app_handle, event| {
                     handle_tray_menu_event(app_handle, event.id.as_ref());
                 })
@@ -2138,10 +2208,95 @@ async fn main() {
                 })
                 .build(app)?;
 
+            // Phase 3: Start live metrics tray tooltip updater
+            {
+                let app_handle_clone = app_handle.clone();
+                tokio::spawn(async move {
+                    let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(5));
+
+                    loop {
+                        interval.tick().await;
+
+                        if let Some(tray) = app_handle_clone.tray_by_id("main") {
+                            // Get current metrics
+                            let tooltip = if let Some(state) = app_handle_clone.try_state::<AppState>() {
+                                let mut system = state.system.lock().unwrap();
+                                system.refresh_cpu();
+                                system.refresh_memory();
+
+                                let cpu_usage = system.global_cpu_info().cpu_usage();
+                                let memory_gb = system.used_memory() as f64 / 1024.0 / 1024.0 / 1024.0;
+                                let total_memory_gb = system.total_memory() as f64 / 1024.0 / 1024.0 / 1024.0;
+                                let loaded_models = state.backend_manager.get_loaded_models().len();
+                                let active_inferences = state.backend_manager.get_active_inference_count();
+
+                                format!(
+                                    "Inferno AI\n\n🔥 CPU: {:.1}%\n💾 Memory: {:.1}/{:.1} GB\n📦 Models: {}\n⚡ Active: {}",
+                                    cpu_usage,
+                                    memory_gb,
+                                    total_memory_gb,
+                                    loaded_models,
+                                    active_inferences
+                                )
+                            } else {
+                                "Inferno AI - Running".to_string()
+                            };
+
+                            let _ = tray.set_tooltip(Some(&tooltip));
+                        }
+                    }
+                });
+            }
+
+            // Phase 3: Start system appearance monitor (light/dark mode)
+            #[cfg(target_os = "macos")]
+            {
+                let app_handle_clone = app_handle.clone();
+                tokio::spawn(async move {
+                    use std::process::Command;
+
+                    let mut last_appearance = String::new();
+                    let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(2));
+
+                    loop {
+                        interval.tick().await;
+
+                        // Check current system appearance
+                        let current_appearance = Command::new("defaults")
+                            .args(&["read", "-g", "AppleInterfaceStyle"])
+                            .output()
+                            .ok()
+                            .and_then(|output| {
+                                if output.status.success() {
+                                    let appearance = String::from_utf8_lossy(&output.stdout);
+                                    if appearance.trim().eq_ignore_ascii_case("dark") {
+                                        Some("dark".to_string())
+                                    } else {
+                                        Some("light".to_string())
+                                    }
+                                } else {
+                                    Some("light".to_string())
+                                }
+                            })
+                            .unwrap_or_else(|| "light".to_string());
+
+                        // If appearance changed, emit event
+                        if current_appearance != last_appearance && !last_appearance.is_empty() {
+                            tracing::info!("🎨 System appearance changed: {} → {}", last_appearance, current_appearance);
+                            let _ = app_handle_clone.emit("appearance-changed", &current_appearance);
+                        }
+
+                        last_appearance = current_appearance;
+                    }
+                });
+            }
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             greet,
+            apply_vibrancy,
+            get_system_appearance,
             get_system_info,
             get_metrics,
             get_models,

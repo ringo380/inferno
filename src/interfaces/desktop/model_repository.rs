@@ -367,6 +367,12 @@ impl ModelDownloadManager {
         }
     }
 
+    pub fn with_default_target(self, _target: String) -> Self {
+        // This is a builder pattern method for API compatibility
+        // The target directory is passed to start_download() instead
+        self
+    }
+
     pub async fn start_download(
         &self,
         model: &ExternalModelInfo,

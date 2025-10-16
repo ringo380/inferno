@@ -80,7 +80,7 @@ impl AppState {
 
         let models_dir = PathBuf::from(&settings.models_directory);
         let backend_manager = Arc::new(
-            BackendManager::new(Arc::clone(&activity_logger), models_dir)
+            BackendManager::with_models_dir(Arc::clone(&activity_logger), models_dir)
                 .await
                 .map_err(|e| format!("Failed to initialize backend manager: {}", e))?,
         );
@@ -97,7 +97,7 @@ impl AppState {
             );
         }
 
-        let security_manager = Arc::new(SecurityManager::new());
+        let security_manager = Arc::new(SecurityManager::new(()));
         let model_repository = Arc::new(ModelRepositoryService::new());
         let download_manager = Arc::new(ModelDownloadManager::new());
 

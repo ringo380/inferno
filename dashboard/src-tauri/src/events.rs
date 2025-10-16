@@ -5,6 +5,9 @@ use uuid::Uuid;
 use std::sync::{Arc, Mutex};
 use sysinfo::System;
 
+// Use ModelInfo from consolidated desktop modules
+use inferno::interfaces::desktop::ModelInfo;
+
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(tag = "type", content = "data")]
 pub enum InfernoEvent {
@@ -27,7 +30,7 @@ pub enum InfernoEvent {
         timestamp: String,
     },
     ModelDiscovered {
-        model_info: crate::backend_manager::ModelInfo,
+        model_info: ModelInfo,
         timestamp: String,
     },
 
