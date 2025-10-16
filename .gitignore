@@ -117,3 +117,11 @@ release/
 flamegraph.svg
 perf.data*
 callgrind.out.*
+
+# Build and test scripts (local development)
+/archive/
+build_and_test.sh
+check_build.sh
+run_tests.sh
+start_build.sh
+test_*.sh
