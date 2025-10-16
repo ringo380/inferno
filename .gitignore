@@ -42,6 +42,8 @@ Thumbs.db
 # Logs
 *.log
 /logs/
+dashboard/*.log
+dashboard/**/*.log
 
 # Local configuration
 .env
@@ -76,7 +78,9 @@ coverage/
 .cache/
 .parcel-cache/
 .next/
+dashboard/.next/
 .nuxt/
+*.tsbuildinfo
 
 # Temporary files
 tmp/

@@ -80,11 +80,48 @@ echo
 
 # 6. Run tests
 echo -e "${YELLOW}Running tests...${NC}"
+
+# Run fast unit tests
 if cargo test --lib > /dev/null 2>&1; then
     print_status 0 "Unit tests (lib)"
 else
     print_status 1 "Unit tests (lib)"
 fi
+
+# Run default test suite (basic functionality + component tests)
+if cargo test > /dev/null 2>&1; then
+    print_status 0 "Fast tests (basic + component)"
+else
+    print_status 1 "Fast tests"
+fi
+
+# Run all integration tests explicitly (these are disabled by default)
+INTEGRATION_TESTS=(
+    "integration_tests"
+    "feature_integration_tests"
+    "end_to_end_tests"
+    "audit_system_integration_tests"
+    "backend_integration_tests"
+    "batch_processing_integration_tests"
+    "batch_queue_integration_tests"
+    "cache_persistence_integration_tests"
+    "conversion_integration_tests"
+    "cross_component_integration_tests"
+    "dashboard_api_tests"
+    "dashboard_api_workflow_tests"
+    "performance_stress_tests"
+    "platform_integration"
+    "error_size_analysis"
+    "metrics_thread_safety"
+)
+
+for test in "${INTEGRATION_TESTS[@]}"; do
+    if cargo test --test "$test" > /dev/null 2>&1; then
+        print_status 0 "Integration: $test"
+    else
+        print_status 1 "Integration: $test"
+    fi
+done
 echo
 
 # 7. Security audit (optional - install with: cargo install cargo-audit)
