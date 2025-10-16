@@ -70,7 +70,8 @@ pub struct TokenCandidate {
 pub struct Sampler {
     config: SamplingConfig,
     recent_tokens: Vec<i32>,
-    rng: Box<dyn std::any::Any>, // Can be upgraded to actual RNG later
+    // TODO: Implement proper RNG for stochastic sampling
+    // rng: Box<dyn std::any::Any>, // Can be upgraded to actual RNG later
 }
 
 impl Sampler {
@@ -78,7 +79,6 @@ impl Sampler {
         Self {
             config,
             recent_tokens: Vec::new(),
-            rng: Box::new(()),
         }
     }
 
@@ -246,7 +246,7 @@ impl Sampler {
         // Calculate probabilities from logits (softmax)
         let max_logit = candidates.iter().map(|c| c.logit).fold(f32::NEG_INFINITY, f32::max);
 
-        let mut scores: Vec<f32> = candidates
+        let scores: Vec<f32> = candidates
             .iter()
             .map(|c| (c.logit - max_logit).exp())
             .collect();

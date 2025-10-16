@@ -340,6 +340,7 @@ async fn deep_validate_model(path: &PathBuf, config: &Config) -> Result<bool> {
             let inference_params = crate::backends::InferenceParams {
                 max_tokens: 10,
                 temperature: 0.7,
+                top_k: 40,
                 top_p: 0.9,
                 stream: false,
                 stop_sequences: vec![],

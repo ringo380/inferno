@@ -438,7 +438,7 @@ pub struct DistributedTest {
     stream: bool,
     max_tokens: u32,
     temperature: f32,
-                    top_k: 40,
+    top_k: u32,
 }
 
 impl DistributedTest {
@@ -449,7 +449,7 @@ impl DistributedTest {
         stream: bool,
         max_tokens: u32,
         temperature: f32,
-                    top_k: 40,
+        top_k: u32,
     ) -> Self {
         Self {
             config,
@@ -458,6 +458,7 @@ impl DistributedTest {
             stream,
             max_tokens,
             temperature,
+            top_k,
         }
     }
 }

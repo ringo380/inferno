@@ -109,6 +109,7 @@ pub async fn execute(args: RunArgs, config: &Config) -> Result<()> {
         let inference_params = crate::backends::InferenceParams {
             max_tokens: args.max_tokens,
             temperature: args.temperature,
+            top_k: 40,
             top_p: args.top_p,
             stream: false,
             stop_sequences: vec![],
@@ -191,6 +192,7 @@ async fn process_single(backend: &mut Backend, args: &RunArgs, _config: &Config)
     let inference_params = crate::backends::InferenceParams {
         max_tokens: args.max_tokens,
         temperature: args.temperature,
+        top_k: 40,
         top_p: args.top_p,
         stream: args.stream,
         stop_sequences: vec![],
@@ -236,6 +238,7 @@ async fn process_batch(backend: &mut Backend, args: &RunArgs, _config: &Config) 
     let inference_params = crate::backends::InferenceParams {
         max_tokens: args.max_tokens,
         temperature: args.temperature,
+        top_k: 40,
         top_p: args.top_p,
         stream: false, // No streaming in batch mode
         stop_sequences: vec![],
