@@ -10,6 +10,7 @@ pub mod priority_queue;
 pub mod fair_scheduler;
 pub mod metrics;
 pub mod worker_pool;
+pub mod assignment;
 
 pub use priority_queue::{Priority, PriorityQueue, RequestMetadata, QueueStats};
 pub use fair_scheduler::{FairScheduler, FairnessMetrics, FairnessStats};
@@ -17,3 +18,4 @@ pub use metrics::{QueueMetricsCollector, QueueMetricsSnapshot, PriorityMetrics, 
 pub use worker_pool::{
     WorkerPool, WorkerPoolConfig, WorkerPoolRegistry, WorkerPoolStats, WorkerMetrics, WorkerState,
 };
+pub use assignment::{LoadBalancer, AssignmentStrategy, BackpressureStatus, RequestGroup, AssignmentResult, LoadStats};
