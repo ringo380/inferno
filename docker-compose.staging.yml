@@ -1,0 +1,62 @@
+# Docker Compose for Staging Environment
+# 2 replicas, moderate resources, limited logging
+
+version: '3.8'
+
+services:
+  inferno-1:
+    extends:
+      file: docker-compose.yml
+      service: inferno
+    container_name: inferno-staging-1
+    ports:
+      - "8001:8000"
+    
+    deploy:
+      resources:
+        limits:
+          cpus: '1.5'
+          memory: 3G
+        reservations:
+          cpus: '0.75'
+          memory: 1.5G
+    
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  inferno-2:
+    extends:
+      file: docker-compose.yml
+      service: inferno
+    container_name: inferno-staging-2
+    ports:
+      - "8002:8000"
+    
+    deploy:
+      resources:
+        limits:
+          cpus: '1.5'
+          memory: 3G
+        reservations:
+          cpus: '0.75'
+          memory: 1.5G
+    
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  # Optional: Load balancer (Nginx)
+  # nginx:
+  #   image: nginx:alpine
+  #   ports:
+  #     - "80:80"
+  #   volumes:
+  #     - ./nginx.conf:/etc/nginx/nginx.conf:ro
+  #   depends_on:
+  #     - inferno-1
+  #     - inferno-2
