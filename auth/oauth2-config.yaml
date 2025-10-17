@@ -1,0 +1,420 @@
+# OAuth2 Configuration for Inferno
+# Supports multiple OAuth2 providers (Google, GitHub, Okta, Auth0, etc.)
+
+---
+# OAuth2 Application Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: inferno-oauth2-config
+  namespace: inferno-prod
+  labels:
+    app: inferno
+    component: auth
+data:
+  oauth2.yaml: |
+    # Global OAuth2 Settings
+    oauth2:
+      enabled: true
+
+      # Session configuration
+      session:
+        # Session TTL (time-to-live)
+        ttl: 3600  # 1 hour
+
+        # Session refresh threshold
+        # Token will be refreshed if less than this time remains
+        refresh_threshold: 300  # 5 minutes before expiry
+
+        # Cookie settings
+        cookie:
+          name: inferno_session
+          secure: true          # HTTPS only
+          http_only: true       # No JavaScript access
+          same_site: "Strict"   # CSRF protection
+          domain: ""            # Set to your domain
+          path: "/"
+
+      # Token validation
+      token:
+        # JWT signature validation
+        validate_signature: true
+
+        # Token expiration check
+        validate_expiration: true
+
+        # Token audience check (recommended)
+        validate_audience: true
+
+        # Token issuer check (recommended)
+        validate_issuer: true
+
+        # Clock skew tolerance (seconds)
+        clock_skew: 30
+
+      # Supported scopes
+      scopes:
+        - openid
+        - profile
+        - email
+        - offline_access  # For refresh tokens
+
+      # Redirect URI whitelist (security)
+      redirect_uri_whitelist:
+        - "http://localhost:8000/auth/callback"
+        - "https://inferno.example.com/auth/callback"
+        - "https://inferno-staging.example.com/auth/callback"
+
+    # Provider: Google
+    # Create credentials at: https://console.cloud.google.com/
+    providers:
+      google:
+        enabled: false  # Set to true to enable
+
+        # OAuth2 endpoints
+        authorization_endpoint: "https://accounts.google.com/o/oauth2/v2/auth"
+        token_endpoint: "https://oauth2.googleapis.com/token"
+        userinfo_endpoint: "https://www.googleapis.com/oauth2/v2/userinfo"
+        jwks_uri: "https://www.googleapis.com/oauth2/v3/certs"
+
+        # Client credentials (from environment variables)
+        client_id: "${OAUTH2_GOOGLE_CLIENT_ID}"
+        client_secret: "${OAUTH2_GOOGLE_CLIENT_SECRET}"
+
+        # Redirect URI (must match Google console)
+        redirect_uri: "https://inferno.example.com/auth/callback/google"
+
+        # Scope
+        scope: "openid profile email"
+
+        # User info mapping
+        user_claim_mappings:
+          user_id: "sub"
+          email: "email"
+          name: "name"
+          picture: "picture"
+
+        # Tenant detection
+        tenant_claim: "hd"  # Google Workspace domain
+
+      # Provider: GitHub
+      # Create credentials at: https://github.com/settings/developers
+      github:
+        enabled: false
+
+        authorization_endpoint: "https://github.com/login/oauth/authorize"
+        token_endpoint: "https://github.com/login/oauth/access_token"
+        userinfo_endpoint: "https://api.github.com/user"
+
+        client_id: "${OAUTH2_GITHUB_CLIENT_ID}"
+        client_secret: "${OAUTH2_GITHUB_CLIENT_SECRET}"
+        redirect_uri: "https://inferno.example.com/auth/callback/github"
+
+        scope: "user:email read:org"
+
+        user_claim_mappings:
+          user_id: "id"
+          email: "email"
+          name: "name"
+          avatar: "avatar_url"
+
+        # Organization requirement (optional)
+        # organization: "your-org"
+
+      # Provider: Okta
+      # Create credentials at: https://developer.okta.com/
+      okta:
+        enabled: false
+
+        authorization_endpoint: "https://${OKTA_DOMAIN}/oauth2/v1/authorize"
+        token_endpoint: "https://${OKTA_DOMAIN}/oauth2/v1/token"
+        userinfo_endpoint: "https://${OKTA_DOMAIN}/oauth2/v1/userinfo"
+        jwks_uri: "https://${OKTA_DOMAIN}/oauth2/v1/keys"
+
+        client_id: "${OAUTH2_OKTA_CLIENT_ID}"
+        client_secret: "${OAUTH2_OKTA_CLIENT_SECRET}"
+        redirect_uri: "https://inferno.example.com/auth/callback/okta"
+
+        scope: "openid profile email"
+
+        user_claim_mappings:
+          user_id: "sub"
+          email: "email"
+          name: "name"
+
+        # Okta tenant isolation via groups
+        tenant_claim: "groups"
+
+      # Provider: Auth0
+      # Create credentials at: https://manage.auth0.com/
+      auth0:
+        enabled: false
+
+        authorization_endpoint: "https://${AUTH0_DOMAIN}/authorize"
+        token_endpoint: "https://${AUTH0_DOMAIN}/oauth/token"
+        userinfo_endpoint: "https://${AUTH0_DOMAIN}/userinfo"
+        jwks_uri: "https://${AUTH0_DOMAIN}/.well-known/jwks.json"
+
+        client_id: "${OAUTH2_AUTH0_CLIENT_ID}"
+        client_secret: "${OAUTH2_AUTH0_CLIENT_SECRET}"
+        redirect_uri: "https://inferno.example.com/auth/callback/auth0"
+
+        scope: "openid profile email"
+
+        user_claim_mappings:
+          user_id: "sub"
+          email: "email"
+          name: "name"
+
+        # Auth0 tenant via app_metadata
+        tenant_claim: "app_metadata.tenant"
+
+      # Provider: Azure AD / Microsoft Entra
+      # Create credentials at: https://portal.azure.com/
+      azure_ad:
+        enabled: false
+
+        authorization_endpoint: "https://login.microsoftonline.com/${TENANT_ID}/oauth2/v2.0/authorize"
+        token_endpoint: "https://login.microsoftonline.com/${TENANT_ID}/oauth2/v2.0/token"
+        userinfo_endpoint: "https://graph.microsoft.com/v1.0/me"
+        jwks_uri: "https://login.microsoftonline.com/${TENANT_ID}/discovery/v2.0/keys"
+
+        client_id: "${OAUTH2_AZURE_CLIENT_ID}"
+        client_secret: "${OAUTH2_AZURE_CLIENT_SECRET}"
+        redirect_uri: "https://inferno.example.com/auth/callback/azure"
+
+        scope: "openid profile email"
+
+        user_claim_mappings:
+          user_id: "sub"
+          email: "mail"
+          name: "displayName"
+
+        # Multi-tenant support
+        tenant_id: "${TENANT_ID}"
+
+---
+# OAuth2 Secrets (Kubernetes Secret)
+apiVersion: v1
+kind: Secret
+metadata:
+  name: inferno-oauth2-secrets
+  namespace: inferno-prod
+  labels:
+    app: inferno
+    component: auth
+type: Opaque
+stringData:
+  # Google OAuth2 Credentials
+  OAUTH2_GOOGLE_CLIENT_ID: ""
+  OAUTH2_GOOGLE_CLIENT_SECRET: ""
+
+  # GitHub OAuth2 Credentials
+  OAUTH2_GITHUB_CLIENT_ID: ""
+  OAUTH2_GITHUB_CLIENT_SECRET: ""
+
+  # Okta Credentials
+  OKTA_DOMAIN: ""
+  OAUTH2_OKTA_CLIENT_ID: ""
+  OAUTH2_OKTA_CLIENT_SECRET: ""
+
+  # Auth0 Credentials
+  AUTH0_DOMAIN: ""
+  OAUTH2_AUTH0_CLIENT_ID: ""
+  OAUTH2_AUTH0_CLIENT_SECRET: ""
+
+  # Azure AD Credentials
+  TENANT_ID: ""
+  OAUTH2_AZURE_CLIENT_ID: ""
+  OAUTH2_AZURE_CLIENT_SECRET: ""
+
+  # JWT Signing Key (for Inferno-issued tokens)
+  JWT_SIGNING_KEY: ""  # Generate with: openssl rand -base64 32
+
+  # Session encryption key
+  SESSION_ENCRYPTION_KEY: ""  # Generate with: openssl rand -base64 32
+
+---
+# ConfigMap: Provider Setup Instructions
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: inferno-oauth2-setup-guide
+  namespace: inferno-prod
+data:
+  GOOGLE_SETUP.md: |
+    # Google OAuth2 Setup
+
+    ## Prerequisites
+    - Google Cloud Project
+    - Admin access to Google Cloud Console
+
+    ## Steps
+
+    1. Create OAuth2 Credentials
+       - Go to: https://console.cloud.google.com/apis/credentials
+       - Click: Create Credentials → OAuth 2.0 Client ID
+       - Select: Web application
+       - Authorized redirect URIs:
+         - https://inferno.example.com/auth/callback/google
+         - http://localhost:8000/auth/callback (development)
+
+    2. Get Credentials
+       - Copy: Client ID
+       - Copy: Client Secret
+
+    3. Update Secrets
+       kubectl set env secret/inferno-oauth2-secrets \
+         OAUTH2_GOOGLE_CLIENT_ID="your-client-id" \
+         OAUTH2_GOOGLE_CLIENT_SECRET="your-client-secret" \
+         -n inferno-prod
+
+    4. Enable Provider
+       - Edit ConfigMap: inferno-oauth2-config
+       - Set: providers.google.enabled = true
+
+  GITHUB_SETUP.md: |
+    # GitHub OAuth2 Setup
+
+    ## Prerequisites
+    - GitHub account with admin access to organization
+
+    ## Steps
+
+    1. Create OAuth App
+       - Go to: https://github.com/settings/developers
+       - Click: New OAuth App
+       - Application name: Inferno
+       - Homepage URL: https://inferno.example.com
+       - Authorization callback URL: https://inferno.example.com/auth/callback/github
+
+    2. Get Credentials
+       - Copy: Client ID
+       - Copy: Client Secret (only visible once!)
+
+    3. Update Secrets
+       kubectl set env secret/inferno-oauth2-secrets \
+         OAUTH2_GITHUB_CLIENT_ID="your-client-id" \
+         OAUTH2_GITHUB_CLIENT_SECRET="your-client-secret" \
+         -n inferno-prod
+
+    4. Enable Provider
+       - Edit ConfigMap: inferno-oauth2-config
+       - Set: providers.github.enabled = true
+       - Optional: Set organization requirement
+
+  OKTA_SETUP.md: |
+    # Okta OAuth2 Setup
+
+    ## Prerequisites
+    - Okta Developer Account
+    - Okta Domain
+
+    ## Steps
+
+    1. Create OAuth Application
+       - Go to: https://developer.okta.com/
+       - Navigate to: Applications → Create App Integration
+       - Choose: OAuth 2.0 / OpenID Connect
+       - Select: Web application
+       - Grant type: Authorization Code
+       - Sign-in redirect URIs: https://inferno.example.com/auth/callback/okta
+
+    2. Get Credentials
+       - Copy: Client ID
+       - Copy: Client Secret
+
+    3. Get Okta Domain
+       - From dashboard: Org URL (e.g., https://dev-12345.okta.com)
+
+    4. Update Secrets
+       kubectl set env secret/inferno-oauth2-secrets \
+         OKTA_DOMAIN="dev-12345.okta.com" \
+         OAUTH2_OKTA_CLIENT_ID="your-client-id" \
+         OAUTH2_OKTA_CLIENT_SECRET="your-client-secret" \
+         -n inferno-prod
+
+    5. Enable Provider
+       - Edit ConfigMap: inferno-oauth2-config
+       - Set: providers.okta.enabled = true
+
+  AUTH0_SETUP.md: |
+    # Auth0 OAuth2 Setup
+
+    ## Prerequisites
+    - Auth0 Account
+    - Auth0 Tenant
+
+    ## Steps
+
+    1. Create Application
+       - Go to: https://manage.auth0.com/
+       - Navigate to: Applications
+       - Click: Create Application
+       - Choose: Regular Web Application
+       - Auth0 Domain: (shown in settings)
+
+    2. Configure Application
+       - Allowed Callback URLs: https://inferno.example.com/auth/callback/auth0
+       - Allowed Logout URLs: https://inferno.example.com
+       - Allowed Web Origins: https://inferno.example.com
+
+    3. Get Credentials
+       - Copy: Client ID
+       - Copy: Client Secret
+       - Copy: Domain
+
+    4. Update Secrets
+       kubectl set env secret/inferno-oauth2-secrets \
+         AUTH0_DOMAIN="your-tenant.auth0.com" \
+         OAUTH2_AUTH0_CLIENT_ID="your-client-id" \
+         OAUTH2_AUTH0_CLIENT_SECRET="your-client-secret" \
+         -n inferno-prod
+
+    5. Enable Provider
+       - Edit ConfigMap: inferno-oauth2-config
+       - Set: providers.auth0.enabled = true
+
+  AZURE_SETUP.md: |
+    # Azure AD / Microsoft Entra OAuth2 Setup
+
+    ## Prerequisites
+    - Microsoft Azure Account
+    - Azure AD Tenant
+
+    ## Steps
+
+    1. Register Application
+       - Go to: https://portal.azure.com/
+       - Navigate to: Azure Active Directory → App registrations
+       - Click: New registration
+       - Name: Inferno
+       - Supported account types: Accounts in this organizational directory only
+
+    2. Configure Redirect URI
+       - Select: Web
+       - Redirect URI: https://inferno.example.com/auth/callback/azure
+
+    3. Create Client Secret
+       - Go to: Certificates & secrets
+       - Click: New client secret
+       - Copy: Client secret value
+
+    4. Get Tenant ID
+       - Go to: Overview
+       - Copy: Tenant ID (Directory ID)
+
+    5. Get Client ID
+       - From Overview page
+       - Copy: Application (client) ID
+
+    6. Update Secrets
+       kubectl set env secret/inferno-oauth2-secrets \
+         TENANT_ID="your-tenant-id" \
+         OAUTH2_AZURE_CLIENT_ID="your-client-id" \
+         OAUTH2_AZURE_CLIENT_SECRET="your-client-secret" \
+         -n inferno-prod
+
+    7. Enable Provider
+       - Edit ConfigMap: inferno-oauth2-config
+       - Set: providers.azure_ad.enabled = true

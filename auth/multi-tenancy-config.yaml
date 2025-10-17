@@ -1,0 +1,407 @@
+# Multi-Tenancy Configuration for Inferno
+# Enables isolated inference, queuing, and resource allocation per tenant
+
+---
+# Multi-Tenancy ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: inferno-multi-tenancy-config
+  namespace: inferno-prod
+  labels:
+    app: inferno
+    component: multi-tenancy
+data:
+  multi-tenancy.yaml: |
+    # Global Multi-Tenancy Settings
+    multi_tenancy:
+      # Enable multi-tenancy
+      enabled: true
+
+      # Tenant identification
+      tenant_identification:
+        # Primary: Extract tenant from JWT claim
+        jwt_claim: "tenant_id"
+
+        # Fallback: Extract from request header
+        header: "X-Tenant-ID"
+
+        # Tertiary: Extract from hostname
+        # E.g., tenant1.inferno.example.com → tenant_id: tenant1
+        hostname_extraction:
+          enabled: false
+          pattern: "^([a-z0-9-]+)\\.inferno\\.example\\.com$"
+
+        # Quaternary: Extract from domain (for SSO)
+        domain_extraction:
+          enabled: false
+          # Maps OAuth2 domain to tenant_id
+          mappings:
+            "acme.okta.com": "tenant_acme"
+            "company.auth0.com": "tenant_company"
+
+      # Tenant isolation strategies
+      isolation:
+        # Data isolation: Separate database schemas/collections per tenant
+        data:
+          type: "schema"  # Options: schema, database, collection
+          namespace_prefix: "tenant_"
+
+        # Queue isolation: Separate request queues per tenant
+        queue:
+          enabled: true
+          namespace_prefix: "tenant_queue_"
+
+        # Cache isolation: Separate caches per tenant
+        cache:
+          enabled: true
+          namespace_prefix: "tenant_cache_"
+
+        # Logging isolation: Tag logs with tenant_id
+        logging:
+          enabled: true
+          include_tenant_id: true
+
+        # Metrics isolation: Tag metrics with tenant_id
+        metrics:
+          enabled: true
+          include_tenant_id: true
+
+      # Resource quotas per tenant
+      quotas:
+        # API rate limiting
+        rate_limit:
+          # Requests per second per tenant
+          requests_per_second: 1000
+          burst_size: 5000
+
+          # By endpoint (more restrictive takes precedence)
+          by_endpoint:
+            "/inference": 500
+            "/batch": 100
+            "/models": 1000
+
+        # Concurrent request limit
+        concurrent_requests:
+          default: 100
+          # Per model limits
+          by_model:
+            llama-7b: 50
+            llama-70b: 20
+
+        # Queue size limits
+        queue:
+          # Max pending requests per tenant
+          max_pending: 10000
+          # Timeout for requests (seconds)
+          timeout: 300
+
+        # Model loading limits
+        models:
+          # Max models loaded per tenant
+          max_loaded: 5
+          # Max model size (GB)
+          max_model_size: 50
+
+        # Storage limits
+        storage:
+          # Cache size limit (GB)
+          cache_size_limit: 100
+          # Model storage limit (GB)
+          models_storage_limit: 500
+
+        # Token/batch limits
+        inference:
+          # Max tokens per request
+          max_tokens: 4096
+          # Max batch size
+          max_batch_size: 32
+          # Max concurrent inferences
+          max_concurrent: 50
+
+      # Cost tracking (optional)
+      cost_tracking:
+        enabled: false
+
+        # Pricing model
+        pricing:
+          # Cost per 1K tokens
+          per_1k_tokens: 0.0015
+
+          # Cost per API request
+          per_request: 0.001
+
+          # Cost per model load
+          per_model_load: 0.10
+
+          # Storage cost per GB per hour
+          storage_per_gb_hour: 0.001
+
+        # Usage tracking
+        usage_tracking:
+          enabled: true
+          tracking_interval: 3600  # seconds
+
+      # Tenant lifecycle
+      lifecycle:
+        # Automatic cleanup
+        auto_cleanup:
+          enabled: true
+
+          # Remove inactive tenant data after N days
+          inactive_days: 30
+
+          # Delete archived tenants after N days
+          archive_retention_days: 90
+
+        # Tenant status management
+        status:
+          # Allow: active, suspended, archived
+          # Active: full access
+          # Suspended: read-only access
+          # Archived: no access
+          allowed_states: ["active", "suspended", "archived"]
+
+      # Default tenant (fallback)
+      default_tenant: "default"
+
+      # Tenant validation
+      validation:
+        # Allow tenant_id to contain only alphanumeric and hyphens
+        allowed_characters: "[a-z0-9-]+"
+        min_length: 3
+        max_length: 32
+
+    # Tenant configurations
+    tenants:
+      # Default tenant (all unauthenticated requests)
+      default:
+        name: "Default Tenant"
+        status: "active"
+        features:
+          multi_tenancy: false
+          oauth2: false
+          rbac: false
+          cost_tracking: false
+
+      # Example: Enterprise tenant with full features
+      tenant_acme:
+        name: "ACME Corporation"
+        status: "active"
+        features:
+          multi_tenancy: true
+          oauth2: true
+          rbac: true
+          cost_tracking: true
+        quotas_override:
+          rate_limit:
+            requests_per_second: 5000
+          concurrent_requests: 500
+          queue:
+            max_pending: 50000
+          models:
+            max_loaded: 20
+            max_model_size: 100
+
+      # Example: Suspended tenant
+      tenant_old_customer:
+        name: "Old Customer (Suspended)"
+        status: "suspended"
+        features:
+          multi_tenancy: true
+          oauth2: false
+          rbac: false
+          cost_tracking: false
+
+---
+# RBAC Policy: Multi-Tenancy Isolation
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: inferno-rbac-config
+  namespace: inferno-prod
+  labels:
+    app: inferno
+    component: rbac
+data:
+  rbac-policy.yaml: |
+    # Role-Based Access Control (RBAC) Policies
+
+    roles:
+      # Admin: Full access within tenant
+      admin:
+        permissions:
+          - "inference:create"
+          - "inference:read"
+          - "inference:update"
+          - "inference:delete"
+          - "models:create"
+          - "models:read"
+          - "models:update"
+          - "models:delete"
+          - "queue:read"
+          - "cache:read"
+          - "cache:clear"
+          - "users:read"
+          - "users:create"
+          - "users:delete"
+          - "audit:read"
+          - "settings:read"
+          - "settings:update"
+
+      # Developer: Limited inference access
+      developer:
+        permissions:
+          - "inference:create"
+          - "inference:read"
+          - "models:read"
+          - "queue:read"
+          - "cache:read"
+          - "audit:read:own"  # Only own requests
+
+      # Analyst: Read-only access
+      analyst:
+        permissions:
+          - "inference:read"
+          - "models:read"
+          - "audit:read"
+          - "metrics:read"
+
+      # Service: API key access (limited)
+      service:
+        permissions:
+          - "inference:create"
+          - "inference:read:own"  # Only own requests
+          - "models:read"
+
+      # Guest: Minimal read-only access
+      guest:
+        permissions:
+          - "models:read"
+          - "health:read"
+
+    # Permission hierarchy
+    permission_hierarchy:
+      # Scoped permissions
+      resource_scope:
+        own: "Owned by current user/tenant"
+        tenant: "All tenant resources"
+        global: "All resources (admin only)"
+
+      # Action-based permissions
+      action_types:
+        create: "Create new resource"
+        read: "View resource"
+        update: "Modify resource"
+        delete: "Delete resource"
+        execute: "Run operation (e.g., inference)"
+
+    # Default role assignments
+    default_role_mapping:
+      # Users from OAuth2 claims
+      role_claim: "roles"  # JWT claim containing role array
+
+      # Fallback based on email domain
+      email_domain_mapping:
+        "acme.com": "developer"
+        "admin@acme.com": "admin"
+
+---
+# API Key Management: Per-Tenant Keys
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: inferno-api-key-config
+  namespace: inferno-prod
+  labels:
+    app: inferno
+    component: api-keys
+data:
+  api-keys.yaml: |
+    # API Key Management Configuration
+
+    api_keys:
+      # Key generation
+      generation:
+        # Algorithm: Ed25519, RSA, HMAC-SHA256
+        algorithm: "Ed25519"
+
+        # Key length
+        length: 32
+
+      # Key expiration
+      expiration:
+        # Default key TTL (days, 0 = no expiration)
+        default_ttl_days: 365
+
+        # Warning period before expiration (days)
+        expiration_warning_days: 30
+
+        # Rotation policy
+        rotation:
+          # Required rotation interval (days)
+          interval_days: 90
+
+          # Allow grace period after rotation (days)
+          grace_period_days: 7
+
+      # Key security
+      security:
+        # Hash algorithm: SHA256, SHA512, bcrypt
+        hash_algorithm: "SHA256"
+
+        # Rate limiting per key
+        rate_limit:
+          requests_per_minute: 1000
+          burst_size: 5000
+
+        # IP whitelist (optional)
+        ip_whitelist:
+          enabled: false
+          # Example: ["10.0.0.0/8", "203.0.113.0/24"]
+
+        # Scope restriction
+        allowed_scopes:
+          - "inference:create"
+          - "models:read"
+          - "health:read"
+
+      # Key storage
+      storage:
+        # Store in: kubernetes_secret, vault, database
+        backend: "kubernetes_secret"
+
+        # Encryption
+        encryption:
+          enabled: true
+          algorithm: "AES-256-GCM"
+
+      # Audit logging
+      audit:
+        enabled: true
+        track_creation: true
+        track_usage: true
+        track_rotation: true
+        track_revocation: true
+
+    # Key rotation example
+    key_rotation:
+      old_key_1:
+        created: "2024-01-15"
+        expires: "2025-01-15"
+        status: "active"
+        tenant_id: "tenant_acme"
+        last_used: "2024-10-15T10:30:00Z"
+
+      old_key_2:
+        created: "2023-10-15"
+        expires: "2024-10-15"
+        status: "expired"
+        tenant_id: "tenant_acme"
+
+      new_key_1:
+        created: "2024-07-15"
+        expires: "2025-07-15"
+        status: "active"
+        tenant_id: "tenant_acme"
+        last_used: "2024-10-15T15:45:00Z"

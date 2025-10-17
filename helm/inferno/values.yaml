@@ -352,6 +352,176 @@ terminationGracePeriodSeconds: 30
 initContainers: []
 
 # ============================================================================
+# ENTERPRISE AUTHENTICATION & MULTI-TENANCY
+# ============================================================================
+
+auth:
+  # OAuth2 Configuration
+  oauth2:
+    enabled: false
+    session:
+      ttl: 3600
+      refresh_threshold: 300
+      cookie:
+        name: inferno_session
+        secure: true
+        http_only: true
+        same_site: "Strict"
+        domain: ""
+        path: "/"
+    token:
+      validate_signature: true
+      validate_expiration: true
+      validate_audience: true
+      validate_issuer: true
+      clock_skew: 30
+    redirect_uri_whitelist:
+      - "http://localhost:8000/auth/callback"
+      - "https://inferno.example.com/auth/callback"
+    providers:
+      google:
+        enabled: false
+        authorization_endpoint: "https://accounts.google.com/o/oauth2/v2/auth"
+        token_endpoint: "https://oauth2.googleapis.com/token"
+        userinfo_endpoint: "https://www.googleapis.com/oauth2/v2/userinfo"
+        jwks_uri: "https://www.googleapis.com/oauth2/v3/certs"
+        client_id: ""
+        client_secret: ""
+        redirect_uri: "https://inferno.example.com/auth/callback/google"
+        scope: "openid profile email"
+        user_claim_mappings:
+          user_id: "sub"
+          email: "email"
+          name: "name"
+        tenant_claim: ""
+      github:
+        enabled: false
+        authorization_endpoint: "https://github.com/login/oauth/authorize"
+        token_endpoint: "https://github.com/login/oauth/access_token"
+        userinfo_endpoint: "https://api.github.com/user"
+        client_id: ""
+        client_secret: ""
+        redirect_uri: "https://inferno.example.com/auth/callback/github"
+        scope: "user:email read:org"
+        user_claim_mappings:
+          user_id: "id"
+          email: "email"
+          name: "name"
+      okta:
+        enabled: false
+        authorization_endpoint: "https://${OKTA_DOMAIN}/oauth2/v1/authorize"
+        token_endpoint: "https://${OKTA_DOMAIN}/oauth2/v1/token"
+        userinfo_endpoint: "https://${OKTA_DOMAIN}/oauth2/v1/userinfo"
+        jwks_uri: "https://${OKTA_DOMAIN}/oauth2/v1/keys"
+        client_id: ""
+        client_secret: ""
+        redirect_uri: "https://inferno.example.com/auth/callback/okta"
+        scope: "openid profile email"
+        user_claim_mappings:
+          user_id: "sub"
+          email: "email"
+          name: "name"
+      auth0:
+        enabled: false
+        authorization_endpoint: "https://${AUTH0_DOMAIN}/authorize"
+        token_endpoint: "https://${AUTH0_DOMAIN}/oauth/token"
+        userinfo_endpoint: "https://${AUTH0_DOMAIN}/userinfo"
+        jwks_uri: "https://${AUTH0_DOMAIN}/.well-known/jwks.json"
+        client_id: ""
+        client_secret: ""
+        redirect_uri: "https://inferno.example.com/auth/callback/auth0"
+        scope: "openid profile email"
+        user_claim_mappings:
+          user_id: "sub"
+          email: "email"
+          name: "name"
+      azure:
+        enabled: false
+        authorization_endpoint: "https://login.microsoftonline.com/${TENANT_ID}/oauth2/v2.0/authorize"
+        token_endpoint: "https://login.microsoftonline.com/${TENANT_ID}/oauth2/v2.0/token"
+        userinfo_endpoint: "https://graph.microsoft.com/v1.0/me"
+        jwks_uri: "https://login.microsoftonline.com/${TENANT_ID}/discovery/v2.0/keys"
+        client_id: ""
+        client_secret: ""
+        redirect_uri: "https://inferno.example.com/auth/callback/azure"
+        scope: "openid profile email"
+        user_claim_mappings:
+          user_id: "sub"
+          email: "mail"
+          name: "displayName"
+    secrets:
+      google:
+        client_id: ""
+        client_secret: ""
+      github:
+        client_id: ""
+        client_secret: ""
+      okta:
+        domain: ""
+        client_id: ""
+        client_secret: ""
+      auth0:
+        domain: ""
+        client_id: ""
+        client_secret: ""
+      azure:
+        tenant_id: ""
+        client_id: ""
+        client_secret: ""
+      jwt_signing_key: ""
+      session_encryption_key: ""
+
+  # Multi-Tenancy Configuration
+  multiTenancy:
+    enabled: false
+    tenant_identification:
+      jwt_claim: "tenant_id"
+      header: "X-Tenant-ID"
+    isolation:
+      data: "schema"  # Options: schema, database, collection
+      queue: true
+      cache: true
+      logging: true
+      metrics: true
+    quotas:
+      rate_limit:
+        requests_per_second: 1000
+        burst_size: 5000
+        by_endpoint:
+          "/inference": 500
+          "/batch": 100
+      concurrent_requests:
+        default: 100
+      queue:
+        max_pending: 10000
+        timeout: 300
+      models:
+        max_loaded: 5
+        max_model_size: 50
+      storage:
+        cache_size_limit: 100
+        models_storage_limit: 500
+      inference:
+        max_tokens: 4096
+        max_batch_size: 32
+        max_concurrent: 50
+    default_tenant: "default"
+
+  # RBAC Configuration
+  rbac:
+    enabled: false
+    default_role: "developer"
+    role_claim: "roles"
+
+  # API Key Management
+  apiKeys:
+    enabled: false
+    expiration_days: 365
+    rotation_interval_days: 90
+    encryption_key: ""
+    signing_key: ""
+
+# ============================================================================
 # HOOKS
 # ============================================================================
 
