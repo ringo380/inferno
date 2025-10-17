@@ -1,31 +1,59 @@
+# Build artifacts
 target/
-Dockerfile
-.dockerignore
-.git/
-.github/
-*.log
-*.pid
-*.seed
-*.pid.lock
+Cargo.lock
+
+# Version control
+.git
+.gitignore
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS
 .DS_Store
-.env
-.env.*
-node_modules/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
+Thumbs.db
+
+# Testing
 tests/
 benches/
-scripts/
-docs/
+
+# Documentation (can be added to image if needed)
 *.md
-!README.md
-.gitignore
-.gitlab-ci.yml
-.travis.yml
-desktop-app/node_modules/
-desktop-app/dist/
-desktop-app/target/
-*.dmg
-*.app
-*.pkg
+
+# Temporary files
+.tmp
+tmp/
+temp/
+
+# Archives
+*.tar.gz
+*.zip
+
+# Python
+*.pyc
+__pycache__/
+*.egg-info/
+dist/
+build/
+
+# Node
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Dashboard build
+dashboard/dist/
+dashboard/build/
+
+# Logs
+*.log
+logs/

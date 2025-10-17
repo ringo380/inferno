@@ -1,0 +1,119 @@
+# Docker Compose for Production Environment
+# 3+ replicas, full resources, comprehensive logging and monitoring
+
+version: '3.8'
+
+services:
+  inferno-1:
+    extends:
+      file: docker-compose.yml
+      service: inferno
+    container_name: inferno-prod-1
+    ports:
+      - "8001:8000"
+    environment:
+      INFERNO_LOG_LEVEL: warn
+      RUST_LOG: info
+    
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 4G
+        reservations:
+          cpus: '1.5'
+          memory: 3G
+
+  inferno-2:
+    extends:
+      file: docker-compose.yml
+      service: inferno
+    container_name: inferno-prod-2
+    ports:
+      - "8002:8000"
+    environment:
+      INFERNO_LOG_LEVEL: warn
+      RUST_LOG: info
+    
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 4G
+        reservations:
+          cpus: '1.5'
+          memory: 3G
+
+  inferno-3:
+    extends:
+      file: docker-compose.yml
+      service: inferno
+    container_name: inferno-prod-3
+    ports:
+      - "8003:8000"
+    environment:
+      INFERNO_LOG_LEVEL: warn
+      RUST_LOG: info
+    
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 4G
+        reservations:
+          cpus: '1.5'
+          memory: 3G
+
+  # Production: Load balancer with health checks
+  nginx:
+    image: nginx:latest
+    container_name: inferno-lb
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.prod.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - inferno-1
+      - inferno-2
+      - inferno-3
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+
+  # Prometheus for monitoring
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: inferno-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+
+volumes:
+  prometheus:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./data/prometheus

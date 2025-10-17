@@ -1,0 +1,109 @@
+# Docker Compose Configuration for Inferno v0.8.0
+# Production-grade deployment with resource management and monitoring
+
+version: '3.8'
+
+services:
+  inferno:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      platforms:
+        - linux/amd64
+        - linux/arm64
+    image: inferno:0.8.0
+    container_name: inferno
+    
+    # Port mapping
+    ports:
+      - "8000:8000"  # API server
+      - "9090:9090"  # Prometheus metrics (optional)
+    
+    # Environment variables
+    environment:
+      INFERNO_LOG_LEVEL: info
+      INFERNO_MODELS_DIR: /data/models
+      INFERNO_CACHE_DIR: /data/cache
+      INFERNO_CONFIG_DIR: /data/config
+      # Optional: Add these for distributed deployment
+      # INFERNO_BIND_ADDRESS: 0.0.0.0
+      # INFERNO_BIND_PORT: 8000
+    
+    # Volume mounts for persistence
+    volumes:
+      # Models directory
+      - models:/data/models
+      - cache:/data/cache
+      - queue:/data/queue
+      # Configuration
+      - ./config:/data/config:ro
+      # Logs (optional)
+      - logs:/data/logs
+    
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 4G
+        reservations:
+          cpus: '1.0'
+          memory: 2G
+    
+    # Restart policy
+    restart: unless-stopped
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    
+    # Logging configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "10"
+        labels: "service=inferno"
+    
+    # Labels for monitoring and organization
+    labels:
+      - "com.inferno.version=0.8.0"
+      - "com.inferno.service=api"
+      - "com.inferno.role=inference"
+
+# Volumes for data persistence
+volumes:
+  models:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./data/models
+  cache:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./data/cache
+  queue:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./data/queue
+  logs:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./data/logs
+
+# Optional: Networks for multi-service deployments
+networks:
+  default:
+    name: inferno-network
+    driver: bridge
