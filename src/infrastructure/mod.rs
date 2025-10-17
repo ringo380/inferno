@@ -16,6 +16,7 @@ pub use crate::observability;
 pub mod audit;
 pub mod cache;
 pub mod monitoring;
+pub mod profiling;
 
 // System monitoring and performance profiling
 pub mod sys_monitor;
