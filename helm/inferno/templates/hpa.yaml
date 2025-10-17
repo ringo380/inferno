@@ -1,0 +1,81 @@
+# Horizontal Pod Autoscaler and optional Vertical Pod Autoscaler
+
+{{- if .Values.autoscaling.enabled }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "inferno.fullname" . }}
+  namespace: {{ include "inferno.namespace" . }}
+  labels:
+    {{- include "inferno.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "inferno.fullname" . }}
+  minReplicas: {{ .Values.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.autoscaling.maxReplicas }}
+  metrics:
+    {{- if .Values.autoscaling.metrics.cpu.enabled }}
+    # CPU utilization scaling
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.autoscaling.metrics.cpu.utilization }}
+    {{- end }}
+    {{- if .Values.autoscaling.metrics.memory.enabled }}
+    # Memory utilization scaling
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.autoscaling.metrics.memory.utilization }}
+    {{- end }}
+  {{- with .Values.autoscaling.behavior }}
+  behavior:
+    {{- if .scaleDown }}
+    scaleDown:
+      stabilizationWindowSeconds: {{ .scaleDown.stabilizationWindowSeconds }}
+      policies:
+        {{- toYaml .scaleDown.policies | nindent 8 }}
+    {{- end }}
+    {{- if .scaleUp }}
+    scaleUp:
+      stabilizationWindowSeconds: {{ .scaleUp.stabilizationWindowSeconds }}
+      policies:
+        {{- toYaml .scaleUp.policies | nindent 8 }}
+    {{- end }}
+  {{- end }}
+{{- end }}
+
+---
+
+{{- if .Values.vpa.enabled }}
+# Vertical Pod Autoscaler (optional, for right-sizing)
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: {{ include "inferno.fullname" . }}
+  namespace: {{ include "inferno.namespace" . }}
+  labels:
+    {{- include "inferno.labels" . | nindent 4 }}
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "inferno.fullname" . }}
+  updatePolicy:
+    updateMode: {{ .Values.vpa.updateMode | quote }}
+  resourcePolicy:
+    containerPolicies:
+      - containerName: {{ .Chart.Name }}
+        minAllowed:
+          cpu: "500m"
+          memory: "1Gi"
+        maxAllowed:
+          cpu: "4000m"
+          memory: "8Gi"
+{{- end }}

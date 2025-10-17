@@ -1,0 +1,197 @@
+# Production Environment Values
+# Override values for production deployment
+
+namespace: inferno-prod
+environment: production
+instanceName: inferno-prod
+
+image:
+  tag: "0.8.0"
+  pullPolicy: IfNotPresent
+
+# Three or more replicas for production HA
+replicaCount: 3
+
+# Full resource limits for production
+resources:
+  limits:
+    cpu: 2000m
+    memory: 4Gi
+  requests:
+    cpu: 1000m
+    memory: 2Gi
+
+# Autoscaling enabled with production limits
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 20
+  metrics:
+    cpu:
+      enabled: true
+      utilization: 70
+    memory:
+      enabled: true
+      utilization: 80
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Percent
+          value: 50
+          periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+        - type: Percent
+          value: 50
+          periodSeconds: 30
+        - type: Pods
+          value: 2
+          periodSeconds: 30
+
+# Production logging (warning level, JSON format)
+configMap:
+  INFERNO_LOG_LEVEL: "warn"
+  INFERNO_LOG_FORMAT: "json"
+  INFERNO_ENV: "production"
+  # API Configuration
+  INFERNO_BIND_ADDRESS: "0.0.0.0"
+  INFERNO_BIND_PORT: "8000"
+  INFERNO_WORKER_THREADS: "8"
+  INFERNO_REQUEST_TIMEOUT: "300"
+  # Model Configuration
+  INFERNO_MAX_MODEL_SIZE_GB: "50"
+  INFERNO_CONTEXT_SIZE: "2048"
+  INFERNO_BATCH_SIZE: "32"
+  INFERNO_GPU_ENABLED: "true"
+  # Queue Configuration
+  INFERNO_QUEUE_MAX_PENDING: "1000"
+  INFERNO_QUEUE_MODERATE_THRESHOLD: "70"
+  INFERNO_QUEUE_CRITICAL_THRESHOLD: "90"
+  INFERNO_MAX_WORKERS: "16"
+  INFERNO_QUEUE_CHECKPOINT_INTERVAL: "30"
+  # Cache Configuration
+  INFERNO_CACHE_STRATEGY: "hybrid"
+  INFERNO_CACHE_SIZE_MB: "1000"
+  INFERNO_CACHE_TTL: "7200"
+  INFERNO_CACHE_COMPRESSION_ENABLED: "true"
+  # Streaming Configuration
+  INFERNO_TOKEN_BATCH_SIZE: "5"
+  INFERNO_TOKEN_BATCH_MAX_WAIT_MS: "100"
+  INFERNO_KEEPALIVE_INTERVAL: "60"
+  # Profiling disabled for production performance
+  INFERNO_PROFILING_ENABLED: "false"
+  INFERNO_PROFILING_MAX_PROFILES: "100"
+  INFERNO_INFERENCE_TIMEOUT: "300"
+  INFERNO_TOKEN_TIMEOUT: "30"
+  # Metrics fully enabled for production monitoring
+  INFERNO_METRICS_ENABLED: "true"
+  INFERNO_METRICS_PORT: "9090"
+
+# Large storage for production
+persistence:
+  enabled: true
+  storageClass: standard
+  models:
+    size: 500Gi
+  cache:
+    size: 200Gi
+  queue:
+    size: 50Gi
+
+# Pod Disruption Budget enforced for production
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 2
+
+# Strict health checks for production
+healthChecks:
+  startup:
+    enabled: true
+    initialDelaySeconds: 5
+    periodSeconds: 2
+    timeoutSeconds: 3
+    failureThreshold: 15
+  readiness:
+    enabled: true
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+  liveness:
+    enabled: true
+    initialDelaySeconds: 30
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 3
+
+# NetworkPolicy strictly enforced for production
+networkPolicy:
+  enabled: true
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 8000
+        - protocol: TCP
+          port: 9090
+
+# Service configuration for production
+service:
+  internal:
+    type: ClusterIP
+    port: 8000
+    targetPort: 8000
+  external:
+    enabled: true
+    type: LoadBalancer
+    port: 80
+    targetPort: 8000
+    name: inferno-prod-external
+
+# VPA disabled for production (manual scaling preferred)
+vpa:
+  enabled: false
+  updateMode: "Off"
+
+# Pod annotations for monitoring
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "9090"
+  prometheus.io/path: "/metrics"
+
+# Pod Security Context for production
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+
+# Container Security Context for production
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false
+  capabilities:
+    drop:
+      - ALL
+
+# Affinity rules for production node distribution
+affinity:
+  podAntiAffinity:
+    preferred: true
+    topologyKey: kubernetes.io/hostname
+
+# Termination grace period for graceful shutdown
+terminationGracePeriodSeconds: 60
+
+# Monitoring fully enabled for production
+monitoring:
+  prometheus:
+    enabled: true
+    port: 9090
+    scrapeInterval: 15s
+  serviceMonitor:
+    enabled: true

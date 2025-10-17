@@ -1,0 +1,193 @@
+# Inferno v0.8.0 Kubernetes Deployment
+# Stateless API server with health probes and resource management
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "inferno.fullname" . }}
+  namespace: {{ include "inferno.namespace" . }}
+  labels:
+    {{- include "inferno.labels" . | nindent 4 }}
+    component: api
+spec:
+  replicas: {{ .Values.replicaCount }}
+  strategy:
+    type: {{ .Values.strategy.type }}
+    rollingUpdate:
+      maxSurge: {{ .Values.strategy.rollingUpdate.maxSurge }}
+      maxUnavailable: {{ .Values.strategy.rollingUpdate.maxUnavailable }}
+
+  selector:
+    matchLabels:
+      {{- include "inferno.selectorLabels" . | nindent 6 }}
+      component: api
+
+  template:
+    metadata:
+      labels:
+        {{- include "inferno.selectorLabels" . | nindent 8 }}
+        component: api
+      annotations:
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+
+    spec:
+      # Service account for RBAC
+      {{- if .Values.rbac.create }}
+      serviceAccountName: {{ include "inferno.serviceAccountName" . }}
+      {{- end }}
+
+      # Security context
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+
+      # Pod anti-affinity for distribution
+      {{- with .Values.affinity }}
+      affinity:
+        {{- if .podAntiAffinity.preferred }}
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app.kubernetes.io/name
+                      operator: In
+                      values:
+                        - {{ include "inferno.name" $ }}
+                topologyKey: {{ .podAntiAffinity.topologyKey }}
+        {{- else }}
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: app.kubernetes.io/name
+                    operator: In
+                    values:
+                      - {{ include "inferno.name" $ }}
+              topologyKey: {{ .podAntiAffinity.topologyKey }}
+        {{- end }}
+      {{- end }}
+
+      containers:
+        - name: {{ .Chart.Name }}
+          image: {{ include "inferno.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+
+          # Command and args
+          command: ["inferno"]
+          args: ["serve", "--bind", "0.0.0.0:{{ include "inferno.port" . }}"]
+
+          # Ports
+          ports:
+            - name: api
+              containerPort: {{ include "inferno.port" . }}
+              protocol: TCP
+            - name: metrics
+              containerPort: {{ .Values.monitoring.prometheus.port }}
+              protocol: TCP
+
+          # Environment variables from ConfigMap and Secrets
+          envFrom:
+            - configMapRef:
+                name: {{ include "inferno.fullname" . }}-config
+            - secretRef:
+                name: {{ include "inferno.fullname" . }}-secrets
+
+          # Additional environment variables
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+
+          # Resource requests and limits
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+
+          # Health probes
+          {{- if .Values.healthChecks.startup.enabled }}
+          startupProbe:
+            httpGet:
+              path: /health
+              port: api
+              scheme: HTTP
+            initialDelaySeconds: {{ .Values.healthChecks.startup.initialDelaySeconds }}
+            periodSeconds: {{ .Values.healthChecks.startup.periodSeconds }}
+            timeoutSeconds: {{ .Values.healthChecks.startup.timeoutSeconds }}
+            failureThreshold: {{ .Values.healthChecks.startup.failureThreshold }}
+            successThreshold: {{ .Values.healthChecks.startup.successThreshold }}
+          {{- end }}
+
+          {{- if .Values.healthChecks.readiness.enabled }}
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: api
+              scheme: HTTP
+            initialDelaySeconds: {{ .Values.healthChecks.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.healthChecks.readiness.periodSeconds }}
+            timeoutSeconds: {{ .Values.healthChecks.readiness.timeoutSeconds }}
+            failureThreshold: {{ .Values.healthChecks.readiness.failureThreshold }}
+            successThreshold: {{ .Values.healthChecks.readiness.successThreshold }}
+          {{- end }}
+
+          {{- if .Values.healthChecks.liveness.enabled }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: api
+              scheme: HTTP
+            initialDelaySeconds: {{ .Values.healthChecks.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.healthChecks.liveness.periodSeconds }}
+            timeoutSeconds: {{ .Values.healthChecks.liveness.timeoutSeconds }}
+            failureThreshold: {{ .Values.healthChecks.liveness.failureThreshold }}
+            successThreshold: {{ .Values.healthChecks.liveness.successThreshold }}
+          {{- end }}
+
+          # Volume mounts
+          {{- if .Values.persistence.enabled }}
+          volumeMounts:
+            - name: models
+              mountPath: {{ .Values.persistence.models.path }}
+            - name: cache
+              mountPath: {{ .Values.persistence.cache.path }}
+            - name: queue
+              mountPath: {{ .Values.persistence.queue.path }}
+            - name: config
+              mountPath: /home/inferno/.inferno/config
+              readOnly: true
+          {{- end }}
+
+          # Security context for container
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+
+      # Volumes
+      {{- if .Values.persistence.enabled }}
+      volumes:
+        - name: models
+          persistentVolumeClaim:
+            claimName: {{ include "inferno.fullname" . }}-models-pvc
+        - name: cache
+          persistentVolumeClaim:
+            claimName: {{ include "inferno.fullname" . }}-cache-pvc
+        - name: queue
+          persistentVolumeClaim:
+            claimName: {{ include "inferno.fullname" . }}-queue-pvc
+        - name: config
+          configMap:
+            name: {{ include "inferno.fullname" . }}-config
+      {{- end }}
+
+      # Termination grace period for graceful shutdown
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
