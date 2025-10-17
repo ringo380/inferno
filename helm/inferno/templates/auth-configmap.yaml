@@ -1,0 +1,205 @@
+{{- if .Values.auth.oauth2.enabled }}
+# OAuth2 Configuration ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "inferno.fullname" . }}-oauth2-config
+  namespace: {{ include "inferno.namespace" . }}
+  labels:
+    {{- include "inferno.labels" . | nindent 4 }}
+    component: auth
+data:
+  oauth2.yaml: |
+    oauth2:
+      enabled: {{ .Values.auth.oauth2.enabled }}
+
+      session:
+        ttl: {{ .Values.auth.oauth2.session.ttl }}
+        refresh_threshold: {{ .Values.auth.oauth2.session.refresh_threshold }}
+        cookie:
+          name: {{ .Values.auth.oauth2.session.cookie.name }}
+          secure: {{ .Values.auth.oauth2.session.cookie.secure }}
+          http_only: {{ .Values.auth.oauth2.session.cookie.http_only }}
+          same_site: "{{ .Values.auth.oauth2.session.cookie.same_site }}"
+          domain: "{{ .Values.auth.oauth2.session.cookie.domain }}"
+          path: "{{ .Values.auth.oauth2.session.cookie.path }}"
+
+      token:
+        validate_signature: {{ .Values.auth.oauth2.token.validate_signature }}
+        validate_expiration: {{ .Values.auth.oauth2.token.validate_expiration }}
+        validate_audience: {{ .Values.auth.oauth2.token.validate_audience }}
+        validate_issuer: {{ .Values.auth.oauth2.token.validate_issuer }}
+        clock_skew: {{ .Values.auth.oauth2.token.clock_skew }}
+
+      redirect_uri_whitelist:
+        {{- toYaml .Values.auth.oauth2.redirect_uri_whitelist | nindent 8 }}
+
+    {{- with .Values.auth.oauth2.providers }}
+    providers:
+      {{- if .google.enabled }}
+      google:
+        enabled: true
+        authorization_endpoint: "{{ .google.authorization_endpoint }}"
+        token_endpoint: "{{ .google.token_endpoint }}"
+        userinfo_endpoint: "{{ .google.userinfo_endpoint }}"
+        jwks_uri: "{{ .google.jwks_uri }}"
+        client_id: "{{ .google.client_id }}"
+        redirect_uri: "{{ .google.redirect_uri }}"
+        scope: "{{ .google.scope }}"
+        user_claim_mappings:
+          {{- toYaml .google.user_claim_mappings | nindent 10 }}
+        {{- if .google.tenant_claim }}
+        tenant_claim: "{{ .google.tenant_claim }}"
+        {{- end }}
+      {{- end }}
+      {{- if .github.enabled }}
+      github:
+        enabled: true
+        authorization_endpoint: "{{ .github.authorization_endpoint }}"
+        token_endpoint: "{{ .github.token_endpoint }}"
+        userinfo_endpoint: "{{ .github.userinfo_endpoint }}"
+        client_id: "{{ .github.client_id }}"
+        redirect_uri: "{{ .github.redirect_uri }}"
+        scope: "{{ .github.scope }}"
+        user_claim_mappings:
+          {{- toYaml .github.user_claim_mappings | nindent 10 }}
+      {{- end }}
+      {{- if .okta.enabled }}
+      okta:
+        enabled: true
+        authorization_endpoint: "{{ .okta.authorization_endpoint }}"
+        token_endpoint: "{{ .okta.token_endpoint }}"
+        userinfo_endpoint: "{{ .okta.userinfo_endpoint }}"
+        jwks_uri: "{{ .okta.jwks_uri }}"
+        client_id: "{{ .okta.client_id }}"
+        redirect_uri: "{{ .okta.redirect_uri }}"
+        scope: "{{ .okta.scope }}"
+        user_claim_mappings:
+          {{- toYaml .okta.user_claim_mappings | nindent 10 }}
+      {{- end }}
+      {{- if .auth0.enabled }}
+      auth0:
+        enabled: true
+        authorization_endpoint: "{{ .auth0.authorization_endpoint }}"
+        token_endpoint: "{{ .auth0.token_endpoint }}"
+        userinfo_endpoint: "{{ .auth0.userinfo_endpoint }}"
+        jwks_uri: "{{ .auth0.jwks_uri }}"
+        client_id: "{{ .auth0.client_id }}"
+        redirect_uri: "{{ .auth0.redirect_uri }}"
+        scope: "{{ .auth0.scope }}"
+        user_claim_mappings:
+          {{- toYaml .auth0.user_claim_mappings | nindent 10 }}
+      {{- end }}
+    {{- end }}
+{{- end }}
+
+---
+{{- if .Values.auth.multiTenancy.enabled }}
+# Multi-Tenancy Configuration ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "inferno.fullname" . }}-multi-tenancy-config
+  namespace: {{ include "inferno.namespace" . }}
+  labels:
+    {{- include "inferno.labels" . | nindent 4 }}
+    component: multi-tenancy
+data:
+  multi-tenancy.yaml: |
+    multi_tenancy:
+      enabled: {{ .Values.auth.multiTenancy.enabled }}
+
+      tenant_identification:
+        jwt_claim: "{{ .Values.auth.multiTenancy.tenant_identification.jwt_claim }}"
+        header: "{{ .Values.auth.multiTenancy.tenant_identification.header }}"
+
+      isolation:
+        data:
+          type: "{{ .Values.auth.multiTenancy.isolation.data }}"
+          namespace_prefix: "tenant_"
+        queue:
+          enabled: {{ .Values.auth.multiTenancy.isolation.queue }}
+          namespace_prefix: "tenant_queue_"
+        cache:
+          enabled: {{ .Values.auth.multiTenancy.isolation.cache }}
+          namespace_prefix: "tenant_cache_"
+        logging:
+          enabled: {{ .Values.auth.multiTenancy.isolation.logging }}
+          include_tenant_id: true
+        metrics:
+          enabled: {{ .Values.auth.multiTenancy.isolation.metrics }}
+          include_tenant_id: true
+
+      quotas:
+        rate_limit:
+          requests_per_second: {{ .Values.auth.multiTenancy.quotas.rate_limit.requests_per_second }}
+          burst_size: {{ .Values.auth.multiTenancy.quotas.rate_limit.burst_size }}
+          by_endpoint:
+            {{- toYaml .Values.auth.multiTenancy.quotas.rate_limit.by_endpoint | nindent 12 }}
+        concurrent_requests:
+          default: {{ .Values.auth.multiTenancy.quotas.concurrent_requests.default }}
+        queue:
+          max_pending: {{ .Values.auth.multiTenancy.quotas.queue.max_pending }}
+          timeout: {{ .Values.auth.multiTenancy.quotas.queue.timeout }}
+        models:
+          max_loaded: {{ .Values.auth.multiTenancy.quotas.models.max_loaded }}
+          max_model_size: {{ .Values.auth.multiTenancy.quotas.models.max_model_size }}
+        storage:
+          cache_size_limit: {{ .Values.auth.multiTenancy.quotas.storage.cache_size_limit }}
+          models_storage_limit: {{ .Values.auth.multiTenancy.quotas.storage.models_storage_limit }}
+        inference:
+          max_tokens: {{ .Values.auth.multiTenancy.quotas.inference.max_tokens }}
+          max_batch_size: {{ .Values.auth.multiTenancy.quotas.inference.max_batch_size }}
+          max_concurrent: {{ .Values.auth.multiTenancy.quotas.inference.max_concurrent }}
+
+      default_tenant: "{{ .Values.auth.multiTenancy.default_tenant }}"
+{{- end }}
+
+---
+{{- if .Values.auth.rbac.enabled }}
+# RBAC Configuration ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "inferno.fullname" . }}-rbac-config
+  namespace: {{ include "inferno.namespace" . }}
+  labels:
+    {{- include "inferno.labels" . | nindent 4 }}
+    component: rbac
+data:
+  rbac-policy.yaml: |
+    rbac:
+      enabled: {{ .Values.auth.rbac.enabled }}
+      default_role: "{{ .Values.auth.rbac.default_role }}"
+      role_claim: "{{ .Values.auth.rbac.role_claim }}"
+
+      roles:
+        admin:
+          permissions:
+            - "inference:*"
+            - "models:*"
+            - "users:*"
+            - "audit:*"
+            - "settings:*"
+        developer:
+          permissions:
+            - "inference:create"
+            - "inference:read:own"
+            - "models:read"
+            - "cache:read"
+        analyst:
+          permissions:
+            - "inference:read"
+            - "models:read"
+            - "audit:read"
+            - "metrics:read"
+        service:
+          permissions:
+            - "inference:create"
+            - "inference:read:own"
+            - "models:read"
+        guest:
+          permissions:
+            - "models:read"
+            - "health:read"
+{{- end }}
