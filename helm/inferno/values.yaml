@@ -522,6 +522,111 @@ auth:
     signing_key: ""
 
 # ============================================================================
+# CACHING & OPTIMIZATION
+# ============================================================================
+
+# Caching Configuration
+cache:
+  # Enable caching system
+  enabled: true
+
+  # Cache version (increment to invalidate all)
+  version: 1
+
+  # Cache strategy preset: aggressive, balanced, conservative, inference_focused, latency_optimized
+  preset: "balanced"
+
+  strategies:
+    hybrid:
+      enabled: true
+      l1_memory:
+        eviction_policy: "lru"  # lru, lfu, random, fifo
+        max_size_mb: 500
+        ttl: 3600               # 1 hour
+        max_items: 10000
+        compression_enabled: true
+        compression_algorithm: "zstd"
+        compression_threshold_bytes: 1024
+        warm_up:
+          enabled: true
+      l2_disk:
+        path: "/home/inferno/.inferno/cache"
+        max_size_gb: 100
+        ttl: 86400              # 24 hours
+        cleanup_interval: 3600
+        cleanup_strategy: "smart"
+        compression_enabled: true
+
+    response_cache:
+      enabled: true
+      key_algorithm: "sha256"
+      ttl_by_endpoint:
+        "/models": 86400
+        "/health": 60
+        "/inference": 3600
+      cache_methods: ["GET"]
+      cache_status_codes: [200]
+
+    inference_cache:
+      enabled: true
+      deterministic_only: true
+
+  monitoring:
+    enabled: true
+    alerts:
+      low_hit_rate_threshold: 0.6
+      high_utilization_threshold: 0.95
+
+# Performance Optimization Configuration
+optimization:
+  # Enable optimization
+  enabled: true
+
+  # Optimization profile: latency_optimized, throughput_optimized, balanced, memory_constrained, cpu_bound, gpu_accelerated
+  profile: "balanced"
+
+  request_processing:
+    batching:
+      enabled: true
+      batch_size: 32
+      batch_max_wait_ms: 50
+      adaptive_batching: true
+
+  inference:
+    token_batching:
+      enabled: true
+      batch_size: 3
+      max_wait_ms: 50
+      adaptive_batching: true
+    speculative_decoding:
+      enabled: true
+      speculation_fraction: 0.5
+    compute:
+      num_threads: 8
+      use_simd: true
+      gpu_utilization_target: 90
+
+  resource_management:
+    cpu_affinity:
+      enabled: true
+    memory:
+      request_limit_mb: 2048
+      swap_enabled: false
+    model_loading:
+      lazy_loading: true
+      parallel_loading: true
+      num_loaders: 4
+
+  io:
+    network:
+      tcp_no_delay: true
+      use_sendfile: true
+    compression:
+      response_compression: true
+      algorithm: "zstd"
+      level: 3
+
+# ============================================================================
 # HOOKS
 # ============================================================================
 
