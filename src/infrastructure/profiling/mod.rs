@@ -10,6 +10,7 @@
 pub mod profiler;
 pub mod stats;
 pub mod benchmark_report;
+pub mod endpoints;
 
 pub use profiler::{
     OperationProfile, InferenceProfile, PhaseTimer, ProfileCollector, AverageMetrics,
@@ -21,4 +22,10 @@ pub use stats::{
 
 pub use benchmark_report::{
     BenchmarkResult, BenchmarkComparison, BenchmarkReport, HTMLReportGenerator, SystemInfo, ReportSummary,
+};
+
+pub use endpoints::{
+    RecentProfilesResponse, ProfileStatsResponse, TimelineResponse, AnomaliesResponse,
+    ComparisonResponse, ExportResponse, PerformanceGaugeResponse, PhaseBreakdownResponse,
+    LatencyHistogramResponse, ModelComparisonResponse, ProfilingHealthResponse,
 };
