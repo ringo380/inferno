@@ -1,0 +1,24 @@
+# Grafana Datasource Configuration for Prometheus
+# Create this as a ConfigMap in your Kubernetes cluster
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasource-prometheus
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  prometheus-datasource.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        type: prometheus
+        access: proxy
+        url: http://prometheus:9090
+        isDefault: true
+        version: 1
+        editable: true
+        jsonData:
+          timeInterval: 30s
+        secureJsonData: {}

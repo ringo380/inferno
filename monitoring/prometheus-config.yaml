@@ -1,0 +1,104 @@
+# Prometheus Configuration for Inferno
+# This configuration scrapes metrics from Inferno instances and defines recording rules
+
+global:
+  scrape_interval: 30s       # Scrape metrics every 30 seconds
+  evaluation_interval: 30s   # Evaluate rules every 30 seconds
+  external_labels:
+    cluster: 'inferno-prod'
+    service: 'inferno'
+    environment: 'production'
+
+# Alertmanager configuration (optional)
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - alertmanager:9093
+
+# Load rules files
+rule_files:
+  - '/etc/prometheus/rules/*.yml'
+
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Inferno API metrics (development/direct scrape)
+  - job_name: 'inferno'
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+    scrape_timeout: 5s
+    static_configs:
+      - targets: ['localhost:8000']
+    relabel_configs:
+      - source_labels: [__scheme__]
+        target_label: __scheme__
+        replacement: 'http'
+
+  # Inferno via Kubernetes SD (production)
+  - job_name: 'inferno-k8s'
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+    scrape_timeout: 5s
+    kubernetes_sd_configs:
+      - role: pod
+        namespaces:
+          names:
+            - inferno-prod
+            - inferno-staging
+            - default
+    relabel_configs:
+      # Only scrape pods with prometheus.io/scrape: "true"
+      - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+        action: keep
+        regex: 'true'
+      # Read port from prometheus.io/port annotation
+      - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_port]
+        action: replace
+        target_label: __meta_kubernetes_pod_container_port_number
+      # Read path from prometheus.io/path annotation
+      - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+        action: replace
+        target_label: __metrics_path__
+        regex: '(.+)'
+      # Construct target from pod IP and port
+      - source_labels: [__meta_kubernetes_pod_ip, __meta_kubernetes_pod_container_port_number]
+        action: replace
+        regex: '([^:]+)(?::\d+)?;(\d+)'
+        replacement: '${1}:${2}'
+        target_label: __address__
+      # Add labels from pod metadata
+      - source_labels: [__meta_kubernetes_namespace]
+        action: replace
+        target_label: kubernetes_namespace
+      - source_labels: [__meta_kubernetes_pod_name]
+        action: replace
+        target_label: kubernetes_pod_name
+      - source_labels: [__meta_kubernetes_pod_label_app]
+        action: replace
+        target_label: app
+      - source_labels: [__meta_kubernetes_pod_label_environment]
+        action: replace
+        target_label: environment
+
+  # Node Exporter metrics (optional, for system metrics)
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['node-exporter:9100']
+
+  # Kubernetes API Server (optional)
+  - job_name: 'kubernetes-apiservers'
+    kubernetes_sd_configs:
+      - role: endpoints
+    scheme: https
+    tls_config:
+      ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+    bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_service_name, __meta_kubernetes_endpoint_port_name]
+        action: keep
+        regex: default;kubernetes;https
