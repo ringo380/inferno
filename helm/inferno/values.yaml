@@ -303,9 +303,13 @@ monitoring:
     enabled: true
     port: 9090
     scrapeInterval: 30s
-  
+
   # ServiceMonitor for Prometheus Operator (optional)
   serviceMonitor:
+    enabled: false
+
+  # PrometheusRule for alerts (optional, requires Prometheus Operator)
+  prometheusRule:
     enabled: false
 
 # ============================================================================

@@ -1,0 +1,318 @@
+# Prometheus Alert Rules for Inferno
+# Define alerts for key metrics and thresholds
+
+groups:
+  - name: inferno-alerts
+    interval: 30s
+    rules:
+      # Pod and Deployment Health
+      - alert: InfernoPodDown
+        expr: up{job="inferno"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: inferno
+        annotations:
+          summary: "Inferno pod is down"
+          description: "Inferno pod {{ $labels.kubernetes_pod_name }} in namespace {{ $labels.kubernetes_namespace }} has been down for 2 minutes"
+
+      - alert: InfernoDeploymentReplicasMismatch
+        expr: |
+          kube_deployment_spec_replicas{deployment="inferno"} !=
+          kube_deployment_status_replicas_available{deployment="inferno"}
+        for: 5m
+        labels:
+          severity: warning
+          component: inferno
+        annotations:
+          summary: "Inferno deployment replicas mismatch"
+          description: "Inferno deployment {{ $labels.deployment }} has {{ $value }} replicas but only {{ $value }} are available"
+
+      # API Response Time and Errors
+      - alert: InfernoHighLatency
+        expr: |
+          histogram_quantile(0.95, rate(inferno_http_request_duration_seconds_bucket[5m])) > 1.0
+        for: 5m
+        labels:
+          severity: warning
+          component: inferno
+          metric_type: latency
+        annotations:
+          summary: "Inferno API latency is high"
+          description: "95th percentile request latency for {{ $labels.endpoint }} is {{ $value }}s (threshold: 1s)"
+
+      - alert: InfernoHighErrorRate
+        expr: |
+          rate(inferno_http_requests_total{status=~"5.."}[5m]) / rate(inferno_http_requests_total[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          component: inferno
+          metric_type: error_rate
+        annotations:
+          summary: "Inferno API error rate is high"
+          description: "5xx error rate for endpoint {{ $labels.endpoint }} is {{ $value | humanizePercentage }} (threshold: 5%)"
+
+      # Queue Health
+      - alert: InfernoQueueBacklog
+        expr: inferno_queue_pending_requests > 100
+        for: 5m
+        labels:
+          severity: warning
+          component: queue
+        annotations:
+          summary: "Inferno request queue backlog is high"
+          description: "Queue has {{ $value }} pending requests (threshold: 100)"
+
+      - alert: InfernoQueueCritical
+        expr: inferno_queue_pending_requests > 500
+        for: 2m
+        labels:
+          severity: critical
+          component: queue
+        annotations:
+          summary: "Inferno request queue is critical"
+          description: "Queue has {{ $value }} pending requests (threshold: 500)"
+
+      - alert: InfernoQueueUtilizationHigh
+        expr: |
+          (inferno_queue_pending_requests / inferno_queue_max_capacity) > 0.9
+        for: 5m
+        labels:
+          severity: warning
+          component: queue
+        annotations:
+          summary: "Inferno queue utilization is high"
+          description: "Queue utilization is {{ $value | humanizePercentage }} (threshold: 90%)"
+
+      # Inference Performance
+      - alert: InfernoInferenceLatencyHigh
+        expr: |
+          histogram_quantile(0.95, rate(inferno_inference_duration_seconds_bucket[5m])) > 5.0
+        for: 5m
+        labels:
+          severity: warning
+          component: inference
+          metric_type: latency
+        annotations:
+          summary: "Inferno inference latency is high"
+          description: "95th percentile inference latency for model {{ $labels.model }} is {{ $value }}s (threshold: 5s)"
+
+      - alert: InfernoInferenceErrorRate
+        expr: |
+          rate(inferno_inference_errors_total[5m]) / rate(inferno_inference_requests_total[5m]) > 0.01
+        for: 5m
+        labels:
+          severity: warning
+          component: inference
+          metric_type: error_rate
+        annotations:
+          summary: "Inferno inference error rate is high"
+          description: "Inference error rate for model {{ $labels.model }} is {{ $value | humanizePercentage }} (threshold: 1%)"
+
+      # Cache Performance
+      - alert: InfernoCacheHitRateLow
+        expr: |
+          rate(inferno_cache_hits_total[5m]) / (rate(inferno_cache_hits_total[5m]) + rate(inferno_cache_misses_total[5m])) < 0.6
+        for: 10m
+        labels:
+          severity: info
+          component: cache
+          metric_type: performance
+        annotations:
+          summary: "Inferno cache hit rate is low"
+          description: "Cache hit rate is {{ $value | humanizePercentage }} (threshold: 60%)"
+
+      - alert: InfernoCacheEvictionRateHigh
+        expr: |
+          rate(inferno_cache_evictions_total[5m]) > 100
+        for: 5m
+        labels:
+          severity: warning
+          component: cache
+          metric_type: performance
+        annotations:
+          summary: "Inferno cache eviction rate is high"
+          description: "Cache evictions per second: {{ $value }} (potential memory pressure)"
+
+      # Resource Utilization
+      - alert: InfernoPodCPUHigh
+        expr: |
+          rate(container_cpu_usage_seconds_total{pod=~"inferno.*"}[5m]) * 1000 > 1800
+        for: 5m
+        labels:
+          severity: warning
+          component: inferno
+          metric_type: resource
+        annotations:
+          summary: "Inferno pod CPU usage is high"
+          description: "Pod {{ $labels.pod }} CPU usage is {{ $value }}m (threshold: 1800m)"
+
+      - alert: InfernoPodMemoryHigh
+        expr: |
+          container_memory_usage_bytes{pod=~"inferno.*"} / 1024 / 1024 > 3500
+        for: 5m
+        labels:
+          severity: warning
+          component: inferno
+          metric_type: resource
+        annotations:
+          summary: "Inferno pod memory usage is high"
+          description: "Pod {{ $labels.pod }} memory usage is {{ $value }}Mi (threshold: 3500Mi)"
+
+      - alert: InfernoPodMemoryCritical
+        expr: |
+          container_memory_usage_bytes{pod=~"inferno.*"} / 1024 / 1024 > 3900
+        for: 2m
+        labels:
+          severity: critical
+          component: inferno
+          metric_type: resource
+        annotations:
+          summary: "Inferno pod memory is critical"
+          description: "Pod {{ $labels.pod }} memory usage is {{ $value }}Mi (threshold: 3900Mi)"
+
+      # Model Management
+      - alert: InfernoModelLoadFailure
+        expr: rate(inferno_model_load_errors_total[5m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+          component: models
+        annotations:
+          summary: "Inferno model loading failures detected"
+          description: "Model {{ $labels.model }} failed to load (rate: {{ $value }}/s)"
+
+      - alert: InfernoModelUnloadFailure
+        expr: rate(inferno_model_unload_errors_total[5m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+          component: models
+        annotations:
+          summary: "Inferno model unloading failures detected"
+          description: "Model {{ $labels.model }} failed to unload (rate: {{ $value }}/s)"
+
+      # Streaming and Tokens
+      - alert: InfernoTokenGenerationSlow
+        expr: |
+          rate(inferno_tokens_generated_total[5m]) / rate(inferno_inference_requests_total[5m]) < 10
+        for: 10m
+        labels:
+          severity: info
+          component: streaming
+          metric_type: performance
+        annotations:
+          summary: "Inferno token generation rate is low"
+          description: "Average tokens per request is {{ $value }} (expected: 10+)"
+
+      - alert: InfernoStreamDropouts
+        expr: rate(inferno_stream_errors_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          component: streaming
+        annotations:
+          summary: "Inferno stream errors detected"
+          description: "Stream error rate: {{ $value }}/s (potential client connection issues)"
+
+      # Database and Persistence
+      - alert: InfernoPersistenceWriteFailure
+        expr: rate(inferno_persistence_write_errors_total[5m]) > 0
+        for: 5m
+        labels:
+          severity: critical
+          component: persistence
+        annotations:
+          summary: "Inferno persistence write failures detected"
+          description: "Persistence write error rate: {{ $value }}/s (data loss risk)"
+
+      - alert: InfernoDiskSpaceLow
+        expr: |
+          (node_filesystem_avail_bytes{mountpoint="/home/inferno/.inferno"} / node_filesystem_size_bytes) < 0.15
+        for: 5m
+        labels:
+          severity: warning
+          component: storage
+        annotations:
+          summary: "Inferno disk space is running low"
+          description: "Available disk space: {{ $value | humanizePercentage }} (threshold: 15%)"
+
+      - alert: InfernoDiskSpaceCritical
+        expr: |
+          (node_filesystem_avail_bytes{mountpoint="/home/inferno/.inferno"} / node_filesystem_size_bytes) < 0.05
+        for: 2m
+        labels:
+          severity: critical
+          component: storage
+        annotations:
+          summary: "Inferno disk space is critical"
+          description: "Available disk space: {{ $value | humanizePercentage }} (threshold: 5%)"
+
+      # Authentication and Security
+      - alert: InfernoAuthenticationFailures
+        expr: rate(inferno_auth_failures_total[5m]) > 10
+        for: 5m
+        labels:
+          severity: warning
+          component: security
+        annotations:
+          summary: "Inferno authentication failures detected"
+          description: "Authentication failure rate: {{ $value }}/s (potential attack)"
+
+      - alert: InfernoRateLimitExceeded
+        expr: rate(inferno_rate_limit_exceeded_total[5m]) > 1
+        for: 5m
+        labels:
+          severity: info
+          component: security
+        annotations:
+          summary: "Inferno rate limit exceeded"
+          description: "Rate limit hits: {{ $value }}/s (client throttling)"
+
+  # Recording Rules (pre-aggregate metrics for faster queries)
+  - name: inferno-recording-rules
+    interval: 30s
+    rules:
+      # Request rate
+      - record: inferno:request_rate:5m
+        expr: rate(inferno_http_requests_total[5m])
+
+      # Error rate
+      - record: inferno:error_rate:5m
+        expr: rate(inferno_http_requests_total{status=~"5.."}[5m]) / rate(inferno_http_requests_total[5m])
+
+      # Latency percentiles
+      - record: inferno:p95_latency:5m
+        expr: histogram_quantile(0.95, rate(inferno_http_request_duration_seconds_bucket[5m]))
+
+      - record: inferno:p99_latency:5m
+        expr: histogram_quantile(0.99, rate(inferno_http_request_duration_seconds_bucket[5m]))
+
+      # Inference metrics
+      - record: inferno:inference_rate:5m
+        expr: rate(inferno_inference_requests_total[5m])
+
+      - record: inferno:inference_p95_latency:5m
+        expr: histogram_quantile(0.95, rate(inferno_inference_duration_seconds_bucket[5m]))
+
+      # Queue metrics
+      - record: inferno:queue_utilization:5m
+        expr: inferno_queue_pending_requests / inferno_queue_max_capacity
+
+      # Cache metrics
+      - record: inferno:cache_hit_rate:5m
+        expr: |
+          rate(inferno_cache_hits_total[5m]) /
+          (rate(inferno_cache_hits_total[5m]) + rate(inferno_cache_misses_total[5m]))
+
+      # Model metrics
+      - record: inferno:active_models:5m
+        expr: inferno_models_loaded
+
+      # Resource utilization
+      - record: inferno:pod_cpu_usage:5m
+        expr: rate(container_cpu_usage_seconds_total{pod=~"inferno.*"}[5m]) * 1000
+
+      - record: inferno:pod_memory_usage_mb:5m
+        expr: container_memory_usage_bytes{pod=~"inferno.*"} / 1024 / 1024
