@@ -1,0 +1,86 @@
+# Kustomization overlay for production environment
+# 3+ replicas, full resources, warn logging, monitoring
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: inferno-prod
+
+bases:
+  - ../../base
+
+namePrefix: "prod-"
+
+commonLabels:
+  environment: production
+  tier: critical
+
+# Production: 3 replicas (HPA will scale this)
+replicas:
+  - name: prod-inferno
+    count: 3
+
+# ConfigMap patches for production
+configMapGenerator:
+  - name: prod-inferno-config
+    behavior: merge
+    literals:
+      - INFERNO_LOG_LEVEL=warn
+      - INFERNO_LOG_FORMAT=json
+      - INFERNO_PROFILING_ENABLED=false
+      - INFERNO_ENV=production
+      - INFERNO_METRICS_ENABLED=true
+
+# Resource limits for production
+patchesJson6902:
+  - target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: prod-inferno
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/cpu
+        value: 1000m
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/memory
+        value: 2Gi
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/cpu
+        value: 2000m
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/memory
+        value: 4Gi
+  # Increase HPA max replicas for production
+  - target:
+      group: autoscaling
+      version: v2
+      kind: HorizontalPodAutoscaler
+      name: prod-inferno
+    patch: |-
+      - op: replace
+        path: /spec/maxReplicas
+        value: 20
+
+# PVC size increases for production
+patchesJson6902:
+  - target:
+      group: v1
+      kind: PersistentVolumeClaim
+      name: prod-inferno-models-pvc
+    patch: |-
+      - op: replace
+        path: /spec/resources/requests/storage
+        value: 500Gi
+  - target:
+      group: v1
+      kind: PersistentVolumeClaim
+      name: prod-inferno-cache-pvc
+    patch: |-
+      - op: replace
+        path: /spec/resources/requests/storage
+        value: 200Gi
+
+# Pod disruption budget for high availability
+resources:
+  - pdb.yaml

@@ -1,0 +1,50 @@
+# Kustomization overlay for staging environment
+# 2 replicas, moderate resources, info logging
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: inferno-staging
+
+bases:
+  - ../../base
+
+namePrefix: "staging-"
+
+commonLabels:
+  environment: staging
+
+# Staging: 2 replicas
+replicas:
+  - name: staging-inferno
+    count: 2
+
+# ConfigMap patches for staging
+configMapGenerator:
+  - name: staging-inferno-config
+    behavior: merge
+    literals:
+      - INFERNO_LOG_LEVEL=info
+      - INFERNO_PROFILING_ENABLED=true
+      - INFERNO_ENV=staging
+
+# Resource limits for staging
+patchesJson6902:
+  - target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: staging-inferno
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/cpu
+        value: 500m
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/memory
+        value: 1Gi
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/cpu
+        value: 1500m
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/memory
+        value: 3Gi

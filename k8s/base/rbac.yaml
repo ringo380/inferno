@@ -1,0 +1,96 @@
+# RBAC configuration for Inferno
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: inferno
+  labels:
+    app: inferno
+
+---
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: inferno
+  labels:
+    app: inferno
+rules:
+  # Allow reading ConfigMaps and Secrets
+  - apiGroups: [""]
+    resources: ["configmaps", "secrets"]
+    verbs: ["get", "list", "watch"]
+  # Allow reading pod information
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+  # Allow reading events
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "patch"]
+
+---
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: inferno
+  labels:
+    app: inferno
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: inferno
+subjects:
+  - kind: ServiceAccount
+    name: inferno
+    namespace: default
+
+---
+
+# NetworkPolicy for security (optional)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: inferno
+  labels:
+    app: inferno
+spec:
+  podSelector:
+    matchLabels:
+      app: inferno
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow from ingress controller
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 8000
+        - protocol: TCP
+          port: 9090
+    # Allow from same namespace
+    - from:
+        - podSelector: {}
+      ports:
+        - protocol: TCP
+          port: 8000
+        - protocol: TCP
+          port: 9090
+  egress:
+    # Allow DNS
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: UDP
+          port: 53
+    # Allow external traffic
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: 443
