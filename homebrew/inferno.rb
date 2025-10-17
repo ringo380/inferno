@@ -3,7 +3,7 @@ class Inferno < Formula
   desc "Enterprise AI/ML model runner with automatic updates and real-time monitoring"
   homepage "https://github.com/ringo380/inferno"
   license "MIT OR Apache-2.0"
-  version "0.7.0"
+  version "0.9.0-phase5"
 
   # Platform-specific downloads
   if OS.mac?
