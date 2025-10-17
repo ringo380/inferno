@@ -1,0 +1,88 @@
+# Inferno Kubernetes Service
+# Exposes API and metrics ports
+
+# Internal ClusterIP Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "inferno.fullname" . }}
+  namespace: {{ include "inferno.namespace" . }}
+  labels:
+    {{- include "inferno.labels" . | nindent 4 }}
+  {{- with .Values.service.internal.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.service.internal.type }}
+  ports:
+    - name: api
+      port: {{ .Values.service.internal.port }}
+      targetPort: {{ .Values.service.internal.targetPort }}
+      protocol: TCP
+    - name: metrics
+      port: {{ .Values.monitoring.prometheus.port }}
+      targetPort: {{ .Values.monitoring.prometheus.port }}
+      protocol: TCP
+  selector:
+    {{- include "inferno.selectorLabels" . | nindent 4 }}
+    component: api
+  sessionAffinity: None
+
+---
+
+# Headless Service for direct pod access
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "inferno.fullname" . }}-headless
+  namespace: {{ include "inferno.namespace" . }}
+  labels:
+    {{- include "inferno.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  clusterIP: None  # Headless
+  ports:
+    - name: api
+      port: {{ .Values.service.internal.port }}
+      targetPort: {{ .Values.service.internal.targetPort }}
+      protocol: TCP
+    - name: metrics
+      port: {{ .Values.monitoring.prometheus.port }}
+      targetPort: {{ .Values.monitoring.prometheus.port }}
+      protocol: TCP
+  selector:
+    {{- include "inferno.selectorLabels" . | nindent 4 }}
+    component: api
+
+---
+
+{{- if .Values.service.external.enabled }}
+# External Service for production (LoadBalancer or NodePort)
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.service.external.name }}
+  namespace: {{ include "inferno.namespace" . }}
+  labels:
+    {{- include "inferno.labels" . | nindent 4 }}
+  {{- with .Values.service.external.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.service.external.type }}
+  ports:
+    - name: api
+      port: {{ .Values.service.external.port }}
+      targetPort: {{ .Values.service.external.targetPort }}
+      protocol: TCP
+  selector:
+    {{- include "inferno.selectorLabels" . | nindent 4 }}
+    component: api
+  sessionAffinity: None
+  {{- with .Values.service.external.externalIPs }}
+  externalIPs:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{- end }}

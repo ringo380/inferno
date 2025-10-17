@@ -1,0 +1,33 @@
+# Inferno ConfigMap for environment variables and configuration
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "inferno.fullname" . }}-config
+  namespace: {{ include "inferno.namespace" . }}
+  labels:
+    {{- include "inferno.labels" . | nindent 4 }}
+data:
+  {{- with .Values.configMap }}
+  {{- range $key, $value := . }}
+  {{ $key }}: {{ $value | quote }}
+  {{- end }}
+  {{- end }}
+
+---
+
+# Secrets for sensitive data
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ include "inferno.fullname" . }}-secrets
+  namespace: {{ include "inferno.namespace" . }}
+  labels:
+    {{- include "inferno.labels" . | nindent 4 }}
+type: Opaque
+stringData:
+  {{- with .Values.secrets }}
+  {{- range $key, $value := . }}
+  {{ $key }}: {{ $value | quote }}
+  {{- end }}
+  {{- end }}

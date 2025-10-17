@@ -1,0 +1,99 @@
+# RBAC configuration for Inferno
+
+{{- if .Values.rbac.create }}
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "inferno.serviceAccountName" . }}
+  namespace: {{ include "inferno.namespace" . }}
+  labels:
+    {{- include "inferno.labels" . | nindent 4 }}
+
+---
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "inferno.fullname" . }}
+  namespace: {{ include "inferno.namespace" . }}
+  labels:
+    {{- include "inferno.labels" . | nindent 4 }}
+rules:
+  # Allow reading ConfigMaps and Secrets
+  - apiGroups: [""]
+    resources: ["configmaps", "secrets"]
+    verbs: ["get", "list", "watch"]
+  # Allow reading pod information
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+  # Allow reading and creating events
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "patch"]
+
+---
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "inferno.fullname" . }}
+  namespace: {{ include "inferno.namespace" . }}
+  labels:
+    {{- include "inferno.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "inferno.fullname" . }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "inferno.serviceAccountName" . }}
+    namespace: {{ include "inferno.namespace" . }}
+
+{{- end }}
+
+---
+
+# NetworkPolicy for security
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "inferno.fullname" . }}
+  namespace: {{ include "inferno.namespace" . }}
+  labels:
+    {{- include "inferno.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "inferno.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    {{- with .Values.networkPolicy.ingress }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  egress:
+    # Allow DNS
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: UDP
+          port: 53
+    # Allow external HTTPS traffic
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: 443
+    # Allow local traffic
+    - to:
+        - podSelector: {}
+      ports:
+        - protocol: TCP
+          port: {{ include "inferno.port" . }}
+        - protocol: TCP
+          port: {{ .Values.monitoring.prometheus.port }}
+{{- end }}

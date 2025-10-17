@@ -1,0 +1,15 @@
+{{- if .Values.podDisruptionBudget.enabled }}
+# Pod Disruption Budget for high availability
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "inferno.fullname" . }}
+  namespace: {{ include "inferno.namespace" . }}
+  labels:
+    {{- include "inferno.labels" . | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "inferno.selectorLabels" . | nindent 6 }}
+{{- end }}

@@ -1,0 +1,60 @@
+1. Get the status of your deployment:
+  kubectl get deployment -n {{ include "inferno.namespace" . }} {{ include "inferno.fullname" . }}
+
+2. Get the list of pods:
+  kubectl get pods -n {{ include "inferno.namespace" . }} -l app.kubernetes.io/name={{ include "inferno.name" . }}
+
+3. Watch the pods come up:
+  kubectl get pods -n {{ include "inferno.namespace" . }} -l app.kubernetes.io/name={{ include "inferno.name" . }} -w
+
+4. Check pod logs:
+  kubectl logs -n {{ include "inferno.namespace" . }} -l app.kubernetes.io/name={{ include "inferno.name" . }} --tail 100 -f
+
+5. Port forward to access the API:
+  kubectl port-forward -n {{ include "inferno.namespace" . }} svc/{{ include "inferno.fullname" . }} 8000:{{ .Values.service.internal.port }}
+
+6. Test the health endpoint:
+  curl http://localhost:8000/health
+
+7. View metrics:
+  kubectl port-forward -n {{ include "inferno.namespace" . }} svc/{{ include "inferno.fullname" . }} 9090:{{ .Values.monitoring.prometheus.port }}
+  curl http://localhost:9090/metrics
+
+{{- if .Values.autoscaling.enabled }}
+
+8. Monitor HPA (Horizontal Pod Autoscaler):
+  kubectl get hpa -n {{ include "inferno.namespace" . }} {{ include "inferno.fullname" . }} -w
+
+{{- end }}
+
+{{- if .Values.persistence.enabled }}
+
+9. Check PersistentVolumeClaims:
+  kubectl get pvc -n {{ include "inferno.namespace" . }} | grep {{ include "inferno.fullname" . }}
+
+10. View storage usage:
+  kubectl describe pvc -n {{ include "inferno.namespace" . }} {{ include "inferno.fullname" . }}-models-pvc
+  kubectl describe pvc -n {{ include "inferno.namespace" . }} {{ include "inferno.fullname" . }}-cache-pvc
+  kubectl describe pvc -n {{ include "inferno.namespace" . }} {{ include "inferno.fullname" . }}-queue-pvc
+
+{{- end }}
+
+Configuration:
+- Environment: {{ .Values.environment }}
+- Replicas: {{ .Values.replicaCount }} ({{ if .Values.autoscaling.enabled }}autoscaled to {{ .Values.autoscaling.minReplicas }}-{{ .Values.autoscaling.maxReplicas }}{{- end }})
+- Image: {{ include "inferno.image" . }}
+- Namespace: {{ include "inferno.namespace" . }}
+
+{{- if .Values.service.external.enabled }}
+
+External Service: {{ .Values.service.external.type }} ({{ .Values.service.external.name }})
+- Accessible at: http://{{ .Values.service.external.name }}.{{ include "inferno.namespace" . }}.svc.cluster.local:{{ .Values.service.external.port }}
+
+{{- else }}
+
+Internal Service Only (ClusterIP):
+- Access from within cluster: http://{{ include "inferno.fullname" . }}.{{ include "inferno.namespace" . }}.svc.cluster.local:{{ .Values.service.internal.port }}
+
+{{- end }}
+
+For more information, visit: https://github.com/ringo380/inferno

@@ -1,0 +1,113 @@
+# Development Environment Values
+# Override values for development deployment
+
+namespace: default
+environment: development
+instanceName: inferno-dev
+
+image:
+  tag: "0.8.0"
+  pullPolicy: IfNotPresent
+
+# Single replica for local development
+replicaCount: 1
+
+# Resource limits for development
+resources:
+  limits:
+    cpu: 1000m
+    memory: 2Gi
+  requests:
+    cpu: 100m
+    memory: 512Mi
+
+# Autoscaling disabled for development
+autoscaling:
+  enabled: false
+
+# Development logging
+configMap:
+  INFERNO_LOG_LEVEL: "debug"
+  INFERNO_LOG_FORMAT: "pretty"
+  INFERNO_ENV: "development"
+  # API Configuration
+  INFERNO_BIND_ADDRESS: "0.0.0.0"
+  INFERNO_BIND_PORT: "8000"
+  INFERNO_WORKER_THREADS: "2"
+  INFERNO_REQUEST_TIMEOUT: "300"
+  # Model Configuration
+  INFERNO_MAX_MODEL_SIZE_GB: "50"
+  INFERNO_CONTEXT_SIZE: "2048"
+  INFERNO_BATCH_SIZE: "32"
+  INFERNO_GPU_ENABLED: "true"
+  # Queue Configuration
+  INFERNO_QUEUE_MAX_PENDING: "1000"
+  INFERNO_QUEUE_MODERATE_THRESHOLD: "70"
+  INFERNO_QUEUE_CRITICAL_THRESHOLD: "90"
+  INFERNO_MAX_WORKERS: "4"
+  INFERNO_QUEUE_CHECKPOINT_INTERVAL: "30"
+  # Cache Configuration
+  INFERNO_CACHE_STRATEGY: "hybrid"
+  INFERNO_CACHE_SIZE_MB: "500"
+  INFERNO_CACHE_TTL: "3600"
+  INFERNO_CACHE_COMPRESSION_ENABLED: "true"
+  # Streaming Configuration
+  INFERNO_TOKEN_BATCH_SIZE: "3"
+  INFERNO_TOKEN_BATCH_MAX_WAIT_MS: "50"
+  INFERNO_KEEPALIVE_INTERVAL: "30"
+  # Profiling enabled for development
+  INFERNO_PROFILING_ENABLED: "true"
+  INFERNO_PROFILING_MAX_PROFILES: "1000"
+  INFERNO_INFERENCE_TIMEOUT: "300"
+  INFERNO_TOKEN_TIMEOUT: "30"
+  # Metrics disabled for development
+  INFERNO_METRICS_ENABLED: "false"
+
+# Reduced storage for development
+persistence:
+  enabled: true
+  storageClass: standard
+  models:
+    size: 20Gi
+  cache:
+    size: 10Gi
+  queue:
+    size: 5Gi
+
+# Pod Disruption Budget disabled for development
+podDisruptionBudget:
+  enabled: false
+
+# Health checks with longer delays for development
+healthChecks:
+  startup:
+    enabled: true
+    initialDelaySeconds: 10
+    periodSeconds: 2
+    timeoutSeconds: 5
+    failureThreshold: 15
+  readiness:
+    enabled: true
+    initialDelaySeconds: 15
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+  liveness:
+    enabled: true
+    initialDelaySeconds: 30
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 3
+
+# Networking disabled for development
+networkPolicy:
+  enabled: false
+
+# Service configuration for development
+service:
+  internal:
+    type: ClusterIP
+    port: 8000
+    targetPort: 8000
+  external:
+    enabled: false

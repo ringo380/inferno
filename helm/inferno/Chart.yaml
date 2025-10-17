@@ -1,0 +1,41 @@
+# Helm Chart for Inferno v0.8.0+
+# Enterprise-grade AI/ML inference engine with streaming
+
+apiVersion: v2
+name: inferno
+description: Enterprise-grade local AI/ML model inference engine with real-time streaming, request queuing, and performance monitoring
+type: application
+version: 0.8.0
+appVersion: "0.8.0"
+
+keywords:
+  - ai
+  - ml
+  - inference
+  - llm
+  - gguf
+  - onnx
+  - streaming
+  - openai-compatible
+
+home: https://github.com/ringo380/inferno
+sources:
+  - https://github.com/ringo380/inferno
+  - https://github.com/ringo380/inferno/issues
+
+maintainers:
+  - name: Inferno Developers
+    email: dev@inferno.ai
+    url: https://github.com/ringo380/inferno
+
+icon: https://raw.githubusercontent.com/ringo380/inferno/main/logo.png
+
+dependencies: []
+
+# Chart deprecation info (remove when stable)
+deprecated: false
+
+# Metadata
+annotations:
+  category: AI/ML
+  licenses: MIT

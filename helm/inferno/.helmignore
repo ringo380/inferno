@@ -1,0 +1,46 @@
+# Patterns to ignore when building packages.
+# This supports shell glob patterns.
+# Common VCS dirs
+.git/
+.gitignore
+.bzr/
+.bzrignore
+.hg/
+.hgignore
+.svn/
+# Common backup files
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+# Helm
+Chart.lock
+# IDEs
+.idea/
+*.sublime-project
+*.sublime-workspace
+.vscode/
+*.code-workspace
+# OS
+._*
+.AppleDouble
+.LSOverride
+*.tmp
+# Documentation
+*.md
+README.md
+# Test files
+test/
+tests/
+# Example files
+examples/
+*.example
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml
+# Development
+*.local.yaml
+values.local.yaml
+secrets.yaml
