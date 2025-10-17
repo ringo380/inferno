@@ -1,0 +1,47 @@
+# Persistent Volumes and Claims for Inferno
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: inferno-models-pvc
+  labels:
+    app: inferno
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: standard
+  resources:
+    requests:
+      storage: 100Gi
+
+---
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: inferno-cache-pvc
+  labels:
+    app: inferno
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: standard
+  resources:
+    requests:
+      storage: 50Gi
+
+---
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: inferno-queue-pvc
+  labels:
+    app: inferno
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: standard
+  resources:
+    requests:
+      storage: 10Gi

@@ -1,0 +1,54 @@
+# Kustomization overlay for development environment
+# Single replica, minimal resources, debug logging
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: default
+
+bases:
+  - ../../base
+
+namePrefix: "dev-"
+
+commonLabels:
+  environment: development
+
+# Development: 1 replica
+replicas:
+  - name: dev-inferno
+    count: 1
+
+# Patch for development environment
+patchesStrategicMerge:
+  - deployment-patch.yaml
+
+# ConfigMap patches for dev logging
+configMapGenerator:
+  - name: dev-inferno-config
+    behavior: merge
+    literals:
+      - INFERNO_LOG_LEVEL=debug
+      - INFERNO_PROFILING_ENABLED=true
+      - INFERNO_ENV=development
+
+# Resource limits for development
+patchesJson6902:
+  - target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: dev-inferno
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/cpu
+        value: 100m
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/memory
+        value: 512Mi
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/cpu
+        value: 1000m
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/memory
+        value: 2Gi

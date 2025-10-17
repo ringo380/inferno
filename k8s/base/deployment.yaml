@@ -1,0 +1,174 @@
+# Inferno v0.8.0 Kubernetes Deployment
+# Stateless API server with health probes and resource management
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: inferno
+  labels:
+    app: inferno
+    version: v0.8.0
+    component: api
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  
+  selector:
+    matchLabels:
+      app: inferno
+      component: api
+  
+  template:
+    metadata:
+      labels:
+        app: inferno
+        version: v0.8.0
+        component: api
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        prometheus.io/path: "/metrics"
+    
+    spec:
+      # Service account for RBAC
+      serviceAccountName: inferno
+      
+      # Security context
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      
+      # Pod anti-affinity for distribution
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - inferno
+                topologyKey: kubernetes.io/hostname
+      
+      containers:
+        - name: inferno
+          image: inferno:0.8.0
+          imagePullPolicy: IfNotPresent
+          
+          # Command and args
+          command: ["inferno"]
+          args: ["serve", "--bind", "0.0.0.0:8000"]
+          
+          # Ports
+          ports:
+            - name: api
+              containerPort: 8000
+              protocol: TCP
+            - name: metrics
+              containerPort: 9090
+              protocol: TCP
+          
+          # Environment variables from ConfigMap and Secrets
+          envFrom:
+            - configMapRef:
+                name: inferno-config
+            - secretRef:
+                name: inferno-secrets
+          
+          # Additional environment variables
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+          
+          # Resource requests and limits
+          resources:
+            requests:
+              cpu: "1000m"
+              memory: "2Gi"
+            limits:
+              cpu: "2000m"
+              memory: "4Gi"
+          
+          # Health probes
+          # Startup probe: wait for app to be ready (up to 30 seconds)
+          startupProbe:
+            httpGet:
+              path: /health
+              port: api
+              scheme: HTTP
+            initialDelaySeconds: 5
+            periodSeconds: 2
+            timeoutSeconds: 3
+            failureThreshold: 15
+            successThreshold: 1
+          
+          # Readiness probe: ready to accept traffic
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: api
+              scheme: HTTP
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+            successThreshold: 1
+          
+          # Liveness probe: restart if unhealthy
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: api
+              scheme: HTTP
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+            successThreshold: 1
+          
+          # Volume mounts
+          volumeMounts:
+            - name: models
+              mountPath: /home/inferno/.inferno/models
+            - name: cache
+              mountPath: /home/inferno/.inferno/cache
+            - name: queue
+              mountPath: /home/inferno/.inferno/queue
+            - name: config
+              mountPath: /home/inferno/.inferno/config
+              readOnly: true
+      
+      # Volumes
+      volumes:
+        - name: models
+          persistentVolumeClaim:
+            claimName: inferno-models-pvc
+        - name: cache
+          persistentVolumeClaim:
+            claimName: inferno-cache-pvc
+        - name: queue
+          persistentVolumeClaim:
+            claimName: inferno-queue-pvc
+        - name: config
+          configMap:
+            name: inferno-config
+      
+      # Termination grace period for graceful shutdown
+      terminationGracePeriodSeconds: 30

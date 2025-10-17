@@ -1,0 +1,81 @@
+# Inferno ConfigMap for environment variables and configuration
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: inferno-config
+  labels:
+    app: inferno
+data:
+  INFERNO_LOG_LEVEL: "info"
+  INFERNO_LOG_FORMAT: "json"
+  
+  # API Configuration
+  INFERNO_BIND_ADDRESS: "0.0.0.0"
+  INFERNO_BIND_PORT: "8000"
+  INFERNO_WORKER_THREADS: "4"
+  INFERNO_REQUEST_TIMEOUT: "300"
+  
+  # Model Configuration
+  INFERNO_MODELS_DIR: "/home/inferno/.inferno/models"
+  INFERNO_CACHE_DIR: "/home/inferno/.inferno/cache"
+  INFERNO_CONFIG_DIR: "/home/inferno/.inferno/config"
+  INFERNO_QUEUE_DIR: "/home/inferno/.inferno/queue"
+  INFERNO_MAX_MODEL_SIZE_GB: "50"
+  INFERNO_CONTEXT_SIZE: "2048"
+  INFERNO_BATCH_SIZE: "32"
+  INFERNO_GPU_ENABLED: "true"
+  
+  # Queue Configuration
+  INFERNO_QUEUE_MAX_PENDING: "1000"
+  INFERNO_QUEUE_MODERATE_THRESHOLD: "70"
+  INFERNO_QUEUE_CRITICAL_THRESHOLD: "90"
+  INFERNO_MAX_WORKERS: "8"
+  INFERNO_QUEUE_CHECKPOINT_INTERVAL: "30"
+  
+  # Profiling Configuration
+  INFERNO_PROFILING_ENABLED: "true"
+  INFERNO_PROFILING_MAX_PROFILES: "1000"
+  INFERNO_INFERENCE_TIMEOUT: "300"
+  INFERNO_TOKEN_TIMEOUT: "30"
+  
+  # Cache Configuration
+  INFERNO_CACHE_STRATEGY: "hybrid"
+  INFERNO_CACHE_SIZE_MB: "500"
+  INFERNO_CACHE_TTL: "3600"
+  INFERNO_CACHE_COMPRESSION_ENABLED: "true"
+  
+  # Streaming Configuration
+  INFERNO_TOKEN_BATCH_SIZE: "3"
+  INFERNO_TOKEN_BATCH_MAX_WAIT_MS: "50"
+  INFERNO_KEEPALIVE_INTERVAL: "30"
+  INFERNO_COMPRESSION_FORMAT: "auto"
+  
+  # Deployment Configuration
+  INFERNO_ENV: "production"
+  INFERNO_METRICS_ENABLED: "true"
+  INFERNO_METRICS_PORT: "9090"
+
+---
+
+# Secrets for sensitive data (example, use real secrets in production)
+apiVersion: v1
+kind: Secret
+metadata:
+  name: inferno-secrets
+  labels:
+    app: inferno
+type: Opaque
+stringData:
+  # Authentication
+  INFERNO_AUTH_ENABLED: "false"
+  INFERNO_AUTH_SECRET_KEY: "change-me-in-production"
+  
+  # Optional: Sentry DSN for error tracking
+  INFERNO_SENTRY_DSN: ""
+  
+  # Optional: OAuth2 credentials
+  OAUTH2_CLIENT_ID: ""
+  OAUTH2_CLIENT_SECRET: ""
+  OAUTH2_PROVIDER_URL: ""
+

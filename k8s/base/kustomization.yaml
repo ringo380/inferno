@@ -1,0 +1,60 @@
+# Kustomization base for Inferno
+# Packages all Kubernetes manifests
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: default
+
+commonLabels:
+  app: inferno
+  version: v0.8.0
+
+commonAnnotations:
+  managed-by: "kustomize"
+  project: "inferno"
+
+resources:
+  - deployment.yaml
+  - service.yaml
+  - configmap.yaml
+  - pvc.yaml
+  - rbac.yaml
+  - hpa.yaml
+
+# Images
+images:
+  - name: inferno
+    newName: inferno
+    newTag: "0.8.0"
+
+# Replicas
+replicas:
+  - name: inferno
+    count: 3
+
+# Patches for specific environments can override defaults
+patchesStrategicMerge: []
+patchesJson6902: []
+
+# ConfigMap generator (alternative to static configmap.yaml)
+# configMapGenerator:
+#   - name: inferno-config
+#     envs:
+#       - config.env
+
+# Secret generator (alternative to static secrets)
+# secretGenerator:
+#   - name: inferno-secrets
+#     envs:
+#       - secrets.env
+
+# Variable replacement
+# vars:
+#   - name: IMAGE_TAG
+#     objref:
+#       kind: Deployment
+#       name: inferno
+#       apiVersion: apps/v1
+#     fieldref:
+#       fieldpath: spec.template.spec.containers[0].image

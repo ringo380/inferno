@@ -1,0 +1,78 @@
+# Inferno Kubernetes Service
+# Exposes API and metrics ports
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: inferno
+  labels:
+    app: inferno
+    version: v0.8.0
+  annotations:
+    description: "Inferno AI Inference API"
+spec:
+  type: ClusterIP
+  ports:
+    - name: api
+      port: 8000
+      targetPort: 8000
+      protocol: TCP
+    - name: metrics
+      port: 9090
+      targetPort: 9090
+      protocol: TCP
+  selector:
+    app: inferno
+    component: api
+  sessionAffinity: None
+
+---
+
+# Headless service for direct pod access (optional)
+apiVersion: v1
+kind: Service
+metadata:
+  name: inferno-headless
+  labels:
+    app: inferno
+    version: v0.8.0
+spec:
+  type: ClusterIP
+  clusterIP: None  # Headless
+  ports:
+    - name: api
+      port: 8000
+      targetPort: 8000
+      protocol: TCP
+    - name: metrics
+      port: 9090
+      targetPort: 9090
+      protocol: TCP
+  selector:
+    app: inferno
+    component: api
+
+---
+
+# External service for production (LoadBalancer or NodePort)
+apiVersion: v1
+kind: Service
+metadata:
+  name: inferno-external
+  labels:
+    app: inferno
+    version: v0.8.0
+spec:
+  type: LoadBalancer  # Change to NodePort if no cloud LB available
+  ports:
+    - name: api
+      port: 80
+      targetPort: 8000
+      protocol: TCP
+  selector:
+    app: inferno
+    component: api
+  sessionAffinity: None
+  # Optional: specify external IPs
+  # externalIPs:
+  #   - "your-external-ip"

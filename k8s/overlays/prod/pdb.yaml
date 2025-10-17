@@ -1,0 +1,11 @@
+# Pod Disruption Budget for production high availability
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: inferno
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: inferno
+      environment: production
