@@ -1,0 +1,113 @@
+{{- if .Values.cache.enabled }}
+# Caching Strategy ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "inferno.fullname" . }}-cache-config
+  namespace: {{ include "inferno.namespace" . }}
+  labels:
+    {{- include "inferno.labels" . | nindent 4 }}
+    component: caching
+data:
+  cache-strategies.yaml: |
+    cache:
+      enabled: {{ .Values.cache.enabled }}
+      version: {{ .Values.cache.version }}
+
+      strategies:
+        hybrid:
+          enabled: {{ .Values.cache.strategies.hybrid.enabled }}
+          l1_memory:
+            eviction_policy: "{{ .Values.cache.strategies.hybrid.l1_memory.eviction_policy }}"
+            max_size_mb: {{ .Values.cache.strategies.hybrid.l1_memory.max_size_mb }}
+            ttl: {{ .Values.cache.strategies.hybrid.l1_memory.ttl }}
+            max_items: {{ .Values.cache.strategies.hybrid.l1_memory.max_items }}
+            compression_enabled: {{ .Values.cache.strategies.hybrid.l1_memory.compression_enabled }}
+            compression_algorithm: "{{ .Values.cache.strategies.hybrid.l1_memory.compression_algorithm }}"
+            compression_threshold_bytes: {{ .Values.cache.strategies.hybrid.l1_memory.compression_threshold_bytes }}
+            warm_up:
+              enabled: {{ .Values.cache.strategies.hybrid.l1_memory.warm_up.enabled }}
+          l2_disk:
+            path: "{{ .Values.cache.strategies.hybrid.l2_disk.path }}"
+            max_size_gb: {{ .Values.cache.strategies.hybrid.l2_disk.max_size_gb }}
+            ttl: {{ .Values.cache.strategies.hybrid.l2_disk.ttl }}
+            cleanup_interval: {{ .Values.cache.strategies.hybrid.l2_disk.cleanup_interval }}
+            cleanup_strategy: "{{ .Values.cache.strategies.hybrid.l2_disk.cleanup_strategy }}"
+            compression_enabled: {{ .Values.cache.strategies.hybrid.l2_disk.compression_enabled }}
+
+        response_cache:
+          enabled: {{ .Values.cache.strategies.response_cache.enabled }}
+          key_algorithm: "{{ .Values.cache.strategies.response_cache.key_algorithm }}"
+          ttl_by_endpoint:
+            {{- toYaml .Values.cache.strategies.response_cache.ttl_by_endpoint | nindent 12 }}
+          cache_methods:
+            {{- toYaml .Values.cache.strategies.response_cache.cache_methods | nindent 12 }}
+
+        inference_cache:
+          enabled: {{ .Values.cache.strategies.inference_cache.enabled }}
+          deterministic_only: {{ .Values.cache.strategies.inference_cache.deterministic_only }}
+
+      monitoring:
+        enabled: {{ .Values.cache.monitoring.enabled }}
+        alerts:
+          low_hit_rate_threshold: {{ .Values.cache.monitoring.alerts.low_hit_rate_threshold }}
+          high_utilization_threshold: {{ .Values.cache.monitoring.alerts.high_utilization_threshold }}
+
+      presets:
+        strategy: "{{ .Values.cache.preset }}"
+{{- end }}
+
+---
+{{- if .Values.optimization.enabled }}
+# Performance Optimization ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "inferno.fullname" . }}-optimization-config
+  namespace: {{ include "inferno.namespace" . }}
+  labels:
+    {{- include "inferno.labels" . | nindent 4 }}
+    component: performance
+data:
+  optimization.yaml: |
+    optimization:
+      request_processing:
+        batching:
+          enabled: {{ .Values.optimization.request_processing.batching.enabled }}
+          batch_size: {{ .Values.optimization.request_processing.batching.batch_size }}
+          batch_max_wait_ms: {{ .Values.optimization.request_processing.batching.batch_max_wait_ms }}
+          adaptive_batching: {{ .Values.optimization.request_processing.batching.adaptive_batching }}
+
+      inference:
+        token_batching:
+          enabled: {{ .Values.optimization.inference.token_batching.enabled }}
+          batch_size: {{ .Values.optimization.inference.token_batching.batch_size }}
+          max_wait_ms: {{ .Values.optimization.inference.token_batching.max_wait_ms }}
+          adaptive_batching: {{ .Values.optimization.inference.token_batching.adaptive_batching }}
+        speculative_decoding:
+          enabled: {{ .Values.optimization.inference.speculative_decoding.enabled }}
+          speculation_fraction: {{ .Values.optimization.inference.speculative_decoding.speculation_fraction }}
+        compute:
+          num_threads: {{ .Values.optimization.inference.compute.num_threads }}
+          use_simd: {{ .Values.optimization.inference.compute.use_simd }}
+          gpu_utilization_target: {{ .Values.optimization.inference.compute.gpu_utilization_target }}
+
+      resource_management:
+        cpu_affinity:
+          enabled: {{ .Values.optimization.resource_management.cpu_affinity.enabled }}
+        memory:
+          request_limit_mb: {{ .Values.optimization.resource_management.memory.request_limit_mb }}
+        model_loading:
+          lazy_loading: {{ .Values.optimization.resource_management.model_loading.lazy_loading }}
+          parallel_loading: {{ .Values.optimization.resource_management.model_loading.parallel_loading }}
+
+      io:
+        network:
+          tcp_no_delay: {{ .Values.optimization.io.network.tcp_no_delay }}
+        compression:
+          response_compression: {{ .Values.optimization.io.compression.response_compression }}
+          algorithm: "{{ .Values.optimization.io.compression.algorithm }}"
+          level: {{ .Values.optimization.io.compression.level }}
+
+      profile: "{{ .Values.optimization.profile }}"
+{{- end }}

@@ -1,0 +1,474 @@
+# Advanced Caching Strategies for Inferno
+# Comprehensive cache configuration with multiple strategies and optimization levels
+
+---
+# Global Cache Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: inferno-cache-strategies
+  namespace: inferno-prod
+  labels:
+    app: inferno
+    component: caching
+data:
+  cache-config.yaml: |
+    # Global Caching Configuration
+    cache:
+      # Enable caching system
+      enabled: true
+
+      # Cache version (increment to invalidate all caches)
+      version: 1
+
+      # ============================================================================
+      # CACHE STRATEGIES
+      # ============================================================================
+
+      strategies:
+        # Hybrid Cache: Combines multiple strategies for optimal performance
+        # Recommended for production
+        hybrid:
+          enabled: true
+          description: "L1: In-memory (fast), L2: Disk (persistent)"
+
+          # L1: In-Memory Cache (Hot data)
+          l1_memory:
+            # Cache eviction policy: lru, lfu, random, fifo
+            eviction_policy: "lru"  # Least Recently Used
+
+            # Maximum cache size (MB)
+            max_size_mb: 500
+
+            # TTL: Time-to-live (seconds)
+            ttl: 3600  # 1 hour
+
+            # Maximum items
+            max_items: 10000
+
+            # Enable compression (reduces memory, increases CPU)
+            compression_enabled: true
+            compression_algorithm: "zstd"  # zstd, gzip, snappy
+            compression_threshold_bytes: 1024  # Compress if >1KB
+
+            # Warm-up strategy
+            warm_up:
+              enabled: true
+              # Pre-load popular models/queries on startup
+              models: ["llama-7b", "llama-13b"]
+              popular_queries: true
+
+          # L2: Disk Cache (Persistent)
+          l2_disk:
+            # Cache directory
+            path: "/home/inferno/.inferno/cache"
+
+            # Maximum cache size (GB)
+            max_size_gb: 100
+
+            # TTL: Time-to-live (seconds)
+            ttl: 86400  # 24 hours
+
+            # Cleanup interval (seconds)
+            cleanup_interval: 3600
+
+            # Cleanup strategy: aggressive, conservative, smart
+            cleanup_strategy: "smart"
+
+            # Compression
+            compression_enabled: true
+            compression_algorithm: "zstd"
+
+          # Cache coherence: Sync L1 and L2 on update
+          cache_coherence:
+            enabled: true
+            sync_interval: 300  # seconds
+
+        # Response Cache: Cache API responses
+        response_cache:
+          enabled: true
+
+          # Cache key generation: sha256, md5, fnv
+          key_algorithm: "sha256"
+
+          # TTL by endpoint
+          ttl_by_endpoint:
+            "/models": 86400        # 24 hours
+            "/health": 60           # 1 minute
+            "/inference": 3600      # 1 hour (for deterministic models)
+            "/embeddings": 86400    # 24 hours
+
+          # Cache by HTTP method
+          cache_methods: ["GET"]  # Only cache GET requests
+
+          # Cache by status code
+          cache_status_codes: [200]  # Only cache successful responses
+
+          # Cache invalidation triggers
+          invalidation:
+            # Invalidate on model load/unload
+            on_model_change: true
+            # Invalidate on config change
+            on_config_change: true
+            # Invalidate on version bump
+            on_version_bump: true
+
+        # Inference Cache: Cache model inference results
+        inference_cache:
+          enabled: true
+
+          # Model-specific cache policies
+          by_model:
+            llama-7b:
+              enabled: true
+              ttl: 3600
+              max_size_mb: 100
+              eviction_policy: "lru"
+
+            llama-13b:
+              enabled: true
+              ttl: 3600
+              max_size_mb: 200
+              eviction_policy: "lru"
+
+            llama-70b:
+              enabled: true
+              ttl: 1800        # Shorter TTL for large model
+              max_size_mb: 500
+              eviction_policy: "lfu"  # Least Frequently Used
+
+          # Cache deterministic vs stochastic requests
+          # Deterministic (temperature=0) responses are cacheable
+          # Stochastic (temperature>0) are not
+          deterministic_only: true
+
+          # Cache invalidation on fine-tuning
+          invalidate_on_finetune: true
+
+        # Embedding Cache: Cache embedding results
+        embedding_cache:
+          enabled: true
+          ttl: 86400          # 24 hours
+          max_size_mb: 200
+          eviction_policy: "lru"
+
+          # Group similar embeddings
+          batch_similar_embeddings: true
+          similarity_threshold: 0.95
+
+        # Prompt Cache: Cache tokenized prompts
+        prompt_cache:
+          enabled: true
+          ttl: 3600
+          max_size_mb: 50
+          eviction_policy: "lfu"
+
+          # KV cache optimization
+          kv_cache:
+            enabled: true
+            # Reuse KV cache across similar prompts
+            reuse_across_requests: true
+            # KV cache TTL (shorter than prompt cache)
+            ttl: 900  # 15 minutes
+
+      # ============================================================================
+      # EVICTION POLICIES
+      # ============================================================================
+
+      eviction_policies:
+        # Least Recently Used: Evict items not used for longest time
+        lru:
+          name: "Least Recently Used"
+          overhead_percent: 5  # 5% memory overhead for tracking
+          best_for: "General purpose, mixed access patterns"
+          worst_case: "Sequential access (thrashing)"
+
+        # Least Frequently Used: Evict items accessed least often
+        lfu:
+          name: "Least Frequently Used"
+          overhead_percent: 8  # 8% memory overhead
+          best_for: "Hot items accessed frequently"
+          worst_case: "Temporal clustering (old items outlive new)"
+
+        # Random: Random eviction
+        random:
+          name: "Random Eviction"
+          overhead_percent: 1  # Minimal overhead
+          best_for: "Uniform access patterns"
+          worst_case: "Bursty access patterns"
+
+        # FIFO: First-In-First-Out
+        fifo:
+          name: "First-In-First-Out"
+          overhead_percent: 3
+          best_for: "Time-windowed data"
+          worst_case: "Variable item lifetimes"
+
+      # ============================================================================
+      # CACHE INVALIDATION STRATEGIES
+      # ============================================================================
+
+      invalidation:
+        # TTL-based invalidation (simple)
+        ttl_based:
+          enabled: true
+          # Use per-endpoint TTLs defined above
+
+        # Event-based invalidation
+        event_based:
+          enabled: true
+          events:
+            - "model_loaded"
+            - "model_unloaded"
+            - "config_changed"
+            - "version_bumped"
+
+        # Dependency-based invalidation
+        dependency_based:
+          enabled: true
+          # Track dependencies between cached items
+          track_model_dependencies: true
+          track_query_dependencies: true
+
+        # Proactive invalidation
+        proactive:
+          enabled: true
+          # Invalidate before expiration if conditions met
+          invalidate_if_stale_gt: 0.8  # 80% of TTL elapsed
+          # Refresh in background instead of evicting
+
+        # Manual invalidation (API)
+        manual_invalidation:
+          enabled: true
+          # Endpoint: POST /cache/invalidate
+          # Payload: {"pattern": "/inference/*"}
+
+      # ============================================================================
+      # CACHE STATISTICS & MONITORING
+      # ============================================================================
+
+      monitoring:
+        # Track cache metrics
+        enabled: true
+
+        # Metrics collected
+        metrics:
+          - cache_hits_total
+          - cache_misses_total
+          - cache_evictions_total
+          - cache_size_bytes
+          - cache_items_count
+          - cache_hit_rate
+          - cache_miss_rate
+          - cache_eviction_rate
+
+        # Performance monitoring
+        performance:
+          # Track read latency
+          track_read_latency: true
+          # Track write latency
+          track_write_latency: true
+          # Track eviction overhead
+          track_eviction_overhead: true
+
+        # Alerting thresholds
+        alerts:
+          # Alert if hit rate drops below 60%
+          low_hit_rate_threshold: 0.6
+          # Alert if cache is 95% full
+          high_utilization_threshold: 0.95
+          # Alert if eviction rate is too high
+          high_eviction_rate_threshold: 100  # evictions/sec
+
+      # ============================================================================
+      # DISTRIBUTED CACHING (Optional)
+      # ============================================================================
+
+      distributed:
+        # Enable distributed caching (requires Redis)
+        enabled: false
+
+        # Redis configuration
+        redis:
+          host: "redis"
+          port: 6379
+          db: 0
+          password: ""
+
+          # Connection pooling
+          pool_size: 10
+          connection_timeout: 5000  # ms
+
+          # Replication
+          replication:
+            enabled: true
+            replicas: 3  # Number of replicas
+            quorum: 2    # Minimum replicas for write
+
+          # Sharding (for large deployments)
+          sharding:
+            enabled: false
+            # Redis cluster configuration
+            cluster: []  # List of cluster nodes
+
+        # Cache coherence protocol
+        coherence:
+          # Protocol: invalidate, update, hybrid
+          protocol: "invalidate"
+          # TTL for distributed cache
+          ttl: 3600
+
+      # ============================================================================
+      # PERFORMANCE TUNING
+      # ============================================================================
+
+      performance:
+        # Batch operations
+        batch_operations:
+          enabled: true
+          batch_size: 100
+          batch_timeout_ms: 50
+
+        # Async cache operations
+        async_operations:
+          enabled: true
+          # Number of async threads
+          thread_pool_size: 4
+          # Queue size for async operations
+          queue_size: 1000
+
+        # Read-write locks optimization
+        lock_optimization:
+          # Use read-write locks (vs exclusive locks)
+          read_write_locks: true
+          # Lock timeout (ms)
+          lock_timeout_ms: 1000
+          # Deadlock detection
+          deadlock_detection: true
+
+        # Memory optimization
+        memory:
+          # Inline small values (avoid pointer indirection)
+          inline_small_values: true
+          # Small value threshold (bytes)
+          inline_threshold: 64
+          # Use memory pooling
+          memory_pooling: true
+
+        # CPU optimization
+        cpu:
+          # SIMD optimization for batch operations
+          use_simd: true
+          # Parallelization level
+          parallelization_level: 4
+
+      # ============================================================================
+      # WARM-UP STRATEGIES
+      # ============================================================================
+
+      warm_up:
+        # Pre-load cache on startup
+        enabled: true
+        # Warm-up strategy: aggressive, balanced, conservative
+        strategy: "balanced"
+
+        # Aggressive: Load all possible data
+        # - All models
+        # - All recent queries
+        # - All popular embeddings
+
+        # Balanced (default): Load common data
+        # - Top 5 models
+        # - Top 100 queries
+        # - Top 50 embeddings
+
+        # Conservative: Minimal pre-loading
+        # - Top 1 model
+        # - Top 10 queries
+
+        # Time to spend on warm-up (seconds)
+        timeout: 60
+
+        # Data sources for warm-up
+        sources:
+          - "model_metadata"
+          - "recent_queries"
+          - "popular_queries"
+          - "embeddings"
+
+      # ============================================================================
+      # DEBUGGING & PROFILING
+      # ============================================================================
+
+      debugging:
+        # Enable cache hit/miss logging
+        log_hits_misses: false  # Can impact performance
+
+        # Log evictions
+        log_evictions: true
+
+        # Log slow operations (ms)
+        log_slow_operations: true
+        slow_operation_threshold_ms: 100
+
+        # Detailed cache statistics
+        detailed_statistics: false
+
+      # ============================================================================
+      # CACHE PRESETS
+      # ============================================================================
+
+      presets:
+        # Preset configurations for different scenarios
+
+        aggressive:
+          description: "Maximum caching for throughput"
+          l1_memory:
+            max_size_mb: 1000
+            ttl: 7200
+            eviction_policy: "lfu"
+            compression_enabled: false
+          l2_disk:
+            max_size_gb: 500
+            ttl: 86400
+
+        balanced:
+          description: "Balanced caching (default)"
+          l1_memory:
+            max_size_mb: 500
+            ttl: 3600
+            eviction_policy: "lru"
+            compression_enabled: true
+          l2_disk:
+            max_size_gb: 100
+            ttl: 86400
+
+        conservative:
+          description: "Minimal caching for memory constraints"
+          l1_memory:
+            max_size_mb: 100
+            ttl: 1800
+            eviction_policy: "lru"
+            compression_enabled: true
+          l2_disk:
+            max_size_gb: 20
+            ttl: 3600
+
+        inference_focused:
+          description: "Optimized for inference caching"
+          inference_cache:
+            enabled: true
+          response_cache:
+            enabled: false
+          l1_memory:
+            max_size_mb: 800
+            eviction_policy: "lfu"
+
+        latency_optimized:
+          description: "Minimize latency with larger caches"
+          l1_memory:
+            max_size_mb: 1500
+            ttl: 7200
+            compression_enabled: false
+          l2_disk:
+            enabled: false

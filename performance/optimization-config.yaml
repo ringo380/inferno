@@ -1,0 +1,533 @@
+# Performance Optimization Configuration for Inferno
+# Comprehensive tuning for latency, throughput, and resource utilization
+
+---
+# Performance Optimization ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: inferno-optimization-config
+  namespace: inferno-prod
+  labels:
+    app: inferno
+    component: performance
+data:
+  optimization.yaml: |
+    # Performance Optimization Configuration
+
+    optimization:
+      # ============================================================================
+      # REQUEST PROCESSING OPTIMIZATION
+      # ============================================================================
+
+      request_processing:
+        # Connection pool settings
+        connection_pool:
+          # Keep-alive connections
+          keep_alive_enabled: true
+          # Keep-alive timeout (seconds)
+          keep_alive_timeout: 30
+          # Connection pool size
+          pool_size: 100
+          # Queue for connection requests
+          queue_size: 1000
+          # Connection reuse
+          connection_reuse: true
+
+        # Request batching
+        batching:
+          enabled: true
+          # Batch size (number of requests)
+          batch_size: 32
+          # Maximum wait time before processing (ms)
+          batch_max_wait_ms: 50
+          # Adaptive batching based on load
+          adaptive_batching: true
+
+        # Request prioritization
+        prioritization:
+          enabled: true
+          # Priority levels: high, normal, low
+          # High: Small requests, frequently accessed models
+          # Normal: Standard requests
+          # Low: Large batch requests, rare models
+          queue_strategy: "priority"
+
+        # Request deduplication
+        deduplication:
+          enabled: true
+          # Window for deduplication (seconds)
+          window_seconds: 60
+          # Exact match required (vs fuzzy matching)
+          exact_match: true
+
+      # ============================================================================
+      # INFERENCE OPTIMIZATION
+      # ============================================================================
+
+      inference:
+        # Token batching
+        token_batching:
+          enabled: true
+          # Batch size (number of tokens)
+          batch_size: 3
+          # Maximum wait time (ms)
+          max_wait_ms: 50
+          # Adaptive batching based on load
+          adaptive_batching: true
+
+        # Context window optimization
+        context_window:
+          # Dynamic context sizing
+          dynamic_sizing: true
+          # Default context size
+          default_size: 2048
+          # Maximum context size
+          max_size: 4096
+          # Context cache between requests
+          context_caching: true
+
+        # Memory optimization
+        memory:
+          # Gradient checkpointing (reduces memory, increases compute)
+          gradient_checkpointing: false
+          # Quantization: none, int8, int4, float16
+          quantization: "none"
+          # Memory pooling
+          memory_pooling: true
+
+        # Compute optimization
+        compute:
+          # SIMD acceleration
+          use_simd: true
+          # Number of compute threads
+          num_threads: 8
+          # GPU utilization percentage (0-100)
+          gpu_utilization_target: 90
+          # CPU utilization percentage (0-100)
+          cpu_utilization_target: 85
+
+        # Early exit / speculative decoding
+        speculative_decoding:
+          enabled: true
+          # Fraction of tokens to generate speculatively
+          speculation_fraction: 0.5
+          # Fallback on mismatch
+          fallback_on_mismatch: true
+
+      # ============================================================================
+      # RESOURCE MANAGEMENT
+      # ============================================================================
+
+      resource_management:
+        # CPU affinity
+        cpu_affinity:
+          enabled: true
+          # Bind processes to specific CPU cores
+          core_assignment: "round_robin"  # round_robin, sequential, manual
+
+        # Memory management
+        memory:
+          # Memory limit per request (MB)
+          request_limit_mb: 2048
+          # Swap usage (enabled/disabled)
+          swap_enabled: false
+          # Memory overcommit ratio
+          overcommit_ratio: 1.0  # 1.0 = no overcommit
+
+        # Model loading optimization
+        model_loading:
+          # Lazy loading (load on first use)
+          lazy_loading: true
+          # Parallel model loading
+          parallel_loading: true
+          # Number of parallel loaders
+          num_loaders: 4
+          # Pre-load popular models
+          preload_models: ["llama-7b"]
+
+        # Resource pooling
+        pooling:
+          # Thread pool settings
+          thread_pool_size: 16
+          # Task queue size
+          queue_size: 1000
+          # Idle timeout (seconds)
+          idle_timeout: 300
+
+      # ============================================================================
+      # I/O OPTIMIZATION
+      # ============================================================================
+
+      io:
+        # Disk I/O
+        disk:
+          # I/O scheduler: noop, deadline, cfq
+          scheduler: "deadline"
+          # Read-ahead size (KB)
+          read_ahead_kb: 256
+          # Write buffering
+          write_buffering: true
+          # Buffer size (MB)
+          buffer_size_mb: 64
+
+        # Network I/O
+        network:
+          # TCP settings
+          tcp_no_delay: true  # Disable Nagle's algorithm
+          # SO_RCVBUF size (bytes)
+          receive_buffer_size: 4194304  # 4MB
+          # SO_SNDBUF size (bytes)
+          send_buffer_size: 4194304     # 4MB
+          # Sendfile optimization
+          use_sendfile: true
+
+        # Compression
+        compression:
+          # Compress responses over threshold
+          response_compression: true
+          # Compression threshold (bytes)
+          threshold_bytes: 1024
+          # Compression algorithm: gzip, brotli, zstd
+          algorithm: "zstd"
+          # Compression level (1-11 for zstd)
+          level: 3
+
+      # ============================================================================
+      # LATENCY OPTIMIZATION
+      # ============================================================================
+
+      latency:
+        # Minimize tail latency
+        tail_latency:
+          # Request timeout (seconds)
+          timeout: 300
+          # Aggressive timeouts for slow requests
+          aggressive_timeouts: true
+          # Timeout percentile to optimize
+          optimize_percentile: 99  # Optimize P99
+
+        # Connection setup optimization
+        connection_setup:
+          # TCP fast open
+          tcp_fast_open: true
+          # Connection reuse
+          connection_reuse: true
+
+        # Query optimization
+        query:
+          # Compile queries to bytecode
+          query_compilation: true
+          # Query caching
+          query_caching: true
+          # Prepared statements
+          prepared_statements: true
+
+        # Prefetching
+        prefetching:
+          enabled: true
+          # Prefetch ratio (prefetches per actual request)
+          prefetch_ratio: 0.5
+          # Prefetch threshold (load %)
+          prefetch_threshold: 50
+
+      # ============================================================================
+      # THROUGHPUT OPTIMIZATION
+      # ============================================================================
+
+      throughput:
+        # Request pipelining
+        pipelining:
+          enabled: true
+          # Pipeline depth (max outstanding requests)
+          depth: 10
+          # In-order delivery
+          in_order_delivery: true
+
+        # Multiplexing
+        multiplexing:
+          enabled: true
+          # Streams per connection
+          streams_per_connection: 100
+
+        # Load balancing
+        load_balancing:
+          # Strategy: round_robin, least_conn, weighted, random
+          strategy: "least_conn"
+          # Connection rebalancing
+          dynamic_rebalancing: true
+          # Rebalance frequency (seconds)
+          rebalance_interval: 60
+
+      # ============================================================================
+      # POWER & EFFICIENCY
+      # ============================================================================
+
+      efficiency:
+        # Power management
+        power:
+          # CPU frequency scaling
+          frequency_scaling: true
+          # Governor: powersave, performance, ondemand
+          governor: "ondemand"
+          # Idle state management
+          idle_management: true
+
+        # Energy efficiency
+        energy:
+          # Idle CPU cores
+          idle_cpu_allowed: true
+          # Dynamic voltage and frequency scaling
+          dvfs: true
+          # Target power consumption (watts)
+          target_power_watts: null  # null = no limit
+
+      # ============================================================================
+      # MONITORING & PROFILING
+      # ============================================================================
+
+      monitoring:
+        # Performance metrics
+        metrics:
+          - "request_latency"
+          - "throughput"
+          - "cpu_utilization"
+          - "memory_utilization"
+          - "cache_hit_rate"
+          - "eviction_rate"
+          - "queueing_delay"
+
+        # Profiling
+        profiling:
+          # Enable CPU profiling
+          cpu_profiling_enabled: false
+          # Profiling sample rate (%)
+          sample_rate: 1
+          # Profiling interval (seconds)
+          interval: 60
+
+        # Tracing
+        tracing:
+          # Enable request tracing
+          tracing_enabled: false
+          # Sample rate (%)
+          sample_rate: 1
+
+      # ============================================================================
+      # TUNING PROFILES
+      # ============================================================================
+
+      profiles:
+        # Latency-optimized (minimize response time)
+        latency_optimized:
+          request_processing:
+            batching:
+              enabled: false  # No batching
+          inference:
+            token_batching:
+              batch_size: 1  # Process one token at a time
+          cache:
+            l1_memory:
+              max_size_mb: 1500  # Large in-memory cache
+              compression_enabled: false  # No compression overhead
+
+        # Throughput-optimized (maximize requests/sec)
+        throughput_optimized:
+          request_processing:
+            batching:
+              batch_size: 128  # Larger batches
+          inference:
+            token_batching:
+              batch_size: 32
+          throughput:
+            pipelining:
+              depth: 50
+
+        # Balanced (default)
+        balanced:
+          request_processing:
+            batching:
+              batch_size: 32
+          inference:
+            token_batching:
+              batch_size: 3
+          resource_management:
+            memory:
+              overcommit_ratio: 1.0
+
+        # Memory-constrained
+        memory_constrained:
+          cache:
+            l1_memory:
+              max_size_mb: 100
+              compression_enabled: true
+          inference:
+            memory:
+              quantization: "int8"
+              gradient_checkpointing: true
+
+        # CPU-bound
+        cpu_bound:
+          resource_management:
+            cpu_affinity:
+              enabled: true
+              core_assignment: "sequential"
+          inference:
+            compute:
+              num_threads: 16
+              parallelization_level: 16
+
+        # GPU-accelerated
+        gpu_accelerated:
+          inference:
+            compute:
+              gpu_utilization_target: 95
+            memory:
+              quantization: "none"  # Full precision on GPU
+          efficiency:
+            power:
+              governor: "performance"  # Max GPU clocks
+
+---
+# Benchmark Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: inferno-benchmark-config
+  namespace: inferno-prod
+  labels:
+    app: inferno
+    component: benchmarking
+data:
+  benchmark.yaml: |
+    # Performance Benchmarking Configuration
+
+    benchmark:
+      # Benchmark scenarios
+      scenarios:
+        # Latency benchmark: Measure response time
+        latency:
+          name: "Latency"
+          description: "Measure end-to-end response time"
+          request_rate: 10  # requests/second
+          duration: 300     # seconds
+          concurrency: 1
+          metrics:
+            - p50
+            - p95
+            - p99
+            - p99.9
+
+        # Throughput benchmark: Maximize requests/second
+        throughput:
+          name: "Throughput"
+          description: "Maximum requests per second"
+          request_rate: unlimited
+          duration: 300
+          concurrency: 100
+          metrics:
+            - requests_per_second
+            - total_requests
+
+        # Concurrent benchmark: Multiple simultaneous requests
+        concurrent:
+          name: "Concurrent"
+          description: "Handle concurrent requests"
+          concurrency_levels: [10, 50, 100, 500]
+          duration: 300
+          metrics:
+            - throughput_by_concurrency
+            - latency_vs_concurrency
+
+        # Model scaling benchmark: Test with different models
+        model_scaling:
+          name: "Model Scaling"
+          description: "Performance with different model sizes"
+          models: ["llama-7b", "llama-13b", "llama-70b"]
+          duration: 60 per model
+          metrics:
+            - throughput_by_model
+            - latency_by_model
+            - memory_by_model
+
+        # Load ramp benchmark: Gradual load increase
+        load_ramp:
+          name: "Load Ramp"
+          description: "Gradually increase load"
+          initial_rate: 10
+          final_rate: 1000
+          ramp_duration: 300
+          hold_duration: 60
+          metrics:
+            - breaking_point
+            - degradation_curve
+
+      # Workload patterns
+      workloads:
+        # Uniform workload
+        uniform:
+          name: "Uniform"
+          description: "Same request pattern throughout"
+          distribution: "uniform"
+
+        # Bursty workload
+        bursty:
+          name: "Bursty"
+          description: "Alternating idle and burst periods"
+          distribution: "bursty"
+          burst_multiplier: 10
+          burst_duration: 10
+          idle_duration: 50
+
+        # Realistic workload
+        realistic:
+          name: "Realistic"
+          description: "Real-world traffic patterns"
+          distribution: "poisson"
+          peak_hour_multiplier: 3
+          seasonal_pattern: true
+
+      # Test data
+      test_data:
+        # Small prompts (100 tokens)
+        small_prompt:
+          tokens: 100
+          count: 100
+
+        # Medium prompts (500 tokens)
+        medium_prompt:
+          tokens: 500
+          count: 50
+
+        # Large prompts (2000 tokens)
+        large_prompt:
+          tokens: 2000
+          count: 10
+
+      # Metrics collection
+      metrics:
+        # Latency metrics
+        latency:
+          percentiles: [50, 75, 90, 95, 99, 99.9]
+          bucket_size_ms: 10
+
+        # Throughput metrics
+        throughput:
+          window_size: 60  # seconds
+
+        # Resource metrics
+        resources:
+          cpu_sampling_interval: 1  # second
+          memory_sampling_interval: 1
+          disk_sampling_interval: 5
+
+      # Reporting
+      reporting:
+        # Report format: json, csv, html
+        format: "html"
+        # Include comparison with baseline
+        include_baseline: true
+        # Baseline file
+        baseline_file: "/tmp/baseline.json"
+        # Output directory
+        output_dir: "/tmp/benchmark-results"
