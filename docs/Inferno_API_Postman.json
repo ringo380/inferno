@@ -1,0 +1,486 @@
+{
+  "info": {
+    "name": "Inferno AI API",
+    "description": "OpenAI-compatible API for local AI inference",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Models",
+      "item": [
+        {
+          "name": "List Models",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/models",
+              "host": ["{{base_url}}"],
+              "path": ["models"]
+            },
+            "description": "List all available models"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Chat Completions",
+      "item": [
+        {
+          "name": "Simple Chat",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"model\": \"llama-7b\",\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"Hello, how are you?\"\n    }\n  ],\n  \"max_tokens\": 100,\n  \"temperature\": 0.7\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/chat/completions",
+              "host": ["{{base_url}}"],
+              "path": ["chat", "completions"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Multi-turn Conversation",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"model\": \"llama-7b\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are a helpful assistant.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"What is machine learning?\"\n    },\n    {\n      \"role\": \"assistant\",\n      \"content\": \"Machine learning is a subset of artificial intelligence...\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"Tell me more about neural networks.\"\n    }\n  ],\n  \"max_tokens\": 200,\n  \"temperature\": 0.7,\n  \"top_p\": 0.9\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/chat/completions",
+              "host": ["{{base_url}}"],
+              "path": ["chat", "completions"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Streaming Chat",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"model\": \"llama-7b\",\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"Write a haiku about programming\"\n    }\n  ],\n  \"stream\": true,\n  \"max_tokens\": 100,\n  \"temperature\": 0.8\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/chat/completions",
+              "host": ["{{base_url}}"],
+              "path": ["chat", "completions"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Chat with Stop Sequences",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"model\": \"llama-7b\",\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"Complete this list: 1, 2, 3\"\n    }\n  ],\n  \"max_tokens\": 50,\n  \"stop\": [\"\\n\", \"Human:\"],\n  \"temperature\": 0.7\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/chat/completions",
+              "host": ["{{base_url}}"],
+              "path": ["chat", "completions"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Chat with Penalties",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"model\": \"llama-7b\",\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"Generate creative content\"\n    }\n  ],\n  \"max_tokens\": 100,\n  \"temperature\": 0.9,\n  \"presence_penalty\": 0.5,\n  \"frequency_penalty\": 0.3\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/chat/completions",
+              "host": ["{{base_url}}"],
+              "path": ["chat", "completions"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Completions",
+      "item": [
+        {
+          "name": "Simple Completion",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"model\": \"llama-7b\",\n  \"prompt\": \"The future of AI is\",\n  \"max_tokens\": 100,\n  \"temperature\": 0.8\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/completions",
+              "host": ["{{base_url}}"],
+              "path": ["completions"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Completion with Array Prompts",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"model\": \"llama-7b\",\n  \"prompt\": [\n    \"Hello, world!\",\n    \"Hi there!\",\n    \"Greetings!\"\n  ],\n  \"max_tokens\": 50,\n  \"temperature\": 0.7\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/completions",
+              "host": ["{{base_url}}"],
+              "path": ["completions"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Streaming Completion",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"model\": \"llama-7b\",\n  \"prompt\": \"Once upon a time\",\n  \"max_tokens\": 100,\n  \"stream\": true,\n  \"temperature\": 0.8\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/completions",
+              "host": ["{{base_url}}"],
+              "path": ["completions"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Completion with Stop",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"model\": \"llama-7b\",\n  \"prompt\": \"Python code:\\n\",\n  \"max_tokens\": 200,\n  \"temperature\": 0.7,\n  \"stop\": [\"\\n\\n\", \"// End\"]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/completions",
+              "host": ["{{base_url}}"],
+              "path": ["completions"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Embeddings",
+      "item": [
+        {
+          "name": "Single Embedding",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"model\": \"text-embedding-ada-002\",\n  \"input\": \"The quick brown fox jumps over the lazy dog\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/embeddings",
+              "host": ["{{base_url}}"],
+              "path": ["embeddings"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Batch Embeddings",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"model\": \"text-embedding-ada-002\",\n  \"input\": [\n    \"First text for embedding\",\n    \"Second text for embedding\",\n    \"Third text for embedding\"\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/embeddings",
+              "host": ["{{base_url}}"],
+              "path": ["embeddings"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Semantic Search Query",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"model\": \"text-embedding-ada-002\",\n  \"input\": \"machine learning algorithms\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/embeddings",
+              "host": ["{{base_url}}"],
+              "path": ["embeddings"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Performance & Monitoring",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/health",
+              "host": ["{{base_url}}"],
+              "path": ["health"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Queue Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/metrics/queue/status",
+              "host": ["{{base_url}}"],
+              "path": ["metrics", "queue", "status"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Recent Profiles",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/metrics/profiles/recent",
+              "host": ["{{base_url}}"],
+              "path": ["metrics", "profiles", "recent"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Profile Statistics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/metrics/profiles/stats",
+              "host": ["{{base_url}}"],
+              "path": ["metrics", "profiles", "stats"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Error Scenarios",
+      "item": [
+        {
+          "name": "Invalid Model",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"model\": \"nonexistent-model\",\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"Hello\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/chat/completions",
+              "host": ["{{base_url}}"],
+              "path": ["chat", "completions"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Missing Required Field",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"model\": \"llama-7b\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/chat/completions",
+              "host": ["{{base_url}}"],
+              "path": ["chat", "completions"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Invalid Temperature",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"model\": \"llama-7b\",\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"Hello\"\n    }\n  ],\n  \"temperature\": 3.0\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/chat/completions",
+              "host": ["{{base_url}}"],
+              "path": ["chat", "completions"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Invalid Top P",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"model\": \"llama-7b\",\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"Hello\"\n    }\n  ],\n  \"top_p\": 1.5\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/chat/completions",
+              "host": ["{{base_url}}"],
+              "path": ["chat", "completions"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Embedding Input Too Long",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"model\": \"text-embedding-ada-002\",\n  \"input\": \"this is a very long input that exceeds the 8000 character limit and should return an error. this is a very long input that exceeds the 8000 character limit and should return an error. this is a very long input that exceeds the 8000 character limit and should return an error. [repeat 100 times...]\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/embeddings",
+              "host": ["{{base_url}}"],
+              "path": ["embeddings"]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000/v1",
+      "type": "string"
+    }
+  ]
+}
