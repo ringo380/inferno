@@ -68,7 +68,7 @@ hound = "3.5"
 
 # ML backend support
 llama-cpp-2 = { version = "0.1.67", optional = true }  # for GGUF support
-ort = { version = "1.16", optional = true }             # for ONNX support
+# ort = { version = "2.0.0-rc.11", optional = true }  # DISABLED: ort 2.0 lacks prebuilt binaries for some platforms
 ndarray = "0.15"         # for tensor operations
 tokenizers = "0.14"      # for text tokenization
 
@@ -187,12 +187,12 @@ predicates = "3.0"
 criterion = { version = "0.5", features = ["html_reports"] }
 
 [build-dependencies]
-tauri-build = { git = "https://github.com/tauri-apps/tauri", tag = "tauri-v2.8.5", package = "tauri-build" }
+tauri-build = { version = "2.0", git = "https://github.com/tauri-apps/tauri", tag = "tauri-v2.8.5", package = "tauri-build" }
 
 [features]
 default = ["reqwest"]  # Minimal default - exclude heavy ML backends for fast development builds
 gguf = ["llama-cpp-2"]     # Enable GGUF/llama.cpp backend
-onnx = ["ort"]             # Enable ONNX Runtime backend
+onnx = []                  # ONNX backend (stub mode - ort 2.0 lacks prebuilt binaries)
 ml-backends = ["gguf", "onnx"]  # Enable all ML backends
 download = ["reqwest"]
 gpu-metal = []

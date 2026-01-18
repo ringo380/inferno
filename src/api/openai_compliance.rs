@@ -47,7 +47,7 @@ impl ErrorResponse {
                 message,
                 r#type: r#type.to_string(),
                 param: None,
-                code,
+                code: code.map(|s| s.to_string()),
             },
         }
     }

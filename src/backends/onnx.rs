@@ -1,3 +1,11 @@
+//! # ONNX Runtime Backend
+//!
+//! Provides ONNX model inference support using the ort crate.
+//!
+//! Note: ONNX support requires the `onnx` feature flag and is currently
+//! in transition due to ort 2.0 API changes. Full functionality will be
+//! restored when ort 2.0 stabilizes.
+
 use crate::{
     backends::{
         BackendConfig, BackendType, InferenceBackend, InferenceMetrics, InferenceParams,
@@ -7,9 +15,7 @@ use crate::{
 };
 use anyhow::{anyhow, Result};
 use async_stream::stream;
-use ndarray::Array2;
-use ort::{Environment, Session, SessionBuilder};
-use std::{sync::Arc, time::Instant};
+use std::time::Instant;
 use tokenizers::Tokenizer;
 use tracing::{debug, info, warn};
 
@@ -18,8 +24,6 @@ pub struct OnnxBackend {
     tokenizer: Option<Tokenizer>,
     model_info: Option<ModelInfo>,
     metrics: Option<InferenceMetrics>,
-    environment: Arc<Environment>,
-    session: Option<Session>,
     model_type: ModelType,
 }
 
@@ -33,24 +37,17 @@ enum ModelType {
 
 impl OnnxBackend {
     pub fn new(config: BackendConfig) -> Result<Self> {
-        info!("Initializing ONNX backend with ONNX Runtime");
+        info!("Initializing ONNX backend");
 
-        // Initialize ONNX Runtime environment
-        let environment = Arc::new(
-            Environment::builder()
-                .with_name("inferno-onnx")
-                .with_log_level(ort::LoggingLevel::Warning)
-                .build()
-                .map_err(|e| anyhow!("Failed to initialize ONNX environment: {}", e))?,
-        );
+        // Note: Full ONNX Runtime initialization is disabled during ort 2.0 transition
+        // The backend provides placeholder responses until ort 2.0 stabilizes
+        warn!("ONNX backend is in stub mode - ort 2.0 prebuilt binaries not available for all platforms");
 
         Ok(Self {
             config,
             tokenizer: None,
             model_info: None,
             metrics: None,
-            environment,
-            session: None,
             model_type: ModelType::Unknown,
         })
     }
@@ -126,56 +123,19 @@ impl InferenceBackend for OnnxBackend {
         // Load tokenizer if available
         self.load_tokenizer(&model_info.path)?;
 
-        // Create ONNX Runtime session with real model loading
-        let session = tokio::task::spawn_blocking({
-            let path = model_info.path.clone();
-            let gpu_enabled = self.config.gpu_enabled;
-            let environment = Arc::clone(&self.environment);
-            move || -> Result<Session> {
-                debug!("Creating ONNX session for model: {}", path.display());
-
-                let builder = SessionBuilder::new(&environment)?;
-
-                // Configure execution providers
-                if gpu_enabled {
-                    debug!("Attempting to use GPU execution providers");
-                    // Try to enable GPU providers (CUDA, DirectML, etc.)
-                    // ONNX Runtime will fallback to CPU if GPU providers are not available
-
-                    #[cfg(feature = "cuda")]
-                    {
-                        builder = builder.with_cuda(0)?;
-                    }
-
-                    #[cfg(feature = "rocm")]
-                    {
-                        builder = builder.with_rocm(0)?;
-                    }
-                }
-
-                let session = builder
-                    .with_model_from_file(&path)
-                    .map_err(|e| anyhow!("Failed to load ONNX model: {}", e))?;
-
-                info!("ONNX session created successfully");
-                Ok(session)
-            }
-        })
-        .await
-        .map_err(|e| anyhow!("Failed to create ONNX session: {}", e))??;
-
-        // Store the session and model info
-        self.session = Some(session);
+        // Store model info (actual session creation disabled during ort 2.0 transition)
         self.model_info = Some(model_info.clone());
         self.model_type = self.detect_model_type(&model_info.path)?;
 
-        info!("ONNX model loaded successfully with real session");
+        warn!(
+            "ONNX model '{}' registered (stub mode - actual inference not available)",
+            model_info.path.display()
+        );
         Ok(())
     }
 
     async fn unload_model(&mut self) -> Result<()> {
         info!("Unloading ONNX model");
-        self.session = None;
         self.tokenizer = None;
         self.model_info = None;
         self.metrics = None;
@@ -185,107 +145,31 @@ impl InferenceBackend for OnnxBackend {
     }
 
     async fn is_loaded(&self) -> bool {
-        self.session.is_some() && self.model_info.is_some()
+        self.model_info.is_some()
     }
 
     async fn get_model_info(&self) -> Option<ModelInfo> {
         self.model_info.as_ref().cloned()
     }
 
-    async fn infer(&mut self, input: &str, params: &InferenceParams) -> Result<String> {
-        let session = self
-            .session
-            .as_ref()
-            .ok_or_else(|| anyhow!("Model not loaded"))?;
+    async fn infer(&mut self, input: &str, _params: &InferenceParams) -> Result<String> {
+        if self.model_info.is_none() {
+            return Err(anyhow!("Model not loaded"));
+        }
 
         let start_time = Instant::now();
-        info!("Starting real ONNX inference");
+        info!("Processing ONNX inference request (stub mode)");
 
         let prompt_tokens = self.estimate_token_count(input);
         let prompt_time = start_time.elapsed();
 
-        // Run real ONNX inference
-        let result = tokio::task::spawn_blocking({
-            let _session = session; // Clone the session reference
-            let input = input.to_string();
-            let max_tokens = params.max_tokens;
-            let tokenizer = self.tokenizer.clone();
-
-            move || -> Result<String> {
-                debug!("Running ONNX inference with real session");
-
-                // Tokenize input
-                let input_tokens = if let Some(tokenizer) = &tokenizer {
-                    tokenizer.encode(input.as_str(), false)
-                        .map_err(|e| anyhow!("Tokenization failed: {}", e))?
-                        .get_ids()
-                        .to_vec()
-                } else {
-                    // Simple fallback tokenization - convert to word IDs
-                    input.split_whitespace()
-                        .enumerate()
-                        .map(|(i, _)| i as u32)
-                        .take(512) // Limit input length
-                        .collect()
-                };
-
-                debug!("Input tokenized to {} tokens", input_tokens.len());
-
-                // Prepare input tensor for ONNX inference
-                let input_ids = Array2::from_shape_vec(
-                    (1, input_tokens.len()),
-                    input_tokens.iter().map(|&x| x as i64).collect()
-                ).map_err(|e| anyhow!("Failed to create input tensor: {}", e))?;
-
-                debug!("Created input tensor with shape: {:?}", input_ids.shape());
-
-                // Run ONNX inference with proper tensor creation
-                match _session.run(ort::inputs!["input_ids" => input_ids.view()]?) {
-                    Ok(outputs) => {
-                        debug!("ONNX inference completed successfully");
-
-                        // Extract the output tensor and convert to text
-                        // This is a generic approach - real models may have different output formats
-                        if let Some(output_tensor) = outputs.get("output").or_else(|| outputs.get("logits")) {
-                            // For text generation models, we would typically get logits that need to be
-                            // sampled and then detokenized. For now, create a meaningful response.
-                            let output_text = format!(
-                                "ONNX inference completed successfully for input: \"{}\" ({} tokens). Model processed {} input tokens and generated output tensor.",
-                                input.chars().take(50).collect::<String>(),
-                                input_tokens.len(),
-                                input_tokens.len()
-                            );
-                            Ok(output_text)
-                        } else {
-                            // Handle case where expected output names don't match
-                            let available_outputs: Vec<String> = outputs.keys().cloned().collect();
-                            debug!("Available outputs: {:?}", available_outputs);
-
-                            let output_text = format!(
-                                "ONNX inference completed for input: \"{}\" ({} tokens). Model outputs: {}.",
-                                input.chars().take(50).collect::<String>(),
-                                input_tokens.len(),
-                                available_outputs.join(", ")
-                            );
-                            Ok(output_text)
-                        }
-                    }
-                    Err(e) => {
-                        warn!("ONNX inference failed: {}", e);
-                        // Provide a meaningful error response instead of failing completely
-                        let output_text = format!(
-                            "ONNX inference encountered an error for input: \"{}\" (Error: {}). Input was tokenized to {} tokens.",
-                            input.chars().take(50).collect::<String>(),
-                            e,
-                            input_tokens.len()
-                        );
-                        Ok(output_text)
-                    }
-                }
-            }
-        })
-        .await
-        .map_err(|e| anyhow!("ONNX inference task failed: {}", e))??;
+        // Generate a stub response (actual inference disabled during ort 2.0 transition)
+        let result = format!(
+            "[ONNX stub mode] Input processed: \"{}\" ({} estimated tokens). \
+             Full ONNX Runtime inference will be available when ort 2.0 stabilizes with prebuilt binaries.",
+            input.chars().take(50).collect::<String>(),
+            prompt_tokens
+        );
 
         let completion_time = start_time.elapsed() - prompt_time;
         let total_time = start_time.elapsed();
@@ -298,13 +182,13 @@ impl InferenceBackend for OnnxBackend {
             prompt_tokens,
             completion_tokens,
             total_time_ms: total_time.as_millis() as u64,
-            tokens_per_second: completion_tokens as f32 / completion_time.as_secs_f32(),
+            tokens_per_second: completion_tokens as f32 / completion_time.as_secs_f32().max(0.001),
             prompt_time_ms: prompt_time.as_millis() as u64,
             completion_time_ms: completion_time.as_millis() as u64,
         });
 
-        info!(
-            "ONNX inference completed: {} tokens in {:.2}s",
+        debug!(
+            "ONNX stub inference completed: {} tokens in {:.2}s",
             completion_tokens,
             completion_time.as_secs_f32()
         );
@@ -317,7 +201,7 @@ impl InferenceBackend for OnnxBackend {
             return Err(anyhow!("Model not loaded"));
         }
 
-        info!("Starting ONNX streaming inference");
+        info!("Starting ONNX streaming inference (stub mode)");
 
         // Since ONNX models don't inherently support streaming, we'll simulate it
         let result = self.infer(input, params).await?;
@@ -360,7 +244,7 @@ impl InferenceBackend for OnnxBackend {
             return Err(anyhow!("Model not loaded"));
         }
 
-        info!("Computing ONNX embeddings");
+        info!("Computing ONNX embeddings (stub mode)");
 
         // For now, create embeddings based on actual input analysis
         // A real implementation would run the model to get actual embeddings
@@ -384,7 +268,7 @@ impl InferenceBackend for OnnxBackend {
                 .tanh();
         }
 
-        info!("Generated {} dimensional embeddings", embeddings.len());
+        info!("Generated {} dimensional embeddings (stub mode)", embeddings.len());
         Ok(embeddings)
     }
 
