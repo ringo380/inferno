@@ -76,7 +76,12 @@ pub struct InferenceProfile {
 
 impl InferenceProfile {
     /// Create a new inference profile
-    pub fn new(request_id: String, model_id: String, input_tokens: u32, output_tokens: u32) -> Self {
+    pub fn new(
+        request_id: String,
+        model_id: String,
+        input_tokens: u32,
+        output_tokens: u32,
+    ) -> Self {
         Self {
             request_id,
             model_id,
@@ -155,7 +160,10 @@ impl ProfileCollector {
 
     /// Record an inference profile
     pub fn record_profile(&self, profile: InferenceProfile) -> anyhow::Result<()> {
-        let mut profiles = self.profiles.lock().map_err(|e| anyhow::anyhow!("Lock error: {}", e))?;
+        let mut profiles = self
+            .profiles
+            .lock()
+            .map_err(|e| anyhow::anyhow!("Lock error: {}", e))?;
 
         profiles.push(profile);
 
@@ -169,7 +177,10 @@ impl ProfileCollector {
 
     /// Get recent profiles
     pub fn get_recent(&self, count: usize) -> anyhow::Result<Vec<InferenceProfile>> {
-        let profiles = self.profiles.lock().map_err(|e| anyhow::anyhow!("Lock error: {}", e))?;
+        let profiles = self
+            .profiles
+            .lock()
+            .map_err(|e| anyhow::anyhow!("Lock error: {}", e))?;
 
         let start_idx = profiles.len().saturating_sub(count);
         Ok(profiles[start_idx..].to_vec())
@@ -177,20 +188,29 @@ impl ProfileCollector {
 
     /// Get all profiles
     pub fn get_all(&self) -> anyhow::Result<Vec<InferenceProfile>> {
-        let profiles = self.profiles.lock().map_err(|e| anyhow::anyhow!("Lock error: {}", e))?;
+        let profiles = self
+            .profiles
+            .lock()
+            .map_err(|e| anyhow::anyhow!("Lock error: {}", e))?;
         Ok(profiles.clone())
     }
 
     /// Clear all profiles
     pub fn clear(&self) -> anyhow::Result<()> {
-        let mut profiles = self.profiles.lock().map_err(|e| anyhow::anyhow!("Lock error: {}", e))?;
+        let mut profiles = self
+            .profiles
+            .lock()
+            .map_err(|e| anyhow::anyhow!("Lock error: {}", e))?;
         profiles.clear();
         Ok(())
     }
 
     /// Get profile count
     pub fn len(&self) -> anyhow::Result<usize> {
-        let profiles = self.profiles.lock().map_err(|e| anyhow::anyhow!("Lock error: {}", e))?;
+        let profiles = self
+            .profiles
+            .lock()
+            .map_err(|e| anyhow::anyhow!("Lock error: {}", e))?;
         Ok(profiles.len())
     }
 
@@ -202,10 +222,17 @@ impl ProfileCollector {
             return Ok(AverageMetrics::default());
         }
 
-        let avg_total_time = recent.iter().map(|p| p.total_time_ms).sum::<f32>() / recent.len() as f32;
-        let avg_input_tokens = recent.iter().map(|p| p.input_tokens as f32).sum::<f32>() / recent.len() as f32;
-        let avg_output_tokens = recent.iter().map(|p| p.output_tokens as f32).sum::<f32>() / recent.len() as f32;
-        let avg_throughput = recent.iter().map(|p| p.throughput_tokens_per_sec()).sum::<f32>() / recent.len() as f32;
+        let avg_total_time =
+            recent.iter().map(|p| p.total_time_ms).sum::<f32>() / recent.len() as f32;
+        let avg_input_tokens =
+            recent.iter().map(|p| p.input_tokens as f32).sum::<f32>() / recent.len() as f32;
+        let avg_output_tokens =
+            recent.iter().map(|p| p.output_tokens as f32).sum::<f32>() / recent.len() as f32;
+        let avg_throughput = recent
+            .iter()
+            .map(|p| p.throughput_tokens_per_sec())
+            .sum::<f32>()
+            / recent.len() as f32;
 
         Ok(AverageMetrics {
             avg_total_time_ms: avg_total_time,
@@ -255,16 +282,13 @@ mod tests {
 
     #[test]
     fn test_inference_profile() {
-        let mut profile = InferenceProfile::new(
-            "req_123".to_string(),
-            "llama-2-7b".to_string(),
-            256,
-            128,
-        );
+        let mut profile =
+            InferenceProfile::new("req_123".to_string(), "llama-2-7b".to_string(), 256, 128);
 
         let tokenize = OperationProfile::new("tokenization".to_string(), Duration::from_millis(10));
         let inference = OperationProfile::new("inference".to_string(), Duration::from_millis(800));
-        let detokenize = OperationProfile::new("detokenization".to_string(), Duration::from_millis(5));
+        let detokenize =
+            OperationProfile::new("detokenization".to_string(), Duration::from_millis(5));
 
         profile.add_phase(tokenize);
         profile.add_phase(inference);
@@ -293,20 +317,12 @@ mod tests {
     fn test_profile_collector() {
         let collector = ProfileCollector::new(100);
 
-        let mut profile1 = InferenceProfile::new(
-            "req_1".to_string(),
-            "model1".to_string(),
-            100,
-            50,
-        );
+        let mut profile1 =
+            InferenceProfile::new("req_1".to_string(), "model1".to_string(), 100, 50);
         profile1.set_total_time(Duration::from_millis(500));
 
-        let mut profile2 = InferenceProfile::new(
-            "req_2".to_string(),
-            "model1".to_string(),
-            200,
-            100,
-        );
+        let mut profile2 =
+            InferenceProfile::new("req_2".to_string(), "model1".to_string(), 200, 100);
         profile2.set_total_time(Duration::from_millis(1000));
 
         collector.record_profile(profile1).unwrap();
@@ -326,12 +342,8 @@ mod tests {
         let collector = ProfileCollector::new(5);
 
         for i in 0..10 {
-            let mut profile = InferenceProfile::new(
-                format!("req_{}", i),
-                "model".to_string(),
-                100,
-                50,
-            );
+            let mut profile =
+                InferenceProfile::new(format!("req_{}", i), "model".to_string(), 100, 50);
             profile.set_total_time(Duration::from_millis(500));
             collector.record_profile(profile).unwrap();
         }

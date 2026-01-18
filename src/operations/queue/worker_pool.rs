@@ -113,8 +113,8 @@ impl WorkerPool {
             worker_metrics: HashMap::new(),
             next_worker_id: 0,
             current_load: 0.0,
-            scale_up_threshold: 0.8,     // Scale up when 80% loaded
-            scale_down_threshold: 0.2,   // Scale down when 20% loaded
+            scale_up_threshold: 0.8,   // Scale up when 80% loaded
+            scale_down_threshold: 0.2, // Scale down when 20% loaded
             last_scale_change_secs: 0,
         };
 
@@ -246,7 +246,11 @@ impl WorkerPool {
         // Find first idle worker
         if let Some(pos) = self.workers.iter().position(|_| {
             // Find idle worker in metrics
-            if let Some(metrics) = self.worker_metrics.values().find(|m| m.state == WorkerState::Idle) {
+            if let Some(metrics) = self
+                .worker_metrics
+                .values()
+                .find(|m| m.state == WorkerState::Idle)
+            {
                 return metrics.active_requests == 0;
             }
             false
@@ -291,7 +295,11 @@ impl WorkerPool {
             .filter(|m| m.state == WorkerState::Failed)
             .count();
 
-        let total_processed: u64 = self.worker_metrics.values().map(|m| m.total_processed).sum();
+        let total_processed: u64 = self
+            .worker_metrics
+            .values()
+            .map(|m| m.total_processed)
+            .sum();
         let total_failed: u64 = self.worker_metrics.values().map(|m| m.total_failed).sum();
         let total_gpu_memory: u32 = self
             .worker_metrics
@@ -351,7 +359,9 @@ impl WorkerPoolRegistry {
     /// Get or create pool for a model
     pub fn get_or_create(&mut self, config: WorkerPoolConfig) -> &mut WorkerPool {
         let model_id = config.model_id.clone();
-        self.pools.entry(model_id).or_insert_with(|| WorkerPool::new(config))
+        self.pools
+            .entry(model_id)
+            .or_insert_with(|| WorkerPool::new(config))
     }
 
     /// Get existing pool

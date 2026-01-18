@@ -2,10 +2,10 @@
 //!
 //! Provides REST API endpoints for profiling data visualization
 
-use serde::{Deserialize, Serialize};
 use crate::infrastructure::profiling::{
-    InferenceProfile, PhaseStats, BenchmarkResult, AnomalyDetection,
+    AnomalyDetection, BenchmarkResult, InferenceProfile, PhaseStats,
 };
+use serde::{Deserialize, Serialize};
 
 /// Request to export profiling data
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -182,7 +182,7 @@ pub struct ModelMetrics {
     pub model_id: String,
     pub avg_throughput_tokens_per_sec: f32,
     pub avg_latency_ms: f32,
-    pub efficiency_score: f32,  // throughput / GPU memory
+    pub efficiency_score: f32, // throughput / GPU memory
     pub inference_count: u32,
 }
 
@@ -209,10 +209,16 @@ mod tests {
 
     #[test]
     fn test_gauge_status_determination() {
-        assert_eq!(GaugeStatus::from_metrics(30.0, 100.0), GaugeStatus::Excellent);
+        assert_eq!(
+            GaugeStatus::from_metrics(30.0, 100.0),
+            GaugeStatus::Excellent
+        );
         assert_eq!(GaugeStatus::from_metrics(100.0, 100.0), GaugeStatus::Good);
         assert_eq!(GaugeStatus::from_metrics(300.0, 50.0), GaugeStatus::Warning);
-        assert_eq!(GaugeStatus::from_metrics(600.0, 10.0), GaugeStatus::Critical);
+        assert_eq!(
+            GaugeStatus::from_metrics(600.0, 10.0),
+            GaugeStatus::Critical
+        );
     }
 
     #[test]

@@ -250,7 +250,10 @@ impl SecurityManager {
         }
     }
 
-    pub async fn get_security_events(&self, limit: Option<usize>) -> Result<Vec<SecurityEvent>, String> {
+    pub async fn get_security_events(
+        &self,
+        limit: Option<usize>,
+    ) -> Result<Vec<SecurityEvent>, String> {
         let events = self.security_events.lock().map_err(|e| e.to_string())?;
         let limit = limit.unwrap_or(100);
 

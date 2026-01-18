@@ -116,14 +116,35 @@ impl BenchmarkReport {
             return ReportSummary::default();
         }
 
-        let avg_throughput = self.benchmarks.iter().map(|b| b.throughput_tokens_per_sec).sum::<f32>()
+        let avg_throughput = self
+            .benchmarks
+            .iter()
+            .map(|b| b.throughput_tokens_per_sec)
+            .sum::<f32>()
             / self.benchmarks.len() as f32;
-        let avg_latency = self.benchmarks.iter().map(|b| b.avg_latency_ms).sum::<f32>()
+        let avg_latency = self
+            .benchmarks
+            .iter()
+            .map(|b| b.avg_latency_ms)
+            .sum::<f32>()
             / self.benchmarks.len() as f32;
-        let peak_memory = self.benchmarks.iter().map(|b| b.memory_peak_mb).max().unwrap_or(0);
+        let peak_memory = self
+            .benchmarks
+            .iter()
+            .map(|b| b.memory_peak_mb)
+            .max()
+            .unwrap_or(0);
 
-        let regressions = self.comparisons.iter().filter(|c| c.has_regression(5.0)).count();
-        let improvements = self.comparisons.iter().filter(|c| c.has_improvement(5.0)).count();
+        let regressions = self
+            .comparisons
+            .iter()
+            .filter(|c| c.has_regression(5.0))
+            .count();
+        let improvements = self
+            .comparisons
+            .iter()
+            .filter(|c| c.has_improvement(5.0))
+            .count();
 
         ReportSummary {
             total_benchmarks: self.benchmarks.len() as u32,
@@ -274,7 +295,9 @@ impl HTMLReportGenerator {
     fn format_timestamp(timestamp: u64) -> String {
         use std::time::SystemTime;
 
-        if let Some(time) = SystemTime::UNIX_EPOCH.checked_add(std::time::Duration::from_secs(timestamp)) {
+        if let Some(time) =
+            SystemTime::UNIX_EPOCH.checked_add(std::time::Duration::from_secs(timestamp))
+        {
             return format!("{:?}", time);
         }
 
@@ -355,7 +378,7 @@ mod tests {
             batch_size: 1,
             model_id: "model".to_string(),
             throughput_tokens_per_sec: 120.0, // 20% improvement
-            avg_latency_ms: 80.0,              // 20% improvement
+            avg_latency_ms: 80.0,             // 20% improvement
             p99_latency_ms: 120.0,
             memory_peak_mb: 1024,
             iterations: 100,
@@ -382,10 +405,10 @@ mod tests {
             scenario_name: "test".to_string(),
             batch_size: 1,
             model_id: "model".to_string(),
-            throughput_tokens_per_sec: 80.0,  // 20% regression
-            avg_latency_ms: 130.0,             // 30% regression
+            throughput_tokens_per_sec: 80.0, // 20% regression
+            avg_latency_ms: 130.0,           // 30% regression
             p99_latency_ms: 180.0,
-            memory_peak_mb: 1280,              // 25% increase
+            memory_peak_mb: 1280, // 25% increase
             iterations: 100,
         };
 

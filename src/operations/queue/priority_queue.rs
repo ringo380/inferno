@@ -248,11 +248,7 @@ impl PriorityQueue {
     /// Get statistics about the queue
     pub fn stats(&self) -> QueueStats {
         let queued_count = self.heap.len();
-        let total_weight: u32 = self
-            .heap
-            .iter()
-            .map(|q| q.metadata.priority.weight())
-            .sum();
+        let total_weight: u32 = self.heap.iter().map(|q| q.metadata.priority.weight()).sum();
 
         // Estimate wait based on token counts and weights
         let estimated_tokens: u32 = self.heap.iter().map(|q| q.metadata.estimated_tokens).sum();

@@ -3,8 +3,8 @@
 //! This module handles event emission from the Rust backend to the frontend.
 //! Events are used for real-time updates, notifications, and state changes.
 
-use tauri::{AppHandle, Emitter};
 use chrono::Utc;
+use tauri::{AppHandle, Emitter};
 
 /// Event manager for emitting events to the frontend
 pub struct EventManager {
@@ -37,36 +37,49 @@ impl EventManager {
                 "model_id": model_name,
                 "backend_id": backend_id,
                 "timestamp": Utc::now().to_rfc3339(),
-            })
+            }),
         )
     }
 
     /// Emit a model unloaded event
-    pub fn emit_model_unloaded(&self, model_name: String, backend_id: String) -> Result<(), String> {
+    pub fn emit_model_unloaded(
+        &self,
+        model_name: String,
+        backend_id: String,
+    ) -> Result<(), String> {
         self.emit_inferno_event(
             "ModelUnloaded",
             serde_json::json!({
                 "model_id": model_name,
                 "backend_id": backend_id,
                 "timestamp": Utc::now().to_rfc3339(),
-            })
+            }),
         )
     }
 
     /// Emit an inference started event
-    pub fn emit_inference_started(&self, inference_id: String, backend_id: String) -> Result<(), String> {
+    pub fn emit_inference_started(
+        &self,
+        inference_id: String,
+        backend_id: String,
+    ) -> Result<(), String> {
         self.emit_inferno_event(
             "InferenceStarted",
             serde_json::json!({
                 "inference_id": inference_id,
                 "model_id": backend_id,
                 "timestamp": Utc::now().to_rfc3339(),
-            })
+            }),
         )
     }
 
     /// Emit an inference completed event
-    pub fn emit_inference_completed(&self, inference_id: String, response: String, latency_ms: u64) -> Result<(), String> {
+    pub fn emit_inference_completed(
+        &self,
+        inference_id: String,
+        response: String,
+        latency_ms: u64,
+    ) -> Result<(), String> {
         self.emit_inferno_event(
             "InferenceCompleted",
             serde_json::json!({
@@ -74,7 +87,7 @@ impl EventManager {
                 "response": response,
                 "latency_ms": latency_ms,
                 "timestamp": Utc::now().to_rfc3339(),
-            })
+            }),
         )
     }
 
@@ -86,7 +99,7 @@ impl EventManager {
                 "inference_id": inference_id,
                 "error": error,
                 "timestamp": Utc::now().to_rfc3339(),
-            })
+            }),
         )
     }
 
@@ -98,7 +111,7 @@ impl EventManager {
                 "cpu_usage": cpu_usage,
                 "memory_usage": memory_usage,
                 "timestamp": Utc::now().to_rfc3339(),
-            })
+            }),
         )
     }
 
@@ -110,7 +123,12 @@ impl EventManager {
     }
 
     /// Emit an API key created event
-    pub fn emit_api_key_created(&self, key_id: String, name: String, permissions: Vec<String>) -> Result<(), String> {
+    pub fn emit_api_key_created(
+        &self,
+        key_id: String,
+        name: String,
+        permissions: Vec<String>,
+    ) -> Result<(), String> {
         self.emit_inferno_event(
             "ApiKeyCreated",
             serde_json::json!({
@@ -118,7 +136,7 @@ impl EventManager {
                 "name": name,
                 "permissions": permissions,
                 "timestamp": Utc::now().to_rfc3339(),
-            })
+            }),
         )
     }
 
@@ -136,7 +154,7 @@ impl EventManager {
         let app_handle = self.app_handle.clone();
 
         tokio::spawn(async move {
-            use sysinfo::{System, SystemExt, CpuExt};
+            use sysinfo::{CpuExt, System, SystemExt};
 
             let mut system = System::new_all();
             let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(3));

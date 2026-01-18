@@ -101,7 +101,8 @@ impl QueuePersistence {
         let json_data = serde_json::to_vec(snapshot)?;
 
         // Compress with zstd
-        let compressed = zstd::encode_all(json_data.as_slice(), self.config.compression_level as i32)?;
+        let compressed =
+            zstd::encode_all(json_data.as_slice(), self.config.compression_level as i32)?;
 
         let compressed_size = compressed.len();
 

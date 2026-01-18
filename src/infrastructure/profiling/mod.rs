@@ -7,25 +7,26 @@
 //! - Trend analysis
 //! - Benchmark report generation
 
-pub mod profiler;
-pub mod stats;
 pub mod benchmark_report;
 pub mod endpoints;
+pub mod profiler;
+pub mod stats;
 
 pub use profiler::{
-    OperationProfile, InferenceProfile, PhaseTimer, ProfileCollector, AverageMetrics,
+    AverageMetrics, InferenceProfile, OperationProfile, PhaseTimer, ProfileCollector,
 };
 
 pub use stats::{
-    DurationStats, PhaseStats, TimeWindow, AnomalyDetection, StatisticsAggregator, TrendDirection,
+    AnomalyDetection, DurationStats, PhaseStats, StatisticsAggregator, TimeWindow, TrendDirection,
 };
 
 pub use benchmark_report::{
-    BenchmarkResult, BenchmarkComparison, BenchmarkReport, HTMLReportGenerator, SystemInfo, ReportSummary,
+    BenchmarkComparison, BenchmarkReport, BenchmarkResult, HTMLReportGenerator, ReportSummary,
+    SystemInfo,
 };
 
 pub use endpoints::{
-    RecentProfilesResponse, ProfileStatsResponse, TimelineResponse, AnomaliesResponse,
-    ComparisonResponse, ExportResponse, PerformanceGaugeResponse, PhaseBreakdownResponse,
-    LatencyHistogramResponse, ModelComparisonResponse, ProfilingHealthResponse,
+    AnomaliesResponse, ComparisonResponse, ExportResponse, LatencyHistogramResponse,
+    ModelComparisonResponse, PerformanceGaugeResponse, PhaseBreakdownResponse,
+    ProfileStatsResponse, ProfilingHealthResponse, RecentProfilesResponse, TimelineResponse,
 };

@@ -112,7 +112,18 @@ pub async fn execute(args: StreamingArgs, config: &Config) -> Result<()> {
             top_k,
             top_p,
             verbose,
-        } => execute_interactive(model, max_tokens, temperature, top_k, top_p, verbose, config).await,
+        } => {
+            execute_interactive(
+                model,
+                max_tokens,
+                temperature,
+                top_k,
+                top_p,
+                verbose,
+                config,
+            )
+            .await
+        }
         StreamingCommand::Benchmark {
             model,
             concurrent,

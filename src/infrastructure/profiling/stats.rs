@@ -65,11 +65,7 @@ impl DurationStats {
         let p99 = sorted[p99_idx];
 
         // Standard deviation
-        let variance = sorted
-            .iter()
-            .map(|x| (x - mean).powi(2))
-            .sum::<f32>()
-            / sorted.len() as f32;
+        let variance = sorted.iter().map(|x| (x - mean).powi(2)).sum::<f32>() / sorted.len() as f32;
         let stddev = variance.sqrt();
 
         Self {
@@ -207,7 +203,12 @@ impl StatisticsAggregator {
     }
 
     /// Detect anomalies by comparing to baseline
-    pub fn detect_anomalies(&self, metric_name: &str, current_value: f32, threshold_percent: f32) -> Option<AnomalyDetection> {
+    pub fn detect_anomalies(
+        &self,
+        metric_name: &str,
+        current_value: f32,
+        threshold_percent: f32,
+    ) -> Option<AnomalyDetection> {
         let baseline = *self.baseline_stats.get(metric_name)?;
 
         if baseline == 0.0 {
@@ -293,9 +294,9 @@ impl Default for StatisticsAggregator {
 /// Trend direction with magnitude
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum TrendDirection {
-    Increasing(f32),  // percentage change
-    Decreasing(f32),  // percentage change
-    Stable(f32),      // percentage deviation
+    Increasing(f32), // percentage change
+    Decreasing(f32), // percentage change
+    Stable(f32),     // percentage deviation
 }
 
 #[cfg(test)]

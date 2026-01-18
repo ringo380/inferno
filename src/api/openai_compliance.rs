@@ -2,8 +2,8 @@
 //!
 //! Ensures all API responses conform to OpenAI API specifications for drop-in replacement compatibility
 
-use serde::{Deserialize, Serialize};
 use crate::InfernoError;
+use serde::{Deserialize, Serialize};
 
 /// Error response matching OpenAI format
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -24,9 +24,11 @@ impl ErrorResponse {
     /// Create from Inferno error
     pub fn from_inferno_error(error: &InfernoError) -> Self {
         let (message, code, r#type) = match error {
-            InfernoError::ModelNotFound(msg) => {
-                (msg.clone(), Some("model_not_found"), "invalid_request_error")
-            }
+            InfernoError::ModelNotFound(msg) => (
+                msg.clone(),
+                Some("model_not_found"),
+                "invalid_request_error",
+            ),
             InfernoError::Config(_) => (
                 "Invalid configuration".to_string(),
                 Some("invalid_config"),
@@ -38,7 +40,9 @@ impl ErrorResponse {
                 Some("timeout"),
                 "server_error",
             ),
-            InfernoError::Validation(msg) => (msg.clone(), Some("invalid_value"), "invalid_request_error"),
+            InfernoError::Validation(msg) => {
+                (msg.clone(), Some("invalid_value"), "invalid_request_error")
+            }
             _ => (error.to_string(), None, "server_error"),
         };
 
@@ -106,27 +110,21 @@ impl ComplianceValidator {
         // Validate temperature (0-2)
         if let Some(temp) = temperature {
             if temp < 0.0 || temp > 2.0 {
-                result = result.with_error(
-                    "temperature must be between 0 and 2".to_string(),
-                );
+                result = result.with_error("temperature must be between 0 and 2".to_string());
             }
         }
 
         // Validate top_p (0-1)
         if let Some(p) = top_p {
             if p < 0.0 || p > 1.0 {
-                result = result.with_error(
-                    "top_p must be between 0 and 1".to_string(),
-                );
+                result = result.with_error("top_p must be between 0 and 1".to_string());
             }
         }
 
         // Validate max_tokens
         if let Some(tokens) = max_tokens {
             if tokens <= 0 || tokens > 2_000_000 {
-                result = result.with_error(
-                    "max_tokens must be between 1 and 2000000".to_string(),
-                );
+                result = result.with_error("max_tokens must be between 1 and 2000000".to_string());
             }
         }
 
@@ -146,19 +144,14 @@ impl ComplianceValidator {
         }
 
         if input.len() > 8_000 {
-            result = result.with_error(
-                "input length must not exceed 8000 characters".to_string(),
-            );
+            result = result.with_error("input length must not exceed 8000 characters".to_string());
         }
 
         result
     }
 
     /// Validate completion request
-    pub fn validate_completion_request(
-        model: &str,
-        max_tokens: Option<i32>,
-    ) -> ValidationResult {
+    pub fn validate_completion_request(model: &str, max_tokens: Option<i32>) -> ValidationResult {
         let mut result = ValidationResult::valid();
 
         if model.is_empty() {
@@ -167,9 +160,7 @@ impl ComplianceValidator {
 
         if let Some(tokens) = max_tokens {
             if tokens <= 0 || tokens > 2_000_000 {
-                result = result.with_error(
-                    "max_tokens must be between 1 and 2000000".to_string(),
-                );
+                result = result.with_error("max_tokens must be between 1 and 2000000".to_string());
             }
         }
 
@@ -308,10 +299,8 @@ mod tests {
     #[test]
     fn test_embeddings_too_long() {
         let long_input = "a".repeat(10_000);
-        let result = ComplianceValidator::validate_embeddings_request(
-            "text-embedding-ada-002",
-            &long_input,
-        );
+        let result =
+            ComplianceValidator::validate_embeddings_request("text-embedding-ada-002", &long_input);
 
         assert!(!result.is_valid);
     }

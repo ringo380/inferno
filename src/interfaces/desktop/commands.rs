@@ -180,11 +180,7 @@ pub async fn infer_stream(
 
         // Get the stream from backend manager
         match backend_manager
-            .infer_stream(
-                &backend_id_clone,
-                &prompt_for_stream,
-                &params_for_stream,
-            )
+            .infer_stream(&backend_id_clone, &prompt_for_stream, &params_for_stream)
             .await
         {
             Ok(mut stream) => {

@@ -254,7 +254,7 @@ async fn handle_ws_message(
             let inference_params = InferenceParams {
                 max_tokens: data.max_tokens,
                 temperature: data.temperature,
-                    top_k: 40,
+                top_k: 40,
                 top_p: data.top_p,
                 stream: true, // Always stream for WebSocket
                 stop_sequences: data.stop.unwrap_or_default(),

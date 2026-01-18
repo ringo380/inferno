@@ -7,12 +7,7 @@ use std::time::Duration;
 fn test_basic_profiling_workflow() {
     let collector = ProfileCollector::new(100);
 
-    let mut profile = InferenceProfile::new(
-        "req_1".to_string(),
-        "llama-7b".to_string(),
-        256,
-        128,
-    );
+    let mut profile = InferenceProfile::new("req_1".to_string(), "llama-7b".to_string(), 256, 128);
 
     let tokenize = OperationProfile::new("tokenization".to_string(), Duration::from_millis(10));
     let inference = OperationProfile::new("inference".to_string(), Duration::from_millis(800));

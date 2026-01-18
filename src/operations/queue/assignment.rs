@@ -236,7 +236,10 @@ impl LoadBalancer {
     ) -> BackpressureStatus {
         let queue_utilization = current_queue_depth as f32 / self.max_queue_depth as f32;
 
-        match (queue_utilization, available_gpu_memory_mb < self.min_gpu_memory_free_mb) {
+        match (
+            queue_utilization,
+            available_gpu_memory_mb < self.min_gpu_memory_free_mb,
+        ) {
             (util, true) if util > 0.8 => BackpressureStatus::Critical,
             (util, true) => BackpressureStatus::Elevated,
             (util, _) if util > 0.9 => BackpressureStatus::Critical,

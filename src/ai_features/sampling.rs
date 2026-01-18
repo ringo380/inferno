@@ -84,7 +84,10 @@ impl Sampler {
 
     /// Sample a token based on configured strategy
     /// Accepts a generic token candidate with id, logit, and probability
-    pub fn sample_from_candidates<T: AsRef<[(i32, f32, f32)]>>(&mut self, candidates_data: T) -> Option<i32> {
+    pub fn sample_from_candidates<T: AsRef<[(i32, f32, f32)]>>(
+        &mut self,
+        candidates_data: T,
+    ) -> Option<i32> {
         let candidates_ref = candidates_data.as_ref();
         if candidates_ref.is_empty() {
             return None;
@@ -130,7 +133,8 @@ impl Sampler {
         if matches!(
             self.config.strategy,
             SamplingStrategy::TopP | SamplingStrategy::TopKP
-        ) && self.config.top_p > 0.0 && self.config.top_p < 1.0
+        ) && self.config.top_p > 0.0
+            && self.config.top_p < 1.0
         {
             Self::apply_top_p(&mut adjusted, self.config.top_p);
         }
@@ -183,10 +187,7 @@ impl Sampler {
         }
 
         // Sort by probability (descending)
-        candidates.sort_by(|a, b| {
-            b.p.partial_cmp(&a.p)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
+        candidates.sort_by(|a, b| b.p.partial_cmp(&a.p).unwrap_or(std::cmp::Ordering::Equal));
 
         // Keep only top k
         candidates.truncate(k);
@@ -201,10 +202,7 @@ impl Sampler {
         }
 
         // Sort by probability (descending)
-        candidates.sort_by(|a, b| {
-            b.p.partial_cmp(&a.p)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
+        candidates.sort_by(|a, b| b.p.partial_cmp(&a.p).unwrap_or(std::cmp::Ordering::Equal));
 
         // Find the cutoff point
         let mut cumsum = 0.0;
@@ -230,10 +228,7 @@ impl Sampler {
     fn greedy_sample(candidates: &[TokenCandidate]) -> Option<i32> {
         candidates
             .iter()
-            .max_by(|a, b| {
-                a.p.partial_cmp(&b.p)
-                    .unwrap_or(std::cmp::Ordering::Equal)
-            })
+            .max_by(|a, b| a.p.partial_cmp(&b.p).unwrap_or(std::cmp::Ordering::Equal))
             .map(|t| t.id)
     }
 
@@ -244,7 +239,10 @@ impl Sampler {
         }
 
         // Calculate probabilities from logits (softmax)
-        let max_logit = candidates.iter().map(|c| c.logit).fold(f32::NEG_INFINITY, f32::max);
+        let max_logit = candidates
+            .iter()
+            .map(|c| c.logit)
+            .fold(f32::NEG_INFINITY, f32::max);
 
         let scores: Vec<f32> = candidates
             .iter()
@@ -275,10 +273,7 @@ impl Sampler {
         // Fallback to highest probability
         candidates
             .iter()
-            .max_by(|a, b| {
-                a.p.partial_cmp(&b.p)
-                    .unwrap_or(std::cmp::Ordering::Equal)
-            })
+            .max_by(|a, b| a.p.partial_cmp(&b.p).unwrap_or(std::cmp::Ordering::Equal))
             .map(|t| t.id)
     }
 
