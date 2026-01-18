@@ -71,6 +71,11 @@ jobs:
     - name: Check formatting
       run: cargo fmt --all -- --check
 
+    - name: Install GTK development libraries (for desktop feature)
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libglib2.0-dev libgtk-3-dev libwebkit2gtk-4.1-dev
+
     - name: Run clippy
       run: cargo clippy --all-targets --all-features -- -D warnings
 
@@ -140,6 +145,11 @@ jobs:
 
     - name: Install tarpaulin
       run: cargo install cargo-tarpaulin
+
+    - name: Install GTK development libraries (for desktop feature)
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libglib2.0-dev libgtk-3-dev libwebkit2gtk-4.1-dev
 
     - name: Run coverage
       run: cargo tarpaulin --verbose --all-features --workspace --timeout 120 --out xml
