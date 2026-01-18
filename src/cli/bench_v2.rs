@@ -136,7 +136,7 @@ impl Command for BenchCommand {
         let inference_params = InferenceParams {
             max_tokens: self.tokens,
             temperature: 0.7,
-                    top_k: 40,
+            top_k: 40,
             top_p: 0.9,
             stream: false,
             stop_sequences: vec![],

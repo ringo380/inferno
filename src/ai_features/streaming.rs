@@ -112,7 +112,8 @@ impl StreamStats {
     /// Calculate tokens per second
     pub fn finalize(&mut self) {
         if self.duration_ms > 0 {
-            self.tokens_per_second = (self.total_tokens as f64 / (self.duration_ms as f64 / 1000.0)) as f32;
+            self.tokens_per_second =
+                (self.total_tokens as f64 / (self.duration_ms as f64 / 1000.0)) as f32;
         }
     }
 }

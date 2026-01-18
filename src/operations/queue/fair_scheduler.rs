@@ -172,7 +172,9 @@ impl FairScheduler {
         let starvation_detected = max_wait_detected > self.starvation_threshold_ms;
 
         let fairness_score = if total_requests > 0 {
-            (sla_met_requests as f32 / total_requests as f32).max(0.0).min(1.0)
+            (sla_met_requests as f32 / total_requests as f32)
+                .max(0.0)
+                .min(1.0)
         } else {
             1.0
         };
@@ -306,11 +308,19 @@ mod tests {
 
         let stats = scheduler.fairness_stats();
         assert_eq!(
-            stats.per_priority.get(&(Priority::VIP as u8)).unwrap().assigned_count,
+            stats
+                .per_priority
+                .get(&(Priority::VIP as u8))
+                .unwrap()
+                .assigned_count,
             1
         );
         assert_eq!(
-            stats.per_priority.get(&(Priority::High as u8)).unwrap().assigned_count,
+            stats
+                .per_priority
+                .get(&(Priority::High as u8))
+                .unwrap()
+                .assigned_count,
             1
         );
     }

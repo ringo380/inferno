@@ -11,7 +11,7 @@ use crate::{
 use anyhow::Result;
 use async_stream::stream;
 use llama_cpp_2::{
-    context::{LlamaContext, params::LlamaContextParams},
+    context::{params::LlamaContextParams, LlamaContext},
     llama_backend::LlamaBackend,
     llama_batch::LlamaBatch,
     model::{params::LlamaModelParams, AddBos, LlamaModel, Special},
@@ -167,7 +167,8 @@ impl GgufBackend {
                 .with_n_ctx(NonZeroU32::new(context_size))
                 .with_n_batch(batch_size);
 
-            let mut context = model.new_context(&backend, ctx_params)
+            let mut context = model
+                .new_context(&backend, ctx_params)
                 .map_err(|e| InfernoError::Backend(format!("Failed to create context: {}", e)))?;
 
             // Tokenize input
@@ -183,12 +184,16 @@ impl GgufBackend {
 
             for (i, token) in input_tokens.iter().enumerate() {
                 let is_last = i == input_tokens.len() - 1;
-                batch.add(token.clone(), i as i32, &[0], is_last)
-                    .map_err(|e| InfernoError::Backend(format!("Failed to add token to batch: {}", e)))?;
+                batch
+                    .add(token.clone(), i as i32, &[0], is_last)
+                    .map_err(|e| {
+                        InfernoError::Backend(format!("Failed to add token to batch: {}", e))
+                    })?;
             }
 
             // Decode the input batch
-            context.decode(&mut batch)
+            context
+                .decode(&mut batch)
                 .map_err(|e| InfernoError::Backend(format!("Failed to decode batch: {}", e)))?;
 
             debug!("⚡ Input processed through Metal GPU");
@@ -235,8 +240,9 @@ impl GgufBackend {
                     .collect();
 
                 // Use configured sampling strategy
-                let next_token = sampler.sample_from_candidates(&candidates)
-                    .ok_or_else(|| InfernoError::Backend("No candidates available for sampling".to_string()))?;
+                let next_token = sampler.sample_from_candidates(&candidates).ok_or_else(|| {
+                    InfernoError::Backend("No candidates available for sampling".to_string())
+                })?;
 
                 // Check for end of sequence - use model's token methods
                 if next_token == model.token_eos().0 {
@@ -248,16 +254,26 @@ impl GgufBackend {
 
                 // Prepare next batch with the sampled token
                 batch.clear();
-                batch.add(LlamaToken(next_token), input_tokens.len() as i32 + output_tokens.len() as i32 - 1, &[0], true)
-                    .map_err(|e| InfernoError::Backend(format!("Failed to add output token: {}", e)))?;
+                batch
+                    .add(
+                        LlamaToken(next_token),
+                        input_tokens.len() as i32 + output_tokens.len() as i32 - 1,
+                        &[0],
+                        true,
+                    )
+                    .map_err(|e| {
+                        InfernoError::Backend(format!("Failed to add output token: {}", e))
+                    })?;
 
                 // Decode for next iteration
-                context.decode(&mut batch)
-                    .map_err(|e| InfernoError::Backend(format!("Failed to decode output token: {}", e)))?;
+                context.decode(&mut batch).map_err(|e| {
+                    InfernoError::Backend(format!("Failed to decode output token: {}", e))
+                })?;
             }
 
             // Detokenize output - convert i32 tokens to LlamaToken
-            let llama_tokens: Vec<LlamaToken> = output_tokens.iter().map(|&t| LlamaToken(t)).collect();
+            let llama_tokens: Vec<LlamaToken> =
+                output_tokens.iter().map(|&t| LlamaToken(t)).collect();
             let response = model
                 .tokens_to_str(&llama_tokens, Special::Tokenize)
                 .map_err(|e| InfernoError::Backend(format!("Failed to detokenize: {}", e)))?;
@@ -330,18 +346,19 @@ impl GgufBackend {
             };
 
             // Tokenize input
-            let input_tokens = match model.str_to_token(&input_str, llama_cpp_2::model::AddBos::Always) {
-                Ok(tokens) => tokens,
-                Err(e) => {
-                    let _ = tx.blocking_send(StreamToken {
-                        content: format!("Error: Tokenization failed: {}", e),
-                        sequence: 0,
-                        is_valid: false,
-                        timestamp_ms: Some(start_time.elapsed().as_millis() as u64),
-                    });
-                    return;
-                }
-            };
+            let input_tokens =
+                match model.str_to_token(&input_str, llama_cpp_2::model::AddBos::Always) {
+                    Ok(tokens) => tokens,
+                    Err(e) => {
+                        let _ = tx.blocking_send(StreamToken {
+                            content: format!("Error: Tokenization failed: {}", e),
+                            sequence: 0,
+                            is_valid: false,
+                            timestamp_ms: Some(start_time.elapsed().as_millis() as u64),
+                        });
+                        return;
+                    }
+                };
 
             debug!("📝 Tokenized {} tokens from input", input_tokens.len());
 
@@ -438,7 +455,10 @@ impl GgufBackend {
                 }
 
                 // Detokenize immediately and send
-                match model.token_to_str(llama_cpp_2::token::LlamaToken(next_token), llama_cpp_2::model::Special::Tokenize) {
+                match model.token_to_str(
+                    llama_cpp_2::token::LlamaToken(next_token),
+                    llama_cpp_2::model::Special::Tokenize,
+                ) {
                     Ok(token_str) => {
                         let stream_token = StreamToken {
                             content: token_str.clone(),
@@ -559,14 +579,18 @@ impl InferenceBackend for GgufBackend {
         );
 
         // Initialize the llama backend
-        let backend = Arc::new(tokio::task::spawn_blocking(|| {
-            LlamaBackend::init().map_err(|e| {
-                InfernoError::Backend(format!("Failed to initialize llama backend: {}", e))
+        let backend = Arc::new(
+            tokio::task::spawn_blocking(|| {
+                LlamaBackend::init().map_err(|e| {
+                    InfernoError::Backend(format!("Failed to initialize llama backend: {}", e))
+                })
             })
-        })
-        .await
-        .map_err(|e| InfernoError::Backend(format!("Backend initialization task failed: {}", e)))?
-        .map_err(anyhow::Error::from)?);
+            .await
+            .map_err(|e| {
+                InfernoError::Backend(format!("Backend initialization task failed: {}", e))
+            })?
+            .map_err(anyhow::Error::from)?,
+        );
 
         // Configure model parameters with GPU support
         // On macOS, Metal is automatically used when n_gpu_layers > 0

@@ -268,7 +268,10 @@ impl InferenceBackend for OnnxBackend {
                 .tanh();
         }
 
-        info!("Generated {} dimensional embeddings (stub mode)", embeddings.len());
+        info!(
+            "Generated {} dimensional embeddings (stub mode)",
+            embeddings.len()
+        );
         Ok(embeddings)
     }
 

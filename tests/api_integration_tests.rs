@@ -6,7 +6,9 @@
 use inferno::api::{
     flow_control::{BackpressureLevel, FlowControlConfig, StreamFlowControl},
     openai_compliance::{ComplianceValidator, ModelInfo},
-    streaming_enhancements::{CompressionFormat, SSEMessage, StreamingOptimizationConfig, TokenBatcher, TimeoutManager},
+    streaming_enhancements::{
+        CompressionFormat, SSEMessage, StreamingOptimizationConfig, TimeoutManager, TokenBatcher,
+    },
 };
 use std::time::Duration;
 
@@ -52,21 +54,25 @@ fn test_chat_completions_with_streaming() {
 #[test]
 fn test_chat_completions_with_temperature_validation() {
     // Valid temperatures
-    assert!(ComplianceValidator::validate_chat_completion_request(
-        "llama-7b",
-        Some(100),
-        Some(0.0),
-        Some(0.9),
-    )
-    .is_valid);
+    assert!(
+        ComplianceValidator::validate_chat_completion_request(
+            "llama-7b",
+            Some(100),
+            Some(0.0),
+            Some(0.9),
+        )
+        .is_valid
+    );
 
-    assert!(ComplianceValidator::validate_chat_completion_request(
-        "llama-7b",
-        Some(100),
-        Some(2.0),
-        Some(0.9),
-    )
-    .is_valid);
+    assert!(
+        ComplianceValidator::validate_chat_completion_request(
+            "llama-7b",
+            Some(100),
+            Some(2.0),
+            Some(0.9),
+        )
+        .is_valid
+    );
 
     // Invalid temperatures
     let invalid_cold = ComplianceValidator::validate_chat_completion_request(
@@ -112,29 +118,24 @@ fn test_chat_completions_with_top_p_validation() {
 #[test]
 fn test_chat_completions_max_tokens_validation() {
     // Valid max_tokens
-    assert!(ComplianceValidator::validate_chat_completion_request(
-        "llama-7b",
-        Some(1),
-        None,
-        None,
-    )
-    .is_valid);
+    assert!(
+        ComplianceValidator::validate_chat_completion_request("llama-7b", Some(1), None, None,)
+            .is_valid
+    );
 
-    assert!(ComplianceValidator::validate_chat_completion_request(
-        "llama-7b",
-        Some(2_000_000),
-        None,
-        None,
-    )
-    .is_valid);
+    assert!(
+        ComplianceValidator::validate_chat_completion_request(
+            "llama-7b",
+            Some(2_000_000),
+            None,
+            None,
+        )
+        .is_valid
+    );
 
     // Invalid max_tokens
-    let invalid_zero = ComplianceValidator::validate_chat_completion_request(
-        "llama-7b",
-        Some(0),
-        None,
-        None,
-    );
+    let invalid_zero =
+        ComplianceValidator::validate_chat_completion_request("llama-7b", Some(0), None, None);
     assert!(!invalid_zero.is_valid);
 
     let invalid_over = ComplianceValidator::validate_chat_completion_request(
@@ -148,12 +149,8 @@ fn test_chat_completions_max_tokens_validation() {
 
 #[test]
 fn test_chat_completions_model_validation() {
-    let invalid = ComplianceValidator::validate_chat_completion_request(
-        "",
-        Some(100),
-        Some(0.7),
-        None,
-    );
+    let invalid =
+        ComplianceValidator::validate_chat_completion_request("", Some(100), Some(0.7), None);
     assert!(!invalid.is_valid);
     assert!(invalid.errors.iter().any(|e| e.contains("model")));
 }
@@ -249,10 +246,8 @@ fn test_embeddings_multiple_inputs() {
 #[test]
 fn test_embeddings_input_too_long() {
     let long_input = "a".repeat(8_001);
-    let invalid = ComplianceValidator::validate_embeddings_request(
-        "text-embedding-ada-002",
-        &long_input,
-    );
+    let invalid =
+        ComplianceValidator::validate_embeddings_request("text-embedding-ada-002", &long_input);
     assert!(!invalid.is_valid);
     assert!(invalid.errors.iter().any(|e| e.contains("length")));
 }
@@ -266,10 +261,8 @@ fn test_embeddings_empty_input() {
 #[test]
 fn test_embeddings_at_boundary() {
     let boundary_input = "a".repeat(8_000);
-    let valid = ComplianceValidator::validate_embeddings_request(
-        "text-embedding-ada-002",
-        &boundary_input,
-    );
+    let valid =
+        ComplianceValidator::validate_embeddings_request("text-embedding-ada-002", &boundary_input);
     assert!(valid.is_valid);
 }
 
@@ -716,10 +709,10 @@ fn test_concurrent_flow_control() {
 #[test]
 fn test_invalid_chat_all_parameters() {
     let validation = ComplianceValidator::validate_chat_completion_request(
-        "",       // Empty model
-        Some(0),  // Invalid tokens
+        "",         // Empty model
+        Some(0),    // Invalid tokens
         Some(-1.0), // Invalid temperature
-        Some(1.5), // Invalid top_p
+        Some(1.5),  // Invalid top_p
     );
 
     assert!(!validation.is_valid);

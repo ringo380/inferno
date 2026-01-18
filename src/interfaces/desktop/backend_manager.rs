@@ -118,7 +118,10 @@ impl BackendManager {
     }
 
     /// Create BackendManager with custom models directory
-    pub async fn with_models_dir(activity_logger: Arc<ActivityLogger>, models_dir: PathBuf) -> Result<Self> {
+    pub async fn with_models_dir(
+        activity_logger: Arc<ActivityLogger>,
+        models_dir: PathBuf,
+    ) -> Result<Self> {
         let model_manager = ModelManager::new(&models_dir);
 
         Ok(Self {
@@ -480,7 +483,8 @@ impl BackendManager {
                 let current_avg = metrics.average_latency;
                 let count = metrics.inference_count as f64;
                 if count > 0.0 {
-                    metrics.average_latency = ((current_avg * (count - 1.0)) + latency_ms as f64) / count;
+                    metrics.average_latency =
+                        ((current_avg * (count - 1.0)) + latency_ms as f64) / count;
                 }
             }
             ActivityStatus::Error => {

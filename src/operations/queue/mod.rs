@@ -6,18 +6,23 @@
 //! - Dynamic worker pool allocation
 //! - Intelligent load balancing
 
-pub mod priority_queue;
+pub mod assignment;
 pub mod fair_scheduler;
 pub mod metrics;
-pub mod worker_pool;
-pub mod assignment;
 pub mod persistence;
+pub mod priority_queue;
+pub mod worker_pool;
 
-pub use priority_queue::{Priority, PriorityQueue, RequestMetadata, QueueStats};
-pub use fair_scheduler::{FairScheduler, FairnessMetrics, FairnessStats};
-pub use metrics::{QueueMetricsCollector, QueueMetricsSnapshot, PriorityMetrics, RequestMetrics};
-pub use worker_pool::{
-    WorkerPool, WorkerPoolConfig, WorkerPoolRegistry, WorkerPoolStats, WorkerMetrics, WorkerState,
+pub use assignment::{
+    AssignmentResult, AssignmentStrategy, BackpressureStatus, LoadBalancer, LoadStats, RequestGroup,
 };
-pub use assignment::{LoadBalancer, AssignmentStrategy, BackpressureStatus, RequestGroup, AssignmentResult, LoadStats};
-pub use persistence::{QueuePersistence, PersistenceConfig, QueueStateSnapshot, QueueHealthStatus, HealthStatus, ShutdownCoordinator};
+pub use fair_scheduler::{FairScheduler, FairnessMetrics, FairnessStats};
+pub use metrics::{PriorityMetrics, QueueMetricsCollector, QueueMetricsSnapshot, RequestMetrics};
+pub use persistence::{
+    HealthStatus, PersistenceConfig, QueueHealthStatus, QueuePersistence, QueueStateSnapshot,
+    ShutdownCoordinator,
+};
+pub use priority_queue::{Priority, PriorityQueue, QueueStats, RequestMetadata};
+pub use worker_pool::{
+    WorkerMetrics, WorkerPool, WorkerPoolConfig, WorkerPoolRegistry, WorkerPoolStats, WorkerState,
+};

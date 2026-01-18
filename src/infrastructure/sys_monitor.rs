@@ -81,7 +81,8 @@ impl SystemState {
     /// Check if system is in a critical state
     pub fn is_critical(&self) -> bool {
         self.thermal_state == ThermalState::Critical
-            || (self.power_state == PowerState::Battery && self.battery_percent.map_or(false, |p| p < 10.0))
+            || (self.power_state == PowerState::Battery
+                && self.battery_percent.map_or(false, |p| p < 10.0))
     }
 }
 
@@ -122,10 +123,10 @@ impl PerformanceProfile {
     /// Get GPU layer recommendation (0 = CPU only, 999 = max GPU)
     pub fn gpu_layers(&self) -> u32 {
         match self {
-            Self::Performance => 999,    // All layers on GPU
-            Self::Balanced => 500,       // Half on GPU
+            Self::Performance => 999,     // All layers on GPU
+            Self::Balanced => 500,        // Half on GPU
             Self::EnergyEfficient => 200, // Minimal GPU
-            Self::PowerSaver => 0,       // CPU only
+            Self::PowerSaver => 0,        // CPU only
         }
     }
 
@@ -142,8 +143,8 @@ impl PerformanceProfile {
     /// Get max tokens per second (rate limiting)
     pub fn max_tokens_per_sec(&self) -> u32 {
         match self {
-            Self::Performance => 0,     // Unlimited
-            Self::Balanced => 100,      // 100 tok/s
+            Self::Performance => 0,      // Unlimited
+            Self::Balanced => 100,       // 100 tok/s
             Self::EnergyEfficient => 50, // 50 tok/s
             Self::PowerSaver => 20,      // 20 tok/s
         }
@@ -206,10 +207,7 @@ impl SystemMonitor {
         };
 
         // Get battery info on macOS
-        if let Ok(output) = Command::new("pmset")
-            .args(&["-g", "batt"])
-            .output()
-        {
+        if let Ok(output) = Command::new("pmset").args(&["-g", "batt"]).output() {
             let batt_info = String::from_utf8_lossy(&output.stdout);
 
             // Check if on battery
@@ -245,10 +243,7 @@ impl SystemMonitor {
         }
 
         // Get CPU and memory load
-        if let Ok(output) = Command::new("top")
-            .args(&["-l", "1", "-n", "0"])
-            .output()
-        {
+        if let Ok(output) = Command::new("top").args(&["-l", "1", "-n", "0"]).output() {
             let top_output = String::from_utf8_lossy(&output.stdout);
 
             // Parse CPU usage
@@ -420,10 +415,14 @@ mod tests {
         }
 
         // Check ordering: performance > energy efficiency
-        assert!(PerformanceProfile::Performance.batch_size()
-            > PerformanceProfile::PowerSaver.batch_size());
-        assert!(PerformanceProfile::Performance.gpu_layers()
-            > PerformanceProfile::PowerSaver.gpu_layers());
+        assert!(
+            PerformanceProfile::Performance.batch_size()
+                > PerformanceProfile::PowerSaver.batch_size()
+        );
+        assert!(
+            PerformanceProfile::Performance.gpu_layers()
+                > PerformanceProfile::PowerSaver.gpu_layers()
+        );
     }
 
     #[test]

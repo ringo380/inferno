@@ -79,8 +79,10 @@ impl StreamFlowControl {
         let pending = self.pending_messages.load(Ordering::Relaxed);
         let max = self.config.max_pending_messages;
 
-        let critical_threshold = (max as f32 * self.config.critical_threshold_percent as f32 / 100.0) as u32;
-        let moderate_threshold = (max as f32 * self.config.moderate_threshold_percent as f32 / 100.0) as u32;
+        let critical_threshold =
+            (max as f32 * self.config.critical_threshold_percent as f32 / 100.0) as u32;
+        let moderate_threshold =
+            (max as f32 * self.config.moderate_threshold_percent as f32 / 100.0) as u32;
 
         if pending >= critical_threshold {
             BackpressureLevel::Critical
@@ -122,7 +124,10 @@ impl StreamFlowControl {
 
     /// Acknowledge received tokens
     pub fn ack_tokens(&self, count: u32) {
-        self.unacked_tokens.fetch_sub(count.min(self.unacked_tokens.load(Ordering::Relaxed)), Ordering::SeqCst);
+        self.unacked_tokens.fetch_sub(
+            count.min(self.unacked_tokens.load(Ordering::Relaxed)),
+            Ordering::SeqCst,
+        );
 
         if let Ok(mut last_ack) = self.last_ack_timestamp.lock() {
             *last_ack = Instant::now();

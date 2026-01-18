@@ -2,7 +2,7 @@
 /target/
 dashboard/src-tauri/target/
 **/target/
-Cargo.lock
+# Note: Cargo.lock is committed for reproducible builds (binary application)
 **/*.rs.bk
 *.pdb
 

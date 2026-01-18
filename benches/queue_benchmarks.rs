@@ -1,8 +1,7 @@
 /// Queue Performance Benchmarks for Phase 4A
 ///
 /// This benchmark suite measures queue performance under various load conditions
-
-use criterion::{criterion_group, criterion_main, Criterion, BenchmarkId};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use inferno::operations::queue::*;
 
 fn benchmark_priority_queue(c: &mut Criterion) {
