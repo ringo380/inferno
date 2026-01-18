@@ -1,6 +1,6 @@
 # Build artifacts
 target/
-Cargo.lock
+# Note: Cargo.lock is NOT ignored - it's committed for reproducible builds
 
 # Version control
 .git
