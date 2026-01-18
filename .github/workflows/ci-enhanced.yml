@@ -21,7 +21,7 @@ jobs:
   quick-checks:
     name: Quick Checks
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15  # Increased for cold cache compilation with all features
     outputs:
       rust-version: ${{ steps.rust-version.outputs.version }}
       cache-key: ${{ steps.cache-key.outputs.key }}
@@ -44,6 +44,18 @@ jobs:
     - name: Generate cache key
       id: cache-key
       run: echo "key=${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}" >> $GITHUB_OUTPUT
+
+    - name: Cache dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-cargo-quick-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-cargo-quick-
+          ${{ runner.os }}-cargo-
 
     - name: Check formatting
       run: cargo fmt --all -- --check
