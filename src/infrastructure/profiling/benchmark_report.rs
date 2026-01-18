@@ -272,12 +272,10 @@ impl HTMLReportGenerator {
     }
 
     fn format_timestamp(timestamp: u64) -> String {
-        use std::time::{SystemTime, UNIX_EPOCH};
+        use std::time::SystemTime;
 
-        if let Ok(duration) = SystemTime::UNIX_EPOCH.checked_add(std::time::Duration::from_secs(timestamp)) {
-            if let Ok(systime) = duration.elapsed() {
-                return format!("{:?}", duration);
-            }
+        if let Some(time) = SystemTime::UNIX_EPOCH.checked_add(std::time::Duration::from_secs(timestamp)) {
+            return format!("{:?}", time);
         }
 
         "Unknown".to_string()
