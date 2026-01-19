@@ -493,6 +493,7 @@ mod tests {
             BatchOutputFormat::JsonLines,
             512,
             0.7,
+            40,
             0.9,
             4,
             300,
@@ -526,6 +527,7 @@ mod tests {
             BatchOutputFormat::JsonLines,
             512,
             3.0, // Invalid temperature
+            40,
             0.9,
             4,
             300,
@@ -559,6 +561,7 @@ mod tests {
             BatchOutputFormat::JsonLines,
             512,
             0.7,
+            40,
             0.9,
             0, // Invalid concurrency
             300,
@@ -592,6 +595,7 @@ mod tests {
             BatchOutputFormat::JsonLines,
             512,
             0.7,
+            40,
             0.9,
             200, // Excessive concurrency
             300,
@@ -625,6 +629,7 @@ mod tests {
             BatchOutputFormat::JsonLines,
             0, // Invalid max_tokens
             0.7,
+            40,
             0.9,
             4,
             300,

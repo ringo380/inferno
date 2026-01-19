@@ -118,7 +118,7 @@ pub struct PerformanceGaugeResponse {
 }
 
 /// Gauge status indicators
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum GaugeStatus {
     Excellent,
     Good,

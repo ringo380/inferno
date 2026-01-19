@@ -295,17 +295,17 @@ mod tests {
     #[test]
     fn test_greedy_sampling() {
         let candidates = vec![
-            LlamaTokenData {
+            TokenCandidate {
                 id: 1,
                 logit: 0.1,
                 p: 0.1,
             },
-            LlamaTokenData {
+            TokenCandidate {
                 id: 2,
                 logit: 0.5,
                 p: 0.5,
             },
-            LlamaTokenData {
+            TokenCandidate {
                 id: 3,
                 logit: 0.3,
                 p: 0.3,
@@ -319,22 +319,22 @@ mod tests {
     #[test]
     fn test_top_k_filtering() {
         let mut candidates = vec![
-            LlamaTokenData {
+            TokenCandidate {
                 id: 1,
                 logit: 0.1,
                 p: 0.1,
             },
-            LlamaTokenData {
+            TokenCandidate {
                 id: 2,
                 logit: 0.5,
                 p: 0.5,
             },
-            LlamaTokenData {
+            TokenCandidate {
                 id: 3,
                 logit: 0.3,
                 p: 0.3,
             },
-            LlamaTokenData {
+            TokenCandidate {
                 id: 4,
                 logit: 0.05,
                 p: 0.05,
@@ -350,22 +350,22 @@ mod tests {
     #[test]
     fn test_top_p_filtering() {
         let mut candidates = vec![
-            LlamaTokenData {
+            TokenCandidate {
                 id: 1,
                 logit: 0.0,
                 p: 0.5,
             },
-            LlamaTokenData {
+            TokenCandidate {
                 id: 2,
                 logit: 0.0,
                 p: 0.3,
             },
-            LlamaTokenData {
+            TokenCandidate {
                 id: 3,
                 logit: 0.0,
                 p: 0.15,
             },
-            LlamaTokenData {
+            TokenCandidate {
                 id: 4,
                 logit: 0.0,
                 p: 0.05,
@@ -390,7 +390,7 @@ mod tests {
 
         let mut sampler = Sampler::new(config);
 
-        let candidates = vec![LlamaTokenData {
+        let candidates = vec![TokenCandidate {
             id: 5,
             logit: 0.8,
             p: 0.8,
@@ -404,12 +404,12 @@ mod tests {
     #[test]
     fn test_temperature_scaling() {
         let mut candidates = vec![
-            LlamaTokenData {
+            TokenCandidate {
                 id: 1,
                 logit: 2.0,
                 p: 0.1,
             },
-            LlamaTokenData {
+            TokenCandidate {
                 id: 2,
                 logit: 1.0,
                 p: 0.5,

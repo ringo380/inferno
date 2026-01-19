@@ -200,7 +200,7 @@ gpu-vulkan = []
 gpu-directml = []
 cuda = []      # NVIDIA CUDA support
 rocm = []      # AMD ROCm support
-pytorch = []  # Enable PyTorch support - temporarily disabled (deps commented out)
+# pytorch = []  # DISABLED: PyTorch support - tch dependency removed, feature breaks --all-features
 desktop = [  # Tauri v2 desktop app with full features
     "tauri",
     "tauri-plugin-dialog",

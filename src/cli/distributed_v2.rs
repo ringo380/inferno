@@ -628,6 +628,7 @@ mod tests {
             false,
             100,
             0.7,
+            40,
         );
         let ctx = CommandContext::new(config);
 
@@ -645,6 +646,7 @@ mod tests {
             false,
             100,
             3.0,
+            40,
         );
         let ctx = CommandContext::new(config);
 
