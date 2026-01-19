@@ -17,6 +17,10 @@ exclude = [
     "*.log"
 ]
 
+[lib]
+name = "inferno"
+path = "src/lib.rs"
+
 [[bin]]
 name = "inferno"
 path = "src/main.rs"
