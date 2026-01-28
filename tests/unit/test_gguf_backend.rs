@@ -55,6 +55,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         max_tokens: 50,
         temperature: 0.7,
         top_p: 0.9,
+        top_k: 40,
         stream: false,
         stop_sequences: vec![],
         seed: None,

@@ -100,6 +100,7 @@ mod perf_test_utils {
                 temperature: 0.7,
                 top_p: 0.9,
                 stream: false,
+                ..Default::default()
             },
             model_name: model_name.to_string(),
             batch_config: BatchConfig {
@@ -312,6 +313,7 @@ async fn test_backend_performance_stress() -> Result<()> {
                     temperature: 0.7,
                     top_p: 0.9,
                     stream: false,
+                    ..Default::default()
                 };
 
                 let input = format!("Performance test request {} from thread {}", j, i);

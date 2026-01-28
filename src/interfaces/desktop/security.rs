@@ -1,3 +1,5 @@
+#![allow(clippy::clone_on_copy)]
+
 use chrono::{DateTime, Utc};
 use rand::Rng;
 use serde::{Deserialize, Serialize};

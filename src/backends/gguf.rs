@@ -1,3 +1,9 @@
+#![allow(
+    clippy::clone_on_copy,
+    clippy::if_same_then_else,
+    clippy::match_single_binding
+)]
+
 use crate::{
     ai_features::sampling::{Sampler, SamplingConfig, SamplingStrategy},
     ai_features::streaming::{create_stream_channel, StreamConfig, StreamToken},

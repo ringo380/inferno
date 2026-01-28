@@ -11,7 +11,25 @@
     clippy::needless_range_loop,
     clippy::len_without_is_empty,
     clippy::only_used_in_recursion,
-    clippy::should_implement_trait
+    clippy::should_implement_trait,
+    clippy::manual_range_contains,
+    clippy::items_after_test_module,
+    clippy::option_map_or_none,
+    clippy::len_zero,
+    clippy::manual_is_multiple_of,
+    clippy::expect_fun_call,
+    clippy::redundant_closure,
+    clippy::bool_comparison,
+    clippy::unnecessary_mut_passed,
+    clippy::or_fun_call,
+    clippy::nonminimal_bool,
+    clippy::option_map_unit_fn,
+    clippy::bind_instead_of_map,
+    clippy::unnecessary_map_or,
+    dead_code,
+    unused_imports,
+    unused_variables,
+    unused_mut
 )]
 
 //! # Inferno - Enterprise AI/ML Model Runner

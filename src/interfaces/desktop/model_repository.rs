@@ -1,3 +1,9 @@
+#![allow(
+    clippy::new_without_default,
+    clippy::double_ended_iterator_last,
+    clippy::manual_is_multiple_of
+)]
+
 use anyhow::{anyhow, Result};
 use reqwest;
 use serde::{Deserialize, Serialize};

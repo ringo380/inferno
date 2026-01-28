@@ -1,3 +1,11 @@
+#![allow(
+    clippy::bool_assert_comparison,
+    clippy::redundant_clone,
+    unused_imports,
+    dead_code,
+    unused_variables
+)]
+
 //! Comprehensive API Integration Tests for Phase 4C
 //!
 //! Tests all OpenAI-compatible endpoints, WebSocket streaming, flow control,

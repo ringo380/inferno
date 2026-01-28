@@ -354,6 +354,7 @@ impl DataFixtures {
             max_tokens: 100,
             temperature: 0.7,
             top_p: 0.9,
+            top_k: 40,
             stream: false,
             stop_sequences: vec![],
             seed: None,

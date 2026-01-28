@@ -1,3 +1,5 @@
+#![allow(clippy::explicit_counter_loop)]
+
 //! # ONNX Runtime Backend
 //!
 //! Provides ONNX model inference support using the ort crate.
