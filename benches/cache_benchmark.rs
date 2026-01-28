@@ -1,3 +1,5 @@
+#![allow(unused_imports, dead_code)]
+
 // Cache benchmarks temporarily disabled due to dependency refactoring
 // Will be re-enabled once cache system is stabilized
 

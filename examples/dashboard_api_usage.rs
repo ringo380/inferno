@@ -1,3 +1,13 @@
+#![allow(
+    clippy::single_component_path_imports,
+    clippy::println_empty_string,
+    clippy::redundant_pattern_matching,
+    clippy::useless_vec,
+    clippy::needless_borrows_for_generic_args,
+    dead_code,
+    unused_variables
+)]
+
 //! Dashboard API Usage Examples
 //!
 //! This example demonstrates how to interact with the Inferno Dashboard API endpoints

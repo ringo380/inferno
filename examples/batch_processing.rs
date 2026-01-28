@@ -1,3 +1,12 @@
+#![allow(
+    clippy::single_component_path_imports,
+    clippy::println_empty_string,
+    clippy::redundant_pattern_matching,
+    clippy::useless_vec,
+    dead_code,
+    unused_variables
+)]
+
 use inferno::io::json;
 use serde_json::json;
 use std::path::Path;
