@@ -2871,7 +2871,7 @@ dependencies = [
 
 [[package]]
 name = "inferno-ai"
-version = "0.7.0"
+version = "0.8.1"
 dependencies = [
  "aes-gcm",
  "anyhow",
@@ -2903,6 +2903,7 @@ dependencies = [
  "indicatif",
  "jsonwebtoken",
  "lettre",
+ "libc",
  "llama-cpp-2",
  "memmap2",
  "native-tls",
