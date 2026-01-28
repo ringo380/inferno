@@ -1,4 +1,10 @@
 #![allow(dead_code, unused_imports, unused_variables)]
+//! Advanced Monitoring Command
+//!
+//! This module provides advanced monitoring and APM features with Prometheus integration.
+//! Supports comprehensive monitoring system management including Prometheus, Alertmanager,
+//! Grafana dashboards, targets, alerts, and data retention.
+
 use crate::{advanced_monitoring::AdvancedMonitoringSystem, config::Config};
 use anyhow::Result;
 use clap::{Args, Subcommand};
@@ -917,6 +923,202 @@ impl std::str::FromStr for CleanupType {
     }
 }
 
+// ============================================================================
+// Validation Functions
+// ============================================================================
+
+/// Validates the start command arguments
+fn validate_start_args(metrics_port: Option<u16>, dashboard_port: Option<u16>) -> Result<()> {
+    if let Some(port) = metrics_port {
+        if port == 0 {
+            anyhow::bail!("Metrics port must be greater than 0");
+        }
+    }
+    if let Some(port) = dashboard_port {
+        if port == 0 {
+            anyhow::bail!("Dashboard port must be greater than 0");
+        }
+    }
+    if let (Some(mp), Some(dp)) = (metrics_port, dashboard_port) {
+        if mp == dp {
+            anyhow::bail!("Metrics port and dashboard port must be different");
+        }
+    }
+    Ok(())
+}
+
+/// Validates alert action and required fields
+fn validate_alert_action(
+    action: &str,
+    name: &Option<String>,
+    severity: &Option<String>,
+) -> Result<()> {
+    let valid_actions = [
+        "list", "add", "remove", "silence", "rules", "test", "active", "history", "ack",
+    ];
+    if !valid_actions
+        .iter()
+        .any(|&a| action.eq_ignore_ascii_case(a))
+    {
+        anyhow::bail!(
+            "Invalid alert action '{}'. Must be one of: {}",
+            action,
+            valid_actions.join(", ")
+        );
+    }
+
+    // Actions that require a name
+    let name_required_actions = ["add", "remove", "silence", "test", "ack"];
+    if name_required_actions
+        .iter()
+        .any(|&a| action.eq_ignore_ascii_case(a))
+        && name.is_none()
+    {
+        anyhow::bail!("Alert name is required for '{}' action", action);
+    }
+
+    // Validate severity if provided
+    if let Some(ref sev) = severity {
+        let valid_severities = ["critical", "warning", "info", "error"];
+        if !valid_severities
+            .iter()
+            .any(|&s| sev.eq_ignore_ascii_case(s))
+        {
+            anyhow::bail!(
+                "Invalid severity '{}'. Must be one of: {}",
+                sev,
+                valid_severities.join(", ")
+            );
+        }
+    }
+
+    Ok(())
+}
+
+/// Validates target action and required fields
+fn validate_target_action(action: &str, address: &Option<String>) -> Result<()> {
+    let valid_actions = [
+        "list", "add", "remove", "update", "test", "discover", "health",
+    ];
+    if !valid_actions
+        .iter()
+        .any(|&a| action.eq_ignore_ascii_case(a))
+    {
+        anyhow::bail!(
+            "Invalid target action '{}'. Must be one of: {}",
+            action,
+            valid_actions.join(", ")
+        );
+    }
+
+    // Actions that require an address/target
+    let address_required_actions = ["add", "remove", "update", "test", "health"];
+    if address_required_actions
+        .iter()
+        .any(|&a| action.eq_ignore_ascii_case(a))
+        && address.is_none()
+    {
+        anyhow::bail!("Target address is required for '{}' action", action);
+    }
+
+    Ok(())
+}
+
+/// Validates time range format
+fn validate_time_range(time_range: &str) -> Result<()> {
+    let valid_ranges = ["1h", "6h", "12h", "24h", "7d", "30d", "90d", "1y"];
+    // Also allow custom formats like "2h", "3d", etc.
+    let is_custom_valid = time_range.len() >= 2
+        && time_range
+            .chars()
+            .take(time_range.len() - 1)
+            .all(|c| c.is_ascii_digit())
+        && matches!(
+            time_range.chars().last(),
+            Some('h') | Some('d') | Some('m') | Some('y')
+        );
+
+    if !valid_ranges.contains(&time_range) && !is_custom_valid {
+        anyhow::bail!(
+            "Invalid time range '{}'. Use format like '1h', '24h', '7d', or '30d'",
+            time_range
+        );
+    }
+    Ok(())
+}
+
+/// Validates PromQL query syntax (basic validation)
+fn validate_promql_query(query: &str) -> Result<()> {
+    if query.trim().is_empty() {
+        anyhow::bail!("PromQL query cannot be empty");
+    }
+    // Basic bracket matching validation
+    let open_parens = query.chars().filter(|&c| c == '(').count();
+    let close_parens = query.chars().filter(|&c| c == ')').count();
+    if open_parens != close_parens {
+        anyhow::bail!("PromQL query has mismatched parentheses");
+    }
+    let open_brackets = query.chars().filter(|&c| c == '[').count();
+    let close_brackets = query.chars().filter(|&c| c == ']').count();
+    if open_brackets != close_brackets {
+        anyhow::bail!("PromQL query has mismatched brackets");
+    }
+    let open_braces = query.chars().filter(|&c| c == '{').count();
+    let close_braces = query.chars().filter(|&c| c == '}').count();
+    if open_braces != close_braces {
+        anyhow::bail!("PromQL query has mismatched braces");
+    }
+    Ok(())
+}
+
+/// Validates dashboard source (file path or URL)
+fn validate_dashboard_source(source: &str) -> Result<()> {
+    if source.trim().is_empty() {
+        anyhow::bail!("Dashboard source cannot be empty");
+    }
+    // Check if it's a URL or file path
+    if source.starts_with("http://") || source.starts_with("https://") {
+        // Basic URL validation - allow localhost without dot
+        let url_part = source
+            .trim_start_matches("http://")
+            .trim_start_matches("https://");
+        if !source.contains('.') && !url_part.starts_with("localhost") {
+            anyhow::bail!("Invalid URL format: {}", source);
+        }
+    } else {
+        // File path - check extension
+        let path = std::path::Path::new(source);
+        if let Some(ext) = path.extension() {
+            let ext_str = ext.to_string_lossy().to_lowercase();
+            if !["json", "yaml", "yml"].contains(&ext_str.as_str()) {
+                anyhow::bail!("Dashboard file must be JSON or YAML format");
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Validates retention duration format
+fn validate_retention_duration(duration: &str) -> Result<()> {
+    let is_valid = duration.len() >= 2
+        && duration
+            .chars()
+            .take(duration.len() - 1)
+            .all(|c| c.is_ascii_digit())
+        && matches!(
+            duration.chars().last(),
+            Some('h') | Some('d') | Some('w') | Some('m') | Some('y')
+        );
+
+    if !is_valid {
+        anyhow::bail!(
+            "Invalid retention duration '{}'. Use format like '7d', '4w', '3m', or '1y'",
+            duration
+        );
+    }
+    Ok(())
+}
+
 pub async fn execute(args: AdvancedMonitoringArgs, config: &Config) -> Result<()> {
     match args.command {
         AdvancedMonitoringCommand::Start {
@@ -993,6 +1195,9 @@ async fn handle_start_command(
     dashboard_port: Option<u16>,
     debug: bool,
 ) -> Result<()> {
+    // Validate port configuration
+    validate_start_args(metrics_port, dashboard_port)?;
+
     info!("Starting advanced monitoring system");
 
     // Load configuration with overrides
@@ -1221,6 +1426,9 @@ async fn handle_prometheus_command(config: &Config, action: PrometheusAction) ->
             timeout,
             format,
         } => {
+            // Validate PromQL query
+            validate_promql_query(&query)?;
+
             let monitoring_system =
                 AdvancedMonitoringSystem::new(config.monitoring.clone().into())?;
 
@@ -1248,6 +1456,9 @@ async fn handle_prometheus_command(config: &Config, action: PrometheusAction) ->
             step,
             format,
         } => {
+            // Validate PromQL query
+            validate_promql_query(&query)?;
+
             let monitoring_system =
                 AdvancedMonitoringSystem::new(config.monitoring.clone().into())?;
 
@@ -1495,6 +1706,9 @@ async fn handle_dashboard_command(config: &Config, action: DashboardAction) -> R
             folder,
             overwrite,
         } => {
+            // Validate dashboard source
+            validate_dashboard_source(&source)?;
+
             let monitoring_system =
                 AdvancedMonitoringSystem::new(config.monitoring.clone().into())?;
 
@@ -2119,6 +2333,17 @@ async fn handle_retention_command(config: &Config, action: RetentionAction) -> R
             logs,
             auto_cleanup,
         } => {
+            // Validate retention durations if provided
+            if let Some(ref m) = metrics {
+                validate_retention_duration(m)?;
+            }
+            if let Some(ref a) = alerts {
+                validate_retention_duration(a)?;
+            }
+            if let Some(ref l) = logs {
+                validate_retention_duration(l)?;
+            }
+
             let monitoring_system =
                 AdvancedMonitoringSystem::new(config.monitoring.clone().into())?;
 
@@ -2569,4 +2794,373 @@ async fn handle_silence_action(config: &Config, action: SilenceAction) -> Result
     }
 
     Ok(())
+}
+
+// ============================================================================
+// Unit Tests
+// ============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // -------------------------------------------------------------------------
+    // Start Command Validation Tests
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_validate_start_args_zero_metrics_port() {
+        let result = validate_start_args(Some(0), Some(3001));
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("Metrics port must be greater than 0"));
+    }
+
+    #[test]
+    fn test_validate_start_args_zero_dashboard_port() {
+        let result = validate_start_args(Some(3000), Some(0));
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("Dashboard port must be greater than 0"));
+    }
+
+    #[test]
+    fn test_validate_start_args_same_ports() {
+        let result = validate_start_args(Some(3000), Some(3000));
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("must be different"));
+    }
+
+    #[test]
+    fn test_validate_start_args_valid_ports() {
+        let result = validate_start_args(Some(9090), Some(3000));
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_start_args_none_ports() {
+        let result = validate_start_args(None, None);
+        assert!(result.is_ok());
+    }
+
+    // -------------------------------------------------------------------------
+    // Alert Action Validation Tests
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_validate_alert_action_invalid() {
+        let result = validate_alert_action("invalid", &None, &None);
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("Invalid alert action"));
+        assert!(err.contains("Must be one of"));
+    }
+
+    #[test]
+    fn test_validate_alert_action_missing_name_for_add() {
+        let result = validate_alert_action("add", &None, &None);
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("Alert name is required"));
+    }
+
+    #[test]
+    fn test_validate_alert_action_missing_name_for_remove() {
+        let result = validate_alert_action("remove", &None, &None);
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("Alert name is required"));
+    }
+
+    #[test]
+    fn test_validate_alert_action_invalid_severity() {
+        let result = validate_alert_action("list", &None, &Some("invalid".to_string()));
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("Invalid severity"));
+    }
+
+    #[test]
+    fn test_validate_alert_action_valid_list() {
+        let result = validate_alert_action("list", &None, &None);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_alert_action_valid_add_with_name() {
+        let result = validate_alert_action(
+            "add",
+            &Some("high_cpu".to_string()),
+            &Some("critical".to_string()),
+        );
+        assert!(result.is_ok());
+    }
+
+    // -------------------------------------------------------------------------
+    // Target Action Validation Tests
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_validate_target_action_invalid() {
+        let result = validate_target_action("invalid", &None);
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("Invalid target action"));
+    }
+
+    #[test]
+    fn test_validate_target_action_missing_address() {
+        let result = validate_target_action("add", &None);
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("Target address is required"));
+    }
+
+    #[test]
+    fn test_validate_target_action_valid_list() {
+        let result = validate_target_action("list", &None);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_target_action_valid_add() {
+        let result = validate_target_action("add", &Some("http://localhost:8080".to_string()));
+        assert!(result.is_ok());
+    }
+
+    // -------------------------------------------------------------------------
+    // Time Range Validation Tests
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_validate_time_range_valid_standard() {
+        assert!(validate_time_range("1h").is_ok());
+        assert!(validate_time_range("24h").is_ok());
+        assert!(validate_time_range("7d").is_ok());
+        assert!(validate_time_range("30d").is_ok());
+    }
+
+    #[test]
+    fn test_validate_time_range_valid_custom() {
+        assert!(validate_time_range("2h").is_ok());
+        assert!(validate_time_range("12h").is_ok());
+        assert!(validate_time_range("3d").is_ok());
+        assert!(validate_time_range("14d").is_ok());
+    }
+
+    #[test]
+    fn test_validate_time_range_invalid() {
+        let result = validate_time_range("invalid");
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("Invalid time range"));
+    }
+
+    // -------------------------------------------------------------------------
+    // PromQL Query Validation Tests
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_validate_promql_query_empty() {
+        let result = validate_promql_query("");
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("cannot be empty"));
+    }
+
+    #[test]
+    fn test_validate_promql_query_whitespace_only() {
+        let result = validate_promql_query("   ");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_promql_query_mismatched_parens() {
+        let result = validate_promql_query("sum(rate(http_requests_total[5m])");
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("mismatched parentheses"));
+    }
+
+    #[test]
+    fn test_validate_promql_query_mismatched_brackets() {
+        let result = validate_promql_query("rate(http_requests_total[5m)");
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("mismatched brackets"));
+    }
+
+    #[test]
+    fn test_validate_promql_query_mismatched_braces() {
+        let result = validate_promql_query("http_requests_total{job=\"api\"");
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("mismatched braces"));
+    }
+
+    #[test]
+    fn test_validate_promql_query_valid() {
+        assert!(validate_promql_query("up").is_ok());
+        assert!(validate_promql_query("sum(rate(http_requests_total[5m]))").is_ok());
+        assert!(validate_promql_query("http_requests_total{job=\"api\"}").is_ok());
+    }
+
+    // -------------------------------------------------------------------------
+    // Dashboard Source Validation Tests
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_validate_dashboard_source_empty() {
+        let result = validate_dashboard_source("");
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("cannot be empty"));
+    }
+
+    #[test]
+    fn test_validate_dashboard_source_valid_url() {
+        assert!(validate_dashboard_source("https://grafana.com/dashboards/1234").is_ok());
+        assert!(validate_dashboard_source("http://localhost:3000/dashboard").is_ok());
+    }
+
+    #[test]
+    fn test_validate_dashboard_source_valid_file() {
+        assert!(validate_dashboard_source("/path/to/dashboard.json").is_ok());
+        assert!(validate_dashboard_source("./dashboard.yaml").is_ok());
+        assert!(validate_dashboard_source("dashboard.yml").is_ok());
+    }
+
+    // -------------------------------------------------------------------------
+    // Retention Duration Validation Tests
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_validate_retention_duration_valid() {
+        assert!(validate_retention_duration("7d").is_ok());
+        assert!(validate_retention_duration("4w").is_ok());
+        assert!(validate_retention_duration("3m").is_ok());
+        assert!(validate_retention_duration("1y").is_ok());
+        assert!(validate_retention_duration("24h").is_ok());
+    }
+
+    #[test]
+    fn test_validate_retention_duration_invalid() {
+        let result = validate_retention_duration("invalid");
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("Invalid retention duration"));
+    }
+
+    #[test]
+    fn test_validate_retention_duration_no_number() {
+        let result = validate_retention_duration("d");
+        assert!(result.is_err());
+    }
+
+    // -------------------------------------------------------------------------
+    // Enum FromStr Tests
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_output_format_from_str() {
+        assert!(matches!(
+            "json".parse::<OutputFormat>(),
+            Ok(OutputFormat::Json)
+        ));
+        assert!(matches!(
+            "yaml".parse::<OutputFormat>(),
+            Ok(OutputFormat::Yaml)
+        ));
+        assert!(matches!(
+            "table".parse::<OutputFormat>(),
+            Ok(OutputFormat::Table)
+        ));
+        assert!(matches!(
+            "plain".parse::<OutputFormat>(),
+            Ok(OutputFormat::Plain)
+        ));
+        assert!("invalid".parse::<OutputFormat>().is_err());
+    }
+
+    #[test]
+    fn test_alert_state_from_str() {
+        assert!(matches!(
+            "firing".parse::<AlertState>(),
+            Ok(AlertState::Firing)
+        ));
+        assert!(matches!(
+            "pending".parse::<AlertState>(),
+            Ok(AlertState::Pending)
+        ));
+        assert!(matches!(
+            "inactive".parse::<AlertState>(),
+            Ok(AlertState::Inactive)
+        ));
+        assert!("invalid".parse::<AlertState>().is_err());
+    }
+
+    #[test]
+    fn test_discovery_method_from_str() {
+        assert!(matches!(
+            "kubernetes".parse::<DiscoveryMethod>(),
+            Ok(DiscoveryMethod::Kubernetes)
+        ));
+        assert!(matches!(
+            "k8s".parse::<DiscoveryMethod>(),
+            Ok(DiscoveryMethod::Kubernetes)
+        ));
+        assert!(matches!(
+            "dns".parse::<DiscoveryMethod>(),
+            Ok(DiscoveryMethod::Dns)
+        ));
+        assert!(matches!(
+            "consul".parse::<DiscoveryMethod>(),
+            Ok(DiscoveryMethod::Consul)
+        ));
+        assert!(matches!(
+            "file".parse::<DiscoveryMethod>(),
+            Ok(DiscoveryMethod::File)
+        ));
+        assert!("invalid".parse::<DiscoveryMethod>().is_err());
+    }
+
+    #[test]
+    fn test_export_format_from_str() {
+        assert!(matches!(
+            "json".parse::<ExportFormat>(),
+            Ok(ExportFormat::Json)
+        ));
+        assert!(matches!(
+            "csv".parse::<ExportFormat>(),
+            Ok(ExportFormat::Csv)
+        ));
+        assert!(matches!(
+            "prometheus".parse::<ExportFormat>(),
+            Ok(ExportFormat::Prometheus)
+        ));
+        assert!(matches!(
+            "parquet".parse::<ExportFormat>(),
+            Ok(ExportFormat::Parquet)
+        ));
+        assert!("invalid".parse::<ExportFormat>().is_err());
+    }
+
+    #[test]
+    fn test_cleanup_type_from_str() {
+        assert!(matches!(
+            "metrics".parse::<CleanupType>(),
+            Ok(CleanupType::Metrics)
+        ));
+        assert!(matches!(
+            "alerts".parse::<CleanupType>(),
+            Ok(CleanupType::Alerts)
+        ));
+        assert!(matches!(
+            "logs".parse::<CleanupType>(),
+            Ok(CleanupType::Logs)
+        ));
+        assert!(matches!("all".parse::<CleanupType>(), Ok(CleanupType::All)));
+        assert!("invalid".parse::<CleanupType>().is_err());
+    }
 }

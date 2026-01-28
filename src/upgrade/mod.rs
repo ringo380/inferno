@@ -1,3 +1,4 @@
+#![allow(clippy::ptr_arg, clippy::inherent_to_string)]
 //! # Application Upgrade System
 //!
 //! Provides seamless application upgrades through the user interface with automatic

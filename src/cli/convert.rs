@@ -1,3 +1,4 @@
+#![allow(clippy::ptr_arg)]
 use crate::{
     config::Config,
     conversion::{
@@ -6,10 +7,72 @@ use crate::{
     },
     models::ModelManager,
 };
-use anyhow::Result;
+use anyhow::{bail, Result};
 use clap::{Args, Subcommand, ValueEnum};
 use std::{path::PathBuf, sync::Arc};
 use tracing::warn;
+
+// ============================================================================
+// Pre-execution Validation
+// ============================================================================
+
+/// Validate input model path exists and is a file
+fn validate_input_path(path: &PathBuf) -> Result<()> {
+    if !path.exists() {
+        bail!("Input model does not exist: {}", path.display());
+    }
+    if !path.is_file() {
+        bail!("Input path is not a file: {}", path.display());
+    }
+    Ok(())
+}
+
+/// Validate output directory exists
+fn validate_output_directory(path: &PathBuf) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        if !parent.as_os_str().is_empty() && !parent.exists() {
+            bail!("Output directory does not exist: {}", parent.display());
+        }
+    }
+    Ok(())
+}
+
+/// Validate context length parameter
+fn validate_context_length(context_length: Option<u32>) -> Result<()> {
+    if let Some(ctx_len) = context_length {
+        if ctx_len == 0 {
+            bail!("Context length cannot be 0");
+        }
+        if ctx_len > 32768 {
+            bail!("Context length cannot exceed 32768");
+        }
+    }
+    Ok(())
+}
+
+/// Validate batch size parameter
+fn validate_batch_size(batch_size: Option<u32>) -> Result<()> {
+    if let Some(batch) = batch_size {
+        if batch == 0 {
+            bail!("Batch size cannot be 0");
+        }
+        if batch > 1024 {
+            bail!("Batch size cannot exceed 1024");
+        }
+    }
+    Ok(())
+}
+
+/// Validate input directory exists
+fn validate_input_directory(path: &PathBuf) -> Result<()> {
+    if !path.exists() {
+        bail!("Input directory does not exist: {}", path.display());
+    }
+    if !path.is_dir() {
+        bail!("Input path is not a directory: {}", path.display());
+    }
+    Ok(())
+}
 
 /// Configuration for model conversion operations
 /// Reduces function signature from 11 parameters to 2
@@ -435,6 +498,12 @@ pub async fn execute(args: ConvertArgs, config: &Config) -> Result<()> {
 }
 
 async fn convert_model(converter: &ModelConverter, config: ConvertModelConfig) -> Result<()> {
+    // Pre-execution validation
+    validate_input_path(&config.input)?;
+    validate_output_directory(&config.output)?;
+    validate_context_length(config.context_length)?;
+    validate_batch_size(config.batch_size)?;
+
     println!(
         "Converting model: {} -> {}",
         config.input.display(),
@@ -488,6 +557,10 @@ async fn convert_model(converter: &ModelConverter, config: ConvertModelConfig) -
 }
 
 async fn optimize_model(converter: &ModelConverter, config: OptimizeModelConfig) -> Result<()> {
+    // Pre-execution validation
+    validate_input_path(&config.input)?;
+    validate_output_directory(&config.output)?;
+
     println!(
         "Optimizing model: {} -> {}",
         config.input.display(),
@@ -576,6 +649,10 @@ async fn quantize_model(
     output: PathBuf,
     quantization: QuantizationTypeArg,
 ) -> Result<()> {
+    // Pre-execution validation
+    validate_input_path(&input)?;
+    validate_output_directory(&output)?;
+
     println!(
         "Quantizing model: {} -> {}",
         input.display(),
@@ -628,6 +705,19 @@ async fn batch_convert_models(
     optimization: OptimizationLevelArg,
     quantization: Option<QuantizationTypeArg>,
 ) -> Result<()> {
+    // Pre-execution validation
+    validate_input_directory(&input_dir)?;
+    // Create output directory if it doesn't exist (for batch operations)
+    if !output_dir.exists() {
+        tokio::fs::create_dir_all(&output_dir).await.map_err(|e| {
+            anyhow::anyhow!(
+                "Failed to create output directory '{}': {}",
+                output_dir.display(),
+                e
+            )
+        })?;
+    }
+
     println!(
         "Batch converting models from {} to {}",
         input_dir.display(),
@@ -706,14 +796,13 @@ async fn analyze_model(
     export: Option<PathBuf>,
     export_format: ExportFormat,
 ) -> Result<()> {
-    println!("Analyzing model: {}", path.display());
-
-    if !path.exists() {
-        return Err(anyhow::anyhow!(
-            "Model file does not exist: {}",
-            path.display()
-        ));
+    // Pre-execution validation
+    validate_input_path(&path)?;
+    if let Some(ref export_path) = export {
+        validate_output_directory(export_path)?;
     }
+
+    println!("Analyzing model: {}", path.display());
 
     let model_info = model_manager.resolve_model(&path.to_string_lossy()).await?;
     let validation_result = model_manager
@@ -852,18 +941,20 @@ async fn benchmark_conversion(
     all_optimizations: bool,
     all_quantizations: bool,
 ) -> Result<()> {
+    // Pre-execution validation
+    validate_input_path(&model)?;
+    if iterations == 0 {
+        bail!("Iterations cannot be 0");
+    }
+    if iterations > 100 {
+        bail!("Iterations cannot exceed 100");
+    }
+
     println!(
         "Benchmarking conversion performance for: {}",
         model.display()
     );
     println!("Iterations: {}", iterations);
-
-    if !model.exists() {
-        return Err(anyhow::anyhow!(
-            "Model file does not exist: {}",
-            model.display()
-        ));
-    }
 
     let temp_dir = std::env::temp_dir().join("inferno_benchmark");
     tokio::fs::create_dir_all(&temp_dir).await?;
@@ -991,4 +1082,270 @@ async fn benchmark_conversion(
     println!("\nBenchmark completed!");
 
     Ok(())
+}
+
+// ============================================================================
+// Unit Tests
+// ============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_validate_input_path_nonexistent() {
+        let path = PathBuf::from("/nonexistent/input.gguf");
+        let result = validate_input_path(&path);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("does not exist"));
+    }
+
+    #[test]
+    fn test_validate_input_path_is_directory() {
+        let path = std::env::temp_dir();
+        let result = validate_input_path(&path);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("not a file"));
+    }
+
+    #[test]
+    fn test_validate_input_path_valid_file() {
+        let temp_file = std::env::temp_dir().join("test_convert_validation.txt");
+        std::fs::write(&temp_file, b"test").unwrap();
+
+        let result = validate_input_path(&temp_file);
+        assert!(result.is_ok());
+
+        let _ = std::fs::remove_file(&temp_file);
+    }
+
+    #[test]
+    fn test_validate_output_directory_nonexistent() {
+        let path = PathBuf::from("/nonexistent/directory/output.gguf");
+        let result = validate_output_directory(&path);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Output directory does not exist"));
+    }
+
+    #[test]
+    fn test_validate_output_directory_valid() {
+        let path = std::env::temp_dir().join("output.gguf");
+        let result = validate_output_directory(&path);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_context_length_zero() {
+        let result = validate_context_length(Some(0));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("cannot be 0"));
+    }
+
+    #[test]
+    fn test_validate_context_length_too_large() {
+        let result = validate_context_length(Some(32769));
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("cannot exceed 32768"));
+    }
+
+    #[test]
+    fn test_validate_context_length_valid() {
+        let result = validate_context_length(Some(4096));
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_context_length_none() {
+        let result = validate_context_length(None);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_batch_size_zero() {
+        let result = validate_batch_size(Some(0));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("cannot be 0"));
+    }
+
+    #[test]
+    fn test_validate_batch_size_too_large() {
+        let result = validate_batch_size(Some(1025));
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("cannot exceed 1024"));
+    }
+
+    #[test]
+    fn test_validate_batch_size_valid() {
+        let result = validate_batch_size(Some(512));
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_batch_size_none() {
+        let result = validate_batch_size(None);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_input_directory_nonexistent() {
+        let path = PathBuf::from("/nonexistent/directory");
+        let result = validate_input_directory(&path);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("does not exist"));
+    }
+
+    #[test]
+    fn test_validate_input_directory_is_file() {
+        let temp_file = std::env::temp_dir().join("test_convert_dir_validation.txt");
+        std::fs::write(&temp_file, b"test").unwrap();
+
+        let result = validate_input_directory(&temp_file);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("not a directory"));
+
+        let _ = std::fs::remove_file(&temp_file);
+    }
+
+    #[test]
+    fn test_validate_input_directory_valid() {
+        let path = std::env::temp_dir();
+        let result = validate_input_directory(&path);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_model_format_conversion() {
+        assert!(matches!(
+            ModelFormat::from(ModelFormatArg::Gguf),
+            ModelFormat::Gguf
+        ));
+        assert!(matches!(
+            ModelFormat::from(ModelFormatArg::Onnx),
+            ModelFormat::Onnx
+        ));
+        assert!(matches!(
+            ModelFormat::from(ModelFormatArg::SafeTensors),
+            ModelFormat::SafeTensors
+        ));
+    }
+
+    #[test]
+    fn test_optimization_level_conversion() {
+        assert!(matches!(
+            OptimizationLevel::from(OptimizationLevelArg::None),
+            OptimizationLevel::None
+        ));
+        assert!(matches!(
+            OptimizationLevel::from(OptimizationLevelArg::Basic),
+            OptimizationLevel::Basic
+        ));
+        assert!(matches!(
+            OptimizationLevel::from(OptimizationLevelArg::Balanced),
+            OptimizationLevel::Balanced
+        ));
+    }
+
+    #[test]
+    fn test_quantization_type_conversion() {
+        assert!(matches!(
+            QuantizationType::from(QuantizationTypeArg::Q4_0),
+            QuantizationType::Q4_0
+        ));
+        assert!(matches!(
+            QuantizationType::from(QuantizationTypeArg::Q8_0),
+            QuantizationType::Q8_0
+        ));
+        assert!(matches!(
+            QuantizationType::from(QuantizationTypeArg::F16),
+            QuantizationType::F16
+        ));
+    }
+
+    #[test]
+    fn test_precision_conversion() {
+        assert!(matches!(
+            Precision::from(PrecisionArg::Float32),
+            Precision::Float32
+        ));
+        assert!(matches!(
+            Precision::from(PrecisionArg::Float16),
+            Precision::Float16
+        ));
+        assert!(matches!(
+            Precision::from(PrecisionArg::Mixed),
+            Precision::Mixed
+        ));
+    }
+
+    #[test]
+    fn test_convert_model_config_into_conversion_config() {
+        let config = ConvertModelConfig {
+            input: PathBuf::from("/tmp/input.gguf"),
+            output: PathBuf::from("/tmp/output.onnx"),
+            format: ModelFormatArg::Onnx,
+            optimization: OptimizationLevelArg::Balanced,
+            quantization: Some(QuantizationTypeArg::Q4_0),
+            precision: Some(PrecisionArg::Float16),
+            context_length: Some(4096),
+            batch_size: Some(32),
+            preserve_metadata: true,
+            verify_output: false,
+        };
+
+        let conversion_config = config.into_conversion_config();
+
+        assert!(matches!(conversion_config.output_format, ModelFormat::Onnx));
+        assert!(matches!(
+            conversion_config.optimization_level,
+            OptimizationLevel::Balanced
+        ));
+        assert!(matches!(
+            conversion_config.quantization,
+            Some(QuantizationType::Q4_0)
+        ));
+        assert!(matches!(
+            conversion_config.target_precision,
+            Some(Precision::Float16)
+        ));
+        assert_eq!(conversion_config.context_length, Some(4096));
+        assert_eq!(conversion_config.batch_size, Some(32));
+        assert!(conversion_config.preserve_metadata);
+        assert!(!conversion_config.verify_output);
+    }
+
+    #[test]
+    fn test_optimize_model_config_into_optimization_options() {
+        let config = OptimizeModelConfig {
+            input: PathBuf::from("/tmp/input.gguf"),
+            output: PathBuf::from("/tmp/output.gguf"),
+            remove_unused: true,
+            merge_ops: true,
+            constant_folding: false,
+            dead_code: true,
+            memory_opt: false,
+            inference_opt: true,
+            graph_simplify: false,
+            operator_fusion: true,
+        };
+
+        let options = config.into_optimization_options();
+
+        assert!(options.remove_unused_layers);
+        assert!(options.merge_consecutive_ops);
+        assert!(!options.constant_folding);
+        assert!(options.dead_code_elimination);
+        assert!(!options.memory_optimization);
+        assert!(options.inference_optimization);
+        assert!(!options.graph_simplification);
+        assert!(options.operator_fusion);
+    }
 }

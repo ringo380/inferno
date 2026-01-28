@@ -23,7 +23,7 @@ pub struct ModelInfo {
     pub status: String,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct InferenceParams {
     pub temperature: Option<f32>,
     pub top_k: Option<u32>,
@@ -175,14 +175,19 @@ impl BackendManager {
                 e
             })?;
 
-        // Parse backend type
-        let backend_type = match backend_type_str.to_lowercase().as_str() {
-            "gguf" => BackendType::Gguf,
-            _ => BackendType::Gguf, // Default fallback (ONNX support disabled)
+        // Parse backend type and create appropriate config
+        // On macOS, "metal" requests use GGUF backend with Metal GPU acceleration
+        let (backend_type, backend_config) = match backend_type_str.to_lowercase().as_str() {
+            "gguf" => (BackendType::Gguf, BackendConfig::default()),
+            #[cfg(all(feature = "gpu-metal", target_os = "macos"))]
+            "metal" => (BackendType::Metal, BackendConfig::with_metal_acceleration()),
+            #[cfg(not(all(feature = "gpu-metal", target_os = "macos")))]
+            "metal" => {
+                // On non-macOS, "metal" falls back to GGUF with GPU disabled
+                (BackendType::Gguf, BackendConfig::cpu_only())
+            }
+            _ => (BackendType::Gguf, BackendConfig::default()), // Default fallback
         };
-
-        // Create backend config
-        let backend_config = BackendConfig::default();
 
         // Create and load backend
         let backend_handle =

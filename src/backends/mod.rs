@@ -112,6 +112,31 @@ impl Default for BackendConfig {
     }
 }
 
+impl BackendConfig {
+    /// Create a configuration optimized for Metal GPU acceleration on macOS.
+    ///
+    /// This helper ensures GPU is enabled and uses optimal settings for Apple Silicon.
+    /// On non-macOS platforms, this falls back to CPU-only configuration.
+    pub fn with_metal_acceleration() -> Self {
+        Self {
+            gpu_enabled: true,
+            gpu_device: None, // Auto-detect Metal GPU
+            cpu_threads: None, // Let the backend choose optimal thread count
+            context_size: 4096, // Larger context for Metal (unified memory)
+            batch_size: 64, // Larger batch size for GPU
+            memory_map: true,
+        }
+    }
+
+    /// Create a CPU-only configuration (no GPU acceleration).
+    pub fn cpu_only() -> Self {
+        Self {
+            gpu_enabled: false,
+            ..Default::default()
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InferenceParams {
     pub max_tokens: u32,
@@ -182,8 +207,22 @@ impl Backend {
                 BackendType::Gguf => Box::new(gguf::GgufBackend::new(config.clone())?),
                 #[cfg(feature = "onnx")]
                 BackendType::Onnx => Box::new(onnx::OnnxBackend::new(config.clone())?),
+                // Metal backend type redirects to GGUF with GPU enabled for real Metal acceleration
+                // The standalone metal.rs is deprecated; llama-cpp-2 provides Metal via GGUF backend
                 #[cfg(all(feature = "gpu-metal", target_os = "macos"))]
-                BackendType::Metal => Box::new(metal::MetalBackend::new()?),
+                BackendType::Metal => {
+                    // Use GGUF backend with Metal acceleration enabled
+                    #[cfg(feature = "gguf")]
+                    {
+                        let metal_config = BackendConfig::with_metal_acceleration();
+                        Box::new(gguf::GgufBackend::new(metal_config)?)
+                    }
+                    #[cfg(not(feature = "gguf"))]
+                    {
+                        // Fall back to placeholder Metal backend if GGUF not available
+                        Box::new(metal::MetalBackend::new()?)
+                    }
+                }
             };
 
             return Ok(Self { backend_impl });
@@ -197,9 +236,9 @@ impl Backend {
         {
             let _ = backend_type;
             let _ = config;
-            return Err(anyhow!(
+            Err(anyhow!(
                 "No backend available. Enable 'gguf', 'onnx', or 'gpu-metal' features."
-            ));
+            ))
         }
     }
 

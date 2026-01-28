@@ -177,16 +177,17 @@ impl PartialOrd for QueuedRequest {
 
 impl Ord for QueuedRequest {
     fn cmp(&self, other: &Self) -> Ordering {
-        // First, compare effective priority (higher is better, so reverse for BinaryHeap)
+        // First, compare effective priority (higher priority = greater in Ord = popped first from max-heap)
         let self_priority = self.metadata.effective_priority();
         let other_priority = other.metadata.effective_priority();
 
-        match other_priority.cmp(&self_priority) {
+        match self_priority.cmp(&other_priority) {
             Ordering::Equal => {
-                // If priority is equal, maintain FIFO order (lower sequence is better)
+                // If priority is equal, maintain FIFO order (lower sequence = earlier = should pop first)
+                // Lower sequence should compare as "greater" so it gets popped first
                 other.sequence.cmp(&self.sequence)
             }
-            other_ordering => other_ordering,
+            ordering => ordering,
         }
     }
 }

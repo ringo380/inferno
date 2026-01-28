@@ -82,7 +82,7 @@ impl SystemState {
     pub fn is_critical(&self) -> bool {
         self.thermal_state == ThermalState::Critical
             || (self.power_state == PowerState::Battery
-                && self.battery_percent.map_or(false, |p| p < 10.0))
+                && self.battery_percent.is_some_and(|p| p < 10.0))
     }
 }
 
@@ -207,7 +207,7 @@ impl SystemMonitor {
         };
 
         // Get battery info on macOS
-        if let Ok(output) = Command::new("pmset").args(&["-g", "batt"]).output() {
+        if let Ok(output) = Command::new("pmset").args(["-g", "batt"]).output() {
             let batt_info = String::from_utf8_lossy(&output.stdout);
 
             // Check if on battery
@@ -221,7 +221,7 @@ impl SystemMonitor {
                     if let Some(num_str) = percent_str
                         .split('%')
                         .next()
-                        .and_then(|s| s.trim().split_whitespace().last())
+                        .and_then(|s| s.split_whitespace().last())
                     {
                         if let Ok(percent) = num_str.parse::<f32>() {
                             state.battery_percent = Some(percent);
@@ -243,7 +243,7 @@ impl SystemMonitor {
         }
 
         // Get CPU and memory load
-        if let Ok(output) = Command::new("top").args(&["-l", "1", "-n", "0"]).output() {
+        if let Ok(output) = Command::new("top").args(["-l", "1", "-n", "0"]).output() {
             let top_output = String::from_utf8_lossy(&output.stdout);
 
             // Parse CPU usage

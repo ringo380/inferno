@@ -35,7 +35,7 @@ use super::types::{
 use super::{
     ActivityLog, ActivityStats, ActivityType, ApiKey, AppState, CreateApiKeyRequest,
     CreateApiKeyResponse, DownloadProgress, ExternalModelInfo, InferenceParams, ModelInfo,
-    ModelSearchQuery, ModelSearchResponse, SecurityEvent, SecurityMetrics,
+    ModelSearchQuery, ModelSearchResponse, SecurityEvent, SecurityMetrics, SecurityScanResult,
 };
 
 // ============================================================================
@@ -624,15 +624,143 @@ pub async fn create_batch_job(
 
 #[command]
 pub async fn start_batch_job(job_id: String, state: State<'_, AppState>) -> Result<(), String> {
-    let mut jobs = state.batch_jobs.lock().map_err(|e| e.to_string())?;
+    // Get job details
+    let (model_id, inputs) = {
+        let mut jobs = state.batch_jobs.lock().map_err(|e| e.to_string())?;
 
-    if let Some(job) = jobs.iter_mut().find(|j| j.id == job_id) {
-        job.status = "running".to_string();
-        job.started_at = Some(chrono::Utc::now().to_rfc3339());
+        if let Some(job) = jobs.iter_mut().find(|j| j.id == job_id) {
+            if job.status != "pending" && job.status != "scheduled" {
+                return Err(format!(
+                    "Job {} is not pending (status: {})",
+                    job_id, job.status
+                ));
+            }
+            job.status = "running".to_string();
+            job.started_at = Some(chrono::Utc::now().to_rfc3339());
+            (job.model_id.clone(), job.config.inputs.clone())
+        } else {
+            return Err(format!("Job {} not found", job_id));
+        }
+    };
 
-        // TODO: Implement actual batch job execution
-        // For now, this is a stub that would need backend integration
-    }
+    // Clone Arc references for the spawned task
+    let backend_manager = state.backend_manager.clone();
+    let batch_jobs = state.batch_jobs.clone();
+    let activity_logger = state.activity_logger.clone();
+    let job_id_clone = job_id.clone();
+
+    // Spawn async task to run the batch job
+    tokio::spawn(async move {
+        let total_inputs = inputs.len();
+        let mut completed = 0;
+        let mut failed = 0;
+        let mut outputs = Vec::new();
+        let mut errors = Vec::new();
+        let start_time = std::time::Instant::now();
+
+        // Check if model is loaded
+        let loaded_models = backend_manager.get_loaded_models();
+        if !loaded_models.contains(&model_id) {
+            // Try to load the model (default to GGUF backend)
+            if let Err(e) = backend_manager
+                .load_model(model_id.clone(), "gguf".to_string())
+                .await
+            {
+                let mut jobs = batch_jobs.lock().unwrap();
+                if let Some(job) = jobs.iter_mut().find(|j| j.id == job_id_clone) {
+                    job.status = "failed".to_string();
+                    job.completed_at = Some(chrono::Utc::now().to_rfc3339());
+                }
+                tracing::error!("Failed to load model for batch job: {}", e);
+                return;
+            }
+        }
+
+        // Process each input
+        for (i, input) in inputs.iter().enumerate() {
+            let params = super::InferenceParams::default();
+
+            match backend_manager
+                .infer(model_id.clone(), input.clone(), params)
+                .await
+            {
+                Ok(output) => {
+                    outputs.push(output);
+                    completed += 1;
+                }
+                Err(e) => {
+                    errors.push(format!("Input {}: {}", i, e));
+                    failed += 1;
+                }
+            }
+
+            // Update progress
+            let progress = ((i + 1) as f64 / total_inputs as f64) * 100.0;
+            let mut jobs = batch_jobs.lock().unwrap();
+            if let Some(job) = jobs.iter_mut().find(|j| j.id == job_id_clone) {
+                job.progress = progress;
+                job.completed_tasks = completed;
+                job.failed_tasks = failed;
+            }
+        }
+
+        // Finalize job
+        let elapsed = start_time.elapsed().as_secs_f64();
+        let avg_time = if total_inputs > 0 {
+            elapsed / total_inputs as f64
+        } else {
+            0.0
+        };
+        let throughput = if elapsed > 0.0 {
+            total_inputs as f64 / elapsed
+        } else {
+            0.0
+        };
+
+        let mut jobs = batch_jobs.lock().unwrap();
+        if let Some(job) = jobs.iter_mut().find(|j| j.id == job_id_clone) {
+            job.status = if failed == 0 {
+                "completed"
+            } else {
+                "completed_with_errors"
+            }
+            .to_string();
+            job.completed_at = Some(chrono::Utc::now().to_rfc3339());
+            job.progress = 100.0;
+            job.results = Some(super::types::BatchJobResults {
+                outputs,
+                errors,
+                metrics: super::types::BatchJobMetrics {
+                    total_time: elapsed,
+                    avg_time_per_task: avg_time,
+                    throughput,
+                },
+            });
+        }
+
+        // Log activity
+        activity_logger.log_simple(
+            super::ActivityType::System,
+            "Batch Job Completed".to_string(),
+            format!(
+                "Batch job {} completed: {} succeeded, {} failed",
+                job_id_clone, completed, failed
+            ),
+            if failed == 0 {
+                super::ActivityStatus::Success
+            } else {
+                super::ActivityStatus::Warning
+            },
+        );
+
+        tracing::info!(
+            "Batch job {} completed: {}/{} tasks succeeded in {:.2}s",
+            job_id_clone,
+            completed,
+            total_inputs,
+            elapsed
+        );
+    });
 
     Ok(())
 }
@@ -686,14 +814,133 @@ pub async fn schedule_batch_job(
     schedule: String,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
+    // Validate and parse the cron expression to calculate next run
+    let next_run = parse_cron_schedule(&schedule)?;
+
     let mut jobs = state.batch_jobs.lock().map_err(|e| e.to_string())?;
 
     if let Some(job) = jobs.iter_mut().find(|j| j.id == job_id) {
-        job.schedule = Some(schedule);
-        // TODO: Implement cron-style scheduling
+        job.schedule = Some(schedule.clone());
+        job.next_run = Some(next_run.to_rfc3339());
+        job.status = "scheduled".to_string();
+
+        tracing::info!(
+            "Batch job {} scheduled with '{}', next run: {}",
+            job_id,
+            schedule,
+            next_run
+        );
+    } else {
+        return Err(format!("Job {} not found", job_id));
     }
 
     Ok(())
+}
+
+/// Parse a cron schedule and calculate the next run time
+fn parse_cron_schedule(schedule: &str) -> Result<chrono::DateTime<chrono::Utc>, String> {
+    use chrono::{Datelike, Timelike, Utc};
+
+    let now = Utc::now();
+
+    // Handle special keywords
+    let next = match schedule {
+        "@hourly" => {
+            // Next hour at :00
+            let next_hour = now + chrono::Duration::hours(1);
+            next_hour
+                .with_minute(0)
+                .and_then(|t| t.with_second(0))
+                .unwrap_or(next_hour)
+        }
+        "@daily" | "@midnight" => {
+            // Tomorrow at 00:00
+            let tomorrow = now + chrono::Duration::days(1);
+            tomorrow
+                .with_hour(0)
+                .and_then(|t| t.with_minute(0))
+                .and_then(|t| t.with_second(0))
+                .unwrap_or(tomorrow)
+        }
+        "@weekly" => {
+            // Next Sunday at 00:00
+            let days_until_sunday = (7 - now.weekday().num_days_from_sunday()) % 7;
+            let days_until_sunday = if days_until_sunday == 0 {
+                7
+            } else {
+                days_until_sunday
+            };
+            let next_sunday = now + chrono::Duration::days(days_until_sunday as i64);
+            next_sunday
+                .with_hour(0)
+                .and_then(|t| t.with_minute(0))
+                .and_then(|t| t.with_second(0))
+                .unwrap_or(next_sunday)
+        }
+        "@monthly" => {
+            // First day of next month at 00:00
+            let next_month = if now.month() == 12 {
+                now.with_year(now.year() + 1)
+                    .and_then(|t| t.with_month(1))
+                    .unwrap_or(now)
+            } else {
+                now.with_month(now.month() + 1).unwrap_or(now)
+            };
+            next_month
+                .with_day(1)
+                .and_then(|t| t.with_hour(0))
+                .and_then(|t| t.with_minute(0))
+                .and_then(|t| t.with_second(0))
+                .unwrap_or(next_month)
+        }
+        _ => {
+            // Parse standard cron expression: "minute hour day month weekday"
+            let parts: Vec<&str> = schedule.split_whitespace().collect();
+            if parts.len() != 5 {
+                return Err(format!(
+                    "Invalid cron expression: '{}'. Expected 5 fields (minute hour day month weekday) or keyword (@hourly, @daily, @weekly, @monthly)",
+                    schedule
+                ));
+            }
+
+            // Simple parsing for common patterns
+            // For full cron parsing, we'd use a cron crate, but this covers basic cases
+            let minute: u32 = if parts[0] == "*" {
+                0
+            } else {
+                parts[0]
+                    .parse()
+                    .map_err(|_| format!("Invalid minute: {}", parts[0]))?
+            };
+            let hour: u32 = if parts[1] == "*" {
+                (now.hour() + 1) % 24
+            } else {
+                parts[1]
+                    .parse()
+                    .map_err(|_| format!("Invalid hour: {}", parts[1]))?
+            };
+
+            if minute > 59 || hour > 23 {
+                return Err(format!("Invalid time: {}:{}", hour, minute));
+            }
+
+            // Calculate next occurrence
+            let mut next = now
+                .with_hour(hour)
+                .and_then(|t| t.with_minute(minute))
+                .and_then(|t| t.with_second(0))
+                .unwrap_or(now);
+
+            // If the time is in the past today, move to tomorrow
+            if next <= now {
+                next = next + chrono::Duration::days(1);
+            }
+
+            next
+        }
+    };
+
+    Ok(next)
 }
 
 #[command]
@@ -765,6 +1012,11 @@ pub async fn get_security_metrics(state: State<'_, AppState>) -> Result<Security
         .get_security_metrics()
         .await
         .map_err(|e| e.to_string())
+}
+
+#[command]
+pub async fn run_security_scan(state: State<'_, AppState>) -> Result<SecurityScanResult, String> {
+    state.security_manager.run_security_scan().await
 }
 
 #[command]

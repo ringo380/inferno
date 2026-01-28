@@ -291,7 +291,17 @@ impl UpdateChecker {
 
     /// Parse version string into ApplicationVersion
     fn parse_version_string(&self, version_str: &str) -> Result<ApplicationVersion> {
-        let parts: Vec<&str> = version_str.split('.').collect();
+        // Split on '-' first to separate version from pre-release (e.g., "1.2.3-beta.1")
+        let (version_part, pre_release) = if let Some(dash_pos) = version_str.find('-') {
+            (
+                &version_str[..dash_pos],
+                Some(version_str[dash_pos + 1..].to_string()),
+            )
+        } else {
+            (version_str, None)
+        };
+
+        let parts: Vec<&str> = version_part.split('.').collect();
 
         if parts.len() < 3 {
             return Err(anyhow::anyhow!("Invalid version format: {}", version_str));
@@ -299,16 +309,7 @@ impl UpdateChecker {
 
         let major = parts[0].parse::<u32>()?;
         let minor = parts[1].parse::<u32>()?;
-
-        // Handle patch version with pre-release suffix
-        let patch_part = parts[2];
-        let (patch, pre_release) = if let Some(dash_pos) = patch_part.find('-') {
-            let patch = patch_part[..dash_pos].parse::<u32>()?;
-            let pre_release = Some(patch_part[dash_pos + 1..].to_string());
-            (patch, pre_release)
-        } else {
-            (patch_part.parse::<u32>()?, None)
-        };
+        let patch = parts[2].parse::<u32>()?;
 
         Ok(ApplicationVersion {
             major,

@@ -64,9 +64,7 @@ async fn main() -> Result<()> {
         Commands::Config(args) => inferno::cli::config::handle_config_command(args).await,
         Commands::Cache(args) => inferno::cli::cache::execute(args, &config).await,
         Commands::Convert(args) => inferno::cli::convert::execute(args, &config).await,
-        Commands::ResponseCache(args) => {
-            inferno::cli::response_cache::execute(args, &config).await
-        }
+        Commands::ResponseCache(args) => inferno::cli::response_cache::execute(args, &config).await,
         Commands::Monitor(args) => inferno::cli::monitoring::execute(args, &config).await,
         Commands::Distributed(args) => inferno::cli::distributed::execute(args, &config).await,
         Commands::ABTest(args) => inferno::cli::ab_testing::execute(args, &config).await,
@@ -77,9 +75,7 @@ async fn main() -> Result<()> {
         Commands::Resilience(args) => inferno::cli::resilience::execute(args, &config).await,
         Commands::Streaming(args) => inferno::cli::streaming::execute(args, &config).await,
         Commands::Security(args) => inferno::cli::security::execute(args, &config).await,
-        Commands::Observability(args) => {
-            inferno::cli::observability::execute(args, &config).await
-        }
+        Commands::Observability(args) => inferno::cli::observability::execute(args, &config).await,
         Commands::Optimization(args) => {
             inferno::cli::optimization::execute_optimization_command(args).await
         }
@@ -100,39 +96,21 @@ async fn main() -> Result<()> {
         Commands::Search(args) => inferno::cli::package::handle_search_simple(args).await,
         Commands::List(args) => inferno::cli::package::handle_list_simple(args).await,
         Commands::Repo(args) => inferno::cli::repo::handle_repo_command(args).await,
-        Commands::Federated(args) => {
-            inferno::cli::federated::handle_federated_command(args).await
-        }
-        Commands::Dashboard(args) => {
-            inferno::cli::dashboard::handle_dashboard_command(args).await
-        }
+        Commands::Dashboard(args) => inferno::cli::dashboard::handle_dashboard_command(args).await,
         Commands::AdvancedMonitoring(args) => {
             inferno::cli::advanced_monitoring::execute(args, &config).await
         }
-        Commands::ApiGateway(args) => inferno::cli::api_gateway::execute(args, &config).await,
         Commands::ModelVersioning(args) => {
             inferno::cli::model_versioning::execute(args, &config).await
-        }
-        Commands::DataPipeline(_args) => {
-            println!("Data pipeline command is temporarily disabled due to implementation issues");
-            Ok(())
         }
         Commands::BackupRecovery(args) => {
             inferno::cli::backup_recovery::execute(args, &config).await
         }
-        Commands::LoggingAudit(args) => {
-            inferno::cli::logging_audit::execute(args, &config).await
-        }
+        Commands::LoggingAudit(args) => inferno::cli::logging_audit::execute(args, &config).await,
         Commands::PerformanceOptimization(args) => {
             inferno::cli::performance_optimization::execute(args, &config).await
         }
-        Commands::MultiTenancy(args) => {
-            inferno::cli::multi_tenancy::execute(args, &config).await
-        }
-        Commands::AdvancedCache(args) => {
-            inferno::cli::advanced_cache::execute(args, &config).await
-        }
-        Commands::QAFramework(args) => inferno::cli::qa_framework::execute(args, &config).await,
+        Commands::AdvancedCache(args) => inferno::cli::advanced_cache::execute(args, &config).await,
         Commands::PerformanceBenchmark(args) => {
             inferno::cli::performance_benchmark::execute_performance_benchmark(args).await
         }

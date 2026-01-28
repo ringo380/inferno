@@ -503,7 +503,7 @@ fn test_timeout_manager_token_timeout() {
 
 #[test]
 fn test_timeout_manager_token_recording() {
-    let mut tm = TimeoutManager::new(30, 5);
+    let mut tm = TimeoutManager::new(30, 1);  // 1 second token timeout
 
     assert!(!tm.is_token_timeout());
 

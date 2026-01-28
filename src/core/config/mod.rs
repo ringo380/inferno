@@ -5,7 +5,7 @@
 //! ## Quick Start
 //!
 //! ```no_run
-//! use inferno::core::config::{ConfigBuilder, Preset};
+//! use inferno::core::config::{ConfigBuilder, Preset, LogLevel};
 //!
 //! // Simple configuration
 //! let config = ConfigBuilder::new()
@@ -50,7 +50,7 @@
 //! New code should use `ConfigBuilder`:
 //!
 //! ```no_run
-//! use inferno::core::config::ConfigBuilder;
+//! use inferno::core::config::{ConfigBuilder, Preset};
 //!
 //! // New way (recommended)
 //! let config = ConfigBuilder::new()

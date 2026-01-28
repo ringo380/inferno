@@ -236,6 +236,14 @@ async fn test_cache(
     test_dedup: bool,
     test_compression: bool,
 ) -> Result<()> {
+    // Validate request count
+    if requests == 0 {
+        return Err(anyhow::anyhow!("Request count must be at least 1"));
+    }
+    if requests > 10000 {
+        return Err(anyhow::anyhow!("Request count cannot exceed 10000"));
+    }
+
     println!("Testing response cache with {} requests...", requests);
 
     let mut cache_config = config.response_cache.clone();
@@ -363,6 +371,11 @@ async fn clear_cache(config: &Config, pattern: Option<String>) -> Result<()> {
 }
 
 async fn invalidate_cache(config: &Config, pattern: String) -> Result<()> {
+    // Validate pattern is not empty
+    if pattern.is_empty() {
+        return Err(anyhow::anyhow!("Pattern cannot be empty"));
+    }
+
     let cache = ResponseCache::new(config.response_cache.clone(), None).await?;
     let removed = cache.invalidate(&pattern).await?;
 
@@ -375,6 +388,13 @@ async fn invalidate_cache(config: &Config, pattern: String) -> Result<()> {
 }
 
 async fn configure_cache(_config: &Config, settings: CacheSettingsConfig) -> Result<()> {
+    // Validate max_entries if provided
+    if let Some(entries) = settings.max_entries {
+        if entries == 0 {
+            return Err(anyhow::anyhow!("Max entries must be at least 1"));
+        }
+    }
+
     println!("=== Response Cache Configuration Update ===");
 
     if let Some(e) = settings.enabled {
@@ -592,4 +612,78 @@ async fn export_cache_config(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_cache_test_validation_zero_requests() {
+        let config = Config::default();
+        let result = test_cache(&config, 0, false, false).await;
+
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Request count must be at least 1"));
+    }
+
+    #[tokio::test]
+    async fn test_cache_test_validation_excessive_requests() {
+        let config = Config::default();
+        let result = test_cache(&config, 20000, false, false).await;
+
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Request count cannot exceed 10000"));
+    }
+
+    #[tokio::test]
+    async fn test_cache_invalidate_validation_empty_pattern() {
+        let config = Config::default();
+        let result = invalidate_cache(&config, String::new()).await;
+
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Pattern cannot be empty"));
+    }
+
+    #[tokio::test]
+    async fn test_cache_configure_validation_zero_entries() {
+        let config = Config::default();
+        let settings = CacheSettingsConfig {
+            enabled: None,
+            max_entries: Some(0),
+            max_memory_mb: None,
+            ttl_seconds: None,
+            deduplication: None,
+            compression: None,
+            hash_algorithm: None,
+        };
+        let result = configure_cache(&config, settings).await;
+
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Max entries must be at least 1"));
+    }
+
+    #[tokio::test]
+    async fn test_benchmark_validation_hit_rate_exceeds_100() {
+        let config = Config::default();
+        let result = benchmark_cache(&config, 100, 1024, 150).await;
+
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Hit rate cannot exceed 100%"));
+    }
 }

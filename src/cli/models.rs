@@ -35,7 +35,53 @@ pub enum ModelsCommand {
     },
 }
 
+/// Validates the command arguments before execution
+fn validate_command(command: &ModelsCommand, config: &Config) -> Result<()> {
+    match command {
+        ModelsCommand::List => {
+            if !config.models_dir.exists() {
+                anyhow::bail!(
+                    "Models directory does not exist: {}\nPlease create the directory or configure a valid models_dir in your configuration.",
+                    config.models_dir.display()
+                );
+            }
+        }
+        ModelsCommand::Info { model } => {
+            if model.is_empty() {
+                anyhow::bail!(
+                    "Model name or path cannot be empty. Please provide a valid model identifier."
+                );
+            }
+        }
+        ModelsCommand::Validate { path } => {
+            if !path.exists() {
+                anyhow::bail!(
+                    "Model file does not exist: {}\nPlease verify the file path is correct.",
+                    path.display()
+                );
+            }
+            if !path.is_file() {
+                anyhow::bail!(
+                    "Path is not a file: {}\nPlease provide a path to a model file, not a directory.",
+                    path.display()
+                );
+            }
+        }
+        ModelsCommand::Quant { model } => {
+            if model.is_empty() {
+                anyhow::bail!(
+                    "Model name or path cannot be empty. Please provide a valid model identifier."
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
 pub async fn execute(args: ModelsArgs, config: &Config) -> Result<()> {
+    // Pre-execution validation
+    validate_command(&args.command, config)?;
+
     let model_manager = ModelManager::new(&config.models_dir);
 
     match args.command {
@@ -170,4 +216,49 @@ fn estimate_vram_usage(metadata: &crate::models::GgufMetadata) -> String {
     };
 
     format!("{:.1} GB", base_gb * 1.2) // Add 20% overhead
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_format_size() {
+        assert_eq!(format_size(0), "0.0 B");
+        assert_eq!(format_size(512), "512.0 B");
+        assert_eq!(format_size(1024), "1.0 KB");
+        assert_eq!(format_size(1536), "1.5 KB");
+        assert_eq!(format_size(1_048_576), "1.0 MB");
+        assert_eq!(format_size(1_572_864), "1.5 MB");
+        assert_eq!(format_size(1_073_741_824), "1.0 GB");
+        assert_eq!(format_size(1_610_612_736), "1.5 GB");
+    }
+
+    #[test]
+    fn test_format_params() {
+        assert_eq!(format_params(500), "500");
+        assert_eq!(format_params(1_500), "1.5K");
+        assert_eq!(format_params(7_000_000), "7.0M");
+        assert_eq!(format_params(13_000_000_000), "13.0B");
+    }
+
+    #[test]
+    fn test_format_size_edge_cases() {
+        // Test boundary values
+        assert_eq!(format_size(1023), "1023.0 B");
+        assert_eq!(format_size(1024), "1.0 KB");
+        assert_eq!(format_size(1024 * 1024 - 1), "1024.0 KB");
+        assert_eq!(format_size(1024 * 1024), "1.0 MB");
+    }
+
+    #[test]
+    fn test_format_params_edge_cases() {
+        // Test boundary values
+        assert_eq!(format_params(999), "999");
+        assert_eq!(format_params(1_000), "1.0K");
+        assert_eq!(format_params(999_999), "1000.0K");
+        assert_eq!(format_params(1_000_000), "1.0M");
+        assert_eq!(format_params(999_999_999), "1000.0M");
+        assert_eq!(format_params(1_000_000_000), "1.0B");
+    }
 }

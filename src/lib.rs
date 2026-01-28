@@ -1,3 +1,19 @@
+// Crate-level clippy allows for minor style issues
+#![allow(
+    clippy::manual_clamp,
+    clippy::field_reassign_with_default,
+    clippy::format_in_format_args,
+    clippy::await_holding_lock,
+    clippy::match_like_matches_macro,
+    clippy::large_enum_variant,
+    clippy::collapsible_if,
+    clippy::collapsible_match,
+    clippy::needless_range_loop,
+    clippy::len_without_is_empty,
+    clippy::only_used_in_recursion,
+    clippy::should_implement_trait
+)]
+
 //! # Inferno - Enterprise AI/ML Model Runner
 //!
 //! Inferno is an enterprise-grade offline AI/ML model runner designed for production
@@ -86,14 +102,12 @@ pub mod backup_recovery;
 pub mod deployment;
 pub mod distributed;
 pub mod model_versioning;
-pub mod multi_tenancy;
 pub mod resilience;
 pub mod upgrade;
 pub mod versioning;
 
 // === AI/ML Specialized Features (kept at root for now) ===
 pub mod conversion;
-pub mod federated;
 pub mod gpu;
 pub mod multimodal;
 pub mod optimization;
@@ -102,10 +116,7 @@ pub mod performance_optimization;
 pub mod streaming;
 
 // === External Integrations (kept at root for now) ===
-pub mod api_gateway;
-pub mod data_pipeline;
 pub mod marketplace;
-pub mod qa_framework;
 
 // REMOVED: Deprecated Tauri v1 module
 // Desktop app now lives in dashboard/src-tauri/

@@ -3,7 +3,7 @@
 //! Provides REST API endpoints for profiling data visualization
 
 use crate::infrastructure::profiling::{
-    AnomalyDetection, BenchmarkResult, InferenceProfile, PhaseStats,
+    BenchmarkResult, InferenceProfile, PhaseStats,
 };
 use serde::{Deserialize, Serialize};
 

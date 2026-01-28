@@ -1,15 +1,53 @@
 #![allow(dead_code, unused_imports, unused_variables)]
+//! Advanced Cache CLI Commands
+//!
+//! This module provides advanced caching and memory management CLI features.
+//! Includes comprehensive input validation and clear error messages.
+
 use crate::advanced_cache::{
     AdvancedCacheConfig, AdvancedCacheSystem, MockCacheBackend, MockCacheMonitor,
     MockCacheOptimizer, MockCompressionEngine, SourceType, WarmingSource,
 };
 use crate::config::Config;
-use anyhow::Result;
+use anyhow::{bail, Result};
 use clap::{Args, Subcommand};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;
+
+// ============================================================================
+// Validation Constants
+// ============================================================================
+
+/// Valid eviction policy types
+const VALID_EVICTION_POLICIES: &[&str] = &["lru", "lfu", "ttl", "size", "arc", "fifo"];
+
+/// Valid warmup strategies
+const VALID_WARMUP_STRATEGIES: &[&str] = &[
+    "popular",
+    "recent",
+    "predicted",
+    "all",
+    "file",
+    "database",
+    "api",
+];
+
+/// Valid time ranges for analysis
+const VALID_TIME_RANGES: &[&str] = &["1h", "24h", "7d", "30d"];
+
+/// Valid cleanup modes
+const VALID_CLEANUP_MODES: &[&str] = &["expired", "unused", "all", "compact"];
+
+/// Valid compression algorithms
+const VALID_COMPRESSION_ALGORITHMS: &[&str] = &["lz4", "zstd", "gzip", "snappy", "none"];
+
+/// Valid tier names
+const VALID_TIER_NAMES: &[&str] = &["l1", "l2", "l3", "memory", "disk", "external"];
+
+/// Valid consistency levels
+const VALID_CONSISTENCY_LEVELS: &[&str] = &["eventual", "strong", "session", "linearizable"];
 
 #[derive(Args)]
 pub struct AdvancedCacheArgs {
@@ -885,6 +923,9 @@ pub enum CoherenceCommand {
 }
 
 pub async fn execute(args: AdvancedCacheArgs, _config: &Config) -> Result<()> {
+    // Validate command arguments before execution
+    validate_command(&args.command)?;
+
     let cache_system = create_cache_system()?;
 
     match args.command {
@@ -912,6 +953,300 @@ pub async fn execute(args: AdvancedCacheArgs, _config: &Config) -> Result<()> {
             hot_keys,
             refresh,
         } => handle_status_command(&cache_system, detailed, tiers, memory, hot_keys, refresh).await,
+    }
+}
+
+// ============================================================================
+// Validation Functions
+// ============================================================================
+
+/// Validate command arguments before execution
+fn validate_command(command: &CacheCommand) -> Result<()> {
+    match command {
+        CacheCommand::Eviction { command } => validate_eviction_command(command),
+        CacheCommand::Prefetch { command } => validate_prefetch_command(command),
+        CacheCommand::Tiers { command } => validate_tier_command(command),
+        CacheCommand::Distributed { command } => validate_distributed_command(command),
+        CacheCommand::Compression { command } => validate_compression_command(command),
+        CacheCommand::Cache { command } => validate_cache_operation_command(command),
+        _ => Ok(()),
+    }
+}
+
+/// Validate cache operation command arguments
+fn validate_cache_operation_command(command: &CacheOperationCommand) -> Result<()> {
+    match command {
+        CacheOperationCommand::Get { key, .. } => {
+            if key.is_empty() {
+                bail!("Cache key cannot be empty");
+            }
+            Ok(())
+        }
+        CacheOperationCommand::Put {
+            key,
+            value,
+            ttl,
+            priority,
+            ..
+        } => {
+            if key.is_empty() {
+                bail!("Cache key cannot be empty");
+            }
+            if value.is_empty() {
+                bail!("Cache value cannot be empty");
+            }
+            if let Some(p) = priority {
+                if *p > 10 {
+                    bail!("Priority must be between 0 and 10");
+                }
+            }
+            Ok(())
+        }
+        CacheOperationCommand::Delete { key, .. } => {
+            if key.is_empty() {
+                bail!("Cache key cannot be empty");
+            }
+            Ok(())
+        }
+        CacheOperationCommand::Invalidate { pattern, .. } => {
+            if pattern.is_empty() {
+                bail!("Invalidation pattern cannot be empty");
+            }
+            Ok(())
+        }
+        _ => Ok(()),
+    }
+}
+
+/// Validate eviction command arguments
+fn validate_eviction_command(command: &EvictionCommand) -> Result<()> {
+    match command {
+        EvictionCommand::Policy { policy, .. } => {
+            let policy_lower = policy.to_lowercase();
+            if !VALID_EVICTION_POLICIES.contains(&policy_lower.as_str()) {
+                bail!(
+                    "Invalid eviction policy '{}'. Must be one of: {}",
+                    policy,
+                    VALID_EVICTION_POLICIES.join(", ")
+                );
+            }
+            Ok(())
+        }
+        EvictionCommand::Adaptive { learning_rate, .. } => {
+            if let Some(rate) = learning_rate {
+                if *rate <= 0.0 || *rate > 1.0 {
+                    bail!("Learning rate must be between 0.0 and 1.0 (exclusive of 0)");
+                }
+            }
+            Ok(())
+        }
+        EvictionCommand::Priority {
+            threshold,
+            preserve,
+        } => {
+            if let Some(t) = threshold {
+                if *t > 10 {
+                    bail!("Priority threshold must be between 0 and 10");
+                }
+            }
+            Ok(())
+        }
+        _ => Ok(()),
+    }
+}
+
+/// Validate prefetch command arguments
+fn validate_prefetch_command(command: &PrefetchCommand) -> Result<()> {
+    match command {
+        PrefetchCommand::Warm {
+            source, location, ..
+        } => {
+            let source_lower = source.to_lowercase();
+            if !VALID_WARMUP_STRATEGIES.contains(&source_lower.as_str()) {
+                bail!(
+                    "Invalid warmup source '{}'. Must be one of: {}",
+                    source,
+                    VALID_WARMUP_STRATEGIES.join(", ")
+                );
+            }
+            if location.is_empty() {
+                bail!("Location cannot be empty for cache warming");
+            }
+            Ok(())
+        }
+        PrefetchCommand::Patterns { confidence, .. } => {
+            if let Some(c) = confidence {
+                if *c < 0.0 || *c > 1.0 {
+                    bail!("Confidence threshold must be between 0.0 and 1.0");
+                }
+            }
+            Ok(())
+        }
+        PrefetchCommand::Config { strategy, .. } => {
+            if let Some(s) = strategy {
+                let valid_strategies = ["sequential", "strided", "markov", "adaptive", "ml"];
+                if !valid_strategies.contains(&s.to_lowercase().as_str()) {
+                    bail!(
+                        "Invalid prefetch strategy '{}'. Must be one of: {}",
+                        s,
+                        valid_strategies.join(", ")
+                    );
+                }
+            }
+            Ok(())
+        }
+        _ => Ok(()),
+    }
+}
+
+/// Validate tier command arguments
+fn validate_tier_command(command: &TierCommand) -> Result<()> {
+    match command {
+        TierCommand::Config { tier, .. } => {
+            let tier_lower = tier.to_lowercase();
+            if !VALID_TIER_NAMES.contains(&tier_lower.as_str()) {
+                bail!(
+                    "Invalid tier name '{}'. Must be one of: {}",
+                    tier,
+                    VALID_TIER_NAMES.join(", ")
+                );
+            }
+            Ok(())
+        }
+        TierCommand::Promote { from, to, .. } | TierCommand::Demote { from, to, .. } => {
+            let from_lower = from.to_lowercase();
+            let to_lower = to.to_lowercase();
+            if !VALID_TIER_NAMES.contains(&from_lower.as_str()) {
+                bail!(
+                    "Invalid source tier '{}'. Must be one of: {}",
+                    from,
+                    VALID_TIER_NAMES.join(", ")
+                );
+            }
+            if !VALID_TIER_NAMES.contains(&to_lower.as_str()) {
+                bail!(
+                    "Invalid target tier '{}'. Must be one of: {}",
+                    to,
+                    VALID_TIER_NAMES.join(", ")
+                );
+            }
+            if from_lower == to_lower {
+                bail!("Source and target tiers cannot be the same");
+            }
+            Ok(())
+        }
+        TierCommand::Migrate { threshold, .. } => {
+            if let Some(t) = threshold {
+                if *t < 0.0 || *t > 1.0 {
+                    bail!("Migration threshold must be between 0.0 and 1.0");
+                }
+            }
+            Ok(())
+        }
+        _ => Ok(()),
+    }
+}
+
+/// Validate distributed command arguments
+fn validate_distributed_command(command: &DistributedCommand) -> Result<()> {
+    match command {
+        DistributedCommand::Config {
+            consistency,
+            replication,
+            ..
+        } => {
+            if let Some(c) = consistency {
+                let c_lower = c.to_lowercase();
+                if !VALID_CONSISTENCY_LEVELS.contains(&c_lower.as_str()) {
+                    bail!(
+                        "Invalid consistency level '{}'. Must be one of: {}",
+                        c,
+                        VALID_CONSISTENCY_LEVELS.join(", ")
+                    );
+                }
+            }
+            if let Some(r) = replication {
+                if *r == 0 || *r > 10 {
+                    bail!("Replication factor must be between 1 and 10");
+                }
+            }
+            Ok(())
+        }
+        DistributedCommand::Nodes { command } => validate_node_command(command),
+        _ => Ok(()),
+    }
+}
+
+/// Validate node command arguments
+fn validate_node_command(command: &NodeCommand) -> Result<()> {
+    match command {
+        NodeCommand::Add { address, .. } => {
+            if address.is_empty() {
+                bail!("Node address cannot be empty");
+            }
+            // Basic address format validation
+            if !address.contains(':') && !address.starts_with("http") {
+                bail!("Invalid node address format. Expected format: host:port or URL");
+            }
+            Ok(())
+        }
+        NodeCommand::Remove { node_id, .. } => {
+            if node_id.is_empty() {
+                bail!("Node ID cannot be empty");
+            }
+            Ok(())
+        }
+        _ => Ok(()),
+    }
+}
+
+/// Validate compression command arguments
+fn validate_compression_command(command: &CompressionCommand) -> Result<()> {
+    match command {
+        CompressionCommand::Config {
+            algorithm, level, ..
+        } => {
+            if let Some(a) = algorithm {
+                let a_lower = a.to_lowercase();
+                if !VALID_COMPRESSION_ALGORITHMS.contains(&a_lower.as_str()) {
+                    bail!(
+                        "Invalid compression algorithm '{}'. Must be one of: {}",
+                        a,
+                        VALID_COMPRESSION_ALGORITHMS.join(", ")
+                    );
+                }
+            }
+            if let Some(l) = level {
+                if *l > 22 {
+                    bail!("Compression level must be between 0 and 22");
+                }
+            }
+            Ok(())
+        }
+        CompressionCommand::Test { size, .. } => {
+            if *size == 0 {
+                bail!("Test data size must be greater than 0");
+            }
+            Ok(())
+        }
+        CompressionCommand::Adaptive {
+            threshold,
+            sample_rate,
+            ..
+        } => {
+            if let Some(t) = threshold {
+                if *t < 1.0 {
+                    bail!("Compression ratio threshold must be at least 1.0");
+                }
+            }
+            if let Some(r) = sample_rate {
+                if *r <= 0.0 || *r > 1.0 {
+                    bail!("Sample rate must be between 0.0 (exclusive) and 1.0");
+                }
+            }
+            Ok(())
+        }
+        _ => Ok(()),
     }
 }
 
@@ -2373,4 +2708,553 @@ async fn handle_status_command(
     }
 
     Ok(())
+}
+
+// ============================================================================
+// Unit Tests
+// ============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // -------------------------------------------------------------------------
+    // Cache Operation Validation Tests
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_validate_cache_get_empty_key() {
+        let command = CacheOperationCommand::Get {
+            key: "".to_string(),
+            metadata: false,
+            stats: false,
+        };
+        let result = validate_cache_operation_command(&command);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("key cannot be empty"));
+    }
+
+    #[test]
+    fn test_validate_cache_get_valid_key() {
+        let command = CacheOperationCommand::Get {
+            key: "test-key".to_string(),
+            metadata: true,
+            stats: true,
+        };
+        let result = validate_cache_operation_command(&command);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_cache_put_empty_key() {
+        let command = CacheOperationCommand::Put {
+            key: "".to_string(),
+            value: "test-value".to_string(),
+            ttl: None,
+            priority: None,
+            compress: false,
+        };
+        let result = validate_cache_operation_command(&command);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("key cannot be empty"));
+    }
+
+    #[test]
+    fn test_validate_cache_put_empty_value() {
+        let command = CacheOperationCommand::Put {
+            key: "test-key".to_string(),
+            value: "".to_string(),
+            ttl: None,
+            priority: None,
+            compress: false,
+        };
+        let result = validate_cache_operation_command(&command);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("value cannot be empty"));
+    }
+
+    #[test]
+    fn test_validate_cache_put_invalid_priority() {
+        let command = CacheOperationCommand::Put {
+            key: "test-key".to_string(),
+            value: "test-value".to_string(),
+            ttl: None,
+            priority: Some(15),
+            compress: false,
+        };
+        let result = validate_cache_operation_command(&command);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Priority must be between"));
+    }
+
+    #[test]
+    fn test_validate_cache_put_valid() {
+        let command = CacheOperationCommand::Put {
+            key: "test-key".to_string(),
+            value: "test-value".to_string(),
+            ttl: Some(3600),
+            priority: Some(5),
+            compress: true,
+        };
+        let result = validate_cache_operation_command(&command);
+        assert!(result.is_ok());
+    }
+
+    // -------------------------------------------------------------------------
+    // Eviction Command Validation Tests
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_validate_eviction_policy_invalid() {
+        let command = EvictionCommand::Policy {
+            policy: "invalid".to_string(),
+            max_entries: None,
+            max_size: None,
+            ttl: None,
+        };
+        let result = validate_eviction_command(&command);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid eviction policy"));
+    }
+
+    #[test]
+    fn test_validate_eviction_policy_valid() {
+        for policy in VALID_EVICTION_POLICIES {
+            let command = EvictionCommand::Policy {
+                policy: policy.to_string(),
+                max_entries: Some(1000),
+                max_size: Some(100),
+                ttl: Some(3600),
+            };
+            let result = validate_eviction_command(&command);
+            assert!(result.is_ok(), "Policy '{}' should be valid", policy);
+        }
+    }
+
+    #[test]
+    fn test_validate_eviction_adaptive_invalid_learning_rate() {
+        let command = EvictionCommand::Adaptive {
+            enable: true,
+            learning_rate: Some(1.5),
+            window: None,
+        };
+        let result = validate_eviction_command(&command);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Learning rate"));
+    }
+
+    #[test]
+    fn test_validate_eviction_adaptive_zero_learning_rate() {
+        let command = EvictionCommand::Adaptive {
+            enable: true,
+            learning_rate: Some(0.0),
+            window: None,
+        };
+        let result = validate_eviction_command(&command);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_eviction_priority_invalid_threshold() {
+        let command = EvictionCommand::Priority {
+            threshold: Some(15),
+            preserve: None,
+        };
+        let result = validate_eviction_command(&command);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Priority threshold"));
+    }
+
+    // -------------------------------------------------------------------------
+    // Prefetch Command Validation Tests
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_validate_prefetch_warm_invalid_source() {
+        let command = PrefetchCommand::Warm {
+            source: "invalid".to_string(),
+            location: "/some/path".to_string(),
+            filter: None,
+            parallel: false,
+            batch: None,
+        };
+        let result = validate_prefetch_command(&command);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid warmup source"));
+    }
+
+    #[test]
+    fn test_validate_prefetch_warm_empty_location() {
+        let command = PrefetchCommand::Warm {
+            source: "file".to_string(),
+            location: "".to_string(),
+            filter: None,
+            parallel: false,
+            batch: None,
+        };
+        let result = validate_prefetch_command(&command);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Location cannot be empty"));
+    }
+
+    #[test]
+    fn test_validate_prefetch_warm_valid() {
+        let command = PrefetchCommand::Warm {
+            source: "file".to_string(),
+            location: "/path/to/data".to_string(),
+            filter: Some("*.json".to_string()),
+            parallel: true,
+            batch: Some(100),
+        };
+        let result = validate_prefetch_command(&command);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_prefetch_patterns_invalid_confidence() {
+        let command = PrefetchCommand::Patterns {
+            enable: true,
+            confidence: Some(1.5),
+            show: false,
+        };
+        let result = validate_prefetch_command(&command);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Confidence threshold"));
+    }
+
+    #[test]
+    fn test_validate_prefetch_config_invalid_strategy() {
+        let command = PrefetchCommand::Config {
+            enable: true,
+            strategy: Some("invalid".to_string()),
+            distance: None,
+            degree: None,
+        };
+        let result = validate_prefetch_command(&command);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid prefetch strategy"));
+    }
+
+    // -------------------------------------------------------------------------
+    // Tier Command Validation Tests
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_validate_tier_config_invalid_tier() {
+        let command = TierCommand::Config {
+            tier: "invalid".to_string(),
+            capacity: None,
+            latency: None,
+            cost: None,
+        };
+        let result = validate_tier_command(&command);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid tier name"));
+    }
+
+    #[test]
+    fn test_validate_tier_config_valid() {
+        for tier in VALID_TIER_NAMES {
+            let command = TierCommand::Config {
+                tier: tier.to_string(),
+                capacity: Some(1024),
+                latency: Some(10),
+                cost: Some(0.5),
+            };
+            let result = validate_tier_command(&command);
+            assert!(result.is_ok(), "Tier '{}' should be valid", tier);
+        }
+    }
+
+    #[test]
+    fn test_validate_tier_promote_same_tier() {
+        let command = TierCommand::Promote {
+            from: "l1".to_string(),
+            to: "l1".to_string(),
+            policy: None,
+            count: None,
+        };
+        let result = validate_tier_command(&command);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("cannot be the same"));
+    }
+
+    #[test]
+    fn test_validate_tier_promote_invalid_from() {
+        let command = TierCommand::Promote {
+            from: "invalid".to_string(),
+            to: "l1".to_string(),
+            policy: None,
+            count: None,
+        };
+        let result = validate_tier_command(&command);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid source tier"));
+    }
+
+    #[test]
+    fn test_validate_tier_migrate_invalid_threshold() {
+        let command = TierCommand::Migrate {
+            auto: true,
+            threshold: Some(1.5),
+            interval: None,
+        };
+        let result = validate_tier_command(&command);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Migration threshold"));
+    }
+
+    // -------------------------------------------------------------------------
+    // Distributed Command Validation Tests
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_validate_distributed_config_invalid_consistency() {
+        let command = DistributedCommand::Config {
+            topology: None,
+            consistency: Some("invalid".to_string()),
+            replication: None,
+            partitioning: None,
+        };
+        let result = validate_distributed_command(&command);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid consistency level"));
+    }
+
+    #[test]
+    fn test_validate_distributed_config_invalid_replication() {
+        let command = DistributedCommand::Config {
+            topology: None,
+            consistency: None,
+            replication: Some(0),
+            partitioning: None,
+        };
+        let result = validate_distributed_command(&command);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Replication factor"));
+    }
+
+    #[test]
+    fn test_validate_distributed_config_valid() {
+        let command = DistributedCommand::Config {
+            topology: Some("ring".to_string()),
+            consistency: Some("strong".to_string()),
+            replication: Some(3),
+            partitioning: Some("hash".to_string()),
+        };
+        let result = validate_distributed_command(&command);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_node_add_empty_address() {
+        let command = NodeCommand::Add {
+            address: "".to_string(),
+            capacity: None,
+            role: None,
+        };
+        let result = validate_node_command(&command);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("address cannot be empty"));
+    }
+
+    #[test]
+    fn test_validate_node_add_invalid_address_format() {
+        let command = NodeCommand::Add {
+            address: "invalid-address".to_string(),
+            capacity: None,
+            role: None,
+        };
+        let result = validate_node_command(&command);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid node address format"));
+    }
+
+    #[test]
+    fn test_validate_node_add_valid_address() {
+        let command = NodeCommand::Add {
+            address: "10.0.0.1:6379".to_string(),
+            capacity: Some(1024),
+            role: Some("primary".to_string()),
+        };
+        let result = validate_node_command(&command);
+        assert!(result.is_ok());
+    }
+
+    // -------------------------------------------------------------------------
+    // Compression Command Validation Tests
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_validate_compression_config_invalid_algorithm() {
+        let command = CompressionCommand::Config {
+            enable: true,
+            algorithm: Some("invalid".to_string()),
+            level: None,
+            min_size: None,
+        };
+        let result = validate_compression_command(&command);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid compression algorithm"));
+    }
+
+    #[test]
+    fn test_validate_compression_config_invalid_level() {
+        let command = CompressionCommand::Config {
+            enable: true,
+            algorithm: Some("zstd".to_string()),
+            level: Some(25),
+            min_size: None,
+        };
+        let result = validate_compression_command(&command);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Compression level"));
+    }
+
+    #[test]
+    fn test_validate_compression_config_valid() {
+        for algo in VALID_COMPRESSION_ALGORITHMS {
+            let command = CompressionCommand::Config {
+                enable: true,
+                algorithm: Some(algo.to_string()),
+                level: Some(6),
+                min_size: Some(1024),
+            };
+            let result = validate_compression_command(&command);
+            assert!(result.is_ok(), "Algorithm '{}' should be valid", algo);
+        }
+    }
+
+    #[test]
+    fn test_validate_compression_test_zero_size() {
+        let command = CompressionCommand::Test {
+            size: 0,
+            algorithm: None,
+            iterations: None,
+        };
+        let result = validate_compression_command(&command);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("size must be greater than 0"));
+    }
+
+    #[test]
+    fn test_validate_compression_adaptive_invalid_threshold() {
+        let command = CompressionCommand::Adaptive {
+            enable: true,
+            threshold: Some(0.5),
+            sample_rate: None,
+        };
+        let result = validate_compression_command(&command);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("ratio threshold must be at least 1.0"));
+    }
+
+    #[test]
+    fn test_validate_compression_adaptive_invalid_sample_rate() {
+        let command = CompressionCommand::Adaptive {
+            enable: true,
+            threshold: None,
+            sample_rate: Some(0.0),
+        };
+        let result = validate_compression_command(&command);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Sample rate"));
+    }
+
+    // -------------------------------------------------------------------------
+    // Integration Tests for validate_command
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_validate_command_eviction() {
+        let command = CacheCommand::Eviction {
+            command: EvictionCommand::Policy {
+                policy: "lru".to_string(),
+                max_entries: None,
+                max_size: None,
+                ttl: None,
+            },
+        };
+        let result = validate_command(&command);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_command_status_always_valid() {
+        let command = CacheCommand::Status {
+            detailed: true,
+            tiers: true,
+            memory: true,
+            hot_keys: true,
+            refresh: Some(5),
+        };
+        let result = validate_command(&command);
+        assert!(result.is_ok());
+    }
 }

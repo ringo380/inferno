@@ -1,3 +1,9 @@
+//! Batch Queue Command - Job Queue Management
+//!
+//! This module provides advanced batch processing with job queues and scheduling.
+//! Features include queue creation, job submission, monitoring, scheduling,
+//! metrics collection, and comprehensive queue management.
+
 use crate::{
     backends::InferenceParams,
     batch::queue::{
@@ -19,6 +25,23 @@ use std::{
     time::{Duration, SystemTime},
 };
 use tokio::time::sleep;
+
+// ============================================================================
+// Validation Constants
+// ============================================================================
+
+/// Maximum allowed concurrent jobs per queue
+const MAX_CONCURRENT_JOBS_LIMIT: usize = 100;
+/// Maximum allowed queue size
+const MAX_QUEUE_SIZE_LIMIT: usize = 10000;
+/// Maximum allowed batch concurrency per job
+const MAX_BATCH_CONCURRENCY: usize = 32;
+/// Maximum allowed timeout in minutes (24 hours)
+const MAX_TIMEOUT_MINUTES: u64 = 1440;
+/// Maximum allowed retry attempts
+const MAX_RETRY_ATTEMPTS: u32 = 10;
+/// Maximum jobs to list
+const MAX_LIST_LIMIT: usize = 1000;
 
 #[derive(Args)]
 pub struct BatchQueueArgs {
@@ -286,6 +309,113 @@ pub enum ExportType {
     All,
 }
 
+// ============================================================================
+// Validation Functions
+// ============================================================================
+
+/// Validate queue creation parameters
+fn validate_create_params(
+    queue_id: &str,
+    name: &str,
+    max_concurrent: usize,
+    max_size: usize,
+) -> Result<()> {
+    if queue_id.is_empty() {
+        return Err(anyhow!("Queue ID cannot be empty"));
+    }
+    if name.is_empty() {
+        return Err(anyhow!("Queue name cannot be empty"));
+    }
+    if max_concurrent == 0 || max_concurrent > MAX_CONCURRENT_JOBS_LIMIT {
+        return Err(anyhow!(
+            "Max concurrent jobs must be between 1 and {}",
+            MAX_CONCURRENT_JOBS_LIMIT
+        ));
+    }
+    if max_size == 0 || max_size > MAX_QUEUE_SIZE_LIMIT {
+        return Err(anyhow!(
+            "Max queue size must be between 1 and {}",
+            MAX_QUEUE_SIZE_LIMIT
+        ));
+    }
+    Ok(())
+}
+
+/// Validate job submission parameters
+fn validate_submit_params(
+    queue_id: &str,
+    name: &str,
+    input_file: &PathBuf,
+    model: &str,
+    concurrency: usize,
+    timeout: u64,
+    max_retries: u32,
+) -> Result<()> {
+    if queue_id.is_empty() {
+        return Err(anyhow!("Queue ID cannot be empty"));
+    }
+    if name.is_empty() {
+        return Err(anyhow!("Job name cannot be empty"));
+    }
+    if !input_file.exists() {
+        return Err(anyhow!("Input file does not exist: {:?}", input_file));
+    }
+    if model.is_empty() {
+        return Err(anyhow!("Model name cannot be empty"));
+    }
+    if concurrency == 0 || concurrency > MAX_BATCH_CONCURRENCY {
+        return Err(anyhow!(
+            "Concurrency must be between 1 and {}",
+            MAX_BATCH_CONCURRENCY
+        ));
+    }
+    if timeout == 0 || timeout > MAX_TIMEOUT_MINUTES {
+        return Err(anyhow!(
+            "Timeout must be between 1 and {} minutes (24 hours)",
+            MAX_TIMEOUT_MINUTES
+        ));
+    }
+    if max_retries > MAX_RETRY_ATTEMPTS {
+        return Err(anyhow!("Max retries must be <= {}", MAX_RETRY_ATTEMPTS));
+    }
+    Ok(())
+}
+
+/// Validate list jobs parameters
+fn validate_list_jobs_params(
+    queue_id: &str,
+    _status: &Option<JobStatusArg>,
+    limit: usize,
+) -> Result<()> {
+    if queue_id.is_empty() {
+        return Err(anyhow!("Queue ID cannot be empty"));
+    }
+    // Status validation is handled by clap's ValueEnum
+    if limit == 0 || limit > MAX_LIST_LIMIT {
+        return Err(anyhow!("Limit must be between 1 and {}", MAX_LIST_LIMIT));
+    }
+    Ok(())
+}
+
+/// Validate job status parameters
+fn validate_job_status_params(queue_id: &str, job_id: &str) -> Result<()> {
+    if queue_id.is_empty() {
+        return Err(anyhow!("Queue ID cannot be empty"));
+    }
+    if job_id.is_empty() {
+        return Err(anyhow!("Job ID cannot be empty"));
+    }
+    Ok(())
+}
+
+/// Validate queue ID for single-parameter operations
+fn validate_queue_id(queue_id: &str) -> Result<()> {
+    if queue_id.is_empty() {
+        return Err(anyhow!("Queue ID cannot be empty"));
+    }
+    Ok(())
+}
+
 pub async fn execute(args: BatchQueueArgs, _config: &Config) -> Result<()> {
     let manager = JobQueueManager::new(JobQueueConfig::default());
 
@@ -297,6 +427,9 @@ pub async fn execute(args: BatchQueueArgs, _config: &Config) -> Result<()> {
             max_concurrent,
             max_size,
         } => {
+            // Validate parameters before proceeding
+            validate_create_params(&queue_id, &name, max_concurrent, max_size)?;
+
             println!("Creating queue '{}'...", queue_id);
 
             let mut queue_config = JobQueueConfig::default();
@@ -317,6 +450,15 @@ pub async fn execute(args: BatchQueueArgs, _config: &Config) -> Result<()> {
         }
 
         BatchQueueCommand::Start { queue_id, workers } => {
+            // Validate parameters before proceeding
+            validate_queue_id(&queue_id)?;
+            if workers == 0 || workers > MAX_CONCURRENT_JOBS_LIMIT {
+                return Err(anyhow!(
+                    "Number of workers must be between 1 and {}",
+                    MAX_CONCURRENT_JOBS_LIMIT
+                ));
+            }
+
             println!("Starting queue '{}' with {} workers...", queue_id, workers);
             manager.start_queue(&queue_id).await?;
             println!("Queue '{}' started successfully", queue_id);
@@ -327,6 +469,9 @@ pub async fn execute(args: BatchQueueArgs, _config: &Config) -> Result<()> {
             drain,
             force,
         } => {
+            // Validate parameters before proceeding
+            validate_queue_id(&queue_id)?;
+
             if !force {
                 print!(
                     "Are you sure you want to stop queue '{}'? [y/N]: ",
@@ -357,6 +502,17 @@ pub async fn execute(args: BatchQueueArgs, _config: &Config) -> Result<()> {
             max_retries,
             schedule,
         } => {
+            // Validate parameters before proceeding
+            validate_submit_params(
+                &queue_id,
+                &name,
+                &input_file,
+                &model,
+                concurrency,
+                timeout,
+                max_retries,
+            )?;
+
             println!("Loading inputs from {:?}...", input_file);
 
             // Load inputs from file
@@ -497,6 +653,9 @@ pub async fn execute(args: BatchQueueArgs, _config: &Config) -> Result<()> {
             limit,
             detailed,
         } => {
+            // Validate parameters before proceeding
+            validate_list_jobs_params(&queue_id, &status, limit)?;
+
             let status_filter = status.map(|s| match s {
                 JobStatusArg::Queued => JobStatus::Queued,
                 JobStatusArg::Running => JobStatus::Running,
@@ -527,6 +686,9 @@ pub async fn execute(args: BatchQueueArgs, _config: &Config) -> Result<()> {
             progress,
             follow,
         } => {
+            // Validate parameters before proceeding
+            validate_job_status_params(&queue_id, &job_id)?;
+
             if follow {
                 println!(
                     "Following job '{}' progress... (press Ctrl+C to stop)",
@@ -681,6 +843,9 @@ pub async fn execute(args: BatchQueueArgs, _config: &Config) -> Result<()> {
             job_id,
             force,
         } => {
+            // Validate parameters before proceeding
+            validate_job_status_params(&queue_id, &job_id)?;
+
             if !force {
                 print!("Are you sure you want to cancel job '{}'? [y/N]: ", job_id);
                 let mut input = String::new();
@@ -700,6 +865,9 @@ pub async fn execute(args: BatchQueueArgs, _config: &Config) -> Result<()> {
             job_id,
             force,
         } => {
+            // Validate parameters before proceeding
+            validate_job_status_params(&queue_id, &job_id)?;
+
             println!("Retrying job '{}' in queue '{}'...", job_id, queue_id);
 
             // Check if job can be retried
@@ -926,6 +1094,9 @@ pub async fn execute(args: BatchQueueArgs, _config: &Config) -> Result<()> {
         }
 
         BatchQueueCommand::Pause { queue_id } => {
+            // Validate parameters before proceeding
+            validate_queue_id(&queue_id)?;
+
             println!("Pausing queue '{}'...", queue_id);
 
             match manager.pause_queue(&queue_id).await {
@@ -940,6 +1111,9 @@ pub async fn execute(args: BatchQueueArgs, _config: &Config) -> Result<()> {
         }
 
         BatchQueueCommand::Resume { queue_id } => {
+            // Validate parameters before proceeding
+            validate_queue_id(&queue_id)?;
+
             println!("Resuming queue '{}'...", queue_id);
 
             match manager.resume_queue(&queue_id).await {
@@ -958,6 +1132,9 @@ pub async fn execute(args: BatchQueueArgs, _config: &Config) -> Result<()> {
             include_failed,
             force,
         } => {
+            // Validate parameters before proceeding
+            validate_queue_id(&queue_id)?;
+
             if !force {
                 let msg = if include_failed {
                     format!(
@@ -999,6 +1176,9 @@ pub async fn execute(args: BatchQueueArgs, _config: &Config) -> Result<()> {
             output,
             format,
         } => {
+            // Validate parameters before proceeding
+            validate_queue_id(&queue_id)?;
+
             println!(
                 "Exporting {} data from queue '{}' to {:?}...",
                 match export_type {
@@ -1044,6 +1224,33 @@ pub async fn execute(args: BatchQueueArgs, _config: &Config) -> Result<()> {
             priority_enabled,
             show,
         } => {
+            // Validate parameters before proceeding
+            validate_queue_id(&queue_id)?;
+            if let Some(mc) = max_concurrent {
+                if mc == 0 || mc > MAX_CONCURRENT_JOBS_LIMIT {
+                    return Err(anyhow!(
+                        "Max concurrent jobs must be between 1 and {}",
+                        MAX_CONCURRENT_JOBS_LIMIT
+                    ));
+                }
+            }
+            if let Some(ms) = max_size {
+                if ms == 0 || ms > MAX_QUEUE_SIZE_LIMIT {
+                    return Err(anyhow!(
+                        "Max queue size must be between 1 and {}",
+                        MAX_QUEUE_SIZE_LIMIT
+                    ));
+                }
+            }
+            if let Some(t) = timeout {
+                if t == 0 || t > MAX_TIMEOUT_MINUTES {
+                    return Err(anyhow!(
+                        "Timeout must be between 1 and {} minutes",
+                        MAX_TIMEOUT_MINUTES
+                    ));
+                }
+            }
+
             if show {
                 println!("Current configuration for queue '{}':", queue_id);
 
@@ -1338,4 +1545,419 @@ fn write_export_data<T: serde::Serialize>(
     file.flush()?;
 
     Ok(())
+}
+
+// ============================================================================
+// Tests
+// ============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+    use tempfile::NamedTempFile;
+
+    // -------------------------------------------------------------------------
+    // Queue Creation Validation Tests
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_validate_create_params_valid() {
+        let result = validate_create_params("queue-1", "Test Queue", 4, 1000);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_create_params_empty_queue_id() {
+        let result = validate_create_params("", "Test Queue", 4, 1000);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Queue ID cannot be empty"));
+    }
+
+    #[test]
+    fn test_validate_create_params_empty_name() {
+        let result = validate_create_params("queue-1", "", 4, 1000);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Queue name cannot be empty"));
+    }
+
+    #[test]
+    fn test_validate_create_params_zero_concurrent() {
+        let result = validate_create_params("queue-1", "Test Queue", 0, 1000);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Max concurrent jobs must be between 1 and"));
+    }
+
+    #[test]
+    fn test_validate_create_params_concurrent_exceeds_limit() {
+        let result = validate_create_params("queue-1", "Test Queue", 101, 1000);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Max concurrent jobs must be between 1 and"));
+    }
+
+    #[test]
+    fn test_validate_create_params_zero_size() {
+        let result = validate_create_params("queue-1", "Test Queue", 4, 0);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Max queue size must be between 1 and"));
+    }
+
+    #[test]
+    fn test_validate_create_params_size_exceeds_limit() {
+        let result = validate_create_params("queue-1", "Test Queue", 4, 10001);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Max queue size must be between 1 and"));
+    }
+
+    // -------------------------------------------------------------------------
+    // Job Submission Validation Tests
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_validate_submit_params_valid() {
+        // Create a temporary file for the input
+        let mut temp_file = NamedTempFile::new().unwrap();
+        writeln!(temp_file, "test input").unwrap();
+        let path = temp_file.path().to_path_buf();
+
+        let result = validate_submit_params("queue-1", "Test Job", &path, "test-model", 4, 60, 3);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_submit_params_empty_queue_id() {
+        let path = PathBuf::from("/tmp/test.txt");
+        let result = validate_submit_params("", "Test Job", &path, "model", 4, 60, 3);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Queue ID cannot be empty"));
+    }
+
+    #[test]
+    fn test_validate_submit_params_empty_job_name() {
+        let path = PathBuf::from("/tmp/test.txt");
+        let result = validate_submit_params("queue-1", "", &path, "model", 4, 60, 3);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Job name cannot be empty"));
+    }
+
+    #[test]
+    fn test_validate_submit_params_nonexistent_file() {
+        let path = PathBuf::from("/nonexistent/path/file.txt");
+        let result = validate_submit_params("queue-1", "Test Job", &path, "model", 4, 60, 3);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Input file does not exist"));
+    }
+
+    #[test]
+    fn test_validate_submit_params_empty_model() {
+        let mut temp_file = NamedTempFile::new().unwrap();
+        writeln!(temp_file, "test input").unwrap();
+        let path = temp_file.path().to_path_buf();
+
+        let result = validate_submit_params("queue-1", "Test Job", &path, "", 4, 60, 3);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Model name cannot be empty"));
+    }
+
+    #[test]
+    fn test_validate_submit_params_zero_concurrency() {
+        let mut temp_file = NamedTempFile::new().unwrap();
+        writeln!(temp_file, "test input").unwrap();
+        let path = temp_file.path().to_path_buf();
+
+        let result = validate_submit_params("queue-1", "Test Job", &path, "model", 0, 60, 3);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Concurrency must be between 1 and"));
+    }
+
+    #[test]
+    fn test_validate_submit_params_concurrency_exceeds_limit() {
+        let mut temp_file = NamedTempFile::new().unwrap();
+        writeln!(temp_file, "test input").unwrap();
+        let path = temp_file.path().to_path_buf();
+
+        let result = validate_submit_params("queue-1", "Test Job", &path, "model", 33, 60, 3);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Concurrency must be between 1 and"));
+    }
+
+    #[test]
+    fn test_validate_submit_params_zero_timeout() {
+        let mut temp_file = NamedTempFile::new().unwrap();
+        writeln!(temp_file, "test input").unwrap();
+        let path = temp_file.path().to_path_buf();
+
+        let result = validate_submit_params("queue-1", "Test Job", &path, "model", 4, 0, 3);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Timeout must be between 1 and"));
+    }
+
+    #[test]
+    fn test_validate_submit_params_timeout_exceeds_limit() {
+        let mut temp_file = NamedTempFile::new().unwrap();
+        writeln!(temp_file, "test input").unwrap();
+        let path = temp_file.path().to_path_buf();
+
+        let result = validate_submit_params("queue-1", "Test Job", &path, "model", 4, 1441, 3);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Timeout must be between 1 and"));
+    }
+
+    #[test]
+    fn test_validate_submit_params_retries_exceeds_limit() {
+        let mut temp_file = NamedTempFile::new().unwrap();
+        writeln!(temp_file, "test input").unwrap();
+        let path = temp_file.path().to_path_buf();
+
+        let result = validate_submit_params("queue-1", "Test Job", &path, "model", 4, 60, 11);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Max retries must be <="));
+    }
+
+    // -------------------------------------------------------------------------
+    // List Jobs Validation Tests
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_validate_list_jobs_params_valid() {
+        let result = validate_list_jobs_params("queue-1", &None, 100);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_list_jobs_params_valid_with_status() {
+        let result = validate_list_jobs_params("queue-1", &Some(JobStatusArg::Running), 100);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_list_jobs_params_empty_queue_id() {
+        let result = validate_list_jobs_params("", &None, 100);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Queue ID cannot be empty"));
+    }
+
+    #[test]
+    fn test_validate_list_jobs_params_zero_limit() {
+        let result = validate_list_jobs_params("queue-1", &None, 0);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Limit must be between 1 and"));
+    }
+
+    #[test]
+    fn test_validate_list_jobs_params_limit_exceeds_max() {
+        let result = validate_list_jobs_params("queue-1", &None, 1001);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Limit must be between 1 and"));
+    }
+
+    // -------------------------------------------------------------------------
+    // Job Status Validation Tests
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_validate_job_status_params_valid() {
+        let result = validate_job_status_params("queue-1", "job-123");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_job_status_params_empty_queue_id() {
+        let result = validate_job_status_params("", "job-123");
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Queue ID cannot be empty"));
+    }
+
+    #[test]
+    fn test_validate_job_status_params_empty_job_id() {
+        let result = validate_job_status_params("queue-1", "");
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Job ID cannot be empty"));
+    }
+
+    // -------------------------------------------------------------------------
+    // Queue ID Validation Tests
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_validate_queue_id_valid() {
+        let result = validate_queue_id("queue-1");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_queue_id_empty() {
+        let result = validate_queue_id("");
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Queue ID cannot be empty"));
+    }
+
+    // -------------------------------------------------------------------------
+    // Schedule Parsing Tests
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_parse_schedule_interval() {
+        let result = parse_schedule("interval:60");
+        assert!(result.is_ok());
+        let schedule = result.unwrap();
+        match schedule.schedule_type {
+            ScheduleType::Interval {
+                interval_minutes, ..
+            } => {
+                assert_eq!(interval_minutes, 60);
+            }
+            _ => panic!("Expected Interval schedule type"),
+        }
+    }
+
+    #[test]
+    fn test_parse_schedule_cron() {
+        let result = parse_schedule("cron:0 * * * *");
+        assert!(result.is_ok());
+        let schedule = result.unwrap();
+        match schedule.schedule_type {
+            ScheduleType::Cron { expression, .. } => {
+                assert_eq!(expression, "0 * * * *");
+            }
+            _ => panic!("Expected Cron schedule type"),
+        }
+    }
+
+    #[test]
+    fn test_parse_schedule_invalid_format() {
+        let result = parse_schedule("invalid");
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid schedule format"));
+    }
+
+    #[test]
+    fn test_parse_schedule_unknown_type() {
+        let result = parse_schedule("unknown:value");
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Unknown schedule type"));
+    }
+
+    #[test]
+    fn test_parse_schedule_invalid_interval() {
+        let result = parse_schedule("interval:not_a_number");
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid interval minutes"));
+    }
+
+    // -------------------------------------------------------------------------
+    // Time Parsing Tests
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_parse_time_valid() {
+        let result = parse_time("2025-01-15T10:30:00Z");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_parse_time_invalid() {
+        let result = parse_time("invalid-time");
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid time format"));
+    }
+
+    // -------------------------------------------------------------------------
+    // Priority Conversion Tests
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_priority_conversion() {
+        assert!(matches!(
+            JobPriority::from(PriorityArg::Low),
+            JobPriority::Low
+        ));
+        assert!(matches!(
+            JobPriority::from(PriorityArg::Normal),
+            JobPriority::Normal
+        ));
+        assert!(matches!(
+            JobPriority::from(PriorityArg::High),
+            JobPriority::High
+        ));
+        assert!(matches!(
+            JobPriority::from(PriorityArg::Critical),
+            JobPriority::Critical
+        ));
+    }
 }

@@ -1,3 +1,9 @@
+#![allow(clippy::ptr_arg)]
+//! Validate Command
+//!
+//! Validates model files, config files, and directories with optional deep validation.
+//! Supports pre-execution validation to catch errors early.
+
 use crate::config::Config;
 use crate::models::ModelManager;
 use anyhow::Result;
@@ -20,13 +26,27 @@ pub struct ValidateArgs {
     pub verbose: bool,
 }
 
-pub async fn execute(args: ValidateArgs, config: &Config) -> Result<()> {
-    info!("Validating: {}", args.path.display());
-
+/// Pre-execution validation to catch errors early before running the command.
+/// Returns Ok(()) if validation passes, or an error with a descriptive message.
+pub fn pre_validate(args: &ValidateArgs) -> Result<()> {
+    // Validate path exists
     if !args.path.exists() {
-        println!("✗ Path does not exist: {}", args.path.display());
-        std::process::exit(1);
+        anyhow::bail!("Path does not exist: {}", args.path.display());
     }
+
+    // Validate it's either a file or directory (not a symlink to nothing, etc.)
+    if !args.path.is_file() && !args.path.is_dir() {
+        anyhow::bail!("Path must be a file or directory: {}", args.path.display());
+    }
+
+    Ok(())
+}
+
+pub async fn execute(args: ValidateArgs, config: &Config) -> Result<()> {
+    // Run pre-execution validation to catch errors early
+    pre_validate(&args)?;
+
+    info!("Validating: {}", args.path.display());
 
     let mut validation_passed = true;
 
@@ -362,5 +382,82 @@ async fn deep_validate_model(path: &PathBuf, config: &Config) -> Result<bool> {
             println!("  ✗ Model failed to load: {}", e);
             Ok(false)
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use tempfile::TempDir;
+
+    fn create_test_args(path: PathBuf) -> ValidateArgs {
+        ValidateArgs {
+            path,
+            checksum: false,
+            deep: false,
+            verbose: false,
+        }
+    }
+
+    #[test]
+    fn test_pre_validate_nonexistent_path() {
+        let args = create_test_args(PathBuf::from("/nonexistent/path/to/file"));
+        let result = pre_validate(&args);
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("Path does not exist"));
+    }
+
+    #[test]
+    fn test_pre_validate_valid_file() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("test.txt");
+        fs::write(&file_path, "test content").unwrap();
+
+        let args = create_test_args(file_path);
+        let result = pre_validate(&args);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_pre_validate_valid_directory() {
+        let temp_dir = TempDir::new().unwrap();
+
+        let args = create_test_args(temp_dir.path().to_path_buf());
+        let result = pre_validate(&args);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_pre_validate_with_checksum_flag() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("model.gguf");
+        fs::write(&file_path, "fake model content").unwrap();
+
+        let args = ValidateArgs {
+            path: file_path,
+            checksum: true,
+            deep: false,
+            verbose: false,
+        };
+        let result = pre_validate(&args);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_pre_validate_with_verbose_flag() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("config.toml");
+        fs::write(&file_path, "[section]\nkey = \"value\"").unwrap();
+
+        let args = ValidateArgs {
+            path: file_path,
+            checksum: false,
+            deep: false,
+            verbose: true,
+        };
+        let result = pre_validate(&args);
+        assert!(result.is_ok());
     }
 }

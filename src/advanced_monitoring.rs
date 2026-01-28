@@ -1,4 +1,4 @@
-#![allow(dead_code, unused_imports, unused_variables)]
+#![allow(dead_code, unused_imports, unused_variables, clippy::ptr_arg)]
 use crate::config::Config;
 use anyhow::Result;
 use chrono::{DateTime, Utc};

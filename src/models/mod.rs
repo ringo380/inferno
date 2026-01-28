@@ -634,9 +634,9 @@ mod tests {
             .expect("Failed to list models in test");
         assert!(models.is_empty());
 
-        // Create a mock model file
+        // Create a mock model file (GGUF magic + version 3 in little-endian)
         let model_path = models_dir.join("test_model.gguf");
-        fs::write(&model_path, b"GGUF\x00\x00\x00\x01mock data")
+        fs::write(&model_path, b"GGUF\x03\x00\x00\x00mock data")
             .await
             .expect("Failed to write test model file");
 
@@ -659,9 +659,9 @@ mod tests {
 
         let manager = ModelManager::new(&models_dir);
 
-        // Valid GGUF file
+        // Valid GGUF file (GGUF magic + version 3 in little-endian)
         let gguf_path = models_dir.join("valid.gguf");
-        fs::write(&gguf_path, b"GGUF\x00\x00\x00\x01mock data")
+        fs::write(&gguf_path, b"GGUF\x03\x00\x00\x00mock data")
             .await
             .expect("Failed to write valid GGUF file");
         assert!(manager

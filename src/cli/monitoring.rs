@@ -172,6 +172,9 @@ pub enum ExportFormat {
 }
 
 pub async fn execute(args: MonitoringArgs, config: &Config) -> Result<()> {
+    // Validate arguments before execution
+    validate_args(&args.command)?;
+
     match args.command {
         MonitoringCommand::Status => show_monitoring_status(config).await,
         MonitoringCommand::Dashboard {
@@ -235,6 +238,97 @@ pub async fn execute(args: MonitoringArgs, config: &Config) -> Result<()> {
             duration,
         } => benchmark_monitoring(config, metrics, concurrent, duration).await,
     }
+}
+
+/// Validate command arguments before execution
+fn validate_args(command: &MonitoringCommand) -> Result<()> {
+    match command {
+        MonitoringCommand::Alerts { limit, .. } => {
+            if *limit == 0 {
+                anyhow::bail!("Limit must be greater than 0");
+            }
+            if *limit > 1000 {
+                anyhow::bail!("Limit cannot exceed 1000");
+            }
+        }
+        MonitoringCommand::Configure {
+            max_error_rate,
+            max_cpu,
+            min_cache_hit_rate,
+            ..
+        } => {
+            if let Some(error_rate) = max_error_rate {
+                if !(0.0..=100.0).contains(error_rate) {
+                    anyhow::bail!("Error rate must be between 0.0 and 100.0");
+                }
+            }
+            if let Some(cpu) = max_cpu {
+                if !(0.0..=100.0).contains(cpu) {
+                    anyhow::bail!("CPU usage must be between 0.0 and 100.0");
+                }
+            }
+            if let Some(cache_hit_rate) = min_cache_hit_rate {
+                if !(0.0..=100.0).contains(cache_hit_rate) {
+                    anyhow::bail!("Cache hit rate must be between 0.0 and 100.0");
+                }
+            }
+        }
+        MonitoringCommand::Trends {
+            hours,
+            group_by_minutes,
+            ..
+        } => {
+            if *hours == 0 {
+                anyhow::bail!("Hours must be greater than 0");
+            }
+            if *hours > 168 {
+                anyhow::bail!("Hours cannot exceed 168 (1 week)");
+            }
+            if *group_by_minutes == 0 {
+                anyhow::bail!("Group by minutes must be greater than 0");
+            }
+            if *group_by_minutes > 1440 {
+                anyhow::bail!("Group by minutes cannot exceed 1440 (1 day)");
+            }
+        }
+        MonitoringCommand::Report { hours, .. } | MonitoringCommand::Export { hours, .. } => {
+            if *hours == 0 {
+                anyhow::bail!("Hours must be greater than 0");
+            }
+            if *hours > 720 {
+                anyhow::bail!("Hours cannot exceed 720 (30 days)");
+            }
+        }
+        MonitoringCommand::Dashboard { interval, .. }
+        | MonitoringCommand::Watch { interval, .. } => {
+            if *interval == 0 {
+                anyhow::bail!("Interval must be greater than 0");
+            }
+        }
+        MonitoringCommand::Benchmark {
+            metrics,
+            concurrent,
+            duration,
+        } => {
+            if *metrics == 0 {
+                anyhow::bail!("Metrics count must be greater than 0");
+            }
+            if *concurrent == 0 {
+                anyhow::bail!("Concurrent writers must be greater than 0");
+            }
+            if *duration == 0 {
+                anyhow::bail!("Duration must be greater than 0");
+            }
+        }
+        MonitoringCommand::Resolve { alert_id } => {
+            if alert_id.trim().is_empty() {
+                anyhow::bail!("Alert ID cannot be empty");
+            }
+        }
+        // Status and TestAlerts have no special validation requirements
+        MonitoringCommand::Status | MonitoringCommand::TestAlerts { .. } => {}
+    }
+    Ok(())
 }
 
 async fn show_monitoring_status(_config: &Config) -> Result<()> {
@@ -995,4 +1089,397 @@ async fn benchmark_monitoring(
     println!("Active alerts: {}", active_alerts.len());
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_validate_alerts_valid() {
+        let cmd = MonitoringCommand::Alerts {
+            show_resolved: false,
+            severity: None,
+            limit: 20,
+        };
+        assert!(validate_args(&cmd).is_ok());
+    }
+
+    #[test]
+    fn test_validate_alerts_zero_limit() {
+        let cmd = MonitoringCommand::Alerts {
+            show_resolved: false,
+            severity: None,
+            limit: 0,
+        };
+        let result = validate_args(&cmd);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Limit must be greater than 0"));
+    }
+
+    #[test]
+    fn test_validate_alerts_exceeds_limit() {
+        let cmd = MonitoringCommand::Alerts {
+            show_resolved: false,
+            severity: None,
+            limit: 1001,
+        };
+        let result = validate_args(&cmd);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Limit cannot exceed 1000"));
+    }
+
+    #[test]
+    fn test_validate_configure_valid() {
+        let cmd = MonitoringCommand::Configure {
+            max_response_time: Some(1000),
+            min_throughput: Some(10.0),
+            max_error_rate: Some(5.0),
+            max_memory: Some(4096),
+            max_cpu: Some(80.0),
+            min_cache_hit_rate: Some(70.0),
+        };
+        assert!(validate_args(&cmd).is_ok());
+    }
+
+    #[test]
+    fn test_validate_configure_invalid_error_rate() {
+        let cmd = MonitoringCommand::Configure {
+            max_response_time: None,
+            min_throughput: None,
+            max_error_rate: Some(150.0),
+            max_memory: None,
+            max_cpu: None,
+            min_cache_hit_rate: None,
+        };
+        let result = validate_args(&cmd);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Error rate must be between 0.0 and 100.0"));
+    }
+
+    #[test]
+    fn test_validate_configure_invalid_cpu() {
+        let cmd = MonitoringCommand::Configure {
+            max_response_time: None,
+            min_throughput: None,
+            max_error_rate: None,
+            max_memory: None,
+            max_cpu: Some(101.0),
+            min_cache_hit_rate: None,
+        };
+        let result = validate_args(&cmd);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("CPU usage must be between 0.0 and 100.0"));
+    }
+
+    #[test]
+    fn test_validate_configure_invalid_cache_hit_rate() {
+        let cmd = MonitoringCommand::Configure {
+            max_response_time: None,
+            min_throughput: None,
+            max_error_rate: None,
+            max_memory: None,
+            max_cpu: None,
+            min_cache_hit_rate: Some(-10.0),
+        };
+        let result = validate_args(&cmd);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Cache hit rate must be between 0.0 and 100.0"));
+    }
+
+    #[test]
+    fn test_validate_trends_valid() {
+        let cmd = MonitoringCommand::Trends {
+            hours: 24,
+            model: None,
+            group_by_minutes: 5,
+        };
+        assert!(validate_args(&cmd).is_ok());
+    }
+
+    #[test]
+    fn test_validate_trends_zero_hours() {
+        let cmd = MonitoringCommand::Trends {
+            hours: 0,
+            model: None,
+            group_by_minutes: 5,
+        };
+        let result = validate_args(&cmd);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Hours must be greater than 0"));
+    }
+
+    #[test]
+    fn test_validate_trends_exceeds_hours() {
+        let cmd = MonitoringCommand::Trends {
+            hours: 200,
+            model: None,
+            group_by_minutes: 5,
+        };
+        let result = validate_args(&cmd);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Hours cannot exceed 168"));
+    }
+
+    #[test]
+    fn test_validate_trends_zero_group_by() {
+        let cmd = MonitoringCommand::Trends {
+            hours: 24,
+            model: None,
+            group_by_minutes: 0,
+        };
+        let result = validate_args(&cmd);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Group by minutes must be greater than 0"));
+    }
+
+    #[test]
+    fn test_validate_trends_exceeds_group_by() {
+        let cmd = MonitoringCommand::Trends {
+            hours: 24,
+            model: None,
+            group_by_minutes: 1500,
+        };
+        let result = validate_args(&cmd);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Group by minutes cannot exceed 1440"));
+    }
+
+    #[test]
+    fn test_validate_report_valid() {
+        let cmd = MonitoringCommand::Report {
+            hours: 24,
+            detailed: false,
+            recommendations: false,
+        };
+        assert!(validate_args(&cmd).is_ok());
+    }
+
+    #[test]
+    fn test_validate_report_zero_hours() {
+        let cmd = MonitoringCommand::Report {
+            hours: 0,
+            detailed: false,
+            recommendations: false,
+        };
+        let result = validate_args(&cmd);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Hours must be greater than 0"));
+    }
+
+    #[test]
+    fn test_validate_report_exceeds_hours() {
+        let cmd = MonitoringCommand::Report {
+            hours: 800,
+            detailed: false,
+            recommendations: false,
+        };
+        let result = validate_args(&cmd);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Hours cannot exceed 720"));
+    }
+
+    #[test]
+    fn test_validate_export_valid() {
+        let cmd = MonitoringCommand::Export {
+            output: None,
+            format: ExportFormat::Json,
+            hours: 24,
+            include_alerts: false,
+        };
+        assert!(validate_args(&cmd).is_ok());
+    }
+
+    #[test]
+    fn test_validate_dashboard_valid() {
+        let cmd = MonitoringCommand::Dashboard {
+            port: 3000,
+            interval: 1,
+            detailed: false,
+        };
+        assert!(validate_args(&cmd).is_ok());
+    }
+
+    #[test]
+    fn test_validate_dashboard_zero_interval() {
+        let cmd = MonitoringCommand::Dashboard {
+            port: 3000,
+            interval: 0,
+            detailed: false,
+        };
+        let result = validate_args(&cmd);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Interval must be greater than 0"));
+    }
+
+    #[test]
+    fn test_validate_watch_zero_interval() {
+        let cmd = MonitoringCommand::Watch {
+            interval: 0,
+            model: None,
+            alerts_only: false,
+        };
+        let result = validate_args(&cmd);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Interval must be greater than 0"));
+    }
+
+    #[test]
+    fn test_validate_benchmark_valid() {
+        let cmd = MonitoringCommand::Benchmark {
+            metrics: 1000,
+            concurrent: 10,
+            duration: 60,
+        };
+        assert!(validate_args(&cmd).is_ok());
+    }
+
+    #[test]
+    fn test_validate_benchmark_zero_metrics() {
+        let cmd = MonitoringCommand::Benchmark {
+            metrics: 0,
+            concurrent: 10,
+            duration: 60,
+        };
+        let result = validate_args(&cmd);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Metrics count must be greater than 0"));
+    }
+
+    #[test]
+    fn test_validate_benchmark_zero_concurrent() {
+        let cmd = MonitoringCommand::Benchmark {
+            metrics: 1000,
+            concurrent: 0,
+            duration: 60,
+        };
+        let result = validate_args(&cmd);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Concurrent writers must be greater than 0"));
+    }
+
+    #[test]
+    fn test_validate_benchmark_zero_duration() {
+        let cmd = MonitoringCommand::Benchmark {
+            metrics: 1000,
+            concurrent: 10,
+            duration: 0,
+        };
+        let result = validate_args(&cmd);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Duration must be greater than 0"));
+    }
+
+    #[test]
+    fn test_validate_resolve_valid() {
+        let cmd = MonitoringCommand::Resolve {
+            alert_id: "alert-123".to_string(),
+        };
+        assert!(validate_args(&cmd).is_ok());
+    }
+
+    #[test]
+    fn test_validate_resolve_empty_id() {
+        let cmd = MonitoringCommand::Resolve {
+            alert_id: "".to_string(),
+        };
+        let result = validate_args(&cmd);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Alert ID cannot be empty"));
+    }
+
+    #[test]
+    fn test_validate_resolve_whitespace_id() {
+        let cmd = MonitoringCommand::Resolve {
+            alert_id: "   ".to_string(),
+        };
+        let result = validate_args(&cmd);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Alert ID cannot be empty"));
+    }
+
+    #[test]
+    fn test_validate_status() {
+        let cmd = MonitoringCommand::Status;
+        assert!(validate_args(&cmd).is_ok());
+    }
+
+    #[test]
+    fn test_validate_test_alerts() {
+        let cmd = MonitoringCommand::TestAlerts {
+            alert_type: None,
+            generate_metrics: false,
+        };
+        assert!(validate_args(&cmd).is_ok());
+    }
+
+    #[test]
+    fn test_alert_severity_conversion() {
+        assert!(matches!(
+            AlertSeverity::from(AlertSeverityArg::Critical),
+            AlertSeverity::Critical
+        ));
+        assert!(matches!(
+            AlertSeverity::from(AlertSeverityArg::Warning),
+            AlertSeverity::Warning
+        ));
+        assert!(matches!(
+            AlertSeverity::from(AlertSeverityArg::Info),
+            AlertSeverity::Info
+        ));
+    }
 }

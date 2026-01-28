@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use crate::config::Config;
 use crate::performance_optimization::{
     PerformanceOptimizationConfig, PerformanceOptimizationSystem,
@@ -7,6 +8,12 @@ use clap::{Args, Subcommand};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
+
+// Valid values for validation
+const VALID_AUTOTUNE_STRATEGIES: &[&str] = &["grid", "random", "bayesian"];
+const VALID_REPORT_TIME_RANGES: &[&str] = &["1h", "24h", "7d", "30d"];
+const VALID_REPORT_FORMATS: &[&str] = &["html", "json", "pdf", "markdown"];
+const VALID_OUTPUT_FORMATS: &[&str] = &["json", "table", "csv"];
 
 // Helper data structures for CLI operations
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1183,7 +1190,139 @@ pub enum BenchmarkCommand {
     },
 }
 
+/// Validate performance optimization command arguments
+fn validate_performance_args(args: &PerformanceOptimizationArgs) -> Result<()> {
+    match &args.command {
+        PerformanceCommand::Profile { command } => validate_profile_command(command),
+        PerformanceCommand::Optimize { command } => validate_optimize_command(command),
+        PerformanceCommand::AutoTune { command } => validate_autotune_command(command),
+        PerformanceCommand::Status { format, .. } => {
+            if let Some(fmt) = format {
+                if !VALID_OUTPUT_FORMATS.contains(&fmt.as_str()) {
+                    anyhow::bail!(
+                        "Output format must be one of: {}",
+                        VALID_OUTPUT_FORMATS.join(", ")
+                    );
+                }
+            }
+            Ok(())
+        }
+        _ => Ok(()), // Other commands have simpler validation
+    }
+}
+
+fn validate_profile_command(command: &ProfileCommand) -> Result<()> {
+    match command {
+        ProfileCommand::Start { name, duration, .. } => {
+            if name.is_empty() {
+                anyhow::bail!("Profile name cannot be empty");
+            }
+            if let Some(dur) = duration {
+                if *dur == 0 {
+                    anyhow::bail!("Duration must be greater than 0");
+                }
+            }
+            Ok(())
+        }
+        ProfileCommand::Analyze { profile, .. } => {
+            if profile.is_empty() {
+                anyhow::bail!("Profile name cannot be empty");
+            }
+            Ok(())
+        }
+        ProfileCommand::Compare {
+            profile1, profile2, ..
+        } => {
+            if profile1.is_empty() {
+                anyhow::bail!("First profile name cannot be empty");
+            }
+            if profile2.is_empty() {
+                anyhow::bail!("Second profile name cannot be empty");
+            }
+            Ok(())
+        }
+        _ => Ok(()),
+    }
+}
+
+fn validate_optimize_command(command: &OptimizeCommand) -> Result<()> {
+    match command {
+        OptimizeCommand::Run { target, .. } => {
+            if target.is_empty() {
+                anyhow::bail!("Optimization target cannot be empty");
+            }
+            Ok(())
+        }
+        OptimizeCommand::Rollback { id, .. } => {
+            if id.is_empty() {
+                anyhow::bail!("Optimization ID cannot be empty");
+            }
+            Ok(())
+        }
+        OptimizeCommand::Plan { targets, .. } => {
+            if targets.is_empty() {
+                anyhow::bail!("At least one optimization target is required");
+            }
+            Ok(())
+        }
+        _ => Ok(()),
+    }
+}
+
+fn validate_autotune_command(command: &AutoTuneCommand) -> Result<()> {
+    match command {
+        AutoTuneCommand::Start {
+            algorithm,
+            max_iterations,
+            exploration,
+            ..
+        } => {
+            if let Some(alg) = algorithm {
+                if !VALID_AUTOTUNE_STRATEGIES.contains(&alg.as_str()) {
+                    anyhow::bail!(
+                        "Algorithm must be one of: {}",
+                        VALID_AUTOTUNE_STRATEGIES.join(", ")
+                    );
+                }
+            }
+            if let Some(iters) = max_iterations {
+                if *iters == 0 {
+                    anyhow::bail!("Max iterations must be greater than 0");
+                }
+            }
+            if let Some(exp) = exploration {
+                if !(*exp >= 0.0 && *exp <= 1.0) {
+                    anyhow::bail!("Exploration factor must be between 0.0 and 1.0");
+                }
+            }
+            Ok(())
+        }
+        AutoTuneCommand::Progress { id, .. } | AutoTuneCommand::Stop { id, .. } => {
+            if id.is_empty() {
+                anyhow::bail!("Session ID cannot be empty");
+            }
+            Ok(())
+        }
+        AutoTuneCommand::Validate { id } | AutoTuneCommand::Apply { id, .. } => {
+            if id.is_empty() {
+                anyhow::bail!("Session ID cannot be empty");
+            }
+            Ok(())
+        }
+        AutoTuneCommand::Export { id, .. } => {
+            if id.is_empty() {
+                anyhow::bail!("Session ID cannot be empty");
+            }
+            Ok(())
+        }
+        _ => Ok(()),
+    }
+}
+
 pub async fn execute(args: PerformanceOptimizationArgs, _config: &Config) -> Result<()> {
+    // Validate arguments before execution
+    validate_performance_args(&args)?;
+
     let system =
         PerformanceOptimizationSystem::new(PerformanceOptimizationConfig::default()).await?;
 
@@ -2633,4 +2772,255 @@ async fn handle_status_command(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_validate_profile_start_empty_name() {
+        let args = PerformanceOptimizationArgs {
+            command: PerformanceCommand::Profile {
+                command: ProfileCommand::Start {
+                    name: "".to_string(),
+                    profile_type: None,
+                    duration: Some(60),
+                    sample_rate: None,
+                    cpu: false,
+                    memory: false,
+                    io: false,
+                    network: false,
+                    gpu: false,
+                },
+            },
+        };
+
+        let result = validate_performance_args(&args);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Profile name cannot be empty"));
+    }
+
+    #[test]
+    fn test_validate_profile_start_zero_duration() {
+        let args = PerformanceOptimizationArgs {
+            command: PerformanceCommand::Profile {
+                command: ProfileCommand::Start {
+                    name: "test".to_string(),
+                    profile_type: None,
+                    duration: Some(0),
+                    sample_rate: None,
+                    cpu: false,
+                    memory: false,
+                    io: false,
+                    network: false,
+                    gpu: false,
+                },
+            },
+        };
+
+        let result = validate_performance_args(&args);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Duration must be greater than 0"));
+    }
+
+    #[test]
+    fn test_validate_autotune_invalid_algorithm() {
+        let args = PerformanceOptimizationArgs {
+            command: PerformanceCommand::AutoTune {
+                command: AutoTuneCommand::Start {
+                    config: None,
+                    algorithm: Some("invalid".to_string()),
+                    max_iterations: Some(100),
+                    target: None,
+                    exploration: None,
+                    background: false,
+                },
+            },
+        };
+
+        let result = validate_performance_args(&args);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Algorithm must be one of"));
+    }
+
+    #[test]
+    fn test_validate_autotune_zero_iterations() {
+        let args = PerformanceOptimizationArgs {
+            command: PerformanceCommand::AutoTune {
+                command: AutoTuneCommand::Start {
+                    config: None,
+                    algorithm: Some("bayesian".to_string()),
+                    max_iterations: Some(0),
+                    target: None,
+                    exploration: None,
+                    background: false,
+                },
+            },
+        };
+
+        let result = validate_performance_args(&args);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Max iterations must be greater than 0"));
+    }
+
+    #[test]
+    fn test_validate_autotune_invalid_exploration() {
+        let args = PerformanceOptimizationArgs {
+            command: PerformanceCommand::AutoTune {
+                command: AutoTuneCommand::Start {
+                    config: None,
+                    algorithm: Some("bayesian".to_string()),
+                    max_iterations: Some(100),
+                    target: None,
+                    exploration: Some(1.5),
+                    background: false,
+                },
+            },
+        };
+
+        let result = validate_performance_args(&args);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Exploration factor must be between 0.0 and 1.0"));
+    }
+
+    #[test]
+    fn test_validate_optimize_run_empty_target() {
+        let args = PerformanceOptimizationArgs {
+            command: PerformanceCommand::Optimize {
+                command: OptimizeCommand::Run {
+                    target: "".to_string(),
+                    level: None,
+                    strategy: None,
+                    dry_run: false,
+                    force: false,
+                    overrides: None,
+                },
+            },
+        };
+
+        let result = validate_performance_args(&args);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Optimization target cannot be empty"));
+    }
+
+    #[test]
+    fn test_validate_optimize_rollback_empty_id() {
+        let args = PerformanceOptimizationArgs {
+            command: PerformanceCommand::Optimize {
+                command: OptimizeCommand::Rollback {
+                    id: "".to_string(),
+                    point: None,
+                    force: false,
+                },
+            },
+        };
+
+        let result = validate_performance_args(&args);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Optimization ID cannot be empty"));
+    }
+
+    #[test]
+    fn test_validate_optimize_plan_empty_targets() {
+        let args = PerformanceOptimizationArgs {
+            command: PerformanceCommand::Optimize {
+                command: OptimizeCommand::Plan {
+                    targets: vec![],
+                    budget: None,
+                    time_limit: None,
+                    detailed: false,
+                },
+            },
+        };
+
+        let result = validate_performance_args(&args);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("At least one optimization target is required"));
+    }
+
+    #[test]
+    fn test_validate_status_invalid_format() {
+        let args = PerformanceOptimizationArgs {
+            command: PerformanceCommand::Status {
+                detailed: false,
+                format: Some("invalid".to_string()),
+                refresh: None,
+                history: false,
+                realtime: false,
+            },
+        };
+
+        let result = validate_performance_args(&args);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Output format must be one of"));
+    }
+
+    #[test]
+    fn test_validate_autotune_progress_empty_id() {
+        let args = PerformanceOptimizationArgs {
+            command: PerformanceCommand::AutoTune {
+                command: AutoTuneCommand::Progress {
+                    id: "".to_string(),
+                    graph: false,
+                    refresh: None,
+                },
+            },
+        };
+
+        let result = validate_performance_args(&args);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Session ID cannot be empty"));
+    }
+
+    #[test]
+    fn test_validate_profile_compare_empty_profile() {
+        let args = PerformanceOptimizationArgs {
+            command: PerformanceCommand::Profile {
+                command: ProfileCommand::Compare {
+                    profile1: "".to_string(),
+                    profile2: "profile2".to_string(),
+                    metrics: false,
+                    format: None,
+                },
+            },
+        };
+
+        let result = validate_performance_args(&args);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("First profile name cannot be empty"));
+    }
 }

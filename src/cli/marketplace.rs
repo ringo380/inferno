@@ -544,6 +544,25 @@ pub async fn handle_marketplace_command(args: MarketplaceArgs) -> Result<()> {
 }
 
 async fn handle_search(marketplace: &ModelMarketplace, config: SearchConfig) -> Result<()> {
+    // Validation
+    if config.query.is_empty() {
+        return Err(anyhow::anyhow!("Search query cannot be empty"));
+    }
+
+    if config.per_page == 0 || config.per_page > 100 {
+        return Err(anyhow::anyhow!(
+            "Results per page must be between 1 and 100"
+        ));
+    }
+
+    if let Some(rating) = config.min_rating {
+        if !(1.0..=5.0).contains(&rating) {
+            return Err(anyhow::anyhow!(
+                "Minimum rating must be between 1.0 and 5.0"
+            ));
+        }
+    }
+
     info!("Searching marketplace for: {}", config.query);
 
     let filters = Some(SearchFilters {
@@ -652,6 +671,11 @@ async fn handle_info(
     model_id: String,
     output: OutputFormat,
 ) -> Result<()> {
+    // Validation
+    if model_id.is_empty() {
+        return Err(anyhow::anyhow!("Model ID cannot be empty"));
+    }
+
     info!("Fetching model information: {}", model_id);
 
     let model = marketplace.get_model_details(&model_id).await?;
@@ -682,6 +706,20 @@ async fn handle_download(
     skip_checks: bool,
     background: bool,
 ) -> Result<()> {
+    // Validation
+    if model_id.is_empty() {
+        return Err(anyhow::anyhow!("Model ID cannot be empty"));
+    }
+
+    if let Some(ref dir) = output {
+        if !dir.exists() {
+            return Err(anyhow::anyhow!(
+                "Output directory does not exist: {}",
+                dir.display()
+            ));
+        }
+    }
+
     info!("Starting download for model: {}", model_id);
 
     if !skip_checks {
@@ -761,6 +799,20 @@ async fn handle_install(
     auto_update: bool,
     path: Option<PathBuf>,
 ) -> Result<()> {
+    // Validation
+    if id.is_empty() {
+        return Err(anyhow::anyhow!("Download ID or model ID cannot be empty"));
+    }
+
+    if let Some(ref dir) = path {
+        if !dir.exists() {
+            return Err(anyhow::anyhow!(
+                "Installation path does not exist: {}",
+                dir.display()
+            ));
+        }
+    }
+
     info!("Installing model: {}", id);
 
     // Try as download ID first, then as model ID
@@ -810,6 +862,11 @@ async fn handle_uninstall(
     remove_files: bool,
     force: bool,
 ) -> Result<()> {
+    // Validation
+    if model_id.is_empty() {
+        return Err(anyhow::anyhow!("Model ID cannot be empty"));
+    }
+
     info!("Uninstalling model: {}", model_id);
 
     if !force {
@@ -1017,6 +1074,11 @@ async fn handle_progress(
 }
 
 async fn handle_cancel(marketplace: &ModelMarketplace, download_id: String) -> Result<()> {
+    // Validation
+    if download_id.is_empty() {
+        return Err(anyhow::anyhow!("Download ID cannot be empty"));
+    }
+
     info!("Cancelling download: {}", download_id);
 
     marketplace.cancel_download(&download_id).await?;
@@ -1105,6 +1167,11 @@ async fn handle_updates(
 }
 
 async fn handle_update(marketplace: &ModelMarketplace, model_id: String, wait: bool) -> Result<()> {
+    // Validation
+    if model_id.is_empty() {
+        return Err(anyhow::anyhow!("Model ID cannot be empty"));
+    }
+
     info!("Updating model: {}", model_id);
 
     let download_id = marketplace.update_model(&model_id).await?;
@@ -1144,14 +1211,55 @@ async fn handle_update(marketplace: &ModelMarketplace, model_id: String, wait: b
 }
 
 async fn handle_publish(marketplace: &ModelMarketplace, config: PublishConfig) -> Result<()> {
-    info!("Publishing model: {}", config.name);
-
+    // Validation
     if !config.model_path.exists() {
         return Err(anyhow::anyhow!(
-            "Model file not found: {}",
+            "Model file does not exist: {}",
             config.model_path.display()
         ));
     }
+
+    if config.name.is_empty() {
+        return Err(anyhow::anyhow!("Model name cannot be empty"));
+    }
+
+    if config.version.is_empty() {
+        return Err(anyhow::anyhow!("Model version cannot be empty"));
+    }
+
+    if config.description.is_empty() {
+        return Err(anyhow::anyhow!("Model description cannot be empty"));
+    }
+
+    if config.license.is_empty() {
+        return Err(anyhow::anyhow!("Model license cannot be empty"));
+    }
+
+    if let Some(price) = config.price {
+        if price < 0.0 {
+            return Err(anyhow::anyhow!("Price cannot be negative"));
+        }
+    }
+
+    if let Some(ref license_file) = config.license_file {
+        if !license_file.exists() {
+            return Err(anyhow::anyhow!(
+                "License file does not exist: {}",
+                license_file.display()
+            ));
+        }
+    }
+
+    if let Some(ref readme_file) = config.readme_file {
+        if !readme_file.exists() {
+            return Err(anyhow::anyhow!(
+                "README file does not exist: {}",
+                readme_file.display()
+            ));
+        }
+    }
+
+    info!("Publishing model: {}", config.name);
 
     // Create basic model metadata
     let metadata = ModelListing {
@@ -1267,6 +1375,11 @@ async fn handle_popular(
     limit: usize,
     output: OutputFormat,
 ) -> Result<()> {
+    // Validation
+    if limit == 0 || limit > 100 {
+        return Err(anyhow::anyhow!("Limit must be between 1 and 100"));
+    }
+
     info!("Fetching popular models");
 
     let models = marketplace
@@ -1339,6 +1452,11 @@ async fn handle_recommendations(
     limit: usize,
     output: OutputFormat,
 ) -> Result<()> {
+    // Validation
+    if limit == 0 || limit > 100 {
+        return Err(anyhow::anyhow!("Limit must be between 1 and 100"));
+    }
+
     info!("Fetching model recommendations");
 
     let models = marketplace
@@ -1448,6 +1566,17 @@ async fn handle_clear_cache(
     metadata_only: bool,
     files_only: bool,
 ) -> Result<()> {
+    // Validation
+    let options_count = [all, metadata_only, files_only]
+        .iter()
+        .filter(|&&x| x)
+        .count();
+    if options_count > 1 {
+        return Err(anyhow::anyhow!(
+            "Only one of --all, --metadata-only, or --files-only can be specified"
+        ));
+    }
+
     info!("Clearing marketplace cache");
 
     if all {
@@ -1611,4 +1740,209 @@ fn confirm(message: &str) -> Result<bool> {
         .read_line(&mut input)
         .context("Failed to read input")?;
     Ok(input.trim().to_lowercase().starts_with('y'))
+}
+
+// ============================================================================
+// Unit Tests
+// ============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs::File;
+    use tempfile::TempDir;
+
+    #[test]
+    fn test_search_config_validation() {
+        // Valid search config
+        let config = SearchConfig {
+            query: "llama".to_string(),
+            category: None,
+            publisher: None,
+            license: None,
+            min_rating: None,
+            max_size: None,
+            tags: None,
+            frameworks: None,
+            languages: None,
+            platforms: None,
+            free_only: false,
+            verified_only: false,
+            page: 1,
+            per_page: 20,
+            output: OutputFormat::Table,
+        };
+        assert!(!config.query.is_empty());
+        assert!(config.per_page > 0 && config.per_page <= 100);
+
+        // Empty query would fail validation
+        let config_empty = SearchConfig {
+            query: "".to_string(),
+            ..config
+        };
+        assert!(config_empty.query.is_empty());
+
+        // Per page out of bounds would fail
+        let config_high_limit = SearchConfig {
+            query: "test".to_string(),
+            category: None,
+            publisher: None,
+            license: None,
+            min_rating: None,
+            max_size: None,
+            tags: None,
+            frameworks: None,
+            languages: None,
+            platforms: None,
+            free_only: false,
+            verified_only: false,
+            page: 1,
+            per_page: 150,
+            output: OutputFormat::Table,
+        };
+        assert!(config_high_limit.per_page > 100);
+    }
+
+    #[test]
+    fn test_publish_config_validation() {
+        let temp_dir = TempDir::new().unwrap();
+        let model_path = temp_dir.path().join("test_model.gguf");
+        File::create(&model_path).unwrap();
+
+        // Valid publish config
+        let config = PublishConfig {
+            model_path: model_path.clone(),
+            name: "Test Model".to_string(),
+            version: "1.0.0".to_string(),
+            description: "A test model".to_string(),
+            category: ModelCategoryArg::Language,
+            license: "MIT".to_string(),
+            publisher: Some("test-user".to_string()),
+            tags: Some("test,model".to_string()),
+            visibility: VisibilityArg::Public,
+            free: true,
+            price: None,
+            license_file: None,
+            readme_file: None,
+        };
+        assert!(config.model_path.exists());
+        assert!(!config.name.is_empty());
+        assert!(!config.version.is_empty());
+
+        // Empty name would fail validation
+        let config_empty_name = PublishConfig {
+            model_path: model_path.clone(),
+            name: "".to_string(),
+            version: "1.0.0".to_string(),
+            description: "A test model".to_string(),
+            category: ModelCategoryArg::Language,
+            license: "MIT".to_string(),
+            publisher: None,
+            tags: None,
+            visibility: VisibilityArg::Public,
+            free: true,
+            price: None,
+            license_file: None,
+            readme_file: None,
+        };
+        assert!(config_empty_name.name.is_empty());
+
+        // Negative price would fail validation
+        let config_negative_price = PublishConfig {
+            model_path,
+            name: "Test".to_string(),
+            version: "1.0.0".to_string(),
+            description: "A test model".to_string(),
+            category: ModelCategoryArg::Language,
+            license: "MIT".to_string(),
+            publisher: None,
+            tags: None,
+            visibility: VisibilityArg::Public,
+            free: false,
+            price: Some(-10.0),
+            license_file: None,
+            readme_file: None,
+        };
+        assert!(config_negative_price.price.unwrap() < 0.0);
+    }
+
+    #[test]
+    fn test_format_size() {
+        assert_eq!(format_size(0), "0 B");
+        assert_eq!(format_size(512), "512 B");
+        assert_eq!(format_size(1024), "1.0 KB");
+        assert_eq!(format_size(1024 * 1024), "1.0 MB");
+        assert_eq!(format_size(1024 * 1024 * 1024), "1.0 GB");
+        assert_eq!(format_size(1536 * 1024 * 1024), "1.5 GB");
+    }
+
+    #[test]
+    fn test_format_number() {
+        assert_eq!(format_number(0), "0");
+        assert_eq!(format_number(500), "500");
+        assert_eq!(format_number(1500), "1.5K");
+        assert_eq!(format_number(1_500_000), "1.5M");
+    }
+
+    #[test]
+    fn test_truncate() {
+        assert_eq!(truncate("hello", 10), "hello");
+        assert_eq!(truncate("hello world", 8), "hello...");
+        assert_eq!(truncate("a", 5), "a");
+    }
+
+    #[test]
+    fn test_model_category_conversion() {
+        assert!(matches!(
+            ModelCategory::from(ModelCategoryArg::Language),
+            ModelCategory::LanguageModel
+        ));
+        assert!(matches!(
+            ModelCategory::from(ModelCategoryArg::Vision),
+            ModelCategory::VisionModel
+        ));
+        assert!(matches!(
+            ModelCategory::from(ModelCategoryArg::Audio),
+            ModelCategory::AudioModel
+        ));
+        assert!(matches!(
+            ModelCategory::from(ModelCategoryArg::MultiModal),
+            ModelCategory::MultiModal
+        ));
+        assert!(matches!(
+            ModelCategory::from(ModelCategoryArg::Embedding),
+            ModelCategory::Embedding
+        ));
+    }
+
+    #[test]
+    fn test_visibility_conversion() {
+        assert!(matches!(
+            ModelVisibility::from(VisibilityArg::Public),
+            ModelVisibility::Public
+        ));
+        assert!(matches!(
+            ModelVisibility::from(VisibilityArg::Private),
+            ModelVisibility::Private
+        ));
+        assert!(matches!(
+            ModelVisibility::from(VisibilityArg::Organization),
+            ModelVisibility::Organization
+        ));
+    }
+
+    #[test]
+    fn test_rating_bounds_validation() {
+        // Valid rating
+        let valid_rating = Some(3.5_f32);
+        assert!(valid_rating.map_or(true, |r| (1.0..=5.0).contains(&r)));
+
+        // Invalid rating - too low
+        let low_rating = Some(0.5_f32);
+        assert!(!low_rating.map_or(true, |r| (1.0..=5.0).contains(&r)));
+
+        // Invalid rating - too high
+        let high_rating = Some(5.5_f32);
+        assert!(!high_rating.map_or(true, |r| (1.0..=5.0).contains(&r)));
+    }
 }

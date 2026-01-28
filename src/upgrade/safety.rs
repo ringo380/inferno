@@ -1,14 +1,26 @@
-#![allow(dead_code, unused_imports, unused_variables)]
+#![allow(dead_code, unused_imports, unused_variables, clippy::ptr_arg)]
 //! # Safety Checker
 //!
 //! Pre-installation safety checks to ensure system compatibility,
 //! sufficient resources, and safe upgrade conditions.
 
 use super::{UpdateInfo, UpgradeConfig, UpgradeError, UpgradeResult};
+use base64::Engine;
+use ring::signature::{self, UnparsedPublicKey};
+use std::io::Read;
 use std::path::PathBuf;
 use std::process::Command;
 use sysinfo::{DiskExt, ProcessExt, System, SystemExt};
 use tracing::{debug, info, warn};
+
+/// Inferno's Ed25519 public key for signature verification
+/// This key is used to verify update packages are from the official Inferno project
+const INFERNO_PUBLIC_KEY: &[u8] = &[
+    // Placeholder public key - in production, this would be the actual Ed25519 public key
+    // Ed25519 public keys are 32 bytes
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+];
 
 /// Safety checker for pre-installation validation
 pub struct SafetyChecker {
@@ -315,7 +327,7 @@ impl SafetyChecker {
         }
     }
 
-    /// Verify digital signature
+    /// Verify digital signature using Ed25519
     async fn verify_package_signature(
         &self,
         package_path: &PathBuf,
@@ -324,24 +336,43 @@ impl SafetyChecker {
         debug!("Verifying package digital signature");
 
         let platform = std::env::consts::OS;
-        if let Some(signature) = update_info.signatures.get(platform) {
-            // In a real implementation, you would:
-            // 1. Extract the signature from the signature string
-            // 2. Use a cryptographic library to verify the signature
-            // 3. Check against trusted public keys
-
-            if signature.is_empty() {
+        if let Some(signature_b64) = update_info.signatures.get(platform) {
+            if signature_b64.is_empty() {
                 return Err(UpgradeError::VerificationFailed(
                     "No signature provided".to_string(),
                 ));
             }
 
-            // Placeholder signature verification
-            // This would be replaced with actual cryptographic verification
-            debug!(
-                "Signature verification placeholder - signature length: {}",
-                signature.len()
-            );
+            // Decode base64 signature
+            let signature_bytes =
+                base64::Engine::decode(&base64::engine::general_purpose::STANDARD, signature_b64)
+                    .map_err(|e| {
+                    UpgradeError::VerificationFailed(format!("Invalid signature encoding: {}", e))
+                })?;
+
+            // Read package file for verification
+            let mut file = std::fs::File::open(package_path).map_err(|e| {
+                UpgradeError::VerificationFailed(format!("Cannot open package: {}", e))
+            })?;
+
+            let mut package_bytes = Vec::new();
+            file.read_to_end(&mut package_bytes).map_err(|e| {
+                UpgradeError::VerificationFailed(format!("Cannot read package: {}", e))
+            })?;
+
+            // Create public key for verification
+            let public_key = UnparsedPublicKey::new(&signature::ED25519, INFERNO_PUBLIC_KEY);
+
+            // Verify signature
+            public_key
+                .verify(&package_bytes, &signature_bytes)
+                .map_err(|_| {
+                    UpgradeError::VerificationFailed(
+                        "Signature verification failed - package may be tampered".to_string(),
+                    )
+                })?;
+
+            info!("Package signature verified successfully");
         } else if self.config.require_signatures {
             return Err(UpgradeError::VerificationFailed(
                 "Signature required but not provided".to_string(),

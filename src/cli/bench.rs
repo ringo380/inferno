@@ -31,6 +31,9 @@ pub struct BenchArgs {
 }
 
 pub async fn execute(args: BenchArgs, config: &Config) -> Result<()> {
+    // Pre-execution validation
+    validate_args(&args)?;
+
     info!("Starting benchmark for model: {}", args.model);
 
     let model_manager = ModelManager::new(&config.models_dir);
@@ -134,9 +137,7 @@ pub async fn execute(args: BenchArgs, config: &Config) -> Result<()> {
     let min = durations[0];
     let max = durations[durations.len() - 1];
     let median = durations[durations.len() / 2];
-    let mean: Duration = Duration::from_nanos(
-        durations.iter().map(|d| d.as_nanos()).sum::<u128>() as u64 / durations.len() as u64,
-    );
+    let mean = calculate_mean(&durations);
 
     let total_tokens_per_sec = total_tokens as f64 / total_time.as_secs_f64();
     let mean_tokens_per_sec = args.tokens as f64 / mean.as_secs_f64();
@@ -167,15 +168,8 @@ pub async fn execute(args: BenchArgs, config: &Config) -> Result<()> {
     println!();
 
     // Performance classification
-    if mean_tokens_per_sec > 100.0 {
-        println!("Performance: Excellent (>100 tok/s)");
-    } else if mean_tokens_per_sec > 50.0 {
-        println!("Performance: Good (50-100 tok/s)");
-    } else if mean_tokens_per_sec > 20.0 {
-        println!("Performance: Fair (20-50 tok/s)");
-    } else {
-        println!("Performance: Needs improvement (<20 tok/s)");
-    }
+    let performance_rating = classify_performance(mean_tokens_per_sec);
+    println!("Performance: {}", performance_rating);
 
     // Memory usage estimation
     if let Ok(memory_info) = get_memory_info() {
@@ -185,9 +179,59 @@ pub async fn execute(args: BenchArgs, config: &Config) -> Result<()> {
     Ok(())
 }
 
+/// Validate benchmark arguments before execution
+fn validate_args(args: &BenchArgs) -> Result<()> {
+    // Validate model name
+    if args.model.is_empty() {
+        anyhow::bail!("Model name cannot be empty");
+    }
+
+    // Validate iterations
+    if args.iterations == 0 {
+        anyhow::bail!("Iterations must be greater than 0");
+    }
+
+    if args.iterations > 1000 {
+        anyhow::bail!("Iterations must be 1000 or less to ensure reasonable benchmark times");
+    }
+
+    // Validate tokens
+    if args.tokens == 0 {
+        anyhow::bail!("Tokens must be greater than 0");
+    }
+
+    if args.tokens > 10000 {
+        anyhow::bail!("Tokens must be 10000 or less to ensure reasonable benchmark times");
+    }
+
+    // Warmup is optional (can be 0), but cap at reasonable limit
+    if args.warmup > 100 {
+        anyhow::bail!("Warmup iterations must be 100 or less");
+    }
+
+    Ok(())
+}
+
 fn estimate_token_count(text: &str) -> u32 {
     // Rough estimation: ~4 characters per token for English text
     (text.len() as f32 / 4.0).ceil() as u32
+}
+
+fn calculate_mean(durations: &[Duration]) -> Duration {
+    let total_nanos: u128 = durations.iter().map(|d| d.as_nanos()).sum();
+    Duration::from_nanos((total_nanos / durations.len() as u128) as u64)
+}
+
+fn classify_performance(tokens_per_sec: f64) -> String {
+    if tokens_per_sec > 100.0 {
+        "Excellent (>100 tok/s)".to_string()
+    } else if tokens_per_sec > 50.0 {
+        "Good (50-100 tok/s)".to_string()
+    } else if tokens_per_sec > 20.0 {
+        "Fair (20-50 tok/s)".to_string()
+    } else {
+        "Needs improvement (<20 tok/s)".to_string()
+    }
 }
 
 fn get_memory_info() -> Result<MemoryInfo> {
@@ -205,4 +249,158 @@ struct MemoryInfo {
     used_gb: f64,
     #[allow(dead_code)]
     total_gb: f64,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_calculate_mean() {
+        let durations = vec![
+            Duration::from_millis(100),
+            Duration::from_millis(200),
+            Duration::from_millis(300),
+        ];
+        let mean = calculate_mean(&durations);
+        assert_eq!(mean.as_millis(), 200);
+    }
+
+    #[test]
+    fn test_estimate_token_count() {
+        let text = "Hello, world!"; // 13 characters
+        let count = estimate_token_count(text);
+        assert_eq!(count, 4); // 13 / 4 = 3.25, ceil = 4
+    }
+
+    #[test]
+    fn test_classify_performance() {
+        assert_eq!(classify_performance(150.0), "Excellent (>100 tok/s)");
+        assert_eq!(classify_performance(75.0), "Good (50-100 tok/s)");
+        assert_eq!(classify_performance(35.0), "Fair (20-50 tok/s)");
+        assert_eq!(classify_performance(10.0), "Needs improvement (<20 tok/s)");
+    }
+
+    #[test]
+    fn test_validate_args_empty_model() {
+        let args = BenchArgs {
+            model: String::new(),
+            iterations: 10,
+            prompt: None,
+            tokens: 100,
+            warmup: 3,
+            backend: None,
+            verbose: false,
+        };
+        let result = validate_args(&args);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Model name cannot be empty"));
+    }
+
+    #[test]
+    fn test_validate_args_zero_iterations() {
+        let args = BenchArgs {
+            model: "test-model".to_string(),
+            iterations: 0,
+            prompt: None,
+            tokens: 100,
+            warmup: 3,
+            backend: None,
+            verbose: false,
+        };
+        let result = validate_args(&args);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Iterations must be greater than 0"));
+    }
+
+    #[test]
+    fn test_validate_args_too_many_iterations() {
+        let args = BenchArgs {
+            model: "test-model".to_string(),
+            iterations: 1001,
+            prompt: None,
+            tokens: 100,
+            warmup: 3,
+            backend: None,
+            verbose: false,
+        };
+        let result = validate_args(&args);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("1000 or less"));
+    }
+
+    #[test]
+    fn test_validate_args_zero_tokens() {
+        let args = BenchArgs {
+            model: "test-model".to_string(),
+            iterations: 10,
+            prompt: None,
+            tokens: 0,
+            warmup: 3,
+            backend: None,
+            verbose: false,
+        };
+        let result = validate_args(&args);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Tokens must be greater than 0"));
+    }
+
+    #[test]
+    fn test_validate_args_too_many_tokens() {
+        let args = BenchArgs {
+            model: "test-model".to_string(),
+            iterations: 10,
+            prompt: None,
+            tokens: 10001,
+            warmup: 3,
+            backend: None,
+            verbose: false,
+        };
+        let result = validate_args(&args);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("10000 or less"));
+    }
+
+    #[test]
+    fn test_validate_args_too_many_warmup() {
+        let args = BenchArgs {
+            model: "test-model".to_string(),
+            iterations: 10,
+            prompt: None,
+            tokens: 100,
+            warmup: 101,
+            backend: None,
+            verbose: false,
+        };
+        let result = validate_args(&args);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Warmup iterations must be 100 or less"));
+    }
+
+    #[test]
+    fn test_validate_args_valid() {
+        let args = BenchArgs {
+            model: "test-model".to_string(),
+            iterations: 10,
+            prompt: Some("test prompt".to_string()),
+            tokens: 100,
+            warmup: 3,
+            backend: None,
+            verbose: true,
+        };
+        let result = validate_args(&args);
+        assert!(result.is_ok());
+    }
 }

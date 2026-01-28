@@ -52,6 +52,9 @@ pub struct RunArgs {
     #[arg(long, help = "Temperature for text generation", default_value = "0.7")]
     pub temperature: f32,
 
+    #[arg(long, help = "Top-k for text generation", default_value = "40")]
+    pub top_k: u32,
+
     #[arg(long, help = "Top-p for text generation", default_value = "0.9")]
     pub top_p: f32,
 
@@ -66,6 +69,20 @@ pub struct RunArgs {
 }
 
 pub async fn execute(args: RunArgs, config: &Config) -> Result<()> {
+    // Validate parameters
+    if args.model.is_empty() {
+        anyhow::bail!("Model name cannot be empty");
+    }
+    if args.max_tokens == 0 {
+        anyhow::bail!("max_tokens must be greater than 0");
+    }
+    if !(0.0..=2.0).contains(&args.temperature) {
+        anyhow::bail!("temperature must be between 0.0 and 2.0");
+    }
+    if !(0.0..=1.0).contains(&args.top_p) {
+        anyhow::bail!("top_p must be between 0.0 and 1.0");
+    }
+
     info!("Running inference with model: {}", args.model);
 
     let model_manager = ModelManager::new(&config.models_dir);
@@ -109,7 +126,7 @@ pub async fn execute(args: RunArgs, config: &Config) -> Result<()> {
         let inference_params = crate::backends::InferenceParams {
             max_tokens: args.max_tokens,
             temperature: args.temperature,
-            top_k: 40,
+            top_k: args.top_k,
             top_p: args.top_p,
             stream: false,
             stop_sequences: vec![],
@@ -177,11 +194,18 @@ async fn process_single(backend: &mut Backend, args: &RunArgs, _config: &Config)
     } else if let Some(input_path) = &args.input {
         tokio::fs::read_to_string(input_path).await?
     } else {
-        let mut input = String::new();
+        // Read all lines from stdin
         let stdin = io::stdin();
-        let mut reader = BufReader::new(stdin);
-        reader.read_line(&mut input).await?;
-        input.trim().to_string()
+        let reader = BufReader::new(stdin);
+        let mut lines = reader.lines();
+        let mut input = String::new();
+
+        while let Some(line) = lines.next_line().await? {
+            input.push_str(&line);
+            input.push('\n');
+        }
+
+        input
     };
 
     if input.is_empty() {
@@ -192,18 +216,24 @@ async fn process_single(backend: &mut Backend, args: &RunArgs, _config: &Config)
     let inference_params = crate::backends::InferenceParams {
         max_tokens: args.max_tokens,
         temperature: args.temperature,
-        top_k: 40,
+        top_k: args.top_k,
         top_p: args.top_p,
         stream: args.stream,
         stop_sequences: vec![],
         seed: None,
     };
 
+    let start = std::time::Instant::now();
+
     if args.stream {
         let mut stream = backend.infer_stream(&input, &inference_params).await?;
         while let Some(token) = stream.next().await {
             match token {
-                Ok(t) => print!("{}", t),
+                Ok(t) => {
+                    print!("{}", t);
+                    use std::io::Write;
+                    std::io::stdout().flush()?;
+                }
                 Err(e) => {
                     eprintln!("Stream error: {}", e);
                     break;
@@ -220,6 +250,9 @@ async fn process_single(backend: &mut Backend, args: &RunArgs, _config: &Config)
             println!("{}", result);
         }
     }
+
+    let elapsed = start.elapsed();
+    info!("Inference completed in {:.2}s", elapsed.as_secs_f64());
 
     Ok(())
 }
@@ -238,7 +271,7 @@ async fn process_batch(backend: &mut Backend, args: &RunArgs, _config: &Config) 
     let inference_params = crate::backends::InferenceParams {
         max_tokens: args.max_tokens,
         temperature: args.temperature,
-        top_k: 40,
+        top_k: args.top_k,
         top_p: args.top_p,
         stream: false, // No streaming in batch mode
         stop_sequences: vec![],

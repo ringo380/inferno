@@ -172,15 +172,15 @@ mod tests {
     use super::*;
     use serde_json::json;
 
-    #[test]
-    fn test_context_creation() {
+    #[tokio::test]
+    async fn test_context_creation() {
         let ctx = CommandContext::mock();
         assert!(!ctx.json_output);
         assert_eq!(ctx.verbosity, 0);
     }
 
-    #[test]
-    fn test_arg_storage() {
+    #[tokio::test]
+    async fn test_arg_storage() {
         let mut ctx = CommandContext::mock();
         ctx.set_arg("model", json!("llama-2-7b"));
         ctx.set_arg("count", json!(5));
@@ -190,8 +190,8 @@ mod tests {
         assert_eq!(ctx.get_arg("missing"), None);
     }
 
-    #[test]
-    fn test_typed_arg_retrieval() {
+    #[tokio::test]
+    async fn test_typed_arg_retrieval() {
         let mut ctx = CommandContext::mock();
         ctx.set_arg("count", json!(42));
         ctx.set_arg("name", json!("test"));
@@ -203,8 +203,8 @@ mod tests {
         assert_eq!(name, "test");
     }
 
-    #[test]
-    fn test_state_storage() {
+    #[tokio::test]
+    async fn test_state_storage() {
         let mut ctx = CommandContext::mock();
 
         ctx.set_state("counter", 42_i32);
@@ -214,8 +214,8 @@ mod tests {
         assert_eq!(ctx.get_state::<String>("name"), Some(&"test".to_string()));
     }
 
-    #[test]
-    fn test_verbosity() {
+    #[tokio::test]
+    async fn test_verbosity() {
         let mut ctx = CommandContext::mock();
         assert!(!ctx.is_verbose());
         assert!(!ctx.is_debug());
@@ -229,10 +229,10 @@ mod tests {
         assert!(ctx.is_debug());
     }
 
-    #[test]
-    fn test_elapsed_time() {
+    #[tokio::test]
+    async fn test_elapsed_time() {
         let ctx = CommandContext::mock();
-        std::thread::sleep(std::time::Duration::from_millis(10));
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
         let elapsed = ctx.elapsed();
         assert!(elapsed.as_millis() >= 10);
     }

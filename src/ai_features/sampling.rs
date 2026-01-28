@@ -3,10 +3,12 @@ use tracing::debug;
 
 /// Sampling strategies for token generation
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+#[derive(Default)]
 pub enum SamplingStrategy {
     /// Always pick the highest probability token (deterministic)
     Greedy,
     /// Apply temperature scaling, then sample from probabilities
+    #[default]
     Temperature,
     /// Keep only top K tokens by probability
     TopK,
@@ -16,11 +18,6 @@ pub enum SamplingStrategy {
     TopKP,
 }
 
-impl Default for SamplingStrategy {
-    fn default() -> Self {
-        SamplingStrategy::Temperature
-    }
-}
 
 /// Configuration for token sampling
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -210,7 +207,7 @@ impl Sampler {
 
         for (i, token) in candidates.iter().enumerate() {
             cumsum += token.p;
-            if cumsum >= p {
+            if cumsum > p {
                 cutoff_idx = i + 1;
                 break;
             }

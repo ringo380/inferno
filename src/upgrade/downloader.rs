@@ -404,7 +404,8 @@ impl UpdateDownloader {
             let mut stat: Statvfs = unsafe { mem::zeroed() };
 
             if unsafe { statvfs(path.as_ptr(), &mut stat) } == 0 {
-                let available_bytes = stat.f_bavail * stat.f_frsize;
+                // Use saturating_mul to avoid overflow panic in debug mode
+                let available_bytes = (stat.f_bavail as u64).saturating_mul(stat.f_frsize as u64);
                 if available_bytes < required_bytes {
                     return Err(UpgradeError::InsufficientDiskSpace {
                         required: required_bytes / 1024 / 1024,
@@ -470,7 +471,12 @@ mod tests {
 
     #[test]
     fn test_disk_space_check() {
-        let config = create_test_config();
+        // Keep temp_dir alive for the duration of the test
+        let temp_dir = TempDir::new().unwrap();
+        let config = UpgradeConfig {
+            download_dir: temp_dir.path().to_path_buf(),
+            ..UpgradeConfig::default()
+        };
         let downloader = UpdateDownloader::new(&config).unwrap();
 
         // Check for a reasonable amount of space (1MB)

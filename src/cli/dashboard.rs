@@ -301,6 +301,14 @@ async fn handle_start(
     daemon: bool,
     assets_dir: Option<PathBuf>,
 ) -> Result<()> {
+    // Validate inputs
+    if port == 0 {
+        anyhow::bail!("Port must be greater than 0");
+    }
+    if address.is_empty() {
+        anyhow::bail!("Address cannot be empty");
+    }
+
     info!("Starting dashboard server");
 
     // Load configuration
@@ -442,6 +450,11 @@ async fn handle_validate(
 }
 
 async fn handle_status(url: String, detailed: bool) -> Result<()> {
+    // Validate inputs
+    if url.is_empty() {
+        anyhow::bail!("URL cannot be empty");
+    }
+
     println!("Checking dashboard status: {}", url);
 
     // Mock status check
@@ -498,6 +511,11 @@ async fn handle_export(
     days: u32,
     include_sensitive: bool,
 ) -> Result<()> {
+    // Validate inputs
+    if days == 0 {
+        anyhow::bail!("Days must be greater than 0");
+    }
+
     println!(
         "Exporting {:?} data for the last {} days",
         export_type, days
@@ -536,6 +554,11 @@ async fn handle_import(
     overwrite: bool,
     dry_run: bool,
 ) -> Result<()> {
+    // Validate inputs
+    if !file.exists() {
+        anyhow::bail!("Import file does not exist: {}", file.display());
+    }
+
     println!("Importing data from: {}", file.display());
 
     if dry_run {
@@ -899,4 +922,143 @@ fn generate_example_users() -> Vec<(String, String, String, String, String)> {
     }
 
     users
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    #[tokio::test]
+    async fn test_handle_start_validation_zero_port() {
+        let result = handle_start("127.0.0.1".to_string(), 0, None, false, false, None).await;
+
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Port must be greater than 0"));
+    }
+
+    #[tokio::test]
+    async fn test_handle_start_validation_empty_address() {
+        let result = handle_start("".to_string(), 8080, None, false, false, None).await;
+
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Address cannot be empty"));
+    }
+
+    #[tokio::test]
+    async fn test_handle_status_validation_empty_url() {
+        let result = handle_status("".to_string(), false).await;
+
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("URL cannot be empty"));
+    }
+
+    #[tokio::test]
+    async fn test_handle_export_validation_zero_days() {
+        let temp_dir = tempdir().unwrap();
+        let output_path = temp_dir.path().join("export.json");
+
+        let result = handle_export(ExportType::Metrics, output_path, 0, false).await;
+
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Days must be greater than 0"));
+    }
+
+    #[tokio::test]
+    async fn test_handle_import_validation_nonexistent_file() {
+        let result = handle_import(
+            PathBuf::from("/nonexistent/path/file.json"),
+            None,
+            false,
+            false,
+        )
+        .await;
+
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Import file does not exist"));
+    }
+
+    #[test]
+    fn test_generate_random_username() {
+        let username1 = generate_random_username();
+        let username2 = generate_random_username();
+
+        // Should start with "admin_"
+        assert!(username1.starts_with("admin_"));
+        assert!(username2.starts_with("admin_"));
+
+        // Should be reasonably unique (different hash values)
+        // Note: In rare cases they could be the same if called at exact same nanosecond
+        assert!(!username1.is_empty());
+        assert!(!username2.is_empty());
+    }
+
+    #[test]
+    fn test_generate_secure_password() {
+        let password = generate_secure_password();
+
+        // Should be 16 characters
+        assert_eq!(password.len(), 16);
+
+        // Should not be empty
+        assert!(!password.is_empty());
+    }
+
+    #[test]
+    fn test_generate_config_template_basic() {
+        let config = generate_config_template(false, false);
+
+        assert!(config.contains("[dashboard]"));
+        assert!(config.contains("enabled = true"));
+        assert!(config.contains("bind_address = \"127.0.0.1\""));
+        assert!(config.contains("port = 8080"));
+    }
+
+    #[test]
+    fn test_generate_config_template_with_auth() {
+        let config = generate_config_template(true, false);
+
+        assert!(config.contains("[dashboard.auth]"));
+        assert!(config.contains("enabled = true"));
+        assert!(config.contains("provider = \"local\""));
+    }
+
+    #[test]
+    fn test_generate_config_template_with_examples() {
+        let config = generate_config_template(false, true);
+
+        assert!(config.contains("# Example security configuration"));
+        assert!(config.contains("# [dashboard.security]"));
+        assert!(config.contains("# Example branding configuration"));
+    }
+
+    #[test]
+    fn test_generate_example_users() {
+        let users = generate_example_users();
+
+        assert_eq!(users.len(), 4);
+
+        // Check that usernames follow expected pattern
+        for (username, email, role, status, _last_login) in &users {
+            assert!(username.starts_with("user_"));
+            assert!(email.contains("@company.internal"));
+            assert!(["admin", "user", "readonly"].contains(&role.as_str()));
+            assert!(["active", "inactive"].contains(&status.as_str()));
+        }
+    }
 }

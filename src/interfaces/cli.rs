@@ -162,8 +162,8 @@ pub use pipeline::{CommandPipeline, DefaultErrorHandler, ErrorHandler, PipelineB
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_module_exports() {
+    #[tokio::test]
+    async fn test_module_exports() {
         // Verify all main types are accessible
         let _: Option<Box<dyn Command>> = None;
         let _: Option<Box<dyn Middleware>> = None;

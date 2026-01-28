@@ -2,10 +2,90 @@ use crate::{
     config::Config,
     observability::{GrafanaDashboard, ObservabilityConfig, ObservabilityManager},
 };
-use anyhow::Result;
+use anyhow::{bail, Result};
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 use tracing::{info, warn};
+
+// ============================================================================
+// Validation Helpers
+// ============================================================================
+
+/// Validate export format
+fn validate_export_format(format: &str) -> Result<()> {
+    let valid_formats = ["json", "prometheus", "otlp", "yaml", "csv"];
+    if !valid_formats.contains(&format) {
+        bail!(
+            "Invalid export format '{}'. Must be one of: {}",
+            format,
+            valid_formats.join(", ")
+        );
+    }
+    Ok(())
+}
+
+/// Validate metric type
+fn validate_metric_type(metric_type: &str) -> Result<()> {
+    let valid_types = ["counter", "gauge", "histogram", "summary"];
+    if !valid_types.contains(&metric_type) {
+        bail!(
+            "Invalid metric type '{}'. Must be one of: {}",
+            metric_type,
+            valid_types.join(", ")
+        );
+    }
+    Ok(())
+}
+
+/// Validate trace export format
+fn validate_trace_format(format: &str) -> Result<()> {
+    let valid_formats = ["otlp", "json", "jaeger"];
+    if !valid_formats.contains(&format) {
+        bail!(
+            "Invalid trace export format '{}'. Must be one of: {}",
+            format,
+            valid_formats.join(", ")
+        );
+    }
+    Ok(())
+}
+
+/// Validate dashboard export format
+fn validate_dashboard_format(format: &str) -> Result<()> {
+    let valid_formats = ["json", "yaml"];
+    if !valid_formats.contains(&format) {
+        bail!(
+            "Invalid dashboard format '{}'. Must be one of: {}",
+            format,
+            valid_formats.join(", ")
+        );
+    }
+    Ok(())
+}
+
+/// Validate bind address format
+fn validate_bind_address(bind: &str) -> Result<()> {
+    // Simple validation: should contain host:port format
+    if !bind.contains(':') {
+        bail!(
+            "Invalid bind address '{}'. Expected format: host:port (e.g., 0.0.0.0:9090)",
+            bind
+        );
+    }
+    Ok(())
+}
+
+/// Validate endpoint format
+fn validate_endpoint(endpoint: &str) -> Result<()> {
+    // Simple validation: should contain host:port format
+    if !endpoint.contains(':') {
+        bail!(
+            "Invalid endpoint '{}'. Expected format: host:port (e.g., localhost:4317)",
+            endpoint
+        );
+    }
+    Ok(())
+}
 
 #[derive(Parser, Debug)]
 #[command(about = "Observability stack management for metrics, tracing, and dashboards")]
@@ -278,6 +358,9 @@ async fn init_observability(
 async fn handle_metrics_command(command: MetricsCommand, _config: &Config) -> Result<()> {
     match command {
         MetricsCommand::Serve { bind, path } => {
+            // Validate bind address format
+            validate_bind_address(&bind)?;
+
             info!("Starting Prometheus metrics server on {}{}", bind, path);
 
             let obs_config = ObservabilityConfig::default();
@@ -332,6 +415,11 @@ async fn handle_metrics_command(command: MetricsCommand, _config: &Config) -> Re
             metric_type,
             labels,
         } => {
+            // Validate metric type if provided
+            if let Some(ref t) = metric_type {
+                validate_metric_type(t)?;
+            }
+
             let obs_config = ObservabilityConfig::default();
             let manager = ObservabilityManager::new(obs_config);
             manager.initialize().await?;
@@ -354,6 +442,9 @@ async fn handle_metrics_command(command: MetricsCommand, _config: &Config) -> Re
 async fn handle_tracing_command(command: TracingCommand, _config: &Config) -> Result<()> {
     match command {
         TracingCommand::Collect { endpoint, debug } => {
+            // Validate endpoint format
+            validate_endpoint(&endpoint)?;
+
             info!("Starting OpenTelemetry trace collector at {}", endpoint);
 
             if debug {
@@ -401,10 +492,12 @@ async fn handle_tracing_command(command: TracingCommand, _config: &Config) -> Re
                 println!("  Status: {:?}", trace.status);
             }
         }
-        TracingCommand::Export {
-            output,
-            format: _format,
-        } => {
+        TracingCommand::Export { output, format } => {
+            // Validate format if provided
+            if let Some(ref f) = format {
+                validate_trace_format(f)?;
+            }
+
             let obs_config = ObservabilityConfig::default();
             let manager = ObservabilityManager::new(obs_config);
 
@@ -487,11 +580,12 @@ async fn handle_dashboard_command(command: DashboardCommand, _config: &Config) -
                 println!("  Time range: {}", dashboard.time_range);
             }
         }
-        DashboardCommand::Export {
-            id,
-            output,
-            format: _format,
-        } => {
+        DashboardCommand::Export { id, output, format } => {
+            // Validate format if provided
+            if let Some(ref f) = format {
+                validate_dashboard_format(f)?;
+            }
+
             let obs_config = ObservabilityConfig::default();
             let manager = ObservabilityManager::new(obs_config);
             manager.initialize().await?;
@@ -554,9 +648,25 @@ async fn export_observability_data(
     metrics: Option<PathBuf>,
     traces: Option<PathBuf>,
     dashboards: Option<PathBuf>,
-    _format: ExportFormat,
+    format: ExportFormat,
     _config: &Config,
 ) -> Result<()> {
+    // Validate that at least one export target is specified
+    if metrics.is_none() && traces.is_none() && dashboards.is_none() {
+        bail!(
+            "At least one export target (--metrics, --traces, or --dashboards) must be specified"
+        );
+    }
+
+    // Validate format based on export target
+    let format_str = match format {
+        ExportFormat::Json => "json",
+        ExportFormat::Yaml => "yaml",
+        ExportFormat::Prometheus => "prometheus",
+        ExportFormat::Csv => "csv",
+    };
+    validate_export_format(format_str)?;
+
     let obs_config = ObservabilityConfig::default();
     let manager = ObservabilityManager::new(obs_config);
     manager.initialize().await?;
@@ -641,4 +751,168 @@ async fn handle_config_command(
     }
 
     Ok(())
+}
+
+// ============================================================================
+// Tests
+// ============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ---- Validation Tests ----
+
+    #[test]
+    fn test_validate_export_format_valid() {
+        assert!(validate_export_format("json").is_ok());
+        assert!(validate_export_format("yaml").is_ok());
+        assert!(validate_export_format("prometheus").is_ok());
+        assert!(validate_export_format("otlp").is_ok());
+        assert!(validate_export_format("csv").is_ok());
+    }
+
+    #[test]
+    fn test_validate_export_format_invalid() {
+        let result = validate_export_format("invalid");
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("Invalid export format"));
+        assert!(err.contains("Must be one of"));
+    }
+
+    #[test]
+    fn test_validate_metric_type_valid() {
+        assert!(validate_metric_type("counter").is_ok());
+        assert!(validate_metric_type("gauge").is_ok());
+        assert!(validate_metric_type("histogram").is_ok());
+        assert!(validate_metric_type("summary").is_ok());
+    }
+
+    #[test]
+    fn test_validate_metric_type_invalid() {
+        let result = validate_metric_type("invalid");
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("Invalid metric type"));
+    }
+
+    #[test]
+    fn test_validate_trace_format_valid() {
+        assert!(validate_trace_format("otlp").is_ok());
+        assert!(validate_trace_format("json").is_ok());
+        assert!(validate_trace_format("jaeger").is_ok());
+    }
+
+    #[test]
+    fn test_validate_trace_format_invalid() {
+        let result = validate_trace_format("xml");
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("Invalid trace export format"));
+    }
+
+    #[test]
+    fn test_validate_dashboard_format_valid() {
+        assert!(validate_dashboard_format("json").is_ok());
+        assert!(validate_dashboard_format("yaml").is_ok());
+    }
+
+    #[test]
+    fn test_validate_dashboard_format_invalid() {
+        let result = validate_dashboard_format("xml");
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("Invalid dashboard format"));
+    }
+
+    #[test]
+    fn test_validate_bind_address_valid() {
+        assert!(validate_bind_address("0.0.0.0:9090").is_ok());
+        assert!(validate_bind_address("localhost:8080").is_ok());
+        assert!(validate_bind_address("127.0.0.1:3000").is_ok());
+    }
+
+    #[test]
+    fn test_validate_bind_address_invalid() {
+        let result = validate_bind_address("localhost");
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("Invalid bind address"));
+        assert!(err.contains("Expected format: host:port"));
+    }
+
+    #[test]
+    fn test_validate_endpoint_valid() {
+        assert!(validate_endpoint("localhost:4317").is_ok());
+        assert!(validate_endpoint("0.0.0.0:4317").is_ok());
+    }
+
+    #[test]
+    fn test_validate_endpoint_invalid() {
+        let result = validate_endpoint("localhost");
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("Invalid endpoint"));
+    }
+
+    // ---- Export Format Enum Tests ----
+
+    #[test]
+    fn test_export_format_enum() {
+        // Test that all enum variants can be matched
+        let formats = vec![
+            ExportFormat::Json,
+            ExportFormat::Yaml,
+            ExportFormat::Prometheus,
+            ExportFormat::Csv,
+        ];
+
+        for format in formats {
+            let format_str = match format {
+                ExportFormat::Json => "json",
+                ExportFormat::Yaml => "yaml",
+                ExportFormat::Prometheus => "prometheus",
+                ExportFormat::Csv => "csv",
+            };
+            assert!(validate_export_format(format_str).is_ok());
+        }
+    }
+
+    // ---- Integration Tests (require async runtime) ----
+
+    #[tokio::test]
+    async fn test_init_observability_all_enabled() {
+        let config = Config::default();
+        let result = init_observability(true, true, true, &config).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_init_observability_none_enabled() {
+        let config = Config::default();
+        let result = init_observability(false, false, false, &config).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_show_observability_status() {
+        let config = Config::default();
+        let result = show_observability_status(&config).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_check_observability_health() {
+        let config = Config::default();
+        let result = check_observability_health(&config).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_handle_config_command_show() {
+        let config = Config::default();
+        let result = handle_config_command(true, None, None, &config).await;
+        assert!(result.is_ok());
+    }
 }

@@ -1,9 +1,15 @@
 #![allow(dead_code, unused_imports, unused_variables)]
+//! Distributed Command Module
+//!
+//! This module provides distributed inference and worker pool management.
+//! Features include starting distributed servers, benchmarking performance,
+//! viewing worker statistics, and testing inference requests.
+
 use crate::{
     backends::InferenceParams, config::Config, distributed::DistributedInference,
     metrics::MetricsCollector, models::ModelManager,
 };
-use anyhow::Result;
+use anyhow::{bail, Result};
 use clap::{Args, Subcommand};
 use futures::StreamExt;
 use std::{sync::Arc, time::Instant};
@@ -78,8 +84,11 @@ pub enum DistributedCommand {
         #[arg(long, help = "Maximum tokens", default_value = "100")]
         max_tokens: u32,
 
-        #[arg(long, help = "Temperature", default_value = "0.7")]
+        #[arg(long, help = "Temperature (0.0-2.0)", default_value = "0.7")]
         temperature: f32,
+
+        #[arg(long, help = "Top-K sampling", default_value = "40")]
+        top_k: u32,
     },
 }
 
@@ -113,9 +122,97 @@ pub async fn execute(args: DistributedArgs, config: &Config) -> Result<()> {
             stream,
             max_tokens,
             temperature,
-        } => test_inference(config, &model, &input, stream, max_tokens, temperature).await,
+            top_k,
+        } => {
+            test_inference(
+                config,
+                &model,
+                &input,
+                stream,
+                max_tokens,
+                temperature,
+                top_k,
+            )
+            .await
+        }
     }
 }
+
+// ============================================================================
+// Validation Functions
+// ============================================================================
+
+/// Validate distributed start command arguments
+fn validate_start_args(workers: usize, max_concurrent: usize) -> Result<()> {
+    if workers > 32 {
+        bail!("Worker count cannot exceed 32");
+    }
+
+    if max_concurrent == 0 {
+        bail!("Max concurrent must be greater than 0");
+    }
+
+    if max_concurrent > 100 {
+        bail!("Max concurrent cannot exceed 100");
+    }
+
+    Ok(())
+}
+
+/// Validate benchmark command arguments
+fn validate_benchmark_args(
+    model: &str,
+    concurrent: usize,
+    requests: usize,
+    prompt: &str,
+) -> Result<()> {
+    if model.is_empty() {
+        bail!("Model name cannot be empty");
+    }
+
+    if concurrent == 0 {
+        bail!("Concurrent must be greater than 0");
+    }
+
+    if concurrent > 100 {
+        bail!("Concurrent cannot exceed 100");
+    }
+
+    if requests == 0 {
+        bail!("Requests must be greater than 0");
+    }
+
+    if prompt.is_empty() {
+        bail!("Prompt cannot be empty");
+    }
+
+    Ok(())
+}
+
+/// Validate test inference command arguments
+fn validate_test_args(model: &str, input: &str, max_tokens: u32, temperature: f32) -> Result<()> {
+    if model.is_empty() {
+        bail!("Model name cannot be empty");
+    }
+
+    if input.is_empty() {
+        bail!("Input cannot be empty");
+    }
+
+    if max_tokens == 0 {
+        bail!("Max tokens must be greater than 0");
+    }
+
+    if !(0.0..=2.0).contains(&temperature) {
+        bail!("Temperature must be between 0.0 and 2.0");
+    }
+
+    Ok(())
+}
+
+// ============================================================================
+// Command Implementations
+// ============================================================================
 
 async fn start_distributed_server(
     config: &Config,
@@ -124,6 +221,9 @@ async fn start_distributed_server(
     load_balancing: bool,
     max_concurrent: usize,
 ) -> Result<()> {
+    // Validate arguments
+    validate_start_args(workers, max_concurrent)?;
+
     info!("Starting distributed inference server");
 
     let model_manager = Arc::new(ModelManager::new(&config.models_dir));
@@ -182,6 +282,9 @@ async fn benchmark_distributed_inference(
     requests_per_client: usize,
     prompt: &str,
 ) -> Result<()> {
+    // Validate arguments
+    validate_benchmark_args(model_name, concurrent, requests_per_client, prompt)?;
+
     info!("Starting distributed inference benchmark");
     info!("Model: {}", model_name);
     info!("Concurrent clients: {}", concurrent);
@@ -345,11 +448,18 @@ async fn test_inference(
     stream: bool,
     max_tokens: u32,
     temperature: f32,
+    top_k: u32,
 ) -> Result<()> {
+    // Validate arguments
+    validate_test_args(model_name, input, max_tokens, temperature)?;
+
     info!("Testing distributed inference");
     info!("Model: {}", model_name);
     info!("Input: \"{}\"", input);
     info!("Streaming: {}", stream);
+    info!("Max tokens: {}", max_tokens);
+    info!("Temperature: {}", temperature);
+    info!("Top-K: {}", top_k);
 
     let model_manager = Arc::new(ModelManager::new(&config.models_dir));
     let metrics = Some(Arc::new({
@@ -369,7 +479,7 @@ async fn test_inference(
     let params = InferenceParams {
         max_tokens,
         temperature,
-        top_k: 40,
+        top_k,
         top_p: 0.9,
         stream,
         stop_sequences: vec![],
@@ -443,5 +553,214 @@ impl ClientStats {
 
     fn record_failure(&mut self) {
         self.failed_requests += 1;
+    }
+}
+
+// ============================================================================
+// Unit Tests
+// ============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_validate_start_args_valid() {
+        let result = validate_start_args(4, 8);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_start_args_zero_workers() {
+        // Zero workers is valid (uses default)
+        let result = validate_start_args(0, 8);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_start_args_too_many_workers() {
+        let result = validate_start_args(100, 8);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Worker count cannot exceed 32"));
+    }
+
+    #[test]
+    fn test_validate_start_args_zero_max_concurrent() {
+        let result = validate_start_args(4, 0);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Max concurrent must be greater than 0"));
+    }
+
+    #[test]
+    fn test_validate_start_args_max_concurrent_exceeds_limit() {
+        let result = validate_start_args(4, 200);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Max concurrent cannot exceed 100"));
+    }
+
+    #[test]
+    fn test_validate_benchmark_args_valid() {
+        let result = validate_benchmark_args("test-model", 10, 5, "Hello");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_benchmark_args_empty_model() {
+        let result = validate_benchmark_args("", 10, 5, "Hello");
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Model name cannot be empty"));
+    }
+
+    #[test]
+    fn test_validate_benchmark_args_zero_concurrent() {
+        let result = validate_benchmark_args("test-model", 0, 5, "Hello");
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Concurrent must be greater than 0"));
+    }
+
+    #[test]
+    fn test_validate_benchmark_args_concurrent_exceeds_limit() {
+        let result = validate_benchmark_args("test-model", 200, 5, "Hello");
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Concurrent cannot exceed 100"));
+    }
+
+    #[test]
+    fn test_validate_benchmark_args_zero_requests() {
+        let result = validate_benchmark_args("test-model", 10, 0, "Hello");
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Requests must be greater than 0"));
+    }
+
+    #[test]
+    fn test_validate_benchmark_args_empty_prompt() {
+        let result = validate_benchmark_args("test-model", 10, 5, "");
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Prompt cannot be empty"));
+    }
+
+    #[test]
+    fn test_validate_test_args_valid() {
+        let result = validate_test_args("test-model", "Hello", 100, 0.7);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_test_args_empty_model() {
+        let result = validate_test_args("", "Hello", 100, 0.7);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Model name cannot be empty"));
+    }
+
+    #[test]
+    fn test_validate_test_args_empty_input() {
+        let result = validate_test_args("test-model", "", 100, 0.7);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Input cannot be empty"));
+    }
+
+    #[test]
+    fn test_validate_test_args_zero_max_tokens() {
+        let result = validate_test_args("test-model", "Hello", 0, 0.7);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Max tokens must be greater than 0"));
+    }
+
+    #[test]
+    fn test_validate_test_args_temperature_too_low() {
+        let result = validate_test_args("test-model", "Hello", 100, -0.5);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Temperature must be between 0.0 and 2.0"));
+    }
+
+    #[test]
+    fn test_validate_test_args_temperature_too_high() {
+        let result = validate_test_args("test-model", "Hello", 100, 3.0);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Temperature must be between 0.0 and 2.0"));
+    }
+
+    #[test]
+    fn test_validate_test_args_temperature_boundary_low() {
+        let result = validate_test_args("test-model", "Hello", 100, 0.0);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_test_args_temperature_boundary_high() {
+        let result = validate_test_args("test-model", "Hello", 100, 2.0);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_client_stats_new() {
+        let stats = ClientStats::new(5);
+        assert_eq!(stats.client_id, 5);
+        assert_eq!(stats.successful_requests, 0);
+        assert_eq!(stats.failed_requests, 0);
+        assert_eq!(stats.total_tokens, 0);
+    }
+
+    #[test]
+    fn test_client_stats_record_success() {
+        let mut stats = ClientStats::new(1);
+        stats.record_success(std::time::Duration::from_millis(100), 50);
+        stats.record_success(std::time::Duration::from_millis(200), 30);
+
+        assert_eq!(stats.successful_requests, 2);
+        assert_eq!(stats.total_tokens, 80);
+        assert_eq!(
+            stats.total_response_time,
+            std::time::Duration::from_millis(300)
+        );
+    }
+
+    #[test]
+    fn test_client_stats_record_failure() {
+        let mut stats = ClientStats::new(1);
+        stats.record_failure();
+        stats.record_failure();
+
+        assert_eq!(stats.failed_requests, 2);
+        assert_eq!(stats.successful_requests, 0);
     }
 }

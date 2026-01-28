@@ -943,10 +943,19 @@ async fn handle_create_command(config: &Config, version_config: CreateVersionCon
         version_config.model, version_config.version
     );
 
+    // Validate inputs
+    if version_config.model.is_empty() {
+        return Err(anyhow::anyhow!("Model name cannot be empty"));
+    }
+
+    if version_config.version.is_empty() {
+        return Err(anyhow::anyhow!("Version cannot be empty"));
+    }
+
     // Validate file exists
     if !version_config.file.exists() {
         return Err(anyhow::anyhow!(
-            "Model file not found: {}",
+            "Model file does not exist: {}",
             version_config.file.display()
         ));
     }
@@ -1026,6 +1035,31 @@ async fn handle_list_command(
     format: Option<OutputFormat>,
 ) -> Result<()> {
     info!("Listing model versions");
+
+    // Validate limit if provided
+    if let Some(l) = limit {
+        if l == 0 || l > 100 {
+            return Err(anyhow::anyhow!("Limit must be between 1 and 100"));
+        }
+    }
+
+    // Validate status if provided
+    if let Some(ref s) = status {
+        let valid_statuses = [
+            "active",
+            "deprecated",
+            "archived",
+            "experimental",
+            "draft",
+            "validated",
+        ];
+        if !valid_statuses.iter().any(|v| v.eq_ignore_ascii_case(s)) {
+            return Err(anyhow::anyhow!(
+                "Status must be one of: {}",
+                valid_statuses.join(", ")
+            ));
+        }
+    }
 
     let version_storage =
         std::sync::Arc::new(crate::model_versioning::FileSystemVersionStorage::new(
@@ -1201,6 +1235,22 @@ async fn handle_validate_command(
 ) -> Result<()> {
     info!("Validating version: {}", version_id);
 
+    // Validate version ID
+    if version_id.is_empty() {
+        return Err(anyhow::anyhow!("Version ID cannot be empty"));
+    }
+
+    // Validate test suite if provided
+    if let Some(ref suite) = test {
+        let valid_suites = ["smoke", "regression", "performance", "comprehensive"];
+        if !valid_suites.iter().any(|v| v.eq_ignore_ascii_case(suite)) {
+            return Err(anyhow::anyhow!(
+                "Test suite must be one of: {}",
+                valid_suites.join(", ")
+            ));
+        }
+    }
+
     let version_storage =
         std::sync::Arc::new(crate::model_versioning::FileSystemVersionStorage::new(
             config.model_versioning.storage.base_path.clone(),
@@ -1303,6 +1353,36 @@ async fn handle_deploy_command(
         version_id, environment
     );
 
+    // Validate version ID
+    if version_id.is_empty() {
+        return Err(anyhow::anyhow!("Version ID cannot be empty"));
+    }
+
+    // Validate environment
+    if environment.is_empty() {
+        return Err(anyhow::anyhow!("Environment cannot be empty"));
+    }
+
+    // Validate strategy if provided
+    if let Some(ref s) = strategy {
+        let valid_strategies = ["blue-green", "canary", "rolling", "manual", "immediate"];
+        if !valid_strategies.iter().any(|v| v.eq_ignore_ascii_case(s)) {
+            return Err(anyhow::anyhow!(
+                "Strategy must be one of: {}",
+                valid_strategies.join(", ")
+            ));
+        }
+    }
+
+    // Validate traffic percentage if provided
+    if let Some(t) = traffic {
+        if t <= 0.0 || t > 100.0 {
+            return Err(anyhow::anyhow!(
+                "Traffic percentage must be between 0 and 100"
+            ));
+        }
+    }
+
     let version_storage =
         std::sync::Arc::new(crate::model_versioning::FileSystemVersionStorage::new(
             config.model_versioning.storage.base_path.clone(),
@@ -1376,6 +1456,11 @@ async fn handle_rollback_command(
 ) -> Result<()> {
     warn!("Rolling back deployment for version: {}", version_id);
 
+    // Validate environment
+    if environment.is_empty() {
+        return Err(anyhow::anyhow!("Environment cannot be empty"));
+    }
+
     if !force {
         println!("Rollback confirmation required:");
         println!("Current version: {}", version_id);
@@ -1425,6 +1510,17 @@ async fn handle_compare_command(
         return Err(anyhow::anyhow!(
             "At least 2 versions required for comparison"
         ));
+    }
+
+    // Validate no empty version IDs
+    if version_ids.iter().any(|v| v.is_empty()) {
+        return Err(anyhow::anyhow!("Version IDs cannot be empty"));
+    }
+
+    // Validate version IDs are different
+    let unique_ids: std::collections::HashSet<_> = version_ids.iter().collect();
+    if unique_ids.len() != version_ids.len() {
+        return Err(anyhow::anyhow!("Version IDs must be different"));
     }
 
     let version_storage =
@@ -1813,6 +1909,16 @@ async fn handle_export_command(
 ) -> Result<()> {
     info!("Exporting data to: {}", output.display());
 
+    // Validate output directory exists
+    if let Some(parent) = output.parent() {
+        if !parent.as_os_str().is_empty() && !parent.exists() {
+            return Err(anyhow::anyhow!(
+                "Output directory does not exist: {}",
+                parent.display()
+            ));
+        }
+    }
+
     let export_format = format.unwrap_or(ExportFormat::Json);
     println!("Export format: {:?}", export_format);
 
@@ -1896,4 +2002,316 @@ async fn handle_report_command(_config: &Config, _action: ReportAction) -> Resul
     info!("Report command not fully implemented");
     println!("Report generation will be available in the next version");
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+    use tempfile::NamedTempFile;
+
+    #[tokio::test]
+    async fn test_create_version_validation_empty_model() {
+        let config = Config::default();
+        let version_config = CreateVersionConfig {
+            model: "".to_string(),
+            version: "v1.0".to_string(),
+            file: PathBuf::from("/tmp/model.gguf"),
+            description: None,
+            model_type: None,
+            format: None,
+            tags: None,
+            created_by: None,
+        };
+
+        let result = handle_create_command(&config, version_config).await;
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Model name cannot be empty"));
+    }
+
+    #[tokio::test]
+    async fn test_create_version_validation_empty_version() {
+        let config = Config::default();
+        let version_config = CreateVersionConfig {
+            model: "llama-7b".to_string(),
+            version: "".to_string(),
+            file: PathBuf::from("/tmp/model.gguf"),
+            description: None,
+            model_type: None,
+            format: None,
+            tags: None,
+            created_by: None,
+        };
+
+        let result = handle_create_command(&config, version_config).await;
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Version cannot be empty"));
+    }
+
+    #[tokio::test]
+    async fn test_create_version_validation_file_not_found() {
+        let config = Config::default();
+        let version_config = CreateVersionConfig {
+            model: "llama-7b".to_string(),
+            version: "v1.0".to_string(),
+            file: PathBuf::from("/nonexistent/path/model.gguf"),
+            description: None,
+            model_type: None,
+            format: None,
+            tags: None,
+            created_by: None,
+        };
+
+        let result = handle_create_command(&config, version_config).await;
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Model file does not exist"));
+    }
+
+    #[tokio::test]
+    async fn test_list_versions_validation_invalid_limit() {
+        let config = Config::default();
+
+        // Test limit of 0
+        let result = handle_list_command(&config, None, None, Some(0), None).await;
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Limit must be between 1 and 100"));
+
+        // Test limit over 100
+        let result = handle_list_command(&config, None, None, Some(101), None).await;
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Limit must be between 1 and 100"));
+    }
+
+    #[tokio::test]
+    async fn test_list_versions_validation_invalid_status() {
+        let config = Config::default();
+
+        let result = handle_list_command(
+            &config,
+            None,
+            Some("invalid_status".to_string()),
+            None,
+            None,
+        )
+        .await;
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Status must be one of"));
+    }
+
+    #[tokio::test]
+    async fn test_validate_command_empty_version_id() {
+        let config = Config::default();
+
+        let result = handle_validate_command(&config, "".to_string(), None, false, false).await;
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Version ID cannot be empty"));
+    }
+
+    #[tokio::test]
+    async fn test_validate_command_invalid_test_suite() {
+        let config = Config::default();
+
+        let result = handle_validate_command(
+            &config,
+            "v1.0".to_string(),
+            Some("invalid_suite".to_string()),
+            false,
+            false,
+        )
+        .await;
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Test suite must be one of"));
+    }
+
+    #[tokio::test]
+    async fn test_deploy_command_validation_empty_version() {
+        let config = Config::default();
+
+        let result = handle_deploy_command(
+            &config,
+            "".to_string(),
+            "prod".to_string(),
+            None,
+            None,
+            true,
+        )
+        .await;
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Version ID cannot be empty"));
+    }
+
+    #[tokio::test]
+    async fn test_deploy_command_validation_empty_environment() {
+        let config = Config::default();
+
+        let result = handle_deploy_command(
+            &config,
+            "v1.0".to_string(),
+            "".to_string(),
+            None,
+            None,
+            true,
+        )
+        .await;
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Environment cannot be empty"));
+    }
+
+    #[tokio::test]
+    async fn test_deploy_command_validation_invalid_strategy() {
+        let config = Config::default();
+
+        let result = handle_deploy_command(
+            &config,
+            "v1.0".to_string(),
+            "prod".to_string(),
+            Some("invalid_strategy".to_string()),
+            None,
+            true,
+        )
+        .await;
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Strategy must be one of"));
+    }
+
+    #[tokio::test]
+    async fn test_deploy_command_validation_invalid_traffic() {
+        let config = Config::default();
+
+        // Test traffic <= 0
+        let result = handle_deploy_command(
+            &config,
+            "v1.0".to_string(),
+            "prod".to_string(),
+            None,
+            Some(0.0),
+            true,
+        )
+        .await;
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Traffic percentage must be between"));
+
+        // Test traffic > 100
+        let result = handle_deploy_command(
+            &config,
+            "v1.0".to_string(),
+            "prod".to_string(),
+            None,
+            Some(101.0),
+            true,
+        )
+        .await;
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Traffic percentage must be between"));
+    }
+
+    #[tokio::test]
+    async fn test_rollback_command_validation_empty_environment() {
+        let config = Config::default();
+
+        let result =
+            handle_rollback_command(&config, "v1.0".to_string(), "".to_string(), None, true).await;
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Environment cannot be empty"));
+    }
+
+    #[tokio::test]
+    async fn test_compare_command_validation_insufficient_versions() {
+        let config = Config::default();
+
+        let result = handle_compare_command(&config, "v1.0".to_string(), None, false, None).await;
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("At least 2 versions required"));
+    }
+
+    #[tokio::test]
+    async fn test_compare_command_validation_duplicate_versions() {
+        let config = Config::default();
+
+        let result =
+            handle_compare_command(&config, "v1.0,v1.0".to_string(), None, false, None).await;
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Version IDs must be different"));
+    }
+
+    #[tokio::test]
+    async fn test_compare_command_validation_empty_version() {
+        let config = Config::default();
+
+        let result = handle_compare_command(&config, "v1.0,".to_string(), None, false, None).await;
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Version IDs cannot be empty"));
+    }
+
+    #[tokio::test]
+    async fn test_export_command_validation_invalid_output_dir() {
+        let config = Config::default();
+
+        let result = handle_export_command(
+            &config,
+            PathBuf::from("/nonexistent/path/export.json"),
+            None,
+            true,
+            false,
+            false,
+            None,
+        )
+        .await;
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Output directory does not exist"));
+    }
 }

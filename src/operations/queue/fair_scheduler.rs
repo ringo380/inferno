@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 //! Fair Queue Scheduler with Starvation Prevention
 //!
 //! This module implements weighted round-robin scheduling to ensure fair resource
@@ -102,7 +103,7 @@ impl FairScheduler {
         let wait_ms = request.age_ms();
         self.per_priority_wait_times
             .entry(priority_val)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(wait_ms);
 
         // Keep only last 1000 wait times per priority to avoid memory bloat

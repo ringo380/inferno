@@ -1576,7 +1576,7 @@ Context:
         let query = AuditQuery {
             start_time: Some(analysis_config.start_time),
             end_time: Some(analysis_config.end_time),
-            limit: Some(50000), // Large limit for analysis
+            limit: Some(10000), // Max allowed limit for analysis
             ..Default::default()
         };
 
@@ -2422,7 +2422,8 @@ mod tests {
         let temp_dir = tempdir().expect("Failed to create temporary directory for test");
         let config = AuditConfiguration {
             storage_path: temp_dir.path().to_path_buf(),
-            batch_size: 1, // Small batch for immediate testing
+            batch_size: 1,            // Small batch for immediate testing
+            log_level: LogLevel::All, // Log all severities including Info
             ..Default::default()
         };
 
@@ -2520,29 +2521,33 @@ mod tests {
 
     #[tokio::test]
     async fn test_compression_gzip() {
-        let test_data = b"This is test audit data for compression testing";
-        let compressed = AuditLogger::compress_data(test_data, &CompressionMethod::Gzip, 6)
+        // Use larger, repetitive data that compresses well
+        let test_data = "This is test audit data for compression testing. ".repeat(20);
+        let test_bytes = test_data.as_bytes();
+        let compressed = AuditLogger::compress_data(test_bytes, &CompressionMethod::Gzip, 6)
             .expect("Failed to compress data with Gzip");
         let decompressed = AuditLogger::decompress_data(&compressed, &CompressionMethod::Gzip)
             .expect("Failed to decompress data with Gzip");
 
-        assert_ne!(compressed, test_data);
-        assert_eq!(decompressed, test_data);
-        assert!(compressed.len() < test_data.len());
+        assert_ne!(compressed.as_slice(), test_bytes);
+        assert_eq!(decompressed, test_bytes);
+        assert!(compressed.len() < test_bytes.len());
     }
 
     #[tokio::test]
     async fn test_compression_zstd() {
+        // Use larger, repetitive data that compresses well
         let test_data =
-            b"This is test audit data for zstd compression testing with more data to compress";
-        let compressed = AuditLogger::compress_data(test_data, &CompressionMethod::Zstd, 3)
+            "This is test audit data for zstd compression testing with more data. ".repeat(20);
+        let test_bytes = test_data.as_bytes();
+        let compressed = AuditLogger::compress_data(test_bytes, &CompressionMethod::Zstd, 3)
             .expect("Failed to compress data with Zstd");
         let decompressed = AuditLogger::decompress_data(&compressed, &CompressionMethod::Zstd)
             .expect("Failed to decompress data with Zstd");
 
-        assert_ne!(compressed, test_data);
-        assert_eq!(decompressed, test_data);
-        assert!(compressed.len() < test_data.len());
+        assert_ne!(compressed.as_slice(), test_bytes);
+        assert_eq!(decompressed, test_bytes);
+        assert!(compressed.len() < test_bytes.len());
     }
 
     #[tokio::test]
@@ -2637,6 +2642,8 @@ mod tests {
         let temp_dir = tempdir().expect("Failed to create temporary directory for test");
         let config = AuditConfiguration {
             storage_path: temp_dir.path().to_path_buf(),
+            batch_size: 100, // Large enough to hold all test events without draining
+            log_level: LogLevel::All, // Log all severities including Info
             ..Default::default()
         };
 
@@ -2785,6 +2792,8 @@ mod tests {
         let temp_dir = tempdir().expect("Failed to create temporary directory for test");
         let config = AuditConfiguration {
             storage_path: temp_dir.path().to_path_buf(),
+            batch_size: 100, // Large enough to hold all test events without draining
+            log_level: LogLevel::All, // Log all severities including Info
             ..Default::default()
         };
 

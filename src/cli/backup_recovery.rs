@@ -1,4 +1,4 @@
-#![allow(dead_code, unused_imports, unused_variables)]
+#![allow(dead_code, unused_imports, unused_variables, clippy::match_same_arms, clippy::wildcard_in_or_patterns)]
 use anyhow::Result;
 use clap::{Args, Subcommand};
 use std::path::PathBuf;
@@ -3108,7 +3108,10 @@ fn parse_backup_type(backup_type: &str) -> Result<BackupType> {
         "differential" => Ok(BackupType::Differential),
         "snapshot" => Ok(BackupType::Snapshot),
         "cdp" | "continuous" => Ok(BackupType::ContinuousDataProtection),
-        _ => Err(anyhow::anyhow!("Invalid backup type: {}", backup_type)),
+        _ => Err(anyhow::anyhow!(
+            "Invalid backup type '{}'. Must be one of: full, incremental, differential, snapshot, cdp, continuous",
+            backup_type
+        )),
     }
 }
 
@@ -3118,7 +3121,10 @@ fn parse_restore_type(restore_type: &str) -> Result<RestoreType> {
         "partial" => Ok(RestoreType::Partial),
         "point-in-time" | "pit" => Ok(RestoreType::PointInTime),
         "file-level" | "file" => Ok(RestoreType::FileLevel),
-        _ => Err(anyhow::anyhow!("Invalid restore type: {}", restore_type)),
+        _ => Err(anyhow::anyhow!(
+            "Invalid restore type '{}'. Must be one of: full, partial, point-in-time, pit, file-level, file",
+            restore_type
+        )),
     }
 }
 
@@ -3130,7 +3136,10 @@ fn parse_backup_status(status: &str) -> Result<BackupStatus> {
         "failed" | "error" => Ok(BackupStatus::Failed),
         "cancelled" => Ok(BackupStatus::Cancelled),
         "paused" => Ok(BackupStatus::Paused),
-        _ => Err(anyhow::anyhow!("Invalid backup status: {}", status)),
+        _ => Err(anyhow::anyhow!(
+            "Invalid backup status '{}'. Must be one of: pending, running, completed, success, failed, error, cancelled, paused",
+            status
+        )),
     }
 }
 
@@ -3141,7 +3150,10 @@ fn parse_restore_status(status: &str) -> Result<RestoreStatus> {
         "completed" | "success" => Ok(RestoreStatus::Completed),
         "failed" | "error" => Ok(RestoreStatus::Failed),
         "cancelled" => Ok(RestoreStatus::Cancelled),
-        _ => Err(anyhow::anyhow!("Invalid restore status: {}", status)),
+        _ => Err(anyhow::anyhow!(
+            "Invalid restore status '{}'. Must be one of: pending, running, completed, success, failed, error, cancelled",
+            status
+        )),
     }
 }
 
@@ -3151,7 +3163,10 @@ fn parse_test_type(test_type: &str) -> Result<TestType> {
         "simulation" => Ok(TestType::Simulation),
         "partial" => Ok(TestType::Partial),
         "full" => Ok(TestType::Full),
-        _ => Err(anyhow::anyhow!("Invalid test type: {}", test_type)),
+        _ => Err(anyhow::anyhow!(
+            "Invalid test type '{}'. Must be one of: tabletop, simulation, partial, full",
+            test_type
+        )),
     }
 }
 
@@ -3658,5 +3673,226 @@ fn format_bytes(bytes: u64) -> String {
         format!("{} {}", bytes, UNITS[unit_index])
     } else {
         format!("{:.2} {}", size, UNITS[unit_index])
+    }
+}
+
+// ============================================================================
+// Tests - Validation and parsing tests
+// ============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_backup_type_valid() {
+        assert!(matches!(parse_backup_type("full"), Ok(BackupType::Full)));
+        assert!(matches!(
+            parse_backup_type("incremental"),
+            Ok(BackupType::Incremental)
+        ));
+        assert!(matches!(
+            parse_backup_type("differential"),
+            Ok(BackupType::Differential)
+        ));
+        assert!(matches!(
+            parse_backup_type("snapshot"),
+            Ok(BackupType::Snapshot)
+        ));
+        assert!(matches!(
+            parse_backup_type("cdp"),
+            Ok(BackupType::ContinuousDataProtection)
+        ));
+        assert!(matches!(
+            parse_backup_type("continuous"),
+            Ok(BackupType::ContinuousDataProtection)
+        ));
+        // Case insensitive
+        assert!(matches!(parse_backup_type("FULL"), Ok(BackupType::Full)));
+        assert!(matches!(parse_backup_type("Full"), Ok(BackupType::Full)));
+    }
+
+    #[test]
+    fn test_parse_backup_type_invalid() {
+        let result = parse_backup_type("invalid");
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid backup type"));
+    }
+
+    #[test]
+    fn test_parse_restore_type_valid() {
+        assert!(matches!(parse_restore_type("full"), Ok(RestoreType::Full)));
+        assert!(matches!(
+            parse_restore_type("partial"),
+            Ok(RestoreType::Partial)
+        ));
+        assert!(matches!(
+            parse_restore_type("point-in-time"),
+            Ok(RestoreType::PointInTime)
+        ));
+        assert!(matches!(
+            parse_restore_type("pit"),
+            Ok(RestoreType::PointInTime)
+        ));
+        assert!(matches!(
+            parse_restore_type("file-level"),
+            Ok(RestoreType::FileLevel)
+        ));
+        assert!(matches!(
+            parse_restore_type("file"),
+            Ok(RestoreType::FileLevel)
+        ));
+    }
+
+    #[test]
+    fn test_parse_restore_type_invalid() {
+        let result = parse_restore_type("invalid");
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid restore type"));
+    }
+
+    #[test]
+    fn test_parse_backup_status_valid() {
+        assert!(matches!(
+            parse_backup_status("pending"),
+            Ok(BackupStatus::Pending)
+        ));
+        assert!(matches!(
+            parse_backup_status("running"),
+            Ok(BackupStatus::Running)
+        ));
+        assert!(matches!(
+            parse_backup_status("completed"),
+            Ok(BackupStatus::Completed)
+        ));
+        assert!(matches!(
+            parse_backup_status("success"),
+            Ok(BackupStatus::Completed)
+        ));
+        assert!(matches!(
+            parse_backup_status("failed"),
+            Ok(BackupStatus::Failed)
+        ));
+        assert!(matches!(
+            parse_backup_status("error"),
+            Ok(BackupStatus::Failed)
+        ));
+        assert!(matches!(
+            parse_backup_status("cancelled"),
+            Ok(BackupStatus::Cancelled)
+        ));
+        assert!(matches!(
+            parse_backup_status("paused"),
+            Ok(BackupStatus::Paused)
+        ));
+    }
+
+    #[test]
+    fn test_parse_backup_status_invalid() {
+        let result = parse_backup_status("invalid");
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid backup status"));
+    }
+
+    #[test]
+    fn test_parse_restore_status_valid() {
+        assert!(matches!(
+            parse_restore_status("pending"),
+            Ok(RestoreStatus::Pending)
+        ));
+        assert!(matches!(
+            parse_restore_status("running"),
+            Ok(RestoreStatus::Running)
+        ));
+        assert!(matches!(
+            parse_restore_status("completed"),
+            Ok(RestoreStatus::Completed)
+        ));
+        assert!(matches!(
+            parse_restore_status("success"),
+            Ok(RestoreStatus::Completed)
+        ));
+        assert!(matches!(
+            parse_restore_status("failed"),
+            Ok(RestoreStatus::Failed)
+        ));
+        assert!(matches!(
+            parse_restore_status("error"),
+            Ok(RestoreStatus::Failed)
+        ));
+        assert!(matches!(
+            parse_restore_status("cancelled"),
+            Ok(RestoreStatus::Cancelled)
+        ));
+    }
+
+    #[test]
+    fn test_parse_restore_status_invalid() {
+        let result = parse_restore_status("invalid");
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid restore status"));
+    }
+
+    #[test]
+    fn test_parse_test_type_valid() {
+        assert!(matches!(
+            parse_test_type("tabletop"),
+            Ok(TestType::Tabletop)
+        ));
+        assert!(matches!(
+            parse_test_type("simulation"),
+            Ok(TestType::Simulation)
+        ));
+        assert!(matches!(parse_test_type("partial"), Ok(TestType::Partial)));
+        assert!(matches!(parse_test_type("full"), Ok(TestType::Full)));
+    }
+
+    #[test]
+    fn test_parse_test_type_invalid() {
+        let result = parse_test_type("invalid");
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid test type"));
+    }
+
+    #[test]
+    fn test_format_bytes() {
+        assert_eq!(format_bytes(0), "0 B");
+        assert_eq!(format_bytes(512), "512 B");
+        assert_eq!(format_bytes(1024), "1.00 KB");
+        assert_eq!(format_bytes(1536), "1.50 KB");
+        assert_eq!(format_bytes(1048576), "1.00 MB");
+        assert_eq!(format_bytes(1073741824), "1.00 GB");
+        assert_eq!(format_bytes(1099511627776), "1.00 TB");
+    }
+
+    #[test]
+    fn test_truncate_string() {
+        assert_eq!(truncate_string("hello", 10), "hello");
+        assert_eq!(truncate_string("hello world", 10), "hello w...");
+        assert_eq!(truncate_string("hi", 2), "hi");
+        assert_eq!(truncate_string("hello", 5), "hello");
+        assert_eq!(truncate_string("hello", 4), "h...");
+    }
+
+    #[test]
+    fn test_truncate_string_edge_cases() {
+        assert_eq!(truncate_string("", 10), "");
+        assert_eq!(truncate_string("a", 1), "a");
+        assert_eq!(truncate_string("abc", 3), "abc");
     }
 }
