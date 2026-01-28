@@ -1,5 +1,6 @@
 'use client';
 
+import { MainLayout } from '@/components/layout/main-layout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -47,7 +48,8 @@ export default function TenantsPage() {
   const { data: systemInfo, isLoading: systemLoading } = useSystemInfo();
 
   return (
-    <div className="space-y-6">
+    <MainLayout>
+      <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Multi-Tenancy</h1>
@@ -206,6 +208,7 @@ export default function TenantsPage() {
           </div>
         </CardContent>
       </Card>
-    </div>
+      </div>
+    </MainLayout>
   );
 }
