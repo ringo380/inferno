@@ -31,6 +31,8 @@ jobs:
   code-quality-analysis:
     name: Code Quality Analysis
     runs-on: ubuntu-latest
+    # Only run on PR, schedule, or manual trigger (not push)
+    if: github.event_name != 'push'
     timeout-minutes: 30
     outputs:
       quality-score: ${{ steps.quality-score.outputs.score }}
@@ -268,6 +270,8 @@ jobs:
   security-compliance:
     name: Security Compliance
     runs-on: ubuntu-latest
+    # Only run on PR, schedule, or manual trigger (not push)
+    if: github.event_name != 'push'
     timeout-minutes: 25
     outputs:
       security-score: ${{ steps.security-score.outputs.score }}
@@ -396,6 +400,8 @@ jobs:
   license-compliance:
     name: License Compliance
     runs-on: ubuntu-latest
+    # Only run on PR, schedule, or manual trigger (not push)
+    if: github.event_name != 'push'
     timeout-minutes: 15
     outputs:
       license-compliant: ${{ steps.license-check.outputs.compliant }}
@@ -507,6 +513,8 @@ jobs:
   performance-standards:
     name: Performance Standards
     runs-on: ubuntu-latest
+    # Only run on PR, schedule, or manual trigger (not push)
+    if: github.event_name != 'push'
     timeout-minutes: 30
     outputs:
       performance-compliant: ${{ steps.perf-check.outputs.compliant }}
@@ -614,6 +622,8 @@ jobs:
     name: Quality Gate Decision
     runs-on: ubuntu-latest
     needs: [code-quality-analysis, security-compliance, license-compliance, performance-standards]
+    # Only run on PR, schedule, or manual trigger (not push)
+    if: github.event_name != 'push'
     timeout-minutes: 10
 
     steps:
