@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { MainLayout } from '@/components/layout/main-layout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -192,7 +193,8 @@ export default function BatchPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <MainLayout>
+      <div className="space-y-6">
       {/* Page Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -588,6 +590,7 @@ export default function BatchPage() {
           )}
         </div>
       </div>
-    </div>
+      </div>
+    </MainLayout>
   );
 }

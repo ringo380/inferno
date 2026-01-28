@@ -1,5 +1,6 @@
 'use client';
 
+import { MainLayout } from '@/components/layout/main-layout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -80,7 +81,8 @@ export default function VersioningPage() {
   const totalDeployments = mockVersions.reduce((sum, v) => sum + v.deployment_count, 0);
 
   return (
-    <div className="space-y-6">
+    <MainLayout>
+      <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Model Versioning</h1>
@@ -268,6 +270,7 @@ export default function VersioningPage() {
           </CardContent>
         </Card>
       </div>
-    </div>
+      </div>
+    </MainLayout>
   );
 }
