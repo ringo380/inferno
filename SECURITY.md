@@ -138,10 +138,9 @@ max_request_size_mb = 10
 
 ## Security Resources
 
-- **Security Documentation**: [Security Guide](SECURITY_GUIDE.md)
-- **Deployment Security**: [Secure Deployment Guide](DEPLOYMENT_SECURITY.md)
-- **API Security**: [API Security Best Practices](API_SECURITY.md)
-- **Audit Logs**: [Audit Logging Guide](AUDIT_GUIDE.md)
+- **Security Documentation**: [Security Guide](docs/SECURITY_GUIDE.md)
+- **Deployment Security**: [Secure Deployment Guide](docs/DEPLOYMENT_SECURITY.md)
+- **API Security**: [API Security Best Practices](docs/API_SECURITY.md)
 
 ## Contact
 

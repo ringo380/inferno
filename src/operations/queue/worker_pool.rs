@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 //! Dynamic Worker Pool Manager
 //!
 //! This module manages inference worker pools with automatic scaling based on queue pressure
@@ -5,7 +6,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::AtomicU32;
 use std::sync::Arc;
 
 /// Worker state

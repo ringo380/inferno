@@ -1,4 +1,4 @@
-#![allow(dead_code, unused_imports, unused_variables)]
+#![allow(dead_code, unused_imports, unused_variables, clippy::ptr_arg)]
 //! # Backup Manager
 //!
 //! Comprehensive backup and restore system for safe application upgrades

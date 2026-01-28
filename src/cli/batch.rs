@@ -97,16 +97,75 @@ impl From<OutputFormat> for BatchOutputFormat {
     }
 }
 
+/// Validate batch processing parameters
+fn validate_parameters(args: &BatchArgs) -> Result<()> {
+    // Validate model name
+    if args.model.is_empty() {
+        anyhow::bail!("Model name cannot be empty");
+    }
+
+    // Validate input file
+    if !args.input.exists() {
+        anyhow::bail!("Input file does not exist: {}", args.input.display());
+    }
+
+    // Validate output directory if specified
+    if let Some(ref output) = args.output {
+        if let Some(parent) = output.parent() {
+            if !parent.exists() {
+                anyhow::bail!("Output directory does not exist: {}", parent.display());
+            }
+        }
+    }
+
+    // Validate resume checkpoint if specified
+    if let Some(ref resume) = args.resume {
+        if !resume.exists() {
+            anyhow::bail!("Checkpoint file does not exist: {}", resume.display());
+        }
+    }
+
+    // Validate parameter ranges
+    if args.max_tokens == 0 {
+        anyhow::bail!("Max tokens must be greater than 0");
+    }
+
+    if args.max_tokens > 32768 {
+        anyhow::bail!("Max tokens cannot exceed 32768");
+    }
+
+    if args.temperature < 0.0 || args.temperature > 2.0 {
+        anyhow::bail!("Temperature must be between 0.0 and 2.0");
+    }
+
+    if args.top_p < 0.0 || args.top_p > 1.0 {
+        anyhow::bail!("Top-p must be between 0.0 and 1.0");
+    }
+
+    if args.concurrency == 0 {
+        anyhow::bail!("Concurrency must be at least 1");
+    }
+
+    if args.concurrency > 128 {
+        anyhow::bail!("Concurrency cannot exceed 128");
+    }
+
+    if args.timeout == 0 {
+        anyhow::bail!("Timeout must be at least 1 second");
+    }
+
+    if args.checkpoint == 0 {
+        anyhow::bail!("Checkpoint interval must be at least 1");
+    }
+
+    Ok(())
+}
+
 pub async fn execute(args: BatchArgs, config: &Config) -> Result<()> {
     info!("Starting batch processing with model: {}", args.model);
 
-    // Validate inputs
-    if !args.input.exists() {
-        return Err(anyhow::anyhow!(
-            "Input file does not exist: {}",
-            args.input.display()
-        ));
-    }
+    // Validate all parameters
+    validate_parameters(&args)?;
 
     if args.dry_run {
         return validate_batch_inputs(&args).await;
@@ -343,5 +402,326 @@ fn print_batch_summary(progress: &crate::batch::BatchProgress, args: &BatchArgs)
 
     if progress.completed_items > 0 {
         println!("\n✅ Batch processing completed successfully!");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+    use tempfile::NamedTempFile;
+
+    /// Create default BatchArgs for testing with a valid temp file
+    fn create_test_args_with_file(temp_file: &NamedTempFile) -> BatchArgs {
+        BatchArgs {
+            model: "test-model".to_string(),
+            input: temp_file.path().to_path_buf(),
+            output: None,
+            output_format: OutputFormat::JsonLines,
+            max_tokens: 512,
+            temperature: 0.7,
+            top_k: 40,
+            top_p: 0.9,
+            concurrency: 4,
+            timeout: 300,
+            retries: 3,
+            checkpoint: 100,
+            continue_on_error: false,
+            shuffle: false,
+            metrics: false,
+            resume: None,
+            dry_run: false,
+            backend: None,
+            verbose: false,
+        }
+    }
+
+    #[test]
+    fn test_validate_empty_model() {
+        let mut temp_file = NamedTempFile::new().unwrap();
+        writeln!(temp_file, "test").unwrap();
+        let mut args = create_test_args_with_file(&temp_file);
+        args.model = String::new();
+
+        let result = validate_parameters(&args);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Model name cannot be empty"));
+    }
+
+    #[test]
+    fn test_validate_max_tokens_zero() {
+        let mut temp_file = NamedTempFile::new().unwrap();
+        writeln!(temp_file, "test").unwrap();
+        let mut args = create_test_args_with_file(&temp_file);
+        args.max_tokens = 0;
+
+        let result = validate_parameters(&args);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Max tokens must be greater than 0"));
+    }
+
+    #[test]
+    fn test_validate_max_tokens_exceeds_limit() {
+        let mut temp_file = NamedTempFile::new().unwrap();
+        writeln!(temp_file, "test").unwrap();
+        let mut args = create_test_args_with_file(&temp_file);
+        args.max_tokens = 32769;
+
+        let result = validate_parameters(&args);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Max tokens cannot exceed 32768"));
+    }
+
+    #[test]
+    fn test_validate_max_tokens_boundary_valid() {
+        let mut temp_file = NamedTempFile::new().unwrap();
+        writeln!(temp_file, "test").unwrap();
+        let mut args = create_test_args_with_file(&temp_file);
+
+        // Test lower boundary
+        args.max_tokens = 1;
+        assert!(validate_parameters(&args).is_ok());
+
+        // Test upper boundary
+        args.max_tokens = 32768;
+        assert!(validate_parameters(&args).is_ok());
+    }
+
+    #[test]
+    fn test_validate_temperature_too_low() {
+        let mut temp_file = NamedTempFile::new().unwrap();
+        writeln!(temp_file, "test").unwrap();
+        let mut args = create_test_args_with_file(&temp_file);
+        args.temperature = -0.1;
+
+        let result = validate_parameters(&args);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Temperature must be between 0.0 and 2.0"));
+    }
+
+    #[test]
+    fn test_validate_temperature_too_high() {
+        let mut temp_file = NamedTempFile::new().unwrap();
+        writeln!(temp_file, "test").unwrap();
+        let mut args = create_test_args_with_file(&temp_file);
+        args.temperature = 2.1;
+
+        let result = validate_parameters(&args);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Temperature must be between 0.0 and 2.0"));
+    }
+
+    #[test]
+    fn test_validate_temperature_boundary_valid() {
+        let mut temp_file = NamedTempFile::new().unwrap();
+        writeln!(temp_file, "test").unwrap();
+        let mut args = create_test_args_with_file(&temp_file);
+
+        // Test lower boundary
+        args.temperature = 0.0;
+        assert!(validate_parameters(&args).is_ok());
+
+        // Test upper boundary
+        args.temperature = 2.0;
+        assert!(validate_parameters(&args).is_ok());
+    }
+
+    #[test]
+    fn test_validate_top_p_too_low() {
+        let mut temp_file = NamedTempFile::new().unwrap();
+        writeln!(temp_file, "test").unwrap();
+        let mut args = create_test_args_with_file(&temp_file);
+        args.top_p = -0.1;
+
+        let result = validate_parameters(&args);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Top-p must be between 0.0 and 1.0"));
+    }
+
+    #[test]
+    fn test_validate_top_p_too_high() {
+        let mut temp_file = NamedTempFile::new().unwrap();
+        writeln!(temp_file, "test").unwrap();
+        let mut args = create_test_args_with_file(&temp_file);
+        args.top_p = 1.1;
+
+        let result = validate_parameters(&args);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Top-p must be between 0.0 and 1.0"));
+    }
+
+    #[test]
+    fn test_validate_top_p_boundary_valid() {
+        let mut temp_file = NamedTempFile::new().unwrap();
+        writeln!(temp_file, "test").unwrap();
+        let mut args = create_test_args_with_file(&temp_file);
+
+        // Test lower boundary
+        args.top_p = 0.0;
+        assert!(validate_parameters(&args).is_ok());
+
+        // Test upper boundary
+        args.top_p = 1.0;
+        assert!(validate_parameters(&args).is_ok());
+    }
+
+    #[test]
+    fn test_validate_concurrency_zero() {
+        let mut temp_file = NamedTempFile::new().unwrap();
+        writeln!(temp_file, "test").unwrap();
+        let mut args = create_test_args_with_file(&temp_file);
+        args.concurrency = 0;
+
+        let result = validate_parameters(&args);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Concurrency must be at least 1"));
+    }
+
+    #[test]
+    fn test_validate_concurrency_exceeds_limit() {
+        let mut temp_file = NamedTempFile::new().unwrap();
+        writeln!(temp_file, "test").unwrap();
+        let mut args = create_test_args_with_file(&temp_file);
+        args.concurrency = 129;
+
+        let result = validate_parameters(&args);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Concurrency cannot exceed 128"));
+    }
+
+    #[test]
+    fn test_validate_concurrency_boundary_valid() {
+        let mut temp_file = NamedTempFile::new().unwrap();
+        writeln!(temp_file, "test").unwrap();
+        let mut args = create_test_args_with_file(&temp_file);
+
+        // Test lower boundary
+        args.concurrency = 1;
+        assert!(validate_parameters(&args).is_ok());
+
+        // Test upper boundary
+        args.concurrency = 128;
+        assert!(validate_parameters(&args).is_ok());
+    }
+
+    #[test]
+    fn test_validate_timeout_zero() {
+        let mut temp_file = NamedTempFile::new().unwrap();
+        writeln!(temp_file, "test").unwrap();
+        let mut args = create_test_args_with_file(&temp_file);
+        args.timeout = 0;
+
+        let result = validate_parameters(&args);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Timeout must be at least 1 second"));
+    }
+
+    #[test]
+    fn test_validate_timeout_boundary_valid() {
+        let mut temp_file = NamedTempFile::new().unwrap();
+        writeln!(temp_file, "test").unwrap();
+        let mut args = create_test_args_with_file(&temp_file);
+
+        // Test lower boundary
+        args.timeout = 1;
+        assert!(validate_parameters(&args).is_ok());
+    }
+
+    #[test]
+    fn test_validate_checkpoint_zero() {
+        let mut temp_file = NamedTempFile::new().unwrap();
+        writeln!(temp_file, "test").unwrap();
+        let mut args = create_test_args_with_file(&temp_file);
+        args.checkpoint = 0;
+
+        let result = validate_parameters(&args);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Checkpoint interval must be at least 1"));
+    }
+
+    #[test]
+    fn test_validate_checkpoint_boundary_valid() {
+        let mut temp_file = NamedTempFile::new().unwrap();
+        writeln!(temp_file, "test").unwrap();
+        let mut args = create_test_args_with_file(&temp_file);
+
+        // Test lower boundary
+        args.checkpoint = 1;
+        assert!(validate_parameters(&args).is_ok());
+    }
+
+    #[test]
+    fn test_validate_input_file_not_exists() {
+        let args = BatchArgs {
+            model: "test-model".to_string(),
+            input: PathBuf::from("/nonexistent/path/to/file.json"),
+            output: None,
+            output_format: OutputFormat::JsonLines,
+            max_tokens: 512,
+            temperature: 0.7,
+            top_k: 40,
+            top_p: 0.9,
+            concurrency: 4,
+            timeout: 300,
+            retries: 3,
+            checkpoint: 100,
+            continue_on_error: false,
+            shuffle: false,
+            metrics: false,
+            resume: None,
+            dry_run: false,
+            backend: None,
+            verbose: false,
+        };
+
+        let result = validate_parameters(&args);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Input file does not exist"));
+    }
+
+    #[test]
+    fn test_validate_all_parameters_valid() {
+        let mut temp_file = NamedTempFile::new().unwrap();
+        writeln!(temp_file, "test").unwrap();
+        let args = create_test_args_with_file(&temp_file);
+
+        let result = validate_parameters(&args);
+        assert!(result.is_ok());
     }
 }

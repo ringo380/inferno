@@ -32,7 +32,7 @@ pub use model_repository::{
 };
 pub use security::{
     ApiKey, CreateApiKeyRequest, CreateApiKeyResponse, SecurityEvent, SecurityManager,
-    SecurityMetrics,
+    SecurityMetrics, SecurityScanResult,
 };
 pub use state::AppState;
 

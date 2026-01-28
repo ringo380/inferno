@@ -511,10 +511,14 @@ impl JobQueueManager {
     }
 
     pub async fn submit_job(&self, queue_id: &str, mut job: BatchJob) -> Result<String> {
-        let queues = self.queues.read().await;
-        let queue = queues
-            .get(queue_id)
-            .ok_or_else(|| anyhow::anyhow!("Queue '{}' not found", queue_id))?;
+        // Get a clone of the queue (Arc) and drop the read lock immediately to avoid deadlock
+        let queue = {
+            let queues = self.queues.read().await;
+            queues
+                .get(queue_id)
+                .cloned()
+                .ok_or_else(|| anyhow::anyhow!("Queue '{}' not found", queue_id))?
+        };
 
         // Check queue capacity
         let queue_jobs = queue.jobs.read().await;
@@ -549,7 +553,7 @@ impl JobQueueManager {
         info!("Submitted job '{}' to queue '{}'", job_id, queue_id);
         drop(queue_jobs); // Drop the write lock
 
-        // Update queue metrics - need a new scope to get write access
+        // Update queue metrics - need to acquire write lock on queues
         {
             let mut queues = self.queues.write().await;
             if let Some(queue) = queues.get_mut(queue_id) {

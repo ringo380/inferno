@@ -11,6 +11,16 @@ use std::io::{self, Write};
 use std::sync::Arc;
 use tracing::{error, info, warn};
 
+// ============================================================================
+// Validation Constants
+// ============================================================================
+
+/// Maximum allowed concurrent streams for benchmarking
+const MAX_CONCURRENT_STREAMS: usize = 100;
+
+/// Maximum allowed benchmark duration in seconds (1 hour)
+const MAX_BENCHMARK_DURATION_SECS: u64 = 3600;
+
 #[derive(Args)]
 pub struct StreamingArgs {
     #[command(subcommand)]
@@ -113,6 +123,9 @@ pub async fn execute(args: StreamingArgs, config: &Config) -> Result<()> {
             top_p,
             verbose,
         } => {
+            // Validate interactive session parameters
+            validate_interactive(&model, temperature, top_p)?;
+
             execute_interactive(
                 model,
                 max_tokens,
@@ -129,17 +142,135 @@ pub async fn execute(args: StreamingArgs, config: &Config) -> Result<()> {
             concurrent,
             prompt,
             duration,
-        } => execute_benchmark(model, concurrent, prompt, duration, config).await,
+        } => {
+            // Validate benchmark parameters
+            validate_benchmark(&model, &prompt, concurrent, duration)?;
+
+            execute_benchmark(model, concurrent, prompt, duration, config).await
+        }
         StreamingCommand::Monitor { interval, detailed } => {
+            // Validate monitor parameters
+            validate_monitor(interval)?;
+
             execute_monitor(interval, detailed, config).await
         }
         StreamingCommand::Server {
             bind,
             model,
             max_connections,
-        } => execute_server(bind, model, max_connections, config).await,
-        StreamingCommand::Config { format, output } => execute_config(format, output).await,
+        } => {
+            // Validate server parameters
+            validate_server(max_connections)?;
+
+            execute_server(bind, model, max_connections, config).await
+        }
+        StreamingCommand::Config { format, output } => {
+            // Validate config export parameters
+            validate_config_export(&output)?;
+
+            execute_config(format, output).await
+        }
     }
+}
+
+// ============================================================================
+// Validation Functions
+// ============================================================================
+
+/// Validate interactive session parameters
+fn validate_interactive(model: &str, temperature: f32, top_p: f32) -> Result<()> {
+    if model.is_empty() {
+        anyhow::bail!("Model name cannot be empty");
+    }
+
+    if !(0.0..=2.0).contains(&temperature) {
+        anyhow::bail!(
+            "Temperature must be between 0.0 and 2.0, got {}",
+            temperature
+        );
+    }
+
+    if !(0.0..=1.0).contains(&top_p) {
+        anyhow::bail!("Top-p must be between 0.0 and 1.0, got {}", top_p);
+    }
+
+    Ok(())
+}
+
+/// Validate benchmark parameters
+fn validate_benchmark(model: &str, prompt: &str, concurrent: usize, duration: u64) -> Result<()> {
+    if model.is_empty() {
+        anyhow::bail!("Model name cannot be empty");
+    }
+
+    if prompt.is_empty() {
+        anyhow::bail!("Prompt cannot be empty");
+    }
+
+    if concurrent == 0 {
+        anyhow::bail!("Concurrent streams must be at least 1");
+    }
+
+    if concurrent > MAX_CONCURRENT_STREAMS {
+        anyhow::bail!(
+            "Concurrent streams cannot exceed {} (got {})",
+            MAX_CONCURRENT_STREAMS,
+            concurrent
+        );
+    }
+
+    if duration == 0 {
+        anyhow::bail!("Duration must be at least 1 second");
+    }
+
+    if duration > MAX_BENCHMARK_DURATION_SECS {
+        anyhow::bail!(
+            "Duration cannot exceed {} seconds (1 hour), got {}",
+            MAX_BENCHMARK_DURATION_SECS,
+            duration
+        );
+    }
+
+    Ok(())
+}
+
+/// Validate monitor parameters
+fn validate_monitor(interval: u64) -> Result<()> {
+    if interval == 0 {
+        anyhow::bail!("Monitor interval must be at least 1 second");
+    }
+
+    if interval > 3600 {
+        anyhow::bail!("Monitor interval cannot exceed 3600 seconds (1 hour)");
+    }
+
+    Ok(())
+}
+
+/// Validate server parameters
+fn validate_server(max_connections: usize) -> Result<()> {
+    if max_connections == 0 {
+        anyhow::bail!("Maximum connections must be at least 1");
+    }
+
+    if max_connections > 10000 {
+        anyhow::bail!("Maximum connections cannot exceed 10000");
+    }
+
+    Ok(())
+}
+
+/// Validate config export parameters
+fn validate_config_export(output: &Option<std::path::PathBuf>) -> Result<()> {
+    if let Some(ref path) = output {
+        if let Some(parent) = path.parent() {
+            if !parent.as_os_str().is_empty() && !parent.exists() {
+                anyhow::bail!("Output directory does not exist: {}", parent.display());
+            }
+        }
+    }
+
+    Ok(())
 }
 
 async fn execute_interactive(
@@ -526,4 +657,219 @@ async fn execute_config(format: ConfigFormat, output: Option<std::path::PathBuf>
     }
 
     Ok(())
+}
+
+// ============================================================================
+// Unit Tests
+// ============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    // -------------------------------------------------------------------------
+    // Interactive Validation Tests
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_validate_interactive_empty_model() {
+        let result = validate_interactive("", 0.7, 0.9);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Model name cannot be empty"));
+    }
+
+    #[test]
+    fn test_validate_interactive_valid() {
+        let result = validate_interactive("model.gguf", 0.7, 0.9);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_interactive_temperature_out_of_range() {
+        let result = validate_interactive("model.gguf", 2.5, 0.9);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Temperature must be between"));
+
+        let result = validate_interactive("model.gguf", -0.5, 0.9);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_interactive_top_p_out_of_range() {
+        let result = validate_interactive("model.gguf", 0.7, 1.5);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Top-p must be between"));
+
+        let result = validate_interactive("model.gguf", 0.7, -0.1);
+        assert!(result.is_err());
+    }
+
+    // -------------------------------------------------------------------------
+    // Benchmark Validation Tests
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_validate_benchmark_empty_model() {
+        let result = validate_benchmark("", "test prompt", 5, 30);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Model name cannot be empty"));
+    }
+
+    #[test]
+    fn test_validate_benchmark_empty_prompt() {
+        let result = validate_benchmark("model.gguf", "", 5, 30);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Prompt cannot be empty"));
+    }
+
+    #[test]
+    fn test_validate_benchmark_zero_concurrent() {
+        let result = validate_benchmark("model.gguf", "test", 0, 30);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Concurrent streams must be at least 1"));
+    }
+
+    #[test]
+    fn test_validate_benchmark_excessive_concurrent() {
+        let result = validate_benchmark("model.gguf", "test", 200, 30);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Concurrent streams cannot exceed 100"));
+    }
+
+    #[test]
+    fn test_validate_benchmark_zero_duration() {
+        let result = validate_benchmark("model.gguf", "test", 5, 0);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Duration must be at least 1 second"));
+    }
+
+    #[test]
+    fn test_validate_benchmark_excessive_duration() {
+        let result = validate_benchmark("model.gguf", "test", 5, 5000);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Duration cannot exceed 3600 seconds"));
+    }
+
+    #[test]
+    fn test_validate_benchmark_valid() {
+        let result = validate_benchmark("model.gguf", "test prompt", 5, 30);
+        assert!(result.is_ok());
+    }
+
+    // -------------------------------------------------------------------------
+    // Monitor Validation Tests
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_validate_monitor_zero_interval() {
+        let result = validate_monitor(0);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Monitor interval must be at least 1 second"));
+    }
+
+    #[test]
+    fn test_validate_monitor_excessive_interval() {
+        let result = validate_monitor(4000);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Monitor interval cannot exceed 3600 seconds"));
+    }
+
+    #[test]
+    fn test_validate_monitor_valid() {
+        let result = validate_monitor(5);
+        assert!(result.is_ok());
+    }
+
+    // -------------------------------------------------------------------------
+    // Server Validation Tests
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_validate_server_zero_connections() {
+        let result = validate_server(0);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Maximum connections must be at least 1"));
+    }
+
+    #[test]
+    fn test_validate_server_excessive_connections() {
+        let result = validate_server(20000);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Maximum connections cannot exceed 10000"));
+    }
+
+    #[test]
+    fn test_validate_server_valid() {
+        let result = validate_server(50);
+        assert!(result.is_ok());
+    }
+
+    // -------------------------------------------------------------------------
+    // Config Export Validation Tests
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_validate_config_export_no_output() {
+        let result = validate_config_export(&None);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_config_export_nonexistent_parent() {
+        let path = PathBuf::from("/nonexistent/directory/config.json");
+        let result = validate_config_export(&Some(path));
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Output directory does not exist"));
+    }
+
+    #[test]
+    fn test_validate_config_export_valid_path() {
+        // Use current directory which should exist
+        let path = PathBuf::from("./config.json");
+        let result = validate_config_export(&Some(path));
+        assert!(result.is_ok());
+    }
 }

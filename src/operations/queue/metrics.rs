@@ -70,7 +70,7 @@ impl QueueMetricsCollector {
         self.total_queued += 1;
         self.per_priority_metrics
             .entry(priority)
-            .or_insert_with(Vec::new);
+            .or_default();
     }
 
     /// Record a request being processed
@@ -78,7 +78,7 @@ impl QueueMetricsCollector {
         self.total_processed += 1;
         self.per_priority_metrics
             .entry(priority)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(wait_time_ms);
     }
 

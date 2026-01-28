@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 //! Request Assignment & Load Balancing
 //!
 //! This module handles intelligent assignment of queued requests to available workers
@@ -159,7 +160,7 @@ impl LoadBalancer {
         // Estimate processing time based on tokens and worker load
         let tokens = request.estimated_tokens;
         let estimated_tokens_per_sec = 50; // Average
-        let estimated_duration_ms = ((tokens as u32 / estimated_tokens_per_sec) * 1000) as u32;
+        let estimated_duration_ms = (tokens / estimated_tokens_per_sec) * 1000;
 
         Some(AssignmentResult {
             request_id: request.request_id.clone(),
@@ -200,7 +201,7 @@ impl LoadBalancer {
         for request in requests {
             groups
                 .entry(request.priority as u8)
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(request.request_id);
         }
 
@@ -240,10 +241,10 @@ impl LoadBalancer {
             queue_utilization,
             available_gpu_memory_mb < self.min_gpu_memory_free_mb,
         ) {
-            (util, true) if util > 0.8 => BackpressureStatus::Critical,
-            (util, true) => BackpressureStatus::Elevated,
-            (util, _) if util > 0.9 => BackpressureStatus::Critical,
-            (util, _) if util > 0.7 => BackpressureStatus::Elevated,
+            (util, true) if util >= 0.8 => BackpressureStatus::Critical,
+            (_, true) => BackpressureStatus::Elevated,
+            (util, _) if util >= 0.9 => BackpressureStatus::Critical,
+            (util, _) if util >= 0.7 => BackpressureStatus::Elevated,
             _ => BackpressureStatus::Healthy,
         }
     }

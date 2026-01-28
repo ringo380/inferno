@@ -1,17 +1,45 @@
 //! Metal GPU Backend for Apple Silicon
 //!
-//! This backend provides GPU-accelerated inference using Metal on macOS.
-//! It leverages Apple's Metal Performance Shaders (MPS) and the Unified Memory
-//! Architecture for efficient model execution on Apple Silicon chips.
+//! **DEPRECATION NOTICE**: This standalone Metal backend is deprecated.
+//! Metal GPU acceleration is now provided through the GGUF backend via
+//! llama-cpp-2, which automatically enables Metal on macOS.
 //!
-//! ## Features
+//! ## Recommended Usage
+//!
+//! Use the GGUF backend instead:
+//! ```ignore
+//! let backend = GgufBackend::new(BackendConfig {
+//!     gpu_enabled: true,  // Automatically uses Metal on macOS
+//!     ..Default::default()
+//! })?;
+//! ```
+//!
+//! ## Why Deprecated?
+//!
+//! The llama-cpp-2 crate provides battle-tested Metal integration that:
+//! - Automatically detects Apple Silicon
+//! - Uses 999 GPU layers for maximum Metal utilization
+//! - Handles memory management efficiently
+//! - Supports all GGUF quantization formats
+//!
+//! This standalone Metal backend was intended for custom Metal shader work
+//! but is not needed for production inference.
+//!
+//! ## GPU Detection
+//!
+//! The GPU detection code in this module is still useful and can be used
+//! to query Metal device capabilities.
+//!
+//! ## Legacy Documentation
+//!
+//! Original features (not implemented in this backend, use GGUF instead):
 //! - Native Metal GPU acceleration
 //! - Unified memory architecture support
 //! - Apple Neural Engine integration
 //! - Quantized model support (Q4_0, Q4_1, Q5_0, Q5_1, Q8_0)
 //! - Optimized for M1/M2/M3/M4 chips
 //!
-//! ## Performance Targets
+//! Performance targets (achieved via GGUF backend):
 //! - 7B models: >30 tokens/sec on M1 Max
 //! - 13B models: >15 tokens/sec on M2 Max
 //! - 70B models: >5 tokens/sec on M4 Max (with unified memory)

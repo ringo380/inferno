@@ -184,6 +184,9 @@ rusqlite = { version = "0.31", features = ["bundled", "chrono", "serde_json"], o
 r2d2 = { version = "0.8", optional = true }
 r2d2_sqlite = { version = "0.24", optional = true }
 
+# Unix system calls for privileged port detection
+libc = "0.2"
+
 [dev-dependencies]
 tempfile = "3.8"
 assert_cmd = "2.0"
@@ -256,6 +259,10 @@ path = "tests/basic_functionality.rs"
 [[test]]
 name = "component_unit_tests"
 path = "tests/component_unit_tests.rs"
+
+[[test]]
+name = "metal_performance_tests"
+path = "tests/metal_performance_tests.rs"
 
 # Slow integration tests - opt-in only via `cargo test --test <name>` or `./verify.sh`
 [[test]]

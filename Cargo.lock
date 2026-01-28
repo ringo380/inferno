@@ -2943,6 +2943,7 @@ dependencies = [
  "indicatif",
  "jsonwebtoken",
  "lettre",
+ "libc",
  "llama-cpp-2",
  "memmap2",
  "native-tls",

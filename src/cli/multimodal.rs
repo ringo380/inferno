@@ -375,6 +375,19 @@ async fn handle_process_command(
     processor: &MultiModalProcessor,
     config: ProcessFileConfig,
 ) -> Result<(), InfernoError> {
+    // Validate inputs
+    if config.model.is_empty() {
+        return Err(InfernoError::InvalidArgument(
+            "Model name cannot be empty".to_string(),
+        ));
+    }
+    if !config.input.exists() {
+        return Err(InfernoError::InvalidArgument(format!(
+            "Input file does not exist: {:?}",
+            config.input
+        )));
+    }
+
     println!("Processing file: {:?}", config.input);
 
     let params = InferenceParams {
@@ -419,6 +432,37 @@ async fn handle_process_base64_command(
     processor: &MultiModalProcessor,
     config: ProcessBase64Config,
 ) -> Result<(), InfernoError> {
+    // Validate inputs
+    if config.model.is_empty() {
+        return Err(InfernoError::InvalidArgument(
+            "Model name cannot be empty".to_string(),
+        ));
+    }
+    if config.data.is_empty() {
+        return Err(InfernoError::InvalidArgument(
+            "Base64 data cannot be empty".to_string(),
+        ));
+    }
+    if config.media_type.is_empty() {
+        return Err(InfernoError::InvalidArgument(
+            "Media type cannot be empty".to_string(),
+        ));
+    }
+
+    // Validate supported media types
+    let supported_types = [
+        "jpg", "jpeg", "png", "gif", "webp", "bmp", "tiff", // images
+        "mp3", "wav", "flac", "ogg", "m4a", "aac", // audio
+        "mp4", "avi", "mov", "mkv", "webm", // video
+    ];
+    if !supported_types.contains(&config.media_type.to_lowercase().as_str()) {
+        return Err(InfernoError::InvalidArgument(format!(
+            "Unsupported media type '{}'. Supported types: {}",
+            config.media_type,
+            supported_types.join(", ")
+        )));
+    }
+
     println!("Processing base64 data ({} type)", config.media_type);
 
     let params = InferenceParams {
@@ -463,6 +507,30 @@ async fn handle_batch_command(
     processor: &MultiModalProcessor,
     config: BatchProcessConfig,
 ) -> Result<(), InfernoError> {
+    // Validate inputs
+    if config.model.is_empty() {
+        return Err(InfernoError::InvalidArgument(
+            "Model name cannot be empty".to_string(),
+        ));
+    }
+    if !config.input_dir.exists() {
+        return Err(InfernoError::InvalidArgument(format!(
+            "Input directory does not exist: {:?}",
+            config.input_dir
+        )));
+    }
+    if !config.input_dir.is_dir() {
+        return Err(InfernoError::InvalidArgument(format!(
+            "Input path is not a directory: {:?}",
+            config.input_dir
+        )));
+    }
+    if config.max_concurrent == 0 {
+        return Err(InfernoError::InvalidArgument(
+            "Max concurrent jobs must be at least 1".to_string(),
+        ));
+    }
+
     println!("Starting batch processing...");
     println!("Input directory: {:?}", config.input_dir);
     println!("Pattern: {}", config.pattern);
@@ -734,6 +802,13 @@ async fn handle_cancel_command(
     processor: &MultiModalProcessor,
     session_id: String,
 ) -> Result<(), InfernoError> {
+    // Validate inputs
+    if session_id.is_empty() {
+        return Err(InfernoError::InvalidArgument(
+            "Session ID cannot be empty".to_string(),
+        ));
+    }
+
     processor
         .cancel_session(&session_id)
         .await
@@ -979,6 +1054,19 @@ async fn handle_register_model_command(
     model: String,
     config_file: PathBuf,
 ) -> Result<(), InfernoError> {
+    // Validate inputs
+    if model.is_empty() {
+        return Err(InfernoError::InvalidArgument(
+            "Model name cannot be empty".to_string(),
+        ));
+    }
+    if !config_file.exists() {
+        return Err(InfernoError::InvalidArgument(format!(
+            "Config file does not exist: {:?}",
+            config_file
+        )));
+    }
+
     let config_content = tokio::fs::read_to_string(&config_file).await?;
 
     let capabilities: ModelCapabilities = serde_json::from_str(&config_content)
@@ -999,6 +1087,14 @@ async fn handle_analyze_command(
     detailed: bool,
     format: String,
 ) -> Result<(), InfernoError> {
+    // Validate inputs
+    if !input.exists() {
+        return Err(InfernoError::InvalidArgument(format!(
+            "Input file does not exist: {:?}",
+            input
+        )));
+    }
+
     println!("Analyzing file: {:?}", input);
 
     // Mock analysis - in real implementation would extract actual metadata
@@ -1041,6 +1137,27 @@ async fn handle_convert_command(
     quality: Option<u32>,
     params: Vec<String>,
 ) -> Result<(), InfernoError> {
+    // Validate inputs
+    if !input.exists() {
+        return Err(InfernoError::InvalidArgument(format!(
+            "Input file does not exist: {:?}",
+            input
+        )));
+    }
+    if format.is_empty() {
+        return Err(InfernoError::InvalidArgument(
+            "Target format cannot be empty".to_string(),
+        ));
+    }
+    if let Some(q) = quality {
+        if q > 100 {
+            return Err(InfernoError::InvalidArgument(format!(
+                "Quality must be between 0 and 100, got: {}",
+                q
+            )));
+        }
+    }
+
     println!(
         "Converting {:?} to {:?} (format: {})",
         input, output, format
@@ -1286,5 +1403,170 @@ fn print_analysis_table(analysis: &serde_json::Value) {
                 audio_codec.as_str().unwrap_or("unknown")
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+    use tempfile::NamedTempFile;
+
+    #[test]
+    fn test_process_file_config_empty_model_validation() {
+        let config = ProcessFileConfig {
+            model: "".to_string(),
+            input: PathBuf::from("/tmp/test.jpg"),
+            prompt: None,
+            max_tokens: 500,
+            temperature: 0.7,
+            output_format: "text".to_string(),
+            output_file: None,
+            show_progress: false,
+        };
+        assert!(config.model.is_empty());
+    }
+
+    #[test]
+    fn test_process_base64_config_empty_data_validation() {
+        let config = ProcessBase64Config {
+            model: "test-model".to_string(),
+            data: "".to_string(),
+            media_type: "jpg".to_string(),
+            prompt: None,
+            max_tokens: 500,
+            temperature: 0.7,
+            output_format: "text".to_string(),
+        };
+        assert!(config.data.is_empty());
+    }
+
+    #[test]
+    fn test_batch_process_config_zero_concurrent_validation() {
+        let config = BatchProcessConfig {
+            model: "test-model".to_string(),
+            input_dir: PathBuf::from("/tmp"),
+            pattern: "*".to_string(),
+            prompt: None,
+            output_dir: PathBuf::from("/tmp/output"),
+            max_concurrent: 0,
+            continue_on_error: false,
+        };
+        assert_eq!(config.max_concurrent, 0);
+    }
+
+    #[test]
+    fn test_determine_file_type_image() {
+        assert_eq!(determine_file_type("jpg"), "image");
+        assert_eq!(determine_file_type("jpeg"), "image");
+        assert_eq!(determine_file_type("png"), "image");
+        assert_eq!(determine_file_type("gif"), "image");
+        assert_eq!(determine_file_type("webp"), "image");
+    }
+
+    #[test]
+    fn test_determine_file_type_audio() {
+        assert_eq!(determine_file_type("mp3"), "audio");
+        assert_eq!(determine_file_type("wav"), "audio");
+        assert_eq!(determine_file_type("flac"), "audio");
+        assert_eq!(determine_file_type("ogg"), "audio");
+    }
+
+    #[test]
+    fn test_determine_file_type_video() {
+        assert_eq!(determine_file_type("mp4"), "video");
+        assert_eq!(determine_file_type("avi"), "video");
+        assert_eq!(determine_file_type("mov"), "video");
+        assert_eq!(determine_file_type("mkv"), "video");
+    }
+
+    #[test]
+    fn test_determine_file_type_text() {
+        assert_eq!(determine_file_type("txt"), "text");
+        assert_eq!(determine_file_type("md"), "text");
+        assert_eq!(determine_file_type("json"), "text");
+    }
+
+    #[test]
+    fn test_determine_file_type_unknown() {
+        assert_eq!(determine_file_type("xyz"), "unknown");
+        assert_eq!(determine_file_type(""), "unknown");
+    }
+
+    #[test]
+    fn test_create_mock_analysis_basic() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let path = temp_file.path().to_path_buf();
+        let metadata = std::fs::metadata(&path).unwrap();
+
+        let analysis = create_mock_analysis(&path, &metadata, "jpg", false);
+
+        assert!(analysis.get("file_path").is_some());
+        assert!(analysis.get("file_size_bytes").is_some());
+        assert!(analysis.get("file_extension").is_some());
+        assert!(analysis.get("file_type").is_some());
+    }
+
+    #[test]
+    fn test_create_mock_analysis_detailed_image() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let path = temp_file.path().to_path_buf();
+        let metadata = std::fs::metadata(&path).unwrap();
+
+        let analysis = create_mock_analysis(&path, &metadata, "png", true);
+
+        assert!(analysis.get("image_analysis").is_some());
+        let img_analysis = analysis.get("image_analysis").unwrap();
+        assert!(img_analysis.get("format").is_some());
+        assert!(img_analysis.get("estimated_dimensions").is_some());
+    }
+
+    #[test]
+    fn test_create_mock_analysis_detailed_audio() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let path = temp_file.path().to_path_buf();
+        let metadata = std::fs::metadata(&path).unwrap();
+
+        let analysis = create_mock_analysis(&path, &metadata, "mp3", true);
+
+        assert!(analysis.get("audio_analysis").is_some());
+        let audio_analysis = analysis.get("audio_analysis").unwrap();
+        assert!(audio_analysis.get("format").is_some());
+        assert!(audio_analysis.get("estimated_duration").is_some());
+    }
+
+    #[test]
+    fn test_create_mock_analysis_detailed_video() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let path = temp_file.path().to_path_buf();
+        let metadata = std::fs::metadata(&path).unwrap();
+
+        let analysis = create_mock_analysis(&path, &metadata, "mp4", true);
+
+        assert!(analysis.get("video_analysis").is_some());
+        let video_analysis = analysis.get("video_analysis").unwrap();
+        assert!(video_analysis.get("format").is_some());
+        assert!(video_analysis.get("estimated_resolution").is_some());
+    }
+
+    #[test]
+    fn test_supported_media_types() {
+        let supported_types = [
+            "jpg", "jpeg", "png", "gif", "webp", "bmp", "tiff", // images
+            "mp3", "wav", "flac", "ogg", "m4a", "aac", // audio
+            "mp4", "avi", "mov", "mkv", "webm", // video
+        ];
+
+        // Test that all supported types are recognized
+        for media_type in &supported_types {
+            assert!(
+                supported_types.contains(media_type),
+                "Type {} should be supported",
+                media_type
+            );
+        }
+
+        // Test unsupported type
+        assert!(!supported_types.contains(&"invalid"));
     }
 }

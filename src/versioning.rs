@@ -1,4 +1,4 @@
-#![allow(dead_code, unused_imports, unused_variables)]
+#![allow(dead_code, unused_imports, unused_variables, clippy::inherent_to_string)]
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::{

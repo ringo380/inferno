@@ -11,7 +11,17 @@ use anyhow::Result;
 use chrono::{DateTime, Utc};
 use clap::{Args, Subcommand, ValueEnum};
 use serde_json;
-use std::{collections::HashMap, path::PathBuf, time::SystemTime};
+use std::{collections::HashMap, path::{Path, PathBuf}, time::SystemTime};
+
+// ============================================================================
+// Validation Constants
+// ============================================================================
+
+/// Maximum allowed limit for query results
+const MAX_QUERY_LIMIT: usize = 10000;
+
+/// Maximum allowed time range in hours (1 year)
+const MAX_TIME_RANGE_HOURS: u64 = 8760;
 
 #[derive(Args)]
 pub struct AuditArgs {
@@ -385,6 +395,109 @@ pub enum ReportFormat {
     Csv,
 }
 
+// ============================================================================
+// Validation Functions
+// ============================================================================
+
+/// Validate query parameters
+fn validate_query_params(
+    limit: usize,
+    start_time: Option<&str>,
+    end_time: Option<&str>,
+) -> Result<()> {
+    // Validate limit
+    if limit == 0 {
+        anyhow::bail!("Limit must be at least 1");
+    }
+    if limit > MAX_QUERY_LIMIT {
+        anyhow::bail!("Limit cannot exceed {}", MAX_QUERY_LIMIT);
+    }
+
+    // Validate time range if both are provided
+    if let (Some(start_str), Some(end_str)) = (start_time, end_time) {
+        let start = parse_time(start_str)?;
+        let end = parse_time(end_str)?;
+        if end < start {
+            anyhow::bail!("End time must be after start time");
+        }
+    }
+
+    Ok(())
+}
+
+/// Validate stats time range
+fn validate_stats_range(range_hours: u64) -> Result<()> {
+    if range_hours == 0 {
+        anyhow::bail!("Time range must be at least 1 hour");
+    }
+    if range_hours > MAX_TIME_RANGE_HOURS {
+        anyhow::bail!(
+            "Time range cannot exceed {} hours (1 year)",
+            MAX_TIME_RANGE_HOURS
+        );
+    }
+    Ok(())
+}
+
+/// Validate export parameters
+fn validate_export_params(output: &Path, limit: Option<usize>) -> Result<()> {
+    // Validate output directory exists
+    if let Some(parent) = output.parent() {
+        if !parent.as_os_str().is_empty() && !parent.exists() {
+            anyhow::bail!("Output directory does not exist: {}", parent.display());
+        }
+    }
+
+    // Validate limit if provided
+    if let Some(limit) = limit {
+        if limit == 0 {
+            anyhow::bail!("Limit must be at least 1");
+        }
+    }
+
+    Ok(())
+}
+
+/// Validate archive parameters
+fn validate_archive_params(destination: &Path, older_than_days: u32) -> Result<()> {
+    if older_than_days == 0 {
+        anyhow::bail!("Days must be at least 1");
+    }
+    Ok(())
+}
+
+// ============================================================================
+// Helper Functions for Statistics
+// ============================================================================
+
+/// Count events by event type
+fn count_by_event_type(events: &[AuditEvent]) -> Vec<(String, usize)> {
+    let mut counts: HashMap<String, usize> = HashMap::new();
+    for event in events {
+        let key = format!("{:?}", event.event_type);
+        *counts.entry(key).or_insert(0) += 1;
+    }
+    let mut result: Vec<_> = counts.into_iter().collect();
+    result.sort_by(|a, b| b.1.cmp(&a.1));
+    result
+}
+
+/// Count events by severity
+fn count_by_severity(events: &[AuditEvent]) -> Vec<(String, usize)> {
+    let mut counts: HashMap<String, usize> = HashMap::new();
+    for event in events {
+        let key = format!("{:?}", event.severity);
+        *counts.entry(key).or_insert(0) += 1;
+    }
+    let mut result: Vec<_> = counts.into_iter().collect();
+    result.sort_by(|a, b| b.1.cmp(&a.1));
+    result
+}
+
+// ============================================================================
+// Command Execution
+// ============================================================================
+
 pub async fn execute(args: AuditArgs, config: &Config) -> Result<()> {
     let audit_config = AuditConfiguration::default();
     let logger = AuditLogger::new(audit_config).await?;
@@ -404,6 +517,9 @@ pub async fn execute(args: AuditArgs, config: &Config) -> Result<()> {
             search,
             format,
         } => {
+            // Validate parameters before processing
+            validate_query_params(limit, start_time.as_deref(), end_time.as_deref())?;
+
             let query = AuditQuery {
                 event_types: event_types.map(|types| parse_event_types(&types)),
                 severities: severities.map(|sevs| parse_severities(&sevs)),
@@ -426,10 +542,13 @@ pub async fn execute(args: AuditArgs, config: &Config) -> Result<()> {
         }
 
         AuditCommand::Stats {
-            range_hours: _,
+            range_hours,
             group_by,
             format,
         } => {
+            // Validate time range
+            validate_stats_range(range_hours)?;
+
             let stats = logger.get_statistics().await?;
             display_statistics(&stats, group_by, format);
         }
@@ -442,6 +561,9 @@ pub async fn execute(args: AuditArgs, config: &Config) -> Result<()> {
             end_time,
             limit,
         } => {
+            // Validate export parameters
+            validate_export_params(&output, limit)?;
+
             let query = AuditQuery {
                 event_types: event_types.map(|types| parse_event_types(&types)),
                 severities: None,
@@ -786,6 +908,9 @@ pub async fn execute(args: AuditArgs, config: &Config) -> Result<()> {
             compression,
             remove_originals,
         } => {
+            // Validate archive parameters
+            validate_archive_params(&destination, older_than_days)?;
+
             println!("Archiving old audit logs...");
 
             let audit_dir = std::path::Path::new(&config.logging_audit.audit.storage_path);
@@ -1230,5 +1355,167 @@ fn create_audit_event(
             records_affected: None,
         },
         metadata: HashMap::new(),
+    }
+}
+
+// ============================================================================
+// Tests
+// ============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_validate_query_params_zero_limit() {
+        let result = validate_query_params(0, None, None);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("at least 1"));
+    }
+
+    #[test]
+    fn test_validate_query_params_limit_too_large() {
+        let result = validate_query_params(MAX_QUERY_LIMIT + 1, None, None);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("cannot exceed"));
+    }
+
+    #[test]
+    fn test_validate_query_params_valid_limit() {
+        let result = validate_query_params(100, None, None);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_query_params_end_before_start() {
+        // End time before start time should fail
+        let result = validate_query_params(
+            100,
+            Some("2024-01-02T00:00:00Z"),
+            Some("2024-01-01T00:00:00Z"),
+        );
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("End time must be after start time"));
+    }
+
+    #[test]
+    fn test_validate_query_params_valid_time_range() {
+        let result = validate_query_params(
+            100,
+            Some("2024-01-01T00:00:00Z"),
+            Some("2024-01-02T00:00:00Z"),
+        );
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_stats_range_zero() {
+        let result = validate_stats_range(0);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("at least 1 hour"));
+    }
+
+    #[test]
+    fn test_validate_stats_range_too_large() {
+        let result = validate_stats_range(MAX_TIME_RANGE_HOURS + 1);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("cannot exceed"));
+    }
+
+    #[test]
+    fn test_validate_stats_range_valid() {
+        let result = validate_stats_range(24);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_export_params_zero_limit() {
+        let result = validate_export_params(&PathBuf::from("/tmp/test.json"), Some(0));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("at least 1"));
+    }
+
+    #[test]
+    fn test_validate_export_params_valid() {
+        let result = validate_export_params(&PathBuf::from("/tmp/test.json"), Some(100));
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_export_params_no_limit() {
+        let result = validate_export_params(&PathBuf::from("/tmp/test.json"), None);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_archive_params_zero_days() {
+        let result = validate_archive_params(&PathBuf::from("/tmp/archive"), 0);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("at least 1"));
+    }
+
+    #[test]
+    fn test_validate_archive_params_valid() {
+        let result = validate_archive_params(&PathBuf::from("/tmp/archive"), 90);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_parse_event_types() {
+        let types = parse_event_types("authentication,authorization,model");
+        assert_eq!(types.len(), 3);
+    }
+
+    #[test]
+    fn test_parse_event_types_with_whitespace() {
+        let types = parse_event_types("authentication , authorization , model");
+        assert_eq!(types.len(), 3);
+    }
+
+    #[test]
+    fn test_parse_event_types_invalid_ignored() {
+        let types = parse_event_types("authentication,invalid,authorization");
+        assert_eq!(types.len(), 2);
+    }
+
+    #[test]
+    fn test_parse_severities() {
+        let severities = parse_severities("critical,high,medium");
+        assert_eq!(severities.len(), 3);
+    }
+
+    #[test]
+    fn test_parse_severities_case_insensitive() {
+        let severities = parse_severities("CRITICAL,High,medium");
+        assert_eq!(severities.len(), 3);
+    }
+
+    #[test]
+    fn test_parse_time_valid() {
+        let result = parse_time("2024-01-01T00:00:00Z");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_parse_time_invalid() {
+        let result = parse_time("invalid-time");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_count_by_event_type_empty() {
+        let events: Vec<AuditEvent> = vec![];
+        let counts = count_by_event_type(&events);
+        assert!(counts.is_empty());
+    }
+
+    #[test]
+    fn test_count_by_severity_empty() {
+        let events: Vec<AuditEvent> = vec![];
+        let counts = count_by_severity(&events);
+        assert!(counts.is_empty());
     }
 }

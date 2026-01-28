@@ -13,6 +13,15 @@ use std::{
 };
 use sysinfo::{CpuExt, System, SystemExt};
 
+// Valid benchmark types for validation
+const VALID_BENCHMARK_TYPES: &[&str] = &["inference", "memory", "concurrent", "cache", "all"];
+
+// Valid output formats for monitor command
+const VALID_MONITOR_FORMATS: &[&str] = &["json", "csv", "console"];
+
+// Valid report formats
+const VALID_REPORT_FORMATS: &[&str] = &["html", "json", "markdown", "csv"];
+
 // Memory profiling structures
 #[derive(Debug, Clone)]
 struct MemoryUsage {
@@ -172,7 +181,113 @@ pub enum PerformanceBenchmarkCommand {
     },
 }
 
+/// Validate benchmark command arguments
+fn validate_benchmark_args(args: &PerformanceBenchmarkArgs) -> Result<()> {
+    match &args.command {
+        PerformanceBenchmarkCommand::Baseline {
+            output: _,
+            targets: _,
+            backends,
+            duration,
+        } => {
+            if backends.is_empty() {
+                anyhow::bail!("Backends cannot be empty");
+            }
+            if *duration == 0 {
+                anyhow::bail!("Duration must be greater than 0");
+            }
+            Ok(())
+        }
+        PerformanceBenchmarkCommand::Benchmark {
+            bench_type,
+            output: _,
+            model: _,
+            iterations,
+            profile: _,
+        } => {
+            if !VALID_BENCHMARK_TYPES.contains(&bench_type.as_str()) {
+                anyhow::bail!(
+                    "Benchmark type must be one of: {}",
+                    VALID_BENCHMARK_TYPES.join(", ")
+                );
+            }
+            if *iterations == 0 {
+                anyhow::bail!("Iterations must be greater than 0");
+            }
+            Ok(())
+        }
+        PerformanceBenchmarkCommand::Compare {
+            current,
+            baseline,
+            threshold,
+            report: _,
+        } => {
+            if !current.exists() {
+                anyhow::bail!("Current results file does not exist: {}", current.display());
+            }
+            if !baseline.exists() {
+                anyhow::bail!(
+                    "Baseline results file does not exist: {}",
+                    baseline.display()
+                );
+            }
+            if *threshold < 0.0 {
+                anyhow::bail!("Threshold must be non-negative");
+            }
+            Ok(())
+        }
+        PerformanceBenchmarkCommand::Monitor {
+            duration: _,
+            interval,
+            format,
+            output: _,
+        } => {
+            if *interval == 0 {
+                anyhow::bail!("Interval must be greater than 0");
+            }
+            if !VALID_MONITOR_FORMATS.contains(&format.as_str()) {
+                anyhow::bail!(
+                    "Monitor format must be one of: {}",
+                    VALID_MONITOR_FORMATS.join(", ")
+                );
+            }
+            Ok(())
+        }
+        PerformanceBenchmarkCommand::Stress {
+            clients,
+            duration,
+            model: _,
+            rate,
+        } => {
+            if *clients == 0 {
+                anyhow::bail!("Number of clients must be greater than 0");
+            }
+            if *duration == 0 {
+                anyhow::bail!("Duration must be greater than 0");
+            }
+            if *rate <= 0.0 {
+                anyhow::bail!("Request rate must be positive");
+            }
+            Ok(())
+        }
+        PerformanceBenchmarkCommand::MemoryProfile {
+            model: _,
+            cycles,
+            output: _,
+            track: _,
+        } => {
+            if *cycles == 0 {
+                anyhow::bail!("Number of cycles must be greater than 0");
+            }
+            Ok(())
+        }
+    }
+}
+
 pub async fn execute_performance_benchmark(args: PerformanceBenchmarkArgs) -> Result<()> {
+    // Validate arguments before execution
+    validate_benchmark_args(&args)?;
+
     match args.command {
         PerformanceBenchmarkCommand::Baseline {
             output,
@@ -1585,5 +1700,210 @@ fn get_current_memory_usage() -> MemoryUsage {
         heap_total: system.total_memory(),
         rss: system.used_memory(),
         vms: system.total_memory(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_validate_benchmark_invalid_type() {
+        let args = PerformanceBenchmarkArgs {
+            command: PerformanceBenchmarkCommand::Benchmark {
+                bench_type: "invalid".to_string(),
+                output: PathBuf::from("output"),
+                model: None,
+                iterations: 100,
+                profile: false,
+            },
+        };
+
+        let result = validate_benchmark_args(&args);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Benchmark type must be one of"));
+    }
+
+    #[test]
+    fn test_validate_benchmark_zero_iterations() {
+        let args = PerformanceBenchmarkArgs {
+            command: PerformanceBenchmarkCommand::Benchmark {
+                bench_type: "all".to_string(),
+                output: PathBuf::from("output"),
+                model: None,
+                iterations: 0,
+                profile: false,
+            },
+        };
+
+        let result = validate_benchmark_args(&args);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Iterations must be greater than 0"));
+    }
+
+    #[test]
+    fn test_validate_compare_negative_threshold() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let current_file = temp_dir.path().join("current.json");
+        let baseline_file = temp_dir.path().join("baseline.json");
+
+        // Create temporary files
+        std::fs::write(&current_file, "{}").unwrap();
+        std::fs::write(&baseline_file, "{}").unwrap();
+
+        let args = PerformanceBenchmarkArgs {
+            command: PerformanceBenchmarkCommand::Compare {
+                current: current_file,
+                baseline: baseline_file,
+                threshold: -5.0,
+                report: false,
+            },
+        };
+
+        let result = validate_benchmark_args(&args);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Threshold must be non-negative"));
+    }
+
+    #[test]
+    fn test_validate_monitor_invalid_format() {
+        let args = PerformanceBenchmarkArgs {
+            command: PerformanceBenchmarkCommand::Monitor {
+                duration: 60,
+                interval: 5,
+                format: "invalid".to_string(),
+                output: None,
+            },
+        };
+
+        let result = validate_benchmark_args(&args);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Monitor format must be one of"));
+    }
+
+    #[test]
+    fn test_validate_monitor_zero_interval() {
+        let args = PerformanceBenchmarkArgs {
+            command: PerformanceBenchmarkCommand::Monitor {
+                duration: 60,
+                interval: 0,
+                format: "console".to_string(),
+                output: None,
+            },
+        };
+
+        let result = validate_benchmark_args(&args);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Interval must be greater than 0"));
+    }
+
+    #[test]
+    fn test_validate_stress_zero_clients() {
+        let args = PerformanceBenchmarkArgs {
+            command: PerformanceBenchmarkCommand::Stress {
+                clients: 0,
+                duration: 300,
+                model: None,
+                rate: 1.0,
+            },
+        };
+
+        let result = validate_benchmark_args(&args);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Number of clients must be greater than 0"));
+    }
+
+    #[test]
+    fn test_validate_stress_zero_rate() {
+        let args = PerformanceBenchmarkArgs {
+            command: PerformanceBenchmarkCommand::Stress {
+                clients: 10,
+                duration: 300,
+                model: None,
+                rate: 0.0,
+            },
+        };
+
+        let result = validate_benchmark_args(&args);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Request rate must be positive"));
+    }
+
+    #[test]
+    fn test_validate_memory_profile_zero_cycles() {
+        let args = PerformanceBenchmarkArgs {
+            command: PerformanceBenchmarkCommand::MemoryProfile {
+                model: None,
+                cycles: 0,
+                output: None,
+                track: false,
+            },
+        };
+
+        let result = validate_benchmark_args(&args);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Number of cycles must be greater than 0"));
+    }
+
+    #[test]
+    fn test_validate_baseline_empty_backends() {
+        let args = PerformanceBenchmarkArgs {
+            command: PerformanceBenchmarkCommand::Baseline {
+                output: PathBuf::from("output"),
+                targets: None,
+                backends: "".to_string(),
+                duration: 30,
+            },
+        };
+
+        let result = validate_benchmark_args(&args);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Backends cannot be empty"));
+    }
+
+    #[test]
+    fn test_validate_baseline_zero_duration() {
+        let args = PerformanceBenchmarkArgs {
+            command: PerformanceBenchmarkCommand::Baseline {
+                output: PathBuf::from("output"),
+                targets: None,
+                backends: "gguf".to_string(),
+                duration: 0,
+            },
+        };
+
+        let result = validate_benchmark_args(&args);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Duration must be greater than 0"));
     }
 }

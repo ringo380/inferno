@@ -2,12 +2,272 @@ use crate::{
     config::Config,
     security::{Permission, SecurityManager, User, UserRole},
 };
-use anyhow::Result;
+use anyhow::{bail, Result};
 use chrono::Utc;
 use clap::{Args, Subcommand};
 use std::collections::HashSet;
 use std::net::IpAddr;
 use tracing::{info, warn};
+
+// ============================================================================
+// RateLimitSettings - Builder pattern for cleaner rate limit configuration
+// ============================================================================
+
+/// Configuration for rate limit settings.
+/// Provides a cleaner interface for passing rate limit parameters.
+#[derive(Debug, Clone, Default)]
+pub struct RateLimitSettings {
+    pub identifier: Option<String>,
+    pub ip: Option<IpAddr>,
+    pub per_minute: Option<u32>,
+    pub per_hour: Option<u32>,
+    pub per_day: Option<u32>,
+    pub reset_all: bool,
+    pub test_requests: Option<u32>,
+}
+
+impl RateLimitSettings {
+    /// Create a new RateLimitSettings with default values.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Set the identifier.
+    pub fn identifier(mut self, id: impl Into<String>) -> Self {
+        self.identifier = Some(id.into());
+        self
+    }
+
+    /// Set the IP address.
+    pub fn ip(mut self, ip: IpAddr) -> Self {
+        self.ip = Some(ip);
+        self
+    }
+
+    /// Set the per-minute limit.
+    pub fn per_minute(mut self, limit: u32) -> Self {
+        self.per_minute = Some(limit);
+        self
+    }
+
+    /// Set the per-hour limit.
+    pub fn per_hour(mut self, limit: u32) -> Self {
+        self.per_hour = Some(limit);
+        self
+    }
+
+    /// Set the per-day limit.
+    pub fn per_day(mut self, limit: u32) -> Self {
+        self.per_day = Some(limit);
+        self
+    }
+
+    /// Set whether to reset all counters.
+    pub fn reset_all(mut self, reset: bool) -> Self {
+        self.reset_all = reset;
+        self
+    }
+
+    /// Set the number of test requests.
+    pub fn test_requests(mut self, requests: u32) -> Self {
+        self.test_requests = Some(requests);
+        self
+    }
+}
+
+// ============================================================================
+// Validation Functions
+// ============================================================================
+
+/// Validate user management operations.
+fn validate_user_operation(
+    operation: &str,
+    user_id: &Option<String>,
+    username: &Option<String>,
+    role: &Option<UserRoleArg>,
+) -> Result<()> {
+    // Validate operation type
+    if !["create", "list", "delete", "modify"].contains(&operation) {
+        bail!("Operation must be one of: create, list, delete, modify");
+    }
+
+    // Validate create operation
+    if operation == "create" {
+        if user_id.is_none() {
+            bail!("User ID is required for create operation");
+        }
+        if username.is_none() {
+            bail!("Username is required for create operation");
+        }
+        if role.is_none() {
+            bail!("Role is required for create operation");
+        }
+    }
+
+    // Validate delete/modify operations
+    if ["delete", "modify"].contains(&operation) && user_id.is_none() {
+        bail!("User ID is required for {} operation", operation);
+    }
+
+    Ok(())
+}
+
+/// Validate API key operations.
+fn validate_api_key_operation(
+    operation: &str,
+    user_id: &Option<String>,
+    key_name: &Option<String>,
+    key_id: &Option<String>,
+    key_value: &Option<String>,
+    expires_in: Option<i64>,
+) -> Result<()> {
+    // Validate operation type
+    if !["generate", "list", "revoke", "test"].contains(&operation) {
+        bail!("Operation must be one of: generate, list, revoke, test");
+    }
+
+    // Validate generate operation
+    if operation == "generate" {
+        if user_id.is_none() {
+            bail!("User ID is required for generate operation");
+        }
+        if key_name.is_none() {
+            bail!("Key name is required for generate operation");
+        }
+    }
+
+    // Validate list operation
+    if operation == "list" && user_id.is_none() {
+        bail!("User ID is required for list operation");
+    }
+
+    // Validate revoke operation
+    if operation == "revoke" {
+        if key_id.is_none() {
+            bail!("Key ID is required for revoke operation");
+        }
+        if user_id.is_none() {
+            bail!("User ID is required for revoke operation");
+        }
+    }
+
+    // Validate test operation
+    if operation == "test" && key_value.is_none() {
+        bail!("Key value is required for test operation");
+    }
+
+    // Validate expiration if provided
+    if let Some(days) = expires_in {
+        if days <= 0 || days > 365 {
+            bail!("Expiration must be between 1 and 365 days");
+        }
+    }
+
+    Ok(())
+}
+
+/// Validate token operations.
+fn validate_token_operation(
+    operation: &str,
+    user_id: &Option<String>,
+    token: &Option<String>,
+    jti: &Option<String>,
+) -> Result<()> {
+    // Validate operation type
+    if !["generate", "verify", "revoke", "list-revoked"].contains(&operation) {
+        bail!("Operation must be one of: generate, verify, revoke, list-revoked");
+    }
+
+    // Validate generate operation
+    if operation == "generate" && user_id.is_none() {
+        bail!("User ID is required for generate operation");
+    }
+
+    // Validate verify operation
+    if operation == "verify" && token.is_none() {
+        bail!("Token is required for verify operation");
+    }
+
+    // Validate revoke operation
+    if operation == "revoke" && jti.is_none() {
+        bail!("JTI (token ID) is required for revoke operation");
+    }
+
+    Ok(())
+}
+
+/// Validate rate limit operations.
+fn validate_rate_limit_operation(operation: &str, settings: &RateLimitSettings) -> Result<()> {
+    // Validate operation type
+    if !["status", "set", "reset", "test"].contains(&operation) {
+        bail!("Operation must be one of: status, set, reset, test");
+    }
+
+    // Validate status operation
+    if operation == "status" && settings.identifier.is_none() {
+        bail!("Identifier is required for status operation");
+    }
+
+    // Validate set operation
+    if operation == "set" {
+        if settings.identifier.is_none() {
+            bail!("Identifier is required for set operation");
+        }
+        if settings.per_minute.is_none()
+            && settings.per_hour.is_none()
+            && settings.per_day.is_none()
+        {
+            bail!("At least one rate limit (per_minute, per_hour, per_day) must be specified");
+        }
+    }
+
+    // Validate test operation
+    if operation == "test" {
+        if settings.test_requests.is_none() {
+            bail!("Number of test requests is required for test operation");
+        }
+        if let Some(requests) = settings.test_requests {
+            if requests == 0 || requests > 10000 {
+                bail!("Test requests must be between 1 and 10000");
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Validate IP control operations.
+fn validate_ip_control_operation(operation: &str, ip: &Option<IpAddr>) -> Result<()> {
+    // Validate operation type
+    if !["allow", "block", "remove", "list", "test"].contains(&operation) {
+        bail!("Operation must be one of: allow, block, remove, list, test");
+    }
+
+    // IP is required for all operations except list
+    if operation != "list" && ip.is_none() {
+        bail!("IP address is required for {} operation", operation);
+    }
+
+    Ok(())
+}
+
+/// Validate audit parameters.
+fn validate_audit_params(limit: usize) -> Result<()> {
+    if limit == 0 || limit > 1000 {
+        bail!("Limit must be between 1 and 1000");
+    }
+    Ok(())
+}
+
+/// Validate security test parameters.
+fn validate_security_test(auth: bool, rate_limit: bool, validation: bool, all: bool) -> Result<()> {
+    if !auth && !rate_limit && !validation && !all {
+        bail!(
+            "At least one test type must be enabled (--auth, --rate-limit, --validation, or --all)"
+        );
+    }
+    Ok(())
+}
 
 #[derive(Args)]
 pub struct SecurityArgs {
@@ -317,6 +577,9 @@ pub async fn execute(args: SecurityArgs, config: &Config) -> Result<()> {
     let security_config = config.auth_security.clone().unwrap_or_default();
     let security_manager = SecurityManager::new(security_config);
 
+    // Validate command-specific parameters before execution
+    validate_command(&args.command)?;
+
     match args.command {
         SecurityCommand::Init => execute_init(&security_manager).await,
         SecurityCommand::User { command } => execute_user_command(command, &security_manager).await,
@@ -348,6 +611,152 @@ pub async fn execute(args: SecurityArgs, config: &Config) -> Result<()> {
             output,
             include_sensitive,
         } => execute_export(output, include_sensitive, &security_manager, config).await,
+    }
+}
+
+/// Validate command parameters before execution
+fn validate_command(command: &SecurityCommand) -> Result<()> {
+    match command {
+        SecurityCommand::Init => Ok(()),
+        SecurityCommand::User { command } => validate_user_command(command),
+        SecurityCommand::ApiKey { command } => validate_api_key_command(command),
+        SecurityCommand::Token { command } => validate_token_command(command),
+        SecurityCommand::RateLimit { command } => validate_rate_limit_cmd(command),
+        SecurityCommand::IpControl { command } => validate_ip_control_cmd(command),
+        SecurityCommand::Audit { limit, .. } => validate_audit_params(*limit),
+        SecurityCommand::Test {
+            auth,
+            rate_limit,
+            validation,
+            all,
+        } => validate_security_test(*auth, *rate_limit, *validation, *all),
+        SecurityCommand::Export { .. } => Ok(()),
+    }
+}
+
+fn validate_user_command(command: &UserCommand) -> Result<()> {
+    match command {
+        UserCommand::Create {
+            id, username, role, ..
+        } => validate_user_operation(
+            "create",
+            &Some(id.clone()),
+            &Some(username.clone()),
+            &Some(role.clone()),
+        ),
+        UserCommand::List { .. } => validate_user_operation("list", &None, &None, &None),
+        UserCommand::Delete { id } => {
+            validate_user_operation("delete", &Some(id.clone()), &None, &None)
+        }
+        UserCommand::Modify { id, role, .. } => {
+            validate_user_operation("modify", &Some(id.clone()), &None, role)
+        }
+    }
+}
+
+fn validate_api_key_command(command: &ApiKeyCommand) -> Result<()> {
+    match command {
+        ApiKeyCommand::Generate {
+            user,
+            name,
+            expires_in,
+            ..
+        } => validate_api_key_operation(
+            "generate",
+            &Some(user.clone()),
+            &Some(name.clone()),
+            &None,
+            &None,
+            *expires_in,
+        ),
+        ApiKeyCommand::List { user } => {
+            validate_api_key_operation("list", &Some(user.clone()), &None, &None, &None, None)
+        }
+        ApiKeyCommand::Revoke { key_id, user } => validate_api_key_operation(
+            "revoke",
+            &Some(user.clone()),
+            &None,
+            &Some(key_id.clone()),
+            &None,
+            None,
+        ),
+        ApiKeyCommand::Test { key } => {
+            validate_api_key_operation("test", &None, &None, &None, &Some(key.clone()), None)
+        }
+    }
+}
+
+fn validate_token_command(command: &TokenCommand) -> Result<()> {
+    match command {
+        TokenCommand::Generate { user } => {
+            validate_token_operation("generate", &Some(user.clone()), &None, &None)
+        }
+        TokenCommand::Verify { token } => {
+            validate_token_operation("verify", &None, &Some(token.clone()), &None)
+        }
+        TokenCommand::Revoke { jti } => {
+            validate_token_operation("revoke", &None, &None, &Some(jti.clone()))
+        }
+        TokenCommand::ListRevoked { .. } => {
+            validate_token_operation("list-revoked", &None, &None, &None)
+        }
+    }
+}
+
+fn validate_rate_limit_cmd(command: &RateLimitCommand) -> Result<()> {
+    match command {
+        RateLimitCommand::Status { identifier, ip } => {
+            let settings = RateLimitSettings {
+                identifier: Some(identifier.clone()),
+                ip: *ip,
+                ..Default::default()
+            };
+            validate_rate_limit_operation("status", &settings)
+        }
+        RateLimitCommand::Set {
+            user,
+            per_minute,
+            per_hour,
+            per_day,
+        } => {
+            let settings = RateLimitSettings {
+                identifier: Some(user.clone()),
+                per_minute: *per_minute,
+                per_hour: *per_hour,
+                per_day: *per_day,
+                ..Default::default()
+            };
+            validate_rate_limit_operation("set", &settings)
+        }
+        RateLimitCommand::Reset { identifier, all } => {
+            let settings = RateLimitSettings {
+                identifier: identifier.clone(),
+                reset_all: *all,
+                ..Default::default()
+            };
+            validate_rate_limit_operation("reset", &settings)
+        }
+        RateLimitCommand::Test {
+            requests,
+            identifier,
+        } => {
+            let settings = RateLimitSettings {
+                identifier: Some(identifier.clone()),
+                test_requests: Some(*requests),
+                ..Default::default()
+            };
+            validate_rate_limit_operation("test", &settings)
+        }
+    }
+}
+
+fn validate_ip_control_cmd(command: &IpControlCommand) -> Result<()> {
+    match command {
+        IpControlCommand::Allow { ip } => validate_ip_control_operation("allow", &Some(*ip)),
+        IpControlCommand::Block { ip, .. } => validate_ip_control_operation("block", &Some(*ip)),
+        IpControlCommand::Remove { ip } => validate_ip_control_operation("remove", &Some(*ip)),
+        IpControlCommand::List { .. } => validate_ip_control_operation("list", &None),
+        IpControlCommand::Test { ip } => validate_ip_control_operation("test", &Some(*ip)),
     }
 }
 
@@ -809,4 +1218,453 @@ fn parse_permissions(permissions: Option<String>) -> HashSet<Permission> {
     }
 
     perms
+}
+
+// ============================================================================
+// Unit Tests
+// ============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // -------------------------------------------------------------------------
+    // User operation validation tests
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_validate_user_operation_invalid_operation() {
+        let result = validate_user_operation("invalid", &None, &None, &None);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Operation must be"));
+    }
+
+    #[test]
+    fn test_validate_user_operation_create_missing_user_id() {
+        let result = validate_user_operation("create", &None, &Some("user".to_string()), &None);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("User ID is required"));
+    }
+
+    #[test]
+    fn test_validate_user_operation_create_missing_username() {
+        let result = validate_user_operation(
+            "create",
+            &Some("id".to_string()),
+            &None,
+            &Some(UserRoleArg::User),
+        );
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Username is required"));
+    }
+
+    #[test]
+    fn test_validate_user_operation_create_missing_role() {
+        let result = validate_user_operation(
+            "create",
+            &Some("id".to_string()),
+            &Some("user".to_string()),
+            &None,
+        );
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Role is required"));
+    }
+
+    #[test]
+    fn test_validate_user_operation_create_valid() {
+        let result = validate_user_operation(
+            "create",
+            &Some("id".to_string()),
+            &Some("user".to_string()),
+            &Some(UserRoleArg::User),
+        );
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_user_operation_delete_missing_id() {
+        let result = validate_user_operation("delete", &None, &None, &None);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("User ID is required"));
+    }
+
+    #[test]
+    fn test_validate_user_operation_list_valid() {
+        let result = validate_user_operation("list", &None, &None, &None);
+        assert!(result.is_ok());
+    }
+
+    // -------------------------------------------------------------------------
+    // API key operation validation tests
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_validate_api_key_operation_invalid_operation() {
+        let result = validate_api_key_operation("invalid", &None, &None, &None, &None, None);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Operation must be"));
+    }
+
+    #[test]
+    fn test_validate_api_key_operation_generate_missing_user() {
+        let result = validate_api_key_operation(
+            "generate",
+            &None,
+            &Some("key".to_string()),
+            &None,
+            &None,
+            None,
+        );
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("User ID is required"));
+    }
+
+    #[test]
+    fn test_validate_api_key_operation_generate_missing_name() {
+        let result = validate_api_key_operation(
+            "generate",
+            &Some("user".to_string()),
+            &None,
+            &None,
+            &None,
+            None,
+        );
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Key name is required"));
+    }
+
+    #[test]
+    fn test_validate_api_key_operation_generate_valid() {
+        let result = validate_api_key_operation(
+            "generate",
+            &Some("user".to_string()),
+            &Some("key".to_string()),
+            &None,
+            &None,
+            Some(30),
+        );
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_api_key_operation_invalid_expiration() {
+        let result = validate_api_key_operation(
+            "generate",
+            &Some("user".to_string()),
+            &Some("key".to_string()),
+            &None,
+            &None,
+            Some(400),
+        );
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Expiration must be"));
+    }
+
+    #[test]
+    fn test_validate_api_key_operation_test_missing_key() {
+        let result = validate_api_key_operation("test", &None, &None, &None, &None, None);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Key value is required"));
+    }
+
+    // -------------------------------------------------------------------------
+    // Token operation validation tests
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_validate_token_operation_invalid_operation() {
+        let result = validate_token_operation("invalid", &None, &None, &None);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Operation must be"));
+    }
+
+    #[test]
+    fn test_validate_token_operation_generate_missing_user() {
+        let result = validate_token_operation("generate", &None, &None, &None);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("User ID is required"));
+    }
+
+    #[test]
+    fn test_validate_token_operation_verify_missing_token() {
+        let result = validate_token_operation("verify", &None, &None, &None);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Token is required"));
+    }
+
+    #[test]
+    fn test_validate_token_operation_revoke_missing_jti() {
+        let result = validate_token_operation("revoke", &None, &None, &None);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("JTI"));
+    }
+
+    #[test]
+    fn test_validate_token_operation_list_revoked_valid() {
+        let result = validate_token_operation("list-revoked", &None, &None, &None);
+        assert!(result.is_ok());
+    }
+
+    // -------------------------------------------------------------------------
+    // Rate limit operation validation tests
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_validate_rate_limit_operation_invalid_operation() {
+        let settings = RateLimitSettings::default();
+        let result = validate_rate_limit_operation("invalid", &settings);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Operation must be"));
+    }
+
+    #[test]
+    fn test_validate_rate_limit_operation_status_missing_identifier() {
+        let settings = RateLimitSettings::default();
+        let result = validate_rate_limit_operation("status", &settings);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Identifier is required"));
+    }
+
+    #[test]
+    fn test_validate_rate_limit_operation_set_missing_limits() {
+        let settings = RateLimitSettings {
+            identifier: Some("user".to_string()),
+            ..Default::default()
+        };
+        let result = validate_rate_limit_operation("set", &settings);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("At least one rate limit"));
+    }
+
+    #[test]
+    fn test_validate_rate_limit_operation_set_valid() {
+        let settings = RateLimitSettings {
+            identifier: Some("user".to_string()),
+            per_minute: Some(60),
+            ..Default::default()
+        };
+        let result = validate_rate_limit_operation("set", &settings);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_rate_limit_operation_test_missing_requests() {
+        let settings = RateLimitSettings {
+            identifier: Some("user".to_string()),
+            ..Default::default()
+        };
+        let result = validate_rate_limit_operation("test", &settings);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Number of test requests"));
+    }
+
+    #[test]
+    fn test_validate_rate_limit_operation_test_invalid_requests() {
+        let settings = RateLimitSettings {
+            identifier: Some("user".to_string()),
+            test_requests: Some(0),
+            ..Default::default()
+        };
+        let result = validate_rate_limit_operation("test", &settings);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Test requests must be"));
+    }
+
+    // -------------------------------------------------------------------------
+    // IP control operation validation tests
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_validate_ip_control_operation_invalid_operation() {
+        let result = validate_ip_control_operation("invalid", &None);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Operation must be"));
+    }
+
+    #[test]
+    fn test_validate_ip_control_operation_allow_missing_ip() {
+        let result = validate_ip_control_operation("allow", &None);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("IP address is required"));
+    }
+
+    #[test]
+    fn test_validate_ip_control_operation_list_valid() {
+        let result = validate_ip_control_operation("list", &None);
+        assert!(result.is_ok());
+    }
+
+    // -------------------------------------------------------------------------
+    // Audit validation tests
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_validate_audit_params_zero_limit() {
+        let result = validate_audit_params(0);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Limit must be"));
+    }
+
+    #[test]
+    fn test_validate_audit_params_over_limit() {
+        let result = validate_audit_params(1001);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Limit must be"));
+    }
+
+    #[test]
+    fn test_validate_audit_params_valid() {
+        let result = validate_audit_params(50);
+        assert!(result.is_ok());
+    }
+
+    // -------------------------------------------------------------------------
+    // Security test validation tests
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_validate_security_test_no_tests() {
+        let result = validate_security_test(false, false, false, false);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("At least one test type"));
+    }
+
+    #[test]
+    fn test_validate_security_test_auth_only() {
+        let result = validate_security_test(true, false, false, false);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_security_test_all() {
+        let result = validate_security_test(false, false, false, true);
+        assert!(result.is_ok());
+    }
+
+    // -------------------------------------------------------------------------
+    // RateLimitSettings builder tests
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_rate_limit_settings_builder() {
+        let settings = RateLimitSettings::new()
+            .identifier("user-123")
+            .per_minute(60)
+            .per_hour(1000)
+            .per_day(10000)
+            .reset_all(false)
+            .test_requests(100);
+
+        assert_eq!(settings.identifier, Some("user-123".to_string()));
+        assert_eq!(settings.per_minute, Some(60));
+        assert_eq!(settings.per_hour, Some(1000));
+        assert_eq!(settings.per_day, Some(10000));
+        assert!(!settings.reset_all);
+        assert_eq!(settings.test_requests, Some(100));
+    }
+
+    #[test]
+    fn test_rate_limit_settings_default() {
+        let settings = RateLimitSettings::default();
+        assert!(settings.identifier.is_none());
+        assert!(settings.ip.is_none());
+        assert!(settings.per_minute.is_none());
+        assert!(settings.per_hour.is_none());
+        assert!(settings.per_day.is_none());
+        assert!(!settings.reset_all);
+        assert!(settings.test_requests.is_none());
+    }
+
+    // -------------------------------------------------------------------------
+    // Permission parsing tests
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_parse_permissions_empty() {
+        let perms = parse_permissions(None);
+        assert!(perms.is_empty());
+    }
+
+    #[test]
+    fn test_parse_permissions_single() {
+        let perms = parse_permissions(Some("read_models".to_string()));
+        assert_eq!(perms.len(), 1);
+        assert!(perms.contains(&Permission::ReadModels));
+    }
+
+    #[test]
+    fn test_parse_permissions_multiple() {
+        let perms = parse_permissions(Some("read_models, write_models, run_inference".to_string()));
+        assert_eq!(perms.len(), 3);
+        assert!(perms.contains(&Permission::ReadModels));
+        assert!(perms.contains(&Permission::WriteModels));
+        assert!(perms.contains(&Permission::RunInference));
+    }
+
+    #[test]
+    fn test_parse_permissions_unknown() {
+        let perms = parse_permissions(Some("read_models, unknown_perm".to_string()));
+        assert_eq!(perms.len(), 1);
+        assert!(perms.contains(&Permission::ReadModels));
+    }
 }

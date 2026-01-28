@@ -1,3 +1,4 @@
+#![allow(clippy::inherent_to_string)]
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::{

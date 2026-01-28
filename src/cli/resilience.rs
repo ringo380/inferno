@@ -136,8 +136,24 @@ pub async fn execute(args: ResilienceArgs, _config: &Config) -> Result<()> {
             requests,
             failure_rate,
         } => {
-            test_resilience_pattern(pattern, requests.unwrap_or(10), failure_rate.unwrap_or(0.2))
-                .await
+            let requests = requests.unwrap_or(10);
+            let failure_rate = failure_rate.unwrap_or(0.2);
+
+            // Validate inputs
+            if pattern.is_empty() {
+                anyhow::bail!("Pattern name cannot be empty");
+            }
+            if requests == 0 {
+                anyhow::bail!("Request count must be at least 1");
+            }
+            if requests > 10000 {
+                anyhow::bail!("Request count cannot exceed 10000");
+            }
+            if !(0.0..=1.0).contains(&failure_rate) {
+                anyhow::bail!("Failure rate must be between 0.0 and 1.0");
+            }
+
+            test_resilience_pattern(pattern, requests, failure_rate).await
         }
         ResilienceCommand::Metrics { format, output } => {
             export_resilience_metrics(format.unwrap_or(MetricsFormat::Json), output).await
@@ -246,6 +262,9 @@ async fn handle_circuit_breaker_action(action: CircuitBreakerAction) -> Result<(
             println!("• State Changes: 2");
         }
         CircuitBreakerAction::Reset { name } => {
+            if name.is_empty() {
+                anyhow::bail!("Circuit breaker name cannot be empty");
+            }
             println!(
                 "✅ Circuit breaker '{}' has been reset to CLOSED state",
                 name
@@ -563,4 +582,123 @@ async fn handle_configure_action(action: ConfigureAction) -> Result<()> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_circuit_breaker_reset_validation_empty() {
+        let config = Config::default();
+        let args = ResilienceArgs {
+            command: ResilienceCommand::CircuitBreaker {
+                action: CircuitBreakerAction::Reset {
+                    name: String::new(),
+                },
+            },
+        };
+
+        let result = execute(args, &config).await;
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Circuit breaker name cannot be empty"));
+    }
+
+    #[tokio::test]
+    async fn test_resilience_test_validation_empty_pattern() {
+        let config = Config::default();
+        let args = ResilienceArgs {
+            command: ResilienceCommand::Test {
+                pattern: String::new(),
+                requests: Some(10),
+                failure_rate: Some(0.1),
+            },
+        };
+
+        let result = execute(args, &config).await;
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Pattern name cannot be empty"));
+    }
+
+    #[tokio::test]
+    async fn test_resilience_test_validation_zero_requests() {
+        let config = Config::default();
+        let args = ResilienceArgs {
+            command: ResilienceCommand::Test {
+                pattern: "retry".to_string(),
+                requests: Some(0),
+                failure_rate: Some(0.1),
+            },
+        };
+
+        let result = execute(args, &config).await;
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Request count must be at least 1"));
+    }
+
+    #[tokio::test]
+    async fn test_resilience_test_validation_excessive_requests() {
+        let config = Config::default();
+        let args = ResilienceArgs {
+            command: ResilienceCommand::Test {
+                pattern: "retry".to_string(),
+                requests: Some(20000),
+                failure_rate: Some(0.1),
+            },
+        };
+
+        let result = execute(args, &config).await;
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Request count cannot exceed 10000"));
+    }
+
+    #[tokio::test]
+    async fn test_resilience_test_validation_invalid_failure_rate_high() {
+        let config = Config::default();
+        let args = ResilienceArgs {
+            command: ResilienceCommand::Test {
+                pattern: "retry".to_string(),
+                requests: Some(100),
+                failure_rate: Some(1.5),
+            },
+        };
+
+        let result = execute(args, &config).await;
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Failure rate must be between 0.0 and 1.0"));
+    }
+
+    #[tokio::test]
+    async fn test_resilience_test_validation_invalid_failure_rate_negative() {
+        let config = Config::default();
+        let args = ResilienceArgs {
+            command: ResilienceCommand::Test {
+                pattern: "retry".to_string(),
+                requests: Some(100),
+                failure_rate: Some(-0.1),
+            },
+        };
+
+        let result = execute(args, &config).await;
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Failure rate must be between 0.0 and 1.0"));
+    }
 }

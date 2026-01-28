@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use crate::cli::enhanced_parser::execute_with_prerequisites;
 use crate::config::Config;
 use crate::marketplace::{MarketplaceConfig, ModelMarketplace};
@@ -354,6 +355,11 @@ async fn handle_install(
     auto_confirm: bool,
     auto_update: bool,
 ) -> Result<()> {
+    // Validate input
+    if package.is_empty() {
+        anyhow::bail!("Package name cannot be empty");
+    }
+
     info!("Installing package: {}", package);
 
     if !auto_confirm {
@@ -427,6 +433,11 @@ async fn handle_remove(
     remove_deps: bool,
     auto_confirm: bool,
 ) -> Result<()> {
+    // Validate input
+    if package.is_empty() {
+        anyhow::bail!("Package name cannot be empty");
+    }
+
     info!("Removing package: {}", package);
 
     if !auto_confirm {
@@ -462,6 +473,15 @@ async fn handle_search(
     limit: usize,
     detailed: bool,
 ) -> Result<()> {
+    // Validate input
+    if query.is_empty() {
+        anyhow::bail!("Search query cannot be empty");
+    }
+
+    if limit == 0 || limit > 100 {
+        anyhow::bail!("Limit must be between 1 and 100");
+    }
+
     info!("Searching for: {}", query);
 
     let results = marketplace.package_search(query, repo_filter).await?;
@@ -540,6 +560,11 @@ async fn handle_info(
     show_deps: bool,
     detailed: bool,
 ) -> Result<()> {
+    // Validate input
+    if package.is_empty() {
+        anyhow::bail!("Package name cannot be empty");
+    }
+
     info!("Getting info for package: {}", package);
 
     // Try to get from marketplace first
@@ -883,6 +908,11 @@ async fn handle_depends(
     reverse: bool,
     tree: bool,
 ) -> Result<()> {
+    // Validate input
+    if package.is_empty() {
+        anyhow::bail!("Package name cannot be empty");
+    }
+
     info!("Checking dependencies for package: {}", package);
 
     if reverse {
@@ -978,5 +1008,134 @@ fn truncate(s: &str, max_len: usize) -> String {
         s.to_string()
     } else {
         format!("{}...", &s[..max_len.saturating_sub(3)])
+    }
+}
+
+// ============================================================================
+// Validation Helper Functions
+// ============================================================================
+
+/// Validate package name is not empty
+fn validate_package_name(package: &str) -> Result<()> {
+    if package.is_empty() {
+        anyhow::bail!("Package name cannot be empty");
+    }
+    Ok(())
+}
+
+/// Validate search query is not empty
+fn validate_search_query(query: &str) -> Result<()> {
+    if query.is_empty() {
+        anyhow::bail!("Search query cannot be empty");
+    }
+    Ok(())
+}
+
+/// Validate search limit is within acceptable range
+fn validate_search_limit(limit: usize) -> Result<()> {
+    if limit == 0 || limit > 100 {
+        anyhow::bail!("Limit must be between 1 and 100");
+    }
+    Ok(())
+}
+
+/// Validate target directory exists if provided
+fn validate_target_directory(target: Option<&PathBuf>) -> Result<()> {
+    if let Some(path) = target {
+        if !path.exists() {
+            anyhow::bail!("Target directory does not exist: {:?}", path);
+        }
+    }
+    Ok(())
+}
+
+// ============================================================================
+// Unit Tests
+// ============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_validate_package_name() {
+        // Valid package name
+        assert!(validate_package_name("llama-2-7b").is_ok());
+        assert!(validate_package_name("microsoft/DialoGPT-medium").is_ok());
+
+        // Empty package name
+        assert!(validate_package_name("").is_err());
+        let err = validate_package_name("").unwrap_err();
+        assert!(err.to_string().contains("Package name cannot be empty"));
+    }
+
+    #[test]
+    fn test_validate_search_query() {
+        // Valid search query
+        assert!(validate_search_query("llama").is_ok());
+        assert!(validate_search_query("gpt").is_ok());
+
+        // Empty query
+        assert!(validate_search_query("").is_err());
+        let err = validate_search_query("").unwrap_err();
+        assert!(err.to_string().contains("Search query cannot be empty"));
+    }
+
+    #[test]
+    fn test_validate_search_limit() {
+        // Valid limits
+        assert!(validate_search_limit(1).is_ok());
+        assert!(validate_search_limit(20).is_ok());
+        assert!(validate_search_limit(100).is_ok());
+
+        // Invalid limits
+        assert!(validate_search_limit(0).is_err());
+        assert!(validate_search_limit(101).is_err());
+        assert!(validate_search_limit(150).is_err());
+
+        let err = validate_search_limit(0).unwrap_err();
+        assert!(err.to_string().contains("Limit must be between 1 and 100"));
+    }
+
+    #[test]
+    fn test_validate_target_directory() {
+        // None is valid
+        assert!(validate_target_directory(None).is_ok());
+
+        // Existing directory is valid
+        let temp_dir = std::env::temp_dir();
+        assert!(validate_target_directory(Some(&temp_dir)).is_ok());
+
+        // Non-existent directory is invalid
+        let non_existent = PathBuf::from("/path/that/does/not/exist/12345");
+        assert!(validate_target_directory(Some(&non_existent)).is_err());
+        let err = validate_target_directory(Some(&non_existent)).unwrap_err();
+        assert!(err.to_string().contains("Target directory does not exist"));
+    }
+
+    #[test]
+    fn test_format_size() {
+        assert_eq!(format_size(0), "0 B");
+        assert_eq!(format_size(500), "500 B");
+        assert_eq!(format_size(1024), "1.0 KB");
+        assert_eq!(format_size(1536), "1.5 KB");
+        assert_eq!(format_size(1048576), "1.0 MB");
+        assert_eq!(format_size(1073741824), "1.0 GB");
+        assert_eq!(format_size(1099511627776), "1.0 TB");
+    }
+
+    #[test]
+    fn test_truncate() {
+        // Short strings should not be truncated
+        assert_eq!(truncate("hello", 10), "hello");
+        assert_eq!(truncate("hello", 5), "hello");
+
+        // Long strings should be truncated with ellipsis
+        assert_eq!(truncate("hello world", 8), "hello...");
+        assert_eq!(truncate("this is a long string", 10), "this is...");
+
+        // Edge cases
+        assert_eq!(truncate("", 10), "");
+        assert_eq!(truncate("abc", 3), "abc");
     }
 }

@@ -3,7 +3,6 @@
 //! Creates comprehensive benchmark reports comparing performance across scenarios
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 /// Benchmark scenario result
 #[derive(Debug, Clone, Serialize, Deserialize)]

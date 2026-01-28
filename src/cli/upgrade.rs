@@ -209,6 +209,13 @@ async fn execute_check(
     format: &str,
     include_prerelease: bool,
 ) -> Result<()> {
+    // Validate inputs
+    validate_format(format)?;
+
+    info!(
+        "Checking for updates (force={}, include_prerelease={})",
+        force, include_prerelease
+    );
     println!("🔍 Checking for updates...");
 
     let upgrade_manager = UpgradeManager::new(config).await?;
@@ -306,6 +313,16 @@ async fn execute_install(
     backup: bool,
     dry_run: bool,
 ) -> Result<()> {
+    // Validate version format if provided
+    if let Some(ref ver) = version {
+        validate_version_format(ver)?;
+    }
+
+    info!(
+        "Installing update (version={:?}, yes={}, backup={}, dry_run={})",
+        version, yes, backup, dry_run
+    );
+
     if dry_run {
         println!("🔍 Dry run mode - no changes will be made");
     }
@@ -392,6 +409,10 @@ async fn execute_install(
 }
 
 async fn execute_status(config: UpgradeConfig, format: &str, detailed: bool) -> Result<()> {
+    // Validate inputs
+    validate_format(format)?;
+
+    info!("Retrieving upgrade status (detailed={})", detailed);
     let upgrade_manager = UpgradeManager::new(config).await?;
     let status = upgrade_manager.get_status().await;
     let current_version = ApplicationVersion::current();
@@ -470,12 +491,27 @@ async fn execute_rollback(
     yes: bool,
     backup_id: Option<String>,
 ) -> Result<()> {
+    info!(
+        "Rolling back upgrade (yes={}, backup_id={:?})",
+        yes, backup_id
+    );
     println!("🔄 Starting rollback process...");
+
+    if let Some(ref id) = backup_id {
+        println!("   Target Backup: {}", id);
+    } else {
+        println!("   Target: Previous version");
+    }
+
+    if !yes {
+        println!("   Confirmation: Required");
+    }
 
     // Implementation would use BackupManager to restore from backup
     // This is a placeholder for the actual rollback logic
     warn!("Rollback functionality not yet implemented");
-    println!("❌ Rollback functionality is not yet implemented");
+    println!();
+    println!("⚠️  Rollback functionality is not yet fully implemented");
 
     Ok(())
 }
@@ -493,6 +529,7 @@ async fn execute_service_command(config: UpgradeConfig, action: ServiceCommands)
             println!("✅ Background update service stopped");
         }
         ServiceCommands::Status { format } => {
+            validate_format(&format)?;
             // Implementation would check service status
             match format.as_str() {
                 "json" => {
@@ -509,6 +546,7 @@ async fn execute_service_command(config: UpgradeConfig, action: ServiceCommands)
             }
         }
         ServiceCommands::Stats { format } => {
+            validate_format(&format)?;
             // Implementation would show service statistics
             match format.as_str() {
                 "json" => {
@@ -535,6 +573,14 @@ async fn execute_list(
     include_prerelease: bool,
     format: &str,
 ) -> Result<()> {
+    // Validate inputs
+    validate_format(format)?;
+    validate_limit(limit, 100)?;
+
+    info!(
+        "Listing available versions (limit={}, include_prerelease={})",
+        limit, include_prerelease
+    );
     println!("📋 Fetching available versions...");
 
     // Implementation would fetch available versions from GitHub
@@ -569,59 +615,69 @@ async fn execute_list(
 }
 
 async fn execute_history(config: UpgradeConfig, limit: usize, format: &str) -> Result<()> {
+    // Validate inputs
+    validate_format(format)?;
+    validate_limit(limit, 1000)?;
+
+    info!("Fetching upgrade history (limit={})", limit);
     println!("📜 Fetching upgrade history...");
 
     // Implementation would show upgrade history
     // This is a placeholder
     println!("📜 No upgrade history available");
+    println!();
+    println!("⚠️  Upgrade history tracking is not yet fully implemented");
 
     Ok(())
 }
 
 async fn execute_config_command(config: UpgradeConfig, action: ConfigCommands) -> Result<()> {
     match action {
-        ConfigCommands::Show { format } => match format.as_str() {
-            "json" => {
-                let output = serde_json::json!({
-                    "auto_check": config.auto_check,
-                    "auto_install": config.auto_install,
-                    "check_interval_hours": config.check_interval.as_secs() / 3600,
-                    "update_channel": config.update_channel.as_str(),
-                    "backup_enabled": config.create_backups,
-                    "max_backups": config.max_backups
-                });
-                println!("{}", serde_json::to_string_pretty(&output)?);
+        ConfigCommands::Show { format } => {
+            validate_format(&format)?;
+            match format.as_str() {
+                "json" => {
+                    let output = serde_json::json!({
+                        "auto_check": config.auto_check,
+                        "auto_install": config.auto_install,
+                        "check_interval_hours": config.check_interval.as_secs() / 3600,
+                        "update_channel": config.update_channel.as_str(),
+                        "backup_enabled": config.create_backups,
+                        "max_backups": config.max_backups
+                    });
+                    println!("{}", serde_json::to_string_pretty(&output)?);
+                }
+                _ => {
+                    println!("⚙️  Upgrade Configuration:");
+                    println!(
+                        "   Auto-check:      {}",
+                        if config.auto_check {
+                            "Enabled"
+                        } else {
+                            "Disabled"
+                        }
+                    );
+                    println!(
+                        "   Auto-install:    {}",
+                        if config.auto_install {
+                            "Enabled"
+                        } else {
+                            "Disabled"
+                        }
+                    );
+                    println!(
+                        "   Check interval:  {} hours",
+                        config.check_interval.as_secs() / 3600
+                    );
+                    println!("   Update channel:  {}", config.update_channel.as_str());
+                    println!(
+                        "   Create backups:  {}",
+                        if config.create_backups { "Yes" } else { "No" }
+                    );
+                    println!("   Max backups:     {}", config.max_backups);
+                }
             }
-            _ => {
-                println!("⚙️  Upgrade Configuration:");
-                println!(
-                    "   Auto-check:      {}",
-                    if config.auto_check {
-                        "Enabled"
-                    } else {
-                        "Disabled"
-                    }
-                );
-                println!(
-                    "   Auto-install:    {}",
-                    if config.auto_install {
-                        "Enabled"
-                    } else {
-                        "Disabled"
-                    }
-                );
-                println!(
-                    "   Check interval:  {} hours",
-                    config.check_interval.as_secs() / 3600
-                );
-                println!("   Update channel:  {}", config.update_channel.as_str());
-                println!(
-                    "   Create backups:  {}",
-                    if config.create_backups { "Yes" } else { "No" }
-                );
-                println!("   Max backups:     {}", config.max_backups);
-            }
-        },
+        }
         ConfigCommands::EnableAutoCheck => {
             println!("✅ Auto-check enabled");
             info!("Auto-check configuration updated");
@@ -631,10 +687,12 @@ async fn execute_config_command(config: UpgradeConfig, action: ConfigCommands) -
             info!("Auto-check configuration updated");
         }
         ConfigCommands::SetInterval { hours } => {
+            validate_interval_hours(hours)?;
             println!("⏰ Check interval set to {} hours", hours);
             info!("Check interval updated to {} hours", hours);
         }
         ConfigCommands::SetChannel { channel } => {
+            validate_channel(&channel)?;
             println!("📡 Update channel set to {}", channel);
             info!("Update channel updated to {}", channel);
         }
@@ -679,5 +737,195 @@ fn format_changelog(changelog: &str) -> String {
         format!("   {}\n   ... (truncated)", formatted)
     } else {
         format!("   {}", formatted)
+    }
+}
+
+// ============================================================================
+// Validation Functions
+// ============================================================================
+
+/// Validate output format argument
+fn validate_format(format: &str) -> Result<()> {
+    match format {
+        "text" | "json" => Ok(()),
+        _ => anyhow::bail!(
+            "Invalid output format '{}'. Valid formats are: text, json",
+            format
+        ),
+    }
+}
+
+/// Validate version string format (semver-like)
+fn validate_version_format(version: &str) -> Result<()> {
+    // Accept versions like "0.5.0", "v0.5.0", "1.0.0-beta.1"
+    let version = version.strip_prefix('v').unwrap_or(version);
+
+    // Split version from pre-release suffix first (e.g., "1.0.0-beta.1" -> "1.0.0" and "beta.1")
+    let version_part = version.split('-').next().unwrap_or(version);
+
+    let parts: Vec<&str> = version_part.split('.').collect();
+    if parts.len() < 2 || parts.len() > 3 {
+        anyhow::bail!(
+            "Invalid version format '{}'. Expected format: MAJOR.MINOR.PATCH (e.g., 0.5.0)",
+            version
+        );
+    }
+    for part in &parts {
+        if part.parse::<u32>().is_err() {
+            anyhow::bail!(
+                "Invalid version component '{}' in version '{}'. Version components must be numeric.",
+                part,
+                version
+            );
+        }
+    }
+    Ok(())
+}
+
+/// Validate update channel
+fn validate_channel(channel: &str) -> Result<()> {
+    match channel.to_lowercase().as_str() {
+        "stable" | "beta" | "nightly" | "alpha" => Ok(()),
+        _ => anyhow::bail!(
+            "Invalid update channel '{}'. Valid channels are: stable, beta, nightly, alpha",
+            channel
+        ),
+    }
+}
+
+/// Validate check interval (reasonable bounds)
+fn validate_interval_hours(hours: u64) -> Result<()> {
+    if hours == 0 {
+        anyhow::bail!("Check interval must be at least 1 hour");
+    }
+    if hours > 8760 {
+        // 1 year
+        anyhow::bail!("Check interval cannot exceed 8760 hours (1 year)");
+    }
+    Ok(())
+}
+
+/// Validate limit parameter
+fn validate_limit(limit: usize, max: usize) -> Result<()> {
+    if limit == 0 {
+        anyhow::bail!("Limit must be at least 1");
+    }
+    if limit > max {
+        anyhow::bail!("Limit cannot exceed {}", max);
+    }
+    Ok(())
+}
+
+// ============================================================================
+// Unit Tests
+// ============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Validation tests
+    #[test]
+    fn test_validate_format_valid() {
+        assert!(validate_format("text").is_ok());
+        assert!(validate_format("json").is_ok());
+    }
+
+    #[test]
+    fn test_validate_format_invalid() {
+        assert!(validate_format("xml").is_err());
+        assert!(validate_format("yaml").is_err());
+        assert!(validate_format("").is_err());
+    }
+
+    #[test]
+    fn test_validate_version_format_valid() {
+        assert!(validate_version_format("0.5.0").is_ok());
+        assert!(validate_version_format("v0.5.0").is_ok());
+        assert!(validate_version_format("1.0.0").is_ok());
+        assert!(validate_version_format("1.0").is_ok());
+        assert!(validate_version_format("10.20.30").is_ok());
+        assert!(validate_version_format("0.5.0-beta.1").is_ok());
+    }
+
+    #[test]
+    fn test_validate_version_format_invalid() {
+        assert!(validate_version_format("abc").is_err());
+        assert!(validate_version_format("1").is_err());
+        assert!(validate_version_format("1.2.3.4").is_err());
+        assert!(validate_version_format("a.b.c").is_err());
+    }
+
+    #[test]
+    fn test_validate_channel_valid() {
+        assert!(validate_channel("stable").is_ok());
+        assert!(validate_channel("beta").is_ok());
+        assert!(validate_channel("nightly").is_ok());
+        assert!(validate_channel("alpha").is_ok());
+        assert!(validate_channel("STABLE").is_ok()); // case insensitive
+    }
+
+    #[test]
+    fn test_validate_channel_invalid() {
+        assert!(validate_channel("unstable").is_err());
+        assert!(validate_channel("dev").is_err());
+        assert!(validate_channel("").is_err());
+    }
+
+    #[test]
+    fn test_validate_interval_hours_valid() {
+        assert!(validate_interval_hours(1).is_ok());
+        assert!(validate_interval_hours(24).is_ok());
+        assert!(validate_interval_hours(168).is_ok()); // 1 week
+        assert!(validate_interval_hours(8760).is_ok()); // 1 year
+    }
+
+    #[test]
+    fn test_validate_interval_hours_invalid() {
+        assert!(validate_interval_hours(0).is_err());
+        assert!(validate_interval_hours(8761).is_err()); // > 1 year
+    }
+
+    #[test]
+    fn test_validate_limit_valid() {
+        assert!(validate_limit(1, 100).is_ok());
+        assert!(validate_limit(50, 100).is_ok());
+        assert!(validate_limit(100, 100).is_ok());
+    }
+
+    #[test]
+    fn test_validate_limit_invalid() {
+        assert!(validate_limit(0, 100).is_err());
+        assert!(validate_limit(101, 100).is_err());
+    }
+
+    // Helper function tests
+    #[test]
+    fn test_status_to_string() {
+        assert_eq!(status_to_string(&UpgradeStatus::UpToDate), "Up to date");
+        assert_eq!(
+            status_to_string(&UpgradeStatus::Checking),
+            "Checking for updates"
+        );
+    }
+
+    #[test]
+    fn test_format_changelog_short() {
+        let changelog = "Line 1\nLine 2\nLine 3";
+        let formatted = format_changelog(changelog);
+        assert!(formatted.contains("Line 1"));
+        assert!(formatted.contains("Line 2"));
+        assert!(formatted.contains("Line 3"));
+        assert!(!formatted.contains("truncated"));
+    }
+
+    #[test]
+    fn test_format_changelog_long() {
+        let lines: Vec<String> = (1..=15).map(|i| format!("Line {}", i)).collect();
+        let changelog = lines.join("\n");
+        let formatted = format_changelog(&changelog);
+        assert!(formatted.contains("truncated"));
+        assert!(formatted.contains("Line 1"));
+        assert!(formatted.contains("Line 10"));
     }
 }

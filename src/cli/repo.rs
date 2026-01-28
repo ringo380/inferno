@@ -166,6 +166,11 @@ async fn handle_add(
     verify: bool,
     disabled: bool,
 ) -> Result<()> {
+    // Validate inputs
+    validate_repo_name(name)?;
+    validate_repo_url(url)?;
+    validate_repo_priority(priority)?;
+
     info!("Adding repository: {} at {}", name, url);
 
     if !disabled {
@@ -205,6 +210,9 @@ async fn handle_add(
 }
 
 async fn handle_remove(marketplace: &ModelMarketplace, name: &str, force: bool) -> Result<()> {
+    // Validate inputs
+    validate_repo_name(name)?;
+
     info!("Removing repository: {}", name);
 
     if !force && !confirm(&format!("Remove repository '{}'?", name))? {
@@ -368,6 +376,9 @@ async fn handle_update(
 }
 
 async fn handle_info(marketplace: &ModelMarketplace, name: &str, show_models: bool) -> Result<()> {
+    // Validate inputs
+    validate_repo_name(name)?;
+
     info!("Getting repository information: {}", name);
 
     let repositories = marketplace.repo_list().await?;
@@ -448,6 +459,9 @@ async fn handle_info(marketplace: &ModelMarketplace, name: &str, show_models: bo
 }
 
 async fn handle_test(_marketplace: &ModelMarketplace, name: &str) -> Result<()> {
+    // Validate inputs
+    validate_repo_name(name)?;
+
     info!("Testing repository connection: {}", name);
 
     println!("Testing connection to repository '{}'...", name);
@@ -469,6 +483,10 @@ async fn handle_test(_marketplace: &ModelMarketplace, name: &str) -> Result<()> 
 }
 
 async fn handle_priority(_marketplace: &ModelMarketplace, name: &str, priority: u32) -> Result<()> {
+    // Validate inputs
+    validate_repo_name(name)?;
+    validate_repo_priority(priority)?;
+
     info!("Setting repository priority: {} -> {}", name, priority);
 
     // In a real implementation, this would update the repository priority
@@ -530,5 +548,123 @@ fn truncate(s: &str, max_len: usize) -> String {
         s.to_string()
     } else {
         format!("{}...", &s[..max_len.saturating_sub(3)])
+    }
+}
+
+// Validation helper functions
+
+fn validate_repo_name(name: &str) -> Result<()> {
+    if name.is_empty() {
+        anyhow::bail!("Repository name cannot be empty");
+    }
+    Ok(())
+}
+
+fn validate_repo_url(url: &str) -> Result<()> {
+    if url.is_empty() {
+        anyhow::bail!("Repository URL cannot be empty");
+    }
+
+    if !url.starts_with("http://") && !url.starts_with("https://") {
+        anyhow::bail!("Repository URL must start with http:// or https://");
+    }
+
+    Ok(())
+}
+
+fn validate_repo_priority(priority: u32) -> Result<()> {
+    if priority > 1000 {
+        anyhow::bail!("Priority cannot exceed 1000");
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_validate_repo_name_empty() {
+        let result = validate_repo_name("");
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Repository name cannot be empty"));
+    }
+
+    #[test]
+    fn test_validate_repo_name_valid() {
+        let result = validate_repo_name("my-repo");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_repo_url_empty() {
+        let result = validate_repo_url("");
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Repository URL cannot be empty"));
+    }
+
+    #[test]
+    fn test_validate_repo_url_invalid_protocol() {
+        let result = validate_repo_url("ftp://example.com");
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("must start with http://"));
+    }
+
+    #[test]
+    fn test_validate_repo_url_valid_http() {
+        let result = validate_repo_url("http://example.com");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_repo_url_valid_https() {
+        let result = validate_repo_url("https://example.com");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_repo_priority_valid() {
+        let result = validate_repo_priority(100);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_repo_priority_max() {
+        let result = validate_repo_priority(1000);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_repo_priority_exceeded() {
+        let result = validate_repo_priority(1001);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Priority cannot exceed 1000"));
+    }
+
+    #[test]
+    fn test_truncate_short_string() {
+        assert_eq!(truncate("hello", 10), "hello");
+    }
+
+    #[test]
+    fn test_truncate_long_string() {
+        assert_eq!(truncate("hello world", 8), "hello...");
+    }
+
+    #[test]
+    fn test_truncate_exact_length() {
+        assert_eq!(truncate("hello", 5), "hello");
     }
 }

@@ -17,7 +17,7 @@ use std::path::PathBuf;
 /// # Examples
 ///
 /// ```no_run
-/// use inferno::core::config::{ConfigBuilder, Preset};
+/// use inferno::core::config::{ConfigBuilder, Preset, LogLevel};
 ///
 /// // Simple development config
 /// let config = ConfigBuilder::new()

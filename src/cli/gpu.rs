@@ -6,7 +6,7 @@ use anyhow::Result;
 use clap::{Args, Subcommand, ValueEnum};
 use serde_json;
 use std::collections::HashMap;
-// Note: tracing imports removed since not used in current implementation
+use tracing::info;
 
 #[derive(Args)]
 pub struct GpuArgs {
@@ -435,6 +435,21 @@ pub async fn execute(args: GpuArgs, _config: &Config) -> Result<()> {
             vendor,
             gpu_id,
         } => {
+            // Validate allocation parameters
+            if memory_mb == 0 {
+                anyhow::bail!("Memory allocation must be greater than 0 MB");
+            }
+
+            if memory_mb > 100_000 {
+                anyhow::bail!("Memory allocation cannot exceed 100,000 MB (100 GB)");
+            }
+
+            if model_name.is_empty() {
+                anyhow::bail!("Model name cannot be empty");
+            }
+
+            info!("Allocating {} MB for model '{}'", memory_mb, model_name);
+
             let preferred_vendor = vendor.map(GpuVendor::from);
 
             if let Some(id) = gpu_id {
@@ -449,7 +464,7 @@ pub async fn execute(args: GpuArgs, _config: &Config) -> Result<()> {
                 {
                     println!("Successfully allocated GPU {}", id);
                 } else {
-                    println!(
+                    anyhow::bail!(
                         "Failed to allocate GPU {} (insufficient memory or unavailable)",
                         id
                     );
@@ -463,7 +478,7 @@ pub async fn execute(args: GpuArgs, _config: &Config) -> Result<()> {
                 {
                     println!("Allocated GPU {} successfully", allocated_gpu);
                 } else {
-                    println!("No suitable GPU found for allocation");
+                    anyhow::bail!("No suitable GPU found for allocation");
                 }
             }
         }
@@ -877,4 +892,95 @@ async fn run_gpu_benchmark(
     println!("  Power Consumption: 245W");
 
     Ok(())
+}
+
+/// Validates GPU allocation parameters
+/// Returns Ok(()) if valid, or an error with a descriptive message
+pub fn validate_allocation_params(memory_mb: u64, model_name: &str) -> Result<()> {
+    if memory_mb == 0 {
+        anyhow::bail!("Memory allocation must be greater than 0 MB");
+    }
+
+    if memory_mb > 100_000 {
+        anyhow::bail!("Memory allocation cannot exceed 100,000 MB (100 GB)");
+    }
+
+    if model_name.is_empty() {
+        anyhow::bail!("Model name cannot be empty");
+    }
+
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_validate_allocation_zero_memory() {
+        let result = validate_allocation_params(0, "test");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("greater than 0"));
+    }
+
+    #[test]
+    fn test_validate_allocation_excessive_memory() {
+        let result = validate_allocation_params(200_000, "test");
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("cannot exceed 100,000"));
+    }
+
+    #[test]
+    fn test_validate_allocation_empty_model() {
+        let result = validate_allocation_params(1000, "");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("cannot be empty"));
+    }
+
+    #[test]
+    fn test_validate_allocation_valid() {
+        let result = validate_allocation_params(1000, "my-model");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_vendor_arg_conversion() {
+        assert!(matches!(
+            GpuVendor::from(VendorArg::Nvidia),
+            GpuVendor::Nvidia
+        ));
+        assert!(matches!(GpuVendor::from(VendorArg::Amd), GpuVendor::Amd));
+        assert!(matches!(
+            GpuVendor::from(VendorArg::Intel),
+            GpuVendor::Intel
+        ));
+        assert!(matches!(
+            GpuVendor::from(VendorArg::Apple),
+            GpuVendor::Apple
+        ));
+    }
+
+    #[test]
+    fn test_power_state_conversion() {
+        use crate::gpu::GpuPowerState;
+        assert!(matches!(
+            GpuPowerState::from(PowerState::Auto),
+            GpuPowerState::Balanced
+        ));
+        assert!(matches!(
+            GpuPowerState::from(PowerState::Performance),
+            GpuPowerState::Performance
+        ));
+        assert!(matches!(
+            GpuPowerState::from(PowerState::Balanced),
+            GpuPowerState::Balanced
+        ));
+        assert!(matches!(
+            GpuPowerState::from(PowerState::PowerSaver),
+            GpuPowerState::PowerSaver
+        ));
+    }
 }

@@ -54,9 +54,13 @@ impl DurationStats {
         let sum: f32 = sorted.iter().sum();
         let mean = sum / sorted.len() as f32;
 
-        // Percentiles
-        let p50_idx = sorted.len() / 2;
-        let p50 = sorted[p50_idx];
+        // Percentiles - use proper median calculation for even-length arrays
+        let p50 = if sorted.len().is_multiple_of(2) {
+            let mid = sorted.len() / 2;
+            (sorted[mid - 1] + sorted[mid]) / 2.0
+        } else {
+            sorted[sorted.len() / 2]
+        };
 
         let p95_idx = ((sorted.len() as f32 * 0.95) as usize).min(sorted.len() - 1);
         let p95 = sorted[p95_idx];
@@ -156,7 +160,7 @@ impl StatisticsAggregator {
     pub fn record_phase(&mut self, phase_name: String, duration_ms: f32) {
         self.phase_durations
             .entry(phase_name)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(duration_ms);
     }
 
@@ -164,7 +168,7 @@ impl StatisticsAggregator {
     pub fn record_model(&mut self, model_id: String, duration_ms: f32) {
         self.per_model_stats
             .entry(model_id)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(duration_ms);
     }
 
@@ -172,7 +176,7 @@ impl StatisticsAggregator {
     pub fn record_priority(&mut self, priority: u8, duration_ms: f32) {
         self.per_priority_stats
             .entry(priority)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(duration_ms);
     }
 

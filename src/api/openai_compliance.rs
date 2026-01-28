@@ -109,14 +109,14 @@ impl ComplianceValidator {
 
         // Validate temperature (0-2)
         if let Some(temp) = temperature {
-            if temp < 0.0 || temp > 2.0 {
+            if !(0.0..=2.0).contains(&temp) {
                 result = result.with_error("temperature must be between 0 and 2".to_string());
             }
         }
 
         // Validate top_p (0-1)
         if let Some(p) = top_p {
-            if p < 0.0 || p > 1.0 {
+            if !(0.0..=1.0).contains(&p) {
                 result = result.with_error("top_p must be between 0 and 1".to_string());
             }
         }

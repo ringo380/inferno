@@ -1,13 +1,11 @@
 use crate::{
     advanced_cache::AdvancedCacheConfig, advanced_monitoring::AdvancedMonitoringConfig,
-    api_gateway::ApiGatewayConfig, backends::BackendConfig, backup_recovery::BackupRecoveryConfig,
-    cache::CacheConfig, dashboard::DashboardConfig, data_pipeline::DataPipelineConfig,
-    deployment::DeploymentConfig, distributed::DistributedConfig, federated::FederatedConfig,
+    backends::BackendConfig, backup_recovery::BackupRecoveryConfig, cache::CacheConfig,
+    dashboard::DashboardConfig, deployment::DeploymentConfig, distributed::DistributedConfig,
     logging_audit::LoggingAuditConfig, marketplace::MarketplaceConfig,
     model_versioning::ModelVersioningConfig, monitoring::MonitoringConfig,
-    multi_tenancy::MultiTenancyConfig,
-    /* ab_testing_config::ABTestingConfig, */ observability::ObservabilityConfig,
-    performance_optimization::PerformanceOptimizationConfig, response_cache::ResponseCacheConfig,
+    observability::ObservabilityConfig, performance_optimization::PerformanceOptimizationConfig,
+    response_cache::ResponseCacheConfig,
 };
 use anyhow::Result;
 use figment::{
@@ -37,16 +35,12 @@ pub struct Config {
     pub observability: ObservabilityConfig,
     pub marketplace: MarketplaceConfig,
     pub deployment: DeploymentConfig,
-    pub federated: FederatedConfig,
     pub dashboard: DashboardConfig,
     pub advanced_monitoring: AdvancedMonitoringConfig,
-    pub api_gateway: ApiGatewayConfig,
     pub model_versioning: ModelVersioningConfig,
-    pub data_pipeline: DataPipelineConfig,
     pub backup_recovery: BackupRecoveryConfig,
     pub logging_audit: LoggingAuditConfig,
     pub performance_optimization: PerformanceOptimizationConfig,
-    pub multi_tenancy: MultiTenancyConfig,
     pub advanced_cache: AdvancedCacheConfig,
 }
 
@@ -102,16 +96,12 @@ impl Default for Config {
             observability: ObservabilityConfig::default(),
             marketplace: MarketplaceConfig::default(),
             deployment: DeploymentConfig::default(),
-            federated: FederatedConfig::default(),
             dashboard: DashboardConfig::default(),
             advanced_monitoring: AdvancedMonitoringConfig::default(),
-            api_gateway: ApiGatewayConfig::default(),
             model_versioning: ModelVersioningConfig::default(),
-            data_pipeline: DataPipelineConfig::default(),
             backup_recovery: BackupRecoveryConfig::default(),
             logging_audit: LoggingAuditConfig::default(),
             performance_optimization: PerformanceOptimizationConfig::default(),
-            multi_tenancy: MultiTenancyConfig::default(),
             advanced_cache: AdvancedCacheConfig::default(),
         }
     }
@@ -344,7 +334,10 @@ mod tests {
 
     #[test]
     fn test_config_validation() {
-        let config = Config::default();
+        // Use explicitly non-existent paths for validation failure
+        let mut config = Config::default();
+        config.models_dir = PathBuf::from("/nonexistent/path/to/models/12345");
+        config.cache_dir = PathBuf::from("/nonexistent/path/to/cache/12345");
         assert!(config.validate().is_err()); // Directories don't exist
 
         // Create a config with valid directories

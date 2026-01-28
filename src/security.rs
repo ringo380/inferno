@@ -57,11 +57,31 @@ pub struct SecurityConfig {
     pub data_dir: PathBuf,
 }
 
+impl SecurityConfig {
+    /// Validate the security configuration, returning an error if critical settings are missing
+    pub fn validate(&self) -> Result<(), String> {
+        if self.auth_enabled && self.jwt_secret.is_empty() {
+            return Err("JWT secret is required when authentication is enabled. \
+                Set INFERNO_JWT_SECRET environment variable or configure jwt_secret in config."
+                .to_string());
+        }
+        if self.jwt_secret.len() < 32 && !self.jwt_secret.is_empty() {
+            return Err("JWT secret must be at least 32 characters for security. \
+                Use a strong random secret."
+                .to_string());
+        }
+        Ok(())
+    }
+}
+
 impl Default for SecurityConfig {
     fn default() -> Self {
+        // Try to load JWT secret from environment variable
+        let jwt_secret = std::env::var("INFERNO_JWT_SECRET").unwrap_or_default();
+
         Self {
             auth_enabled: true,
-            jwt_secret: String::new(), // Should be set from environment
+            jwt_secret, // Loaded from INFERNO_JWT_SECRET environment variable
             token_expiry_hours: 24,
             api_key_enabled: true,
             rate_limiting_enabled: true,
@@ -330,11 +350,32 @@ impl SecurityManager {
     }
 
     /// Initialize with default users and API keys (legacy method)
+    ///
+    /// # Security Note
+    /// The admin password MUST be set via INFERNO_ADMIN_PASSWORD environment variable.
+    /// If not set, this method will return an error.
     pub async fn initialize_default_users(&self) -> Result<()> {
         info!("Initializing security manager");
 
-        // Create default admin user
-        let admin_password_hash = self.hash_password("admin123")?; // Default password
+        // Get admin password from environment variable - REQUIRED for security
+        let admin_password = std::env::var("INFERNO_ADMIN_PASSWORD").map_err(|_| {
+            InfernoError::Security(
+                "INFERNO_ADMIN_PASSWORD environment variable is required to create admin user. \
+                Set a strong password (at least 12 characters) before starting the application."
+                    .to_string(),
+            )
+        })?;
+
+        // Validate password strength
+        if admin_password.len() < 12 {
+            return Err(InfernoError::Security(
+                "Admin password must be at least 12 characters for security".to_string(),
+            )
+            .into());
+        }
+
+        // Create default admin user with hashed password
+        let admin_password_hash = self.hash_password(&admin_password)?;
         let admin_user = User {
             id: "admin".to_string(),
             username: "admin".to_string(),
@@ -780,6 +821,14 @@ impl SecurityManager {
 
     /// Sanitize output to prevent data leakage
     pub fn sanitize_output(&self, output: &str) -> String {
+        use std::sync::OnceLock;
+
+        // Pre-compiled regex patterns (compiled once, reused)
+        // These patterns are known-valid, so unwrap in OnceLock is safe
+        static API_KEY_PATTERN: OnceLock<Option<regex::Regex>> = OnceLock::new();
+        static EMAIL_PATTERN: OnceLock<Option<regex::Regex>> = OnceLock::new();
+        static IP_PATTERN: OnceLock<Option<regex::Regex>> = OnceLock::new();
+
         if !self.config.output_sanitization_enabled {
             return output.to_string();
         }
@@ -788,19 +837,26 @@ impl SecurityManager {
         let mut sanitized = output.to_string();
 
         // Remove potential API keys (simple pattern)
-        let api_key_pattern = regex::Regex::new(r"[A-Za-z0-9]{32,}").unwrap();
-        sanitized = api_key_pattern
-            .replace_all(&sanitized, "[REDACTED]")
-            .to_string();
+        let api_key_regex =
+            API_KEY_PATTERN.get_or_init(|| regex::Regex::new(r"[A-Za-z0-9]{32,}").ok());
+        if let Some(pattern) = api_key_regex {
+            sanitized = pattern.replace_all(&sanitized, "[REDACTED]").to_string();
+        }
 
         // Remove email addresses
-        let email_pattern =
-            regex::Regex::new(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}").unwrap();
-        sanitized = email_pattern.replace_all(&sanitized, "[EMAIL]").to_string();
+        let email_regex = EMAIL_PATTERN.get_or_init(|| {
+            regex::Regex::new(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}").ok()
+        });
+        if let Some(pattern) = email_regex {
+            sanitized = pattern.replace_all(&sanitized, "[EMAIL]").to_string();
+        }
 
         // Remove IP addresses
-        let ip_pattern = regex::Regex::new(r"\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b").unwrap();
-        sanitized = ip_pattern.replace_all(&sanitized, "[IP]").to_string();
+        let ip_regex =
+            IP_PATTERN.get_or_init(|| regex::Regex::new(r"\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b").ok());
+        if let Some(pattern) = ip_regex {
+            sanitized = pattern.replace_all(&sanitized, "[IP]").to_string();
+        }
 
         sanitized
     }
@@ -907,11 +963,20 @@ impl SecurityManager {
     }
 
     /// Initialize the security manager with persistence
+    ///
+    /// # Security Note
+    /// If no users exist, a default admin user will be created using the
+    /// INFERNO_ADMIN_PASSWORD environment variable. This is REQUIRED for security.
     pub async fn initialize(&self) -> Result<()> {
+        // Validate security configuration
+        if let Err(e) = self.config.validate() {
+            warn!("Security configuration validation warning: {}", e);
+        }
+
         // Load existing users
         if let Err(e) = self.load_users().await {
             warn!(
-                "Failed to load users from storage: {}. Creating default admin user.",
+                "Failed to load users from storage: {}. Will create default admin user if needed.",
                 e
             );
         }
@@ -924,11 +989,32 @@ impl SecurityManager {
 
         if users_count == 0 {
             info!("No users found, creating default admin user");
+
+            // Get admin password from environment variable - REQUIRED
+            let admin_password = std::env::var("INFERNO_ADMIN_PASSWORD").map_err(|_| {
+                InfernoError::Security(
+                    "INFERNO_ADMIN_PASSWORD environment variable is required to create admin user. \
+                    Set a strong password (at least 12 characters) before starting the application."
+                        .to_string(),
+                )
+            })?;
+
+            // Validate password strength
+            if admin_password.len() < 12 {
+                return Err(InfernoError::Security(
+                    "Admin password must be at least 12 characters for security".to_string(),
+                )
+                .into());
+            }
+
+            // Properly hash the password using Argon2
+            let password_hash = self.hash_password(&admin_password)?;
+
             let default_user = User {
                 id: "admin".to_string(),
                 username: "admin".to_string(),
                 email: Some("admin@localhost".to_string()),
-                password_hash: Some("admin123".to_string()), // Simplified for now
+                password_hash: Some(password_hash),
                 role: UserRole::Admin,
                 api_keys: vec![],
                 created_at: chrono::Utc::now(),

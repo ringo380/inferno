@@ -6,7 +6,8 @@
 use super::{platform::BasePlatformHandler, PlatformUpgradeHandler, UpgradeConfig};
 use anyhow::Result;
 use std::path::PathBuf;
-use tracing::info;
+use std::process::Command;
+use tracing::{debug, info, warn};
 
 /// Windows-specific upgrade handler
 pub struct WindowsUpgradeHandler {
@@ -18,6 +19,73 @@ impl WindowsUpgradeHandler {
     pub fn new(config: &UpgradeConfig) -> Result<Self> {
         let base = BasePlatformHandler::new(config)?;
         Ok(Self { base })
+    }
+
+    /// Get the current executable path
+    fn get_current_executable(&self) -> Result<PathBuf> {
+        std::env::current_exe().map_err(|e| anyhow::anyhow!("Failed to get executable path: {}", e))
+    }
+
+    /// Install from MSI package
+    async fn install_msi(&self, package_path: &PathBuf) -> Result<()> {
+        info!("Installing MSI package: {:?}", package_path);
+
+        let output = Command::new("msiexec")
+            .args([
+                "/i",
+                package_path.to_str().unwrap_or_default(),
+                "/quiet",
+                "/norestart",
+            ])
+            .output()?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            anyhow::bail!("MSI installation failed: {}", stderr);
+        }
+
+        Ok(())
+    }
+
+    /// Install from EXE installer
+    async fn install_exe(&self, package_path: &PathBuf) -> Result<()> {
+        info!("Running EXE installer: {:?}", package_path);
+
+        let output = Command::new(package_path)
+            .args(["/S", "/quiet"]) // Common silent install flags
+            .output()?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            anyhow::bail!("EXE installer failed: {}", stderr);
+        }
+
+        Ok(())
+    }
+
+    /// Install binary directly to installation directory
+    async fn install_binary(&self, package_path: &PathBuf) -> Result<()> {
+        let install_dir = self.get_installation_directory();
+        let target_binary = install_dir.join("inferno.exe");
+
+        // Create installation directory if needed
+        if !install_dir.exists() {
+            std::fs::create_dir_all(&install_dir)?;
+        }
+
+        // Backup existing binary
+        if target_binary.exists() {
+            let backup_path = self.get_backup_directory().join("inferno.exe.backup");
+            std::fs::create_dir_all(self.get_backup_directory())?;
+            std::fs::copy(&target_binary, &backup_path)?;
+            debug!("Backed up existing binary to {:?}", backup_path);
+        }
+
+        // Copy new binary
+        std::fs::copy(package_path, &target_binary)?;
+
+        info!("Installed binary to {:?}", target_binary);
+        Ok(())
     }
 }
 
@@ -33,13 +101,65 @@ impl PlatformUpgradeHandler for WindowsUpgradeHandler {
         Ok(())
     }
 
-    async fn install_update(&self, _package_path: &PathBuf) -> Result<()> {
-        anyhow::bail!("Windows upgrade installation not yet implemented")
+    async fn install_update(&self, package_path: &PathBuf) -> Result<()> {
+        info!("Installing update on Windows: {:?}", package_path);
+
+        // Determine package type by extension
+        let extension = package_path
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("")
+            .to_lowercase();
+
+        match extension.as_str() {
+            "msi" => {
+                self.install_msi(package_path).await?;
+            }
+            "exe" => {
+                self.install_exe(package_path).await?;
+            }
+            _ => {
+                // Assume it's a binary
+                self.install_binary(package_path).await?;
+            }
+        }
+
+        Ok(())
     }
 
     async fn restart_application(&self) -> Result<()> {
         info!("Restarting application on Windows");
-        // TODO: Implement Windows-specific restart
+
+        let current_exe = self.get_current_executable()?;
+
+        // Check if running as a Windows service
+        let is_service = std::env::var("SERVICE_NAME").is_ok();
+
+        if is_service {
+            // Restart via service controller
+            if let Ok(service_name) = std::env::var("SERVICE_NAME") {
+                let output = Command::new("sc").args(["stop", &service_name]).output();
+
+                if output.is_ok() {
+                    // Give service time to stop
+                    tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+
+                    let _ = Command::new("sc").args(["start", &service_name]).output();
+
+                    info!("Restarted Windows service: {}", service_name);
+                    return Ok(());
+                }
+            }
+            debug!("Service restart not available, spawning new process");
+        }
+
+        // Spawn new process
+        info!("Spawning new process: {:?}", current_exe);
+        Command::new(&current_exe)
+            .spawn()
+            .map_err(|e| anyhow::anyhow!("Failed to spawn new process: {}", e))?;
+
+        info!("New process spawned, current process should exit");
         Ok(())
     }
 

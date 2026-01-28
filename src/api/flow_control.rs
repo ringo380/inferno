@@ -151,7 +151,12 @@ impl StreamFlowControl {
     /// Get current buffer utilization percentage
     pub fn buffer_utilization_percent(&self) -> u32 {
         let pending = self.pending_messages.load(Ordering::Relaxed);
-        ((pending as f32 / self.config.max_pending_messages as f32) * 100.0) as u32
+        if pending == 0 {
+            return 0;
+        }
+        // Calculate percentage with proper rounding, ensuring at least 1% when messages exist
+        let percent = ((pending as f32 / self.config.max_pending_messages as f32) * 100.0).round() as u32;
+        percent.max(1) // At least 1% when there are any pending messages
     }
 
     /// Get current unacknowledged token count
@@ -208,7 +213,7 @@ impl ConnectionPool {
     /// Get pool utilization percentage
     pub fn utilization_percent(&self) -> u32 {
         let active = self.active_connections.load(Ordering::Relaxed);
-        ((active as f32 / self.max_connections as f32) * 100.0) as u32
+        ((active as f32 / self.max_connections as f32) * 100.0 + 0.5) as u32
     }
 
     /// Get global pending message count
@@ -376,9 +381,10 @@ mod tests {
         let _conn1 = pool.acquire_connection().unwrap();
         assert_eq!(pool.utilization_percent(), 1);
 
-        for _ in 0..49 {
-            let _ = pool.acquire_connection().unwrap();
-        }
+        // Keep connections alive by storing them in a Vec
+        let _conns: Vec<_> = (0..49)
+            .map(|_| pool.acquire_connection().unwrap())
+            .collect();
         assert_eq!(pool.utilization_percent(), 50);
     }
 }

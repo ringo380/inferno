@@ -218,7 +218,8 @@ impl QueueHealthStatus {
     ) -> Self {
         let status = match (queue_depth, avg_wait_ms, gpu_memory_free_mb) {
             (_, _, gpu) if gpu < 256 => HealthStatus::Critical,
-            (depth, wait, _) if depth > 5000 && wait > 1000.0 => HealthStatus::Critical,
+            (depth, _, _) if depth > 5000 => HealthStatus::Critical,
+            (_, wait, _) if wait > 1000.0 => HealthStatus::Critical,
             (depth, wait, _) if depth > 2000 || wait > 500.0 => HealthStatus::Degraded,
             _ => HealthStatus::Healthy,
         };

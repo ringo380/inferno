@@ -1,4 +1,4 @@
-#![allow(dead_code, unused_imports, unused_variables)]
+#![allow(dead_code, unused_imports, unused_variables, clippy::ptr_arg, clippy::wildcard_in_or_patterns)]
 use anyhow::Result;
 use clap::{Args, Subcommand};
 use std::collections::HashMap;
@@ -3134,4 +3134,492 @@ fn convert_logging_audit_config(
         alerting: AlertConfiguration::default(),
         export_format: ExportFormat::Json,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ============================================================================
+    // Validation function tests
+    // ============================================================================
+
+    #[test]
+    fn test_validate_search_parameters_too_many_event_types() {
+        let event_types: Vec<String> = (0..51).map(|i| format!("type_{}", i)).collect();
+        let result = validate_search_parameters(&event_types, &[], &None, None, None);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Too many event types"));
+    }
+
+    #[test]
+    fn test_validate_search_parameters_too_many_severities() {
+        let severities: Vec<String> = (0..11).map(|i| format!("sev_{}", i)).collect();
+        let result = validate_search_parameters(&[], &severities, &None, None, None);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Too many severities"));
+    }
+
+    #[test]
+    fn test_validate_search_parameters_empty_search_text() {
+        let result = validate_search_parameters(&[], &[], &Some("".to_string()), None, None);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Search text cannot be empty"));
+    }
+
+    #[test]
+    fn test_validate_search_parameters_search_text_too_long() {
+        let long_text = "x".repeat(1001);
+        let result = validate_search_parameters(&[], &[], &Some(long_text), None, None);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Search text too long"));
+    }
+
+    #[test]
+    fn test_validate_search_parameters_unsafe_search_text() {
+        let result = validate_search_parameters(
+            &[],
+            &[],
+            &Some("test'; DROP TABLE".to_string()),
+            None,
+            None,
+        );
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("potentially unsafe"));
+    }
+
+    #[test]
+    fn test_validate_search_parameters_zero_limit() {
+        let result = validate_search_parameters(&[], &[], &None, Some(0), None);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Limit must be greater than 0"));
+    }
+
+    #[test]
+    fn test_validate_search_parameters_limit_too_large() {
+        let result = validate_search_parameters(&[], &[], &None, Some(10001), None);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Limit too large"));
+    }
+
+    #[test]
+    fn test_validate_search_parameters_offset_too_large() {
+        let result = validate_search_parameters(&[], &[], &None, None, Some(1_000_001));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Offset too large"));
+    }
+
+    #[test]
+    fn test_validate_search_parameters_valid() {
+        let result = validate_search_parameters(
+            &["auth".to_string()],
+            &["high".to_string()],
+            &Some("valid search".to_string()),
+            Some(100),
+            Some(0),
+        );
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_time_range_string_valid() {
+        assert!(validate_time_range_string("1h").is_ok());
+        assert!(validate_time_range_string("24h").is_ok());
+        assert!(validate_time_range_string("7d").is_ok());
+        assert!(validate_time_range_string("30d").is_ok());
+        assert!(validate_time_range_string("1y").is_ok());
+    }
+
+    #[test]
+    fn test_validate_time_range_string_custom_valid() {
+        assert!(validate_time_range_string("48h").is_ok());
+        assert!(validate_time_range_string("14d").is_ok());
+        assert!(validate_time_range_string("60m").is_ok());
+    }
+
+    #[test]
+    fn test_validate_time_range_string_invalid() {
+        assert!(validate_time_range_string("invalid").is_err());
+        assert!(validate_time_range_string("abc").is_err());
+    }
+
+    #[test]
+    fn test_validate_time_range_string_too_large() {
+        assert!(validate_time_range_string("9000h").is_err()); // More than 1 year in hours
+        assert!(validate_time_range_string("400d").is_err()); // More than 1 year in days
+    }
+
+    #[test]
+    fn test_validate_group_by_fields_valid() {
+        let fields = vec!["type".to_string(), "severity".to_string()];
+        assert!(validate_group_by_fields(&fields).is_ok());
+    }
+
+    #[test]
+    fn test_validate_group_by_fields_too_many() {
+        let fields: Vec<String> = (0..6).map(|i| format!("field_{}", i)).collect();
+        let result = validate_group_by_fields(&fields);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Too many group by fields"));
+    }
+
+    #[test]
+    fn test_validate_group_by_fields_invalid() {
+        let fields = vec!["invalid_field".to_string()];
+        let result = validate_group_by_fields(&fields);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid group by field"));
+    }
+
+    #[test]
+    fn test_validate_export_path_missing_parent() {
+        let path = PathBuf::from("/nonexistent/directory/file.json");
+        let result = validate_export_path(&path);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("directory does not exist"));
+    }
+
+    #[test]
+    fn test_validate_export_path_unsupported_extension() {
+        let path = PathBuf::from("/tmp/file.exe");
+        let result = validate_export_path(&path);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Unsupported export file extension"));
+    }
+
+    #[test]
+    fn test_validate_export_path_no_extension() {
+        let path = PathBuf::from("/tmp/file");
+        let result = validate_export_path(&path);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("must have an extension"));
+    }
+
+    // ============================================================================
+    // Sanitization function tests
+    // ============================================================================
+
+    #[test]
+    fn test_sanitize_input_empty() {
+        let result = sanitize_input("");
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Input cannot be empty"));
+    }
+
+    #[test]
+    fn test_sanitize_input_too_long() {
+        let long_input = "x".repeat(1001);
+        let result = sanitize_input(&long_input);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Input too long"));
+    }
+
+    #[test]
+    fn test_sanitize_input_valid() {
+        let result = sanitize_input("valid-input_123.test@example");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "valid-input_123.test@example");
+    }
+
+    #[test]
+    fn test_sanitize_input_removes_dangerous_chars() {
+        let result = sanitize_input("test<script>alert('xss')</script>");
+        assert!(result.is_ok());
+        // Should only contain alphanumeric and allowed chars
+        let sanitized = result.unwrap();
+        assert!(!sanitized.contains('<'));
+        assert!(!sanitized.contains('>'));
+        assert!(!sanitized.contains('\''));
+    }
+
+    #[test]
+    fn test_sanitize_search_text_empty() {
+        let result = sanitize_search_text("");
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Search text cannot be empty"));
+    }
+
+    #[test]
+    fn test_sanitize_search_text_too_long() {
+        let long_text = "x".repeat(1001);
+        let result = sanitize_search_text(&long_text);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Search text too long"));
+    }
+
+    #[test]
+    fn test_sanitize_search_text_injection_patterns() {
+        // SQL injection patterns
+        assert!(sanitize_search_text("test'; DROP TABLE users").is_err());
+        assert!(sanitize_search_text("test -- comment").is_err());
+        assert!(sanitize_search_text("test /* comment */").is_err());
+        assert!(sanitize_search_text("SELECT * FROM users").is_err());
+        assert!(sanitize_search_text("DELETE FROM users").is_err());
+    }
+
+    #[test]
+    fn test_sanitize_search_text_valid() {
+        let result = sanitize_search_text("valid search query");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "valid search query");
+    }
+
+    // ============================================================================
+    // Parsing function tests
+    // ============================================================================
+
+    #[test]
+    fn test_parse_event_type_authentication() {
+        let result = parse_event_type("authentication");
+        assert!(result.is_ok());
+        assert!(matches!(result.unwrap(), AuditEventType::Authentication));
+
+        let result = parse_event_type("auth");
+        assert!(result.is_ok());
+        assert!(matches!(result.unwrap(), AuditEventType::Authentication));
+    }
+
+    #[test]
+    fn test_parse_event_type_custom() {
+        let result = parse_event_type("custom_event");
+        assert!(result.is_ok());
+        assert!(matches!(result.unwrap(), AuditEventType::Custom(_)));
+    }
+
+    #[test]
+    fn test_parse_severity_valid() {
+        assert!(matches!(parse_severity("low").unwrap(), EventSeverity::Low));
+        assert!(matches!(
+            parse_severity("medium").unwrap(),
+            EventSeverity::Medium
+        ));
+        assert!(matches!(
+            parse_severity("high").unwrap(),
+            EventSeverity::High
+        ));
+        assert!(matches!(
+            parse_severity("critical").unwrap(),
+            EventSeverity::Critical
+        ));
+    }
+
+    #[test]
+    fn test_parse_severity_invalid() {
+        let result = parse_severity("invalid");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Invalid severity"));
+    }
+
+    #[test]
+    fn test_parse_outcome_valid() {
+        assert!(matches!(
+            parse_outcome("success").unwrap(),
+            ActionOutcome::Success
+        ));
+        assert!(matches!(
+            parse_outcome("failure").unwrap(),
+            ActionOutcome::Failure
+        ));
+        assert!(matches!(
+            parse_outcome("failed").unwrap(),
+            ActionOutcome::Failure
+        ));
+        assert!(matches!(
+            parse_outcome("partial").unwrap(),
+            ActionOutcome::Partial
+        ));
+        assert!(matches!(
+            parse_outcome("unknown").unwrap(),
+            ActionOutcome::Unknown
+        ));
+    }
+
+    #[test]
+    fn test_parse_outcome_invalid() {
+        let result = parse_outcome("invalid");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Invalid outcome"));
+    }
+
+    #[test]
+    fn test_parse_sort_order_valid() {
+        assert!(matches!(
+            parse_sort_order("asc").unwrap(),
+            SortOrder::Ascending
+        ));
+        assert!(matches!(
+            parse_sort_order("ascending").unwrap(),
+            SortOrder::Ascending
+        ));
+        assert!(matches!(
+            parse_sort_order("desc").unwrap(),
+            SortOrder::Descending
+        ));
+        assert!(matches!(
+            parse_sort_order("descending").unwrap(),
+            SortOrder::Descending
+        ));
+    }
+
+    #[test]
+    fn test_parse_sort_order_invalid() {
+        let result = parse_sort_order("invalid");
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid sort order"));
+    }
+
+    #[test]
+    fn test_parse_sort_field_valid() {
+        assert!(matches!(
+            parse_sort_field("timestamp").unwrap(),
+            SortField::Timestamp
+        ));
+        assert!(matches!(
+            parse_sort_field("time").unwrap(),
+            SortField::Timestamp
+        ));
+        assert!(matches!(
+            parse_sort_field("severity").unwrap(),
+            SortField::Severity
+        ));
+        assert!(matches!(
+            parse_sort_field("event_type").unwrap(),
+            SortField::EventType
+        ));
+        assert!(matches!(
+            parse_sort_field("actor").unwrap(),
+            SortField::Actor
+        ));
+        assert!(matches!(
+            parse_sort_field("resource").unwrap(),
+            SortField::Resource
+        ));
+    }
+
+    #[test]
+    fn test_parse_sort_field_invalid() {
+        let result = parse_sort_field("invalid");
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid sort field"));
+    }
+
+    #[test]
+    fn test_parse_export_format_valid() {
+        assert!(matches!(
+            parse_export_format("json").unwrap(),
+            ExportFormat::Json
+        ));
+        assert!(matches!(
+            parse_export_format("csv").unwrap(),
+            ExportFormat::Csv
+        ));
+        assert!(matches!(
+            parse_export_format("parquet").unwrap(),
+            ExportFormat::Parquet
+        ));
+        assert!(matches!(
+            parse_export_format("avro").unwrap(),
+            ExportFormat::Avro
+        ));
+    }
+
+    #[test]
+    fn test_parse_export_format_invalid() {
+        let result = parse_export_format("invalid");
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid export format"));
+    }
+
+    #[test]
+    fn test_parse_time_range_valid() {
+        let range = parse_time_range("1h");
+        assert!(range.is_ok());
+        let dr = range.unwrap();
+        assert!(dr.end > dr.start);
+
+        let range = parse_time_range("24h");
+        assert!(range.is_ok());
+
+        let range = parse_time_range("7d");
+        assert!(range.is_ok());
+
+        let range = parse_time_range("30d");
+        assert!(range.is_ok());
+
+        let range = parse_time_range("1y");
+        assert!(range.is_ok());
+    }
+
+    #[test]
+    fn test_parse_compliance_standard_known() {
+        let gdpr = parse_compliance_standard("GDPR").unwrap();
+        assert_eq!(gdpr.name, "GDPR");
+
+        let hipaa = parse_compliance_standard("HIPAA").unwrap();
+        assert_eq!(hipaa.name, "HIPAA");
+
+        let sox = parse_compliance_standard("SOX").unwrap();
+        assert_eq!(sox.name, "SOX");
+
+        let pci = parse_compliance_standard("PCI").unwrap();
+        assert_eq!(pci.name, "PCI");
+    }
+
+    #[test]
+    fn test_parse_compliance_standard_custom() {
+        let custom = parse_compliance_standard("CUSTOM_STANDARD").unwrap();
+        assert_eq!(custom.name, "CUSTOM_STANDARD");
+        assert!(custom.description.contains("Custom compliance standard"));
+    }
 }

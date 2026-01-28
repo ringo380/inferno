@@ -1,4 +1,4 @@
-#![allow(dead_code, unused_imports, unused_variables)]
+#![allow(dead_code, unused_imports, unused_variables, clippy::ptr_arg)]
 //! # Upgrade Manager
 //!
 //! Central coordinator for all upgrade operations, providing a unified interface

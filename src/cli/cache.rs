@@ -4,11 +4,24 @@ use crate::{
     metrics::MetricsCollector,
     models::ModelManager,
 };
-use anyhow::Result;
+use anyhow::{bail, Result};
 use clap::{Args, Subcommand, ValueEnum};
 use serde_json;
 use std::{sync::Arc, time::Instant};
 use tracing::{info, warn};
+
+// ============================================================================
+// Validation Constants
+// ============================================================================
+
+/// Maximum number of models that can be cached
+const MAX_CACHED_MODELS_LIMIT: usize = 100;
+
+/// Maximum memory limit in MB (1TB)
+const MAX_MEMORY_MB_LIMIT: u64 = 1_000_000;
+
+/// Maximum TTL in seconds (1 year)
+const MAX_TTL_SECONDS_LIMIT: u64 = 31_536_000;
 
 #[derive(Args)]
 pub struct CacheArgs {
@@ -308,6 +321,23 @@ async fn warmup_models(
 }
 
 async fn clear_cache(config: &Config, model: Option<String>, force: bool) -> Result<()> {
+    // Validate always-warm configuration upfront (fail fast instead of warn)
+    if !force {
+        if let Some(ref model_name) = model {
+            if config.cache.always_warm.contains(model_name) {
+                bail!(
+                    "Model '{}' is configured as always-warm. Use --force to clear.",
+                    model_name
+                );
+            }
+        } else if !config.cache.always_warm.is_empty() {
+            bail!(
+                "Some models are configured as always-warm: {:?}. Use --force to clear all.",
+                config.cache.always_warm
+            );
+        }
+    }
+
     info!("Clearing model cache...");
 
     let model_manager = Arc::new(ModelManager::new(&config.models_dir));
@@ -326,24 +356,9 @@ async fn clear_cache(config: &Config, model: Option<String>, force: bool) -> Res
     .await?;
 
     if let Some(model_name) = model {
-        // Clear specific model
-        if config.cache.always_warm.contains(&model_name) && !force {
-            warn!(
-                "Model {} is configured as always-warm. Use --force to clear.",
-                model_name
-            );
-            return Ok(());
-        }
-
         cache.evict_model(&model_name).await?;
         println!("✓ Cleared model: {}", model_name);
     } else {
-        // Clear all models
-        if !force && !config.cache.always_warm.is_empty() {
-            warn!("Some models are configured as always-warm. Use --force to clear all.");
-            return Ok(());
-        }
-
         cache.clear_cache().await?;
         println!("✓ Cleared all cached models");
     }
@@ -351,6 +366,57 @@ async fn clear_cache(config: &Config, model: Option<String>, force: bool) -> Res
     let stats = cache.get_stats().await;
     println!("Remaining models: {}", stats.total_models);
     println!("Memory usage: {:.2} MB", stats.memory_usage_mb);
+
+    Ok(())
+}
+
+/// Validate configuration parameters
+fn validate_cache_config(
+    max_models: Option<usize>,
+    max_memory_mb: Option<u64>,
+    ttl_seconds: Option<u64>,
+) -> Result<()> {
+    // Validate max_models
+    if let Some(max) = max_models {
+        if max == 0 {
+            bail!("Max models cannot be 0");
+        }
+        if max > MAX_CACHED_MODELS_LIMIT {
+            bail!(
+                "Max models cannot exceed {} (got {})",
+                MAX_CACHED_MODELS_LIMIT,
+                max
+            );
+        }
+    }
+
+    // Validate max_memory_mb
+    if let Some(mem) = max_memory_mb {
+        if mem == 0 {
+            bail!("Max memory cannot be 0");
+        }
+        if mem > MAX_MEMORY_MB_LIMIT {
+            bail!(
+                "Max memory cannot exceed {} MB (1TB) (got {} MB)",
+                MAX_MEMORY_MB_LIMIT,
+                mem
+            );
+        }
+    }
+
+    // Validate ttl_seconds
+    if let Some(ttl) = ttl_seconds {
+        if ttl == 0 {
+            bail!("TTL cannot be 0");
+        }
+        if ttl > MAX_TTL_SECONDS_LIMIT {
+            bail!(
+                "TTL cannot exceed {} seconds (1 year) (got {} seconds)",
+                MAX_TTL_SECONDS_LIMIT,
+                ttl
+            );
+        }
+    }
 
     Ok(())
 }
@@ -364,6 +430,9 @@ async fn configure_cache(
     strategy: Option<WarmupStrategyArg>,
     always_warm: Option<String>,
 ) -> Result<()> {
+    // Validate inputs first
+    validate_cache_config(max_models, max_memory_mb, ttl_seconds)?;
+
     println!("=== Cache Configuration Update ===");
 
     if let Some(max) = max_models {
@@ -398,9 +467,12 @@ async fn benchmark_cache(
     models: Vec<String>,
     concurrent: bool,
 ) -> Result<()> {
+    // Validate inputs
     if models.is_empty() {
-        println!("Please specify models to benchmark");
-        return Ok(());
+        bail!("No models specified for benchmark. Use --models to specify models to test.");
+    }
+    if requests == 0 {
+        bail!("Number of requests must be greater than 0");
     }
 
     info!("Starting cache benchmark...");
@@ -564,4 +636,108 @@ async fn export_cache_config(
     }
 
     Ok(())
+}
+
+// ============================================================================
+// Tests
+// ============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_validate_cache_config_valid() {
+        // Valid configuration
+        let result = validate_cache_config(Some(10), Some(1024), Some(3600));
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_cache_config_none_values() {
+        // All None values should be valid
+        let result = validate_cache_config(None, None, None);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_cache_config_max_models_zero() {
+        let result = validate_cache_config(Some(0), None, None);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("cannot be 0"));
+    }
+
+    #[test]
+    fn test_validate_cache_config_max_models_excessive() {
+        let result = validate_cache_config(Some(200), None, None);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("cannot exceed"));
+    }
+
+    #[test]
+    fn test_validate_cache_config_max_memory_zero() {
+        let result = validate_cache_config(None, Some(0), None);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("cannot be 0"));
+    }
+
+    #[test]
+    fn test_validate_cache_config_max_memory_excessive() {
+        let result = validate_cache_config(None, Some(2_000_000), None);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("cannot exceed"));
+    }
+
+    #[test]
+    fn test_validate_cache_config_ttl_zero() {
+        let result = validate_cache_config(None, None, Some(0));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("cannot be 0"));
+    }
+
+    #[test]
+    fn test_validate_cache_config_ttl_excessive() {
+        let result = validate_cache_config(None, None, Some(50_000_000));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("cannot exceed"));
+    }
+
+    #[test]
+    fn test_validate_cache_config_boundary_values() {
+        // Test boundary values (should be valid)
+        let result = validate_cache_config(
+            Some(MAX_CACHED_MODELS_LIMIT),
+            Some(MAX_MEMORY_MB_LIMIT),
+            Some(MAX_TTL_SECONDS_LIMIT),
+        );
+        assert!(result.is_ok());
+
+        // Test just over boundary (should fail)
+        let result = validate_cache_config(Some(MAX_CACHED_MODELS_LIMIT + 1), None, None);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_warmup_strategy_conversion() {
+        assert!(matches!(
+            WarmupStrategy::from(WarmupStrategyArg::UsageBased),
+            WarmupStrategy::UsageBased
+        ));
+        assert!(matches!(
+            WarmupStrategy::from(WarmupStrategyArg::Predictive),
+            WarmupStrategy::Predictive
+        ));
+        assert!(matches!(
+            WarmupStrategy::from(WarmupStrategyArg::SizeOptimized),
+            WarmupStrategy::SizeOptimized
+        ));
+        assert!(matches!(
+            WarmupStrategy::from(WarmupStrategyArg::Priority),
+            WarmupStrategy::Priority
+        ));
+        assert!(matches!(
+            WarmupStrategy::from(WarmupStrategyArg::Hybrid),
+            WarmupStrategy::Hybrid
+        ));
+    }
 }

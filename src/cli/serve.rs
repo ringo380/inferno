@@ -48,7 +48,52 @@ pub struct ServeArgs {
     pub workers: usize,
 }
 
+/// Maximum allowed worker count for distributed mode
+const MAX_DISTRIBUTED_WORKERS: usize = 100;
+
+/// Validate server arguments before execution
+pub fn validate_args(args: &ServeArgs) -> Result<()> {
+    // Validate port range (port is part of SocketAddr, already validated by clap)
+    let port = args.bind.port();
+    if port == 0 {
+        anyhow::bail!(
+            "Invalid port 0: Port must be between 1 and 65535. \
+            Use a specific port like 8080 or 3000."
+        );
+    }
+
+    // Validate worker count for distributed mode
+    if args.distributed && args.workers > MAX_DISTRIBUTED_WORKERS {
+        anyhow::bail!(
+            "Worker count {} exceeds maximum of {} for distributed mode. \
+            Reduce the worker count or use auto-detection with --workers 0.",
+            args.workers,
+            MAX_DISTRIBUTED_WORKERS
+        );
+    }
+
+    // Warn about privileged ports on Unix systems
+    #[cfg(unix)]
+    if port < 1024 && !is_running_as_root() {
+        warn!(
+            "Port {} is a privileged port (< 1024). \
+            You may need root/sudo privileges to bind to this port.",
+            port
+        );
+    }
+
+    Ok(())
+}
+
+#[cfg(unix)]
+fn is_running_as_root() -> bool {
+    unsafe { libc::geteuid() == 0 }
+}
+
 pub async fn execute(args: ServeArgs, config: &Config) -> Result<()> {
+    // Validate arguments before proceeding
+    validate_args(&args)?;
+
     info!("Starting HTTP server on {}", args.bind);
 
     // Initialize metrics collector
@@ -502,4 +547,96 @@ async fn shutdown_signal() {
     }
 
     info!("Shutdown signal received");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn create_test_args(bind: &str, distributed: bool, workers: usize) -> ServeArgs {
+        ServeArgs {
+            bind: bind.parse().unwrap(),
+            model: None,
+            distributed,
+            workers,
+        }
+    }
+
+    #[test]
+    fn test_validate_args_valid_defaults() {
+        let args = create_test_args("127.0.0.1:8080", false, 0);
+        assert!(validate_args(&args).is_ok());
+    }
+
+    #[test]
+    fn test_validate_args_valid_distributed() {
+        let args = create_test_args("127.0.0.1:8080", true, 4);
+        assert!(validate_args(&args).is_ok());
+    }
+
+    #[test]
+    fn test_validate_args_max_workers_allowed() {
+        let args = create_test_args("127.0.0.1:8080", true, MAX_DISTRIBUTED_WORKERS);
+        assert!(validate_args(&args).is_ok());
+    }
+
+    #[test]
+    fn test_validate_args_too_many_workers() {
+        let args = create_test_args("127.0.0.1:8080", true, 150);
+        let result = validate_args(&args);
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("Worker count"));
+        assert!(err_msg.contains("150"));
+        assert!(err_msg.contains("100"));
+    }
+
+    #[test]
+    fn test_validate_args_workers_ignored_non_distributed() {
+        // Workers > MAX is allowed when not in distributed mode
+        let args = create_test_args("127.0.0.1:8080", false, 200);
+        assert!(validate_args(&args).is_ok());
+    }
+
+    #[test]
+    fn test_validate_args_various_ports() {
+        // Test various valid ports
+        let args = create_test_args("127.0.0.1:3000", false, 0);
+        assert!(validate_args(&args).is_ok());
+
+        let args = create_test_args("0.0.0.0:9090", false, 0);
+        assert!(validate_args(&args).is_ok());
+
+        let args = create_test_args("127.0.0.1:65535", false, 0);
+        assert!(validate_args(&args).is_ok());
+    }
+
+    #[test]
+    fn test_validate_args_ipv6_address() {
+        let args = ServeArgs {
+            bind: "[::1]:8080".parse().unwrap(),
+            model: None,
+            distributed: false,
+            workers: 0,
+        };
+        assert!(validate_args(&args).is_ok());
+    }
+
+    #[test]
+    fn test_validate_args_with_model() {
+        let args = ServeArgs {
+            bind: "127.0.0.1:8080".parse().unwrap(),
+            model: Some("test-model".to_string()),
+            distributed: false,
+            workers: 0,
+        };
+        assert!(validate_args(&args).is_ok());
+    }
+
+    #[test]
+    fn test_validate_args_distributed_auto_workers() {
+        // Auto worker detection (workers = 0) should be valid
+        let args = create_test_args("127.0.0.1:8080", true, 0);
+        assert!(validate_args(&args).is_ok());
+    }
 }

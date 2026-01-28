@@ -1,4 +1,4 @@
-#![allow(dead_code, unused_imports, unused_variables)]
+#![allow(dead_code, unused_imports, unused_variables, clippy::ptr_arg)]
 //! # macOS-Specific Upgrade Handler
 //!
 //! Handles macOS-specific upgrade operations including App Bundle management,

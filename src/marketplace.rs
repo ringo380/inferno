@@ -1775,7 +1775,7 @@ impl RegistryClient {
         &self,
         url: &str,
         target_path: &Path,
-        mut progress_callback: F,
+        progress_callback: F,
     ) -> Result<()>
     where
         F: FnMut(u64, u64) + Send + 'static,

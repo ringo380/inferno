@@ -168,6 +168,7 @@ impl MetricsCollector {
     ///
     /// # Example
     /// ```no_run
+    /// use inferno::metrics::MetricsCollector;
     /// let (collector, processor) = MetricsCollector::new();
     /// processor.start(); // Start background event processing
     /// // Use collector.record_inference(...) from any thread

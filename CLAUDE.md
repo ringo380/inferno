@@ -52,7 +52,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - ✅ Metal 3 support detection
 - ✅ Unified memory architecture support
 
-**Metal GPU Acceleration (Phase 2.3 - COMPLETE ✅)**:
+**Metal GPU Acceleration (via GGUF backend)**:
 - ✅ **Real Metal GPU inference via GGUF backend** (`src/backends/gguf.rs`)
 - ✅ Automatic Metal acceleration on macOS (via llama-cpp-2)
 - ✅ Full inference with LlamaContext and batch processing
@@ -66,7 +66,22 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - 13B models: >15 tokens/sec on M2 Max
 - 70B models: >5 tokens/sec on M4 Max (with unified memory)
 
-**Note**: The placeholder `src/backends/metal.rs` remains for future custom Metal shader work, but the production-ready GPU acceleration is now in the GGUF backend using llama.cpp's battle-tested Metal implementation.
+**Note**: The `src/backends/metal.rs` file is **deprecated**. It contains useful GPU detection code but its inference methods are stubs. Use the GGUF backend with `gpu_enabled: true` for Metal acceleration.
+
+**Backend Configuration Helpers**:
+```rust
+// Automatic Metal acceleration (default on macOS)
+let config = BackendConfig::default();  // gpu_enabled: true on macOS
+
+// Explicit Metal optimization (larger context/batch)
+let config = BackendConfig::with_metal_acceleration();
+
+// CPU-only mode (for testing or compatibility)
+let config = BackendConfig::cpu_only();
+
+// BackendType::Metal automatically uses GGUF + Metal acceleration
+let backend = Backend::new(BackendType::Metal, &config)?;  // Uses GGUF internally
+```
 
 ### Development Tools
 - `./bootstrap.sh` - Bootstrap new project from scratch
@@ -117,15 +132,10 @@ src/
 │
 ├── enterprise/               # 🔹 Enterprise Features
 │   ├── distributed/          # Distributed inference
-│   ├── multi_tenancy/        # Multi-tenant isolation
-│   ├── federated/            # Federated learning
-│   ├── marketplace/          # Model marketplace
-│   ├── api_gateway/          # API gateway & rate limiting
-│   ├── data_pipeline/        # ETL data pipeline
-│   └── qa_framework/         # Quality assurance
+│   └── marketplace/          # Model marketplace
 │
 └── interfaces/               # 🔹 User Interfaces
-    ├── cli/                  # Command-line interface (46 commands)
+    ├── cli/                  # Command-line interface (40+ commands)
     ├── api/                  # HTTP API (OpenAI-compatible)
     ├── tui/                  # Terminal UI
     ├── dashboard/            # Web dashboard

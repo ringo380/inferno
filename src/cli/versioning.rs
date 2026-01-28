@@ -325,6 +325,10 @@ pub async fn execute(args: VersioningArgs, _config: &Config) -> Result<()> {
             tags,
             created_by,
         } => {
+            // Validation
+            if model_name.is_empty() {
+                return Err(anyhow!("Model name cannot be empty"));
+            }
             if !model_file.exists() {
                 return Err(anyhow!("Model file does not exist: {:?}", model_file));
             }
@@ -415,6 +419,14 @@ pub async fn execute(args: VersioningArgs, _config: &Config) -> Result<()> {
             metadata,
             deployments,
         } => {
+            // Validation
+            if model_name.is_empty() {
+                return Err(anyhow!("Model name cannot be empty"));
+            }
+            if version_id.is_empty() {
+                return Err(anyhow!("Version ID cannot be empty"));
+            }
+
             let version = manager.get_version(&model_name, &version_id).await?;
 
             println!("Model Version Details:");
@@ -483,6 +495,14 @@ pub async fn execute(args: VersioningArgs, _config: &Config) -> Result<()> {
             status,
             promoted_by,
         } => {
+            // Validation
+            if model_name.is_empty() {
+                return Err(anyhow!("Model name cannot be empty"));
+            }
+            if version_id.is_empty() {
+                return Err(anyhow!("Version ID cannot be empty"));
+            }
+
             let target_status = VersionStatus::from(status);
 
             println!(
@@ -501,6 +521,17 @@ pub async fn execute(args: VersioningArgs, _config: &Config) -> Result<()> {
             environment,
             config: deploy_config,
         } => {
+            // Validation
+            if model_name.is_empty() {
+                return Err(anyhow!("Model name cannot be empty"));
+            }
+            if version_id.is_empty() {
+                return Err(anyhow!("Version ID cannot be empty"));
+            }
+            if environment.is_empty() {
+                return Err(anyhow!("Environment cannot be empty"));
+            }
+
             let deployment_config = if let Some(config_str) = deploy_config {
                 serde_json::from_str(&config_str)?
             } else {
@@ -525,6 +556,17 @@ pub async fn execute(args: VersioningArgs, _config: &Config) -> Result<()> {
             triggered_by,
             force,
         } => {
+            // Validation
+            if model_name.is_empty() {
+                return Err(anyhow!("Model name cannot be empty"));
+            }
+            if version_id.is_empty() {
+                return Err(anyhow!("Version ID cannot be empty"));
+            }
+            if environment.is_empty() {
+                return Err(anyhow!("Environment cannot be empty"));
+            }
+
             if !force {
                 print!(
                     "Are you sure you want to rollback {} in {} to version {}? [y/N]: ",
@@ -563,6 +605,14 @@ pub async fn execute(args: VersioningArgs, _config: &Config) -> Result<()> {
             version_id,
             force,
         } => {
+            // Validation
+            if model_name.is_empty() {
+                return Err(anyhow!("Model name cannot be empty"));
+            }
+            if version_id.is_empty() {
+                return Err(anyhow!("Version ID cannot be empty"));
+            }
+
             if !force {
                 print!("Are you sure you want to delete version {} of {}? This cannot be undone. [y/N]: ",
                         version_id, model_name);
@@ -586,6 +636,20 @@ pub async fn execute(args: VersioningArgs, _config: &Config) -> Result<()> {
             metadata,
             performance,
         } => {
+            // Validation
+            if model_name.is_empty() {
+                return Err(anyhow!("Model name cannot be empty"));
+            }
+            if version1.is_empty() {
+                return Err(anyhow!("Version 1 cannot be empty"));
+            }
+            if version2.is_empty() {
+                return Err(anyhow!("Version 2 cannot be empty"));
+            }
+            if version1 == version2 {
+                return Err(anyhow!("Cannot compare version to itself"));
+            }
+
             let v1 = manager.get_version(&model_name, &version1).await?;
             let v2 = manager.get_version(&model_name, &version2).await?;
 
@@ -830,5 +894,354 @@ fn display_deployments(deployments: &[&ActiveDeployment], format: OutputFormat) 
         _ => {
             println!("Format {:?} not yet implemented", format);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_version_status_arg_conversion() {
+        assert!(matches!(
+            VersionStatus::from(VersionStatusArg::Draft),
+            VersionStatus::Draft
+        ));
+        assert!(matches!(
+            VersionStatus::from(VersionStatusArg::Testing),
+            VersionStatus::Testing
+        ));
+        assert!(matches!(
+            VersionStatus::from(VersionStatusArg::Staging),
+            VersionStatus::Staging
+        ));
+        assert!(matches!(
+            VersionStatus::from(VersionStatusArg::Production),
+            VersionStatus::Production
+        ));
+        assert!(matches!(
+            VersionStatus::from(VersionStatusArg::Deprecated),
+            VersionStatus::Deprecated
+        ));
+        assert!(matches!(
+            VersionStatus::from(VersionStatusArg::Archived),
+            VersionStatus::Archived
+        ));
+        assert!(matches!(
+            VersionStatus::from(VersionStatusArg::Failed),
+            VersionStatus::Failed
+        ));
+    }
+
+    #[test]
+    fn test_rollback_reason_arg_conversion() {
+        assert!(matches!(
+            RollbackReason::from(RollbackReasonArg::Manual),
+            RollbackReason::Manual
+        ));
+        assert!(matches!(
+            RollbackReason::from(RollbackReasonArg::HealthCheck),
+            RollbackReason::HealthCheck
+        ));
+        assert!(matches!(
+            RollbackReason::from(RollbackReasonArg::Emergency),
+            RollbackReason::Emergency
+        ));
+        assert!(matches!(
+            RollbackReason::from(RollbackReasonArg::ErrorRate),
+            RollbackReason::AutoTriggered(TriggerType::ErrorRate)
+        ));
+        assert!(matches!(
+            RollbackReason::from(RollbackReasonArg::ResponseTime),
+            RollbackReason::AutoTriggered(TriggerType::ResponseTime)
+        ));
+        assert!(matches!(
+            RollbackReason::from(RollbackReasonArg::Throughput),
+            RollbackReason::AutoTriggered(TriggerType::Throughput)
+        ));
+        assert!(matches!(
+            RollbackReason::from(RollbackReasonArg::Accuracy),
+            RollbackReason::AutoTriggered(TriggerType::Accuracy)
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_create_validation_empty_model_name() {
+        let config = Config::default();
+        let args = VersioningArgs {
+            command: VersioningCommand::Create {
+                model_name: String::new(),
+                model_file: PathBuf::from("/tmp/model.gguf"),
+                version: None,
+                description: None,
+                model_type: "llm".to_string(),
+                architecture: "transformer".to_string(),
+                framework: "pytorch".to_string(),
+                framework_version: "2.0".to_string(),
+                parameters: None,
+                format: "gguf".to_string(),
+                tags: None,
+                created_by: "test".to_string(),
+            },
+        };
+
+        let result = execute(args, &config).await;
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Model name cannot be empty"));
+    }
+
+    #[tokio::test]
+    async fn test_create_validation_missing_file() {
+        let config = Config::default();
+        let args = VersioningArgs {
+            command: VersioningCommand::Create {
+                model_name: "test-model".to_string(),
+                model_file: PathBuf::from("/nonexistent/path/model.gguf"),
+                version: None,
+                description: None,
+                model_type: "llm".to_string(),
+                architecture: "transformer".to_string(),
+                framework: "pytorch".to_string(),
+                framework_version: "2.0".to_string(),
+                parameters: None,
+                format: "gguf".to_string(),
+                tags: None,
+                created_by: "test".to_string(),
+            },
+        };
+
+        let result = execute(args, &config).await;
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Model file does not exist"));
+    }
+
+    #[tokio::test]
+    async fn test_promote_validation_empty_model_name() {
+        let config = Config::default();
+        let args = VersioningArgs {
+            command: VersioningCommand::Promote {
+                model_name: String::new(),
+                version_id: "v1.0.0".to_string(),
+                status: VersionStatusArg::Production,
+                promoted_by: "test".to_string(),
+            },
+        };
+
+        let result = execute(args, &config).await;
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Model name cannot be empty"));
+    }
+
+    #[tokio::test]
+    async fn test_promote_validation_empty_version_id() {
+        let config = Config::default();
+        let args = VersioningArgs {
+            command: VersioningCommand::Promote {
+                model_name: "test-model".to_string(),
+                version_id: String::new(),
+                status: VersionStatusArg::Production,
+                promoted_by: "test".to_string(),
+            },
+        };
+
+        let result = execute(args, &config).await;
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Version ID cannot be empty"));
+    }
+
+    #[tokio::test]
+    async fn test_rollback_validation_empty_model_name() {
+        let config = Config::default();
+        let args = VersioningArgs {
+            command: VersioningCommand::Rollback {
+                model_name: String::new(),
+                version_id: "v1.0.0".to_string(),
+                environment: "production".to_string(),
+                reason: RollbackReasonArg::Manual,
+                triggered_by: "test".to_string(),
+                force: true,
+            },
+        };
+
+        let result = execute(args, &config).await;
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Model name cannot be empty"));
+    }
+
+    #[tokio::test]
+    async fn test_rollback_validation_empty_version_id() {
+        let config = Config::default();
+        let args = VersioningArgs {
+            command: VersioningCommand::Rollback {
+                model_name: "test-model".to_string(),
+                version_id: String::new(),
+                environment: "production".to_string(),
+                reason: RollbackReasonArg::Manual,
+                triggered_by: "test".to_string(),
+                force: true,
+            },
+        };
+
+        let result = execute(args, &config).await;
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Version ID cannot be empty"));
+    }
+
+    #[tokio::test]
+    async fn test_compare_validation_empty_model_name() {
+        let config = Config::default();
+        let args = VersioningArgs {
+            command: VersioningCommand::Compare {
+                model_name: String::new(),
+                version1: "v1.0.0".to_string(),
+                version2: "v2.0.0".to_string(),
+                metadata: false,
+                performance: false,
+            },
+        };
+
+        let result = execute(args, &config).await;
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Model name cannot be empty"));
+    }
+
+    #[tokio::test]
+    async fn test_compare_validation_same_versions() {
+        let config = Config::default();
+        let args = VersioningArgs {
+            command: VersioningCommand::Compare {
+                model_name: "test-model".to_string(),
+                version1: "v1.0.0".to_string(),
+                version2: "v1.0.0".to_string(),
+                metadata: false,
+                performance: false,
+            },
+        };
+
+        let result = execute(args, &config).await;
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Cannot compare version to itself"));
+    }
+
+    #[tokio::test]
+    async fn test_delete_validation_empty_model_name() {
+        let config = Config::default();
+        let args = VersioningArgs {
+            command: VersioningCommand::Delete {
+                model_name: String::new(),
+                version_id: "v1.0.0".to_string(),
+                force: true,
+            },
+        };
+
+        let result = execute(args, &config).await;
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Model name cannot be empty"));
+    }
+
+    #[tokio::test]
+    async fn test_delete_validation_empty_version_id() {
+        let config = Config::default();
+        let args = VersioningArgs {
+            command: VersioningCommand::Delete {
+                model_name: "test-model".to_string(),
+                version_id: String::new(),
+                force: true,
+            },
+        };
+
+        let result = execute(args, &config).await;
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Version ID cannot be empty"));
+    }
+
+    #[tokio::test]
+    async fn test_deploy_validation_empty_environment() {
+        let config = Config::default();
+        let args = VersioningArgs {
+            command: VersioningCommand::Deploy {
+                model_name: "test-model".to_string(),
+                version_id: "v1.0.0".to_string(),
+                environment: String::new(),
+                config: None,
+            },
+        };
+
+        let result = execute(args, &config).await;
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Environment cannot be empty"));
+    }
+
+    #[tokio::test]
+    async fn test_show_validation_empty_model_name() {
+        let config = Config::default();
+        let args = VersioningArgs {
+            command: VersioningCommand::Show {
+                model_name: String::new(),
+                version_id: "v1.0.0".to_string(),
+                metadata: false,
+                deployments: false,
+            },
+        };
+
+        let result = execute(args, &config).await;
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Model name cannot be empty"));
+    }
+
+    #[tokio::test]
+    async fn test_show_validation_empty_version_id() {
+        let config = Config::default();
+        let args = VersioningArgs {
+            command: VersioningCommand::Show {
+                model_name: "test-model".to_string(),
+                version_id: String::new(),
+                metadata: false,
+                deployments: false,
+            },
+        };
+
+        let result = execute(args, &config).await;
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Version ID cannot be empty"));
     }
 }

@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use crate::config::Config;
 use crate::deployment::{DeploymentArgs, DeploymentConfig, DeploymentManager};
 use anyhow::{Context, Result};
@@ -6,6 +7,90 @@ use std::collections::HashMap;
 use std::io;
 use std::path::PathBuf;
 use tracing::{info, warn};
+
+// ============================================================================
+// Validation Helpers
+// ============================================================================
+
+/// Valid environments for deployment operations
+const VALID_ENVIRONMENTS: &[&str] = &["dev", "staging", "prod", "production"];
+
+/// Valid deployment strategies
+const VALID_STRATEGIES: &[&str] = &["rolling", "blue-green", "canary"];
+
+/// Validate that the environment is one of the allowed values
+fn validate_environment(environment: &str) -> Result<()> {
+    if !VALID_ENVIRONMENTS.contains(&environment) {
+        anyhow::bail!(
+            "Invalid environment '{}'. Must be one of: dev, staging, prod, production",
+            environment
+        );
+    }
+    Ok(())
+}
+
+/// Validate that the environment is one of the allowed values, including "all" for status queries
+fn validate_environment_with_all(environment: &str) -> Result<()> {
+    if environment != "all" && !VALID_ENVIRONMENTS.contains(&environment) {
+        anyhow::bail!(
+            "Invalid environment '{}'. Must be one of: dev, staging, prod, production, all",
+            environment
+        );
+    }
+    Ok(())
+}
+
+/// Validate that replicas is greater than zero
+fn validate_replicas(replicas: u32) -> Result<()> {
+    if replicas == 0 {
+        anyhow::bail!("Replicas must be greater than 0");
+    }
+    Ok(())
+}
+
+/// Validate deployment strategy
+fn validate_strategy(strategy: &str) -> Result<()> {
+    if !VALID_STRATEGIES.contains(&strategy) {
+        anyhow::bail!(
+            "Invalid deployment strategy '{}'. Must be one of: rolling, blue-green, canary",
+            strategy
+        );
+    }
+    Ok(())
+}
+
+/// Validate output format
+fn validate_output_format(format: &str) -> Result<()> {
+    if !["table", "json", "yaml"].contains(&format) {
+        anyhow::bail!(
+            "Invalid output format '{}'. Must be one of: table, json, yaml",
+            format
+        );
+    }
+    Ok(())
+}
+
+/// Validate manifest format
+fn validate_manifest_format(format: &str) -> Result<()> {
+    if !["yaml", "helm"].contains(&format) {
+        anyhow::bail!(
+            "Invalid manifest format '{}'. Must be one of: yaml, helm",
+            format
+        );
+    }
+    Ok(())
+}
+
+/// Validate config export format
+fn validate_export_format(format: &str) -> Result<()> {
+    if !["yaml", "json", "env"].contains(&format) {
+        anyhow::bail!(
+            "Invalid export format '{}'. Must be one of: yaml, json, env",
+            format
+        );
+    }
+    Ok(())
+}
 
 /// Configuration for deployment operations
 /// Reduces function signature from 12 parameters to 2
@@ -592,6 +677,12 @@ pub async fn handle_deployment_command(args: DeploymentCliArgs) -> Result<()> {
 }
 
 async fn handle_deploy(manager: &mut DeploymentManager, config: DeployConfig) -> Result<()> {
+    // Validate inputs
+    validate_environment(&config.environment)?;
+    if let Some(replicas) = config.replicas {
+        validate_replicas(replicas)?;
+    }
+
     info!("Starting deployment to {} environment", config.environment);
 
     // Convert config to DeploymentArgs (parses set_values into custom_values)
@@ -625,6 +716,9 @@ async fn handle_rollback(
     _namespace: Option<String>,
     wait: bool,
 ) -> Result<()> {
+    // Validate inputs
+    validate_environment(&environment)?;
+
     info!("Rolling back deployment in {} environment", environment);
 
     let result = manager.rollback(&environment, revision).await?;
@@ -648,6 +742,10 @@ async fn handle_scale(
     _namespace: Option<String>,
     wait: bool,
 ) -> Result<()> {
+    // Validate inputs
+    validate_environment(&environment)?;
+    validate_replicas(replicas)?;
+
     info!(
         "Scaling deployment in {} environment to {} replicas",
         environment, replicas
@@ -675,6 +773,9 @@ async fn handle_status(
     detailed: bool,
     watch: bool,
 ) -> Result<()> {
+    // Validate inputs (allow "all" for status queries)
+    validate_environment_with_all(&environment)?;
+
     if watch {
         info!("Watching deployment status (Ctrl+C to exit)");
         // Implementation would continuously monitor status
@@ -730,6 +831,9 @@ async fn handle_logs(
     since: Option<String>,
     selector: Option<String>,
 ) -> Result<()> {
+    // Validate inputs
+    validate_environment(&environment)?;
+
     info!("Fetching logs for {} environment", environment);
 
     let logs = manager
@@ -762,6 +866,9 @@ async fn handle_pause(
     environment: String,
     _namespace: Option<String>,
 ) -> Result<()> {
+    // Validate inputs
+    validate_environment(&environment)?;
+
     info!("Pausing deployment in {} environment", environment);
 
     manager.pause(&environment).await?;
@@ -778,6 +885,12 @@ async fn handle_resume(
     _namespace: Option<String>,
     replicas: Option<u32>,
 ) -> Result<()> {
+    // Validate inputs
+    validate_environment(&environment)?;
+    if let Some(r) = replicas {
+        validate_replicas(r)?;
+    }
+
     info!("Resuming deployment in {} environment", environment);
 
     let replica_count = replicas.unwrap_or(1);
@@ -796,6 +909,9 @@ async fn handle_delete(
     force: bool,
     purge: bool,
 ) -> Result<()> {
+    // Validate inputs
+    validate_environment(&environment)?;
+
     if !force {
         println!(
             "This will delete the deployment in {} environment.",
@@ -838,6 +954,10 @@ async fn handle_generate(
     _namespace: Option<String>,
     _values_file: Option<PathBuf>,
 ) -> Result<()> {
+    // Validate inputs
+    validate_environment(&environment)?;
+    validate_manifest_format(&format)?;
+
     info!(
         "Generating {} manifests for {} environment",
         format, environment
@@ -860,12 +980,8 @@ async fn handle_generate(
             manager.generate_helm_chart(&chart_dir).await?;
             println!("Generated Helm chart: {}", chart_dir.display());
         }
-        _ => {
-            return Err(anyhow::anyhow!(
-                "Unsupported format: {}. Use 'yaml' or 'helm'",
-                format
-            ));
-        }
+        // Other formats already rejected by validate_manifest_format()
+        _ => unreachable!("Format already validated"),
     }
 
     println!("Manifest generation completed successfully!");
@@ -880,6 +996,9 @@ async fn handle_validate(
     namespace: Option<String>,
     cluster: bool,
 ) -> Result<()> {
+    // Validate inputs
+    validate_environment(&environment)?;
+
     info!(
         "Validating deployment configuration for {} environment",
         environment
@@ -937,6 +1056,10 @@ async fn handle_history(
     limit: u32,
     output_format: String,
 ) -> Result<()> {
+    // Validate inputs
+    validate_environment(&environment)?;
+    validate_output_format(&output_format)?;
+
     info!(
         "Fetching deployment history for {} environment",
         environment
@@ -972,12 +1095,8 @@ async fn handle_history(
             let yaml = serde_yaml::to_string(&history)?;
             println!("{}", yaml);
         }
-        _ => {
-            return Err(anyhow::anyhow!(
-                "Unsupported output format: {}. Use 'table', 'json', or 'yaml'",
-                output_format
-            ));
-        }
+        // Other formats already rejected by validate_output_format()
+        _ => unreachable!("Output format already validated"),
     }
 
     Ok(())
@@ -996,6 +1115,27 @@ async fn handle_autoscale_command(
             memory_percent,
             namespace,
         } => {
+            // Validate inputs
+            validate_environment(&environment)?;
+            if min_replicas == 0 {
+                anyhow::bail!("Minimum replicas must be greater than 0");
+            }
+            if max_replicas < min_replicas {
+                anyhow::bail!(
+                    "Maximum replicas ({}) must be >= minimum replicas ({})",
+                    max_replicas,
+                    min_replicas
+                );
+            }
+            if cpu_percent == 0 || cpu_percent > 100 {
+                anyhow::bail!("CPU percentage must be between 1 and 100");
+            }
+            if let Some(mem) = memory_percent {
+                if mem == 0 || mem > 100 {
+                    anyhow::bail!("Memory percentage must be between 1 and 100");
+                }
+            }
+
             info!("Enabling autoscaling for {} environment", environment);
 
             manager
@@ -1022,6 +1162,9 @@ async fn handle_autoscale_command(
             environment,
             namespace,
         } => {
+            // Validate inputs
+            validate_environment(&environment)?;
+
             info!("Disabling autoscaling for {} environment", environment);
 
             manager
@@ -1035,6 +1178,9 @@ async fn handle_autoscale_command(
             environment,
             namespace,
         } => {
+            // Validate inputs
+            validate_environment(&environment)?;
+
             let status = manager
                 .get_autoscaling_status(&environment, namespace.as_deref())
                 .await?;
@@ -1069,6 +1215,33 @@ async fn handle_autoscale_command(
             memory_percent,
             namespace,
         } => {
+            // Validate inputs
+            validate_environment(&environment)?;
+            if let Some(min) = min_replicas {
+                if min == 0 {
+                    anyhow::bail!("Minimum replicas must be greater than 0");
+                }
+            }
+            if let (Some(min), Some(max)) = (min_replicas, max_replicas) {
+                if max < min {
+                    anyhow::bail!(
+                        "Maximum replicas ({}) must be >= minimum replicas ({})",
+                        max,
+                        min
+                    );
+                }
+            }
+            if let Some(cpu) = cpu_percent {
+                if cpu == 0 || cpu > 100 {
+                    anyhow::bail!("CPU percentage must be between 1 and 100");
+                }
+            }
+            if let Some(mem) = memory_percent {
+                if mem == 0 || mem > 100 {
+                    anyhow::bail!("Memory percentage must be between 1 and 100");
+                }
+            }
+
             info!("Updating autoscaling for {} environment", environment);
 
             manager
@@ -1101,6 +1274,12 @@ async fn handle_config_command(
             namespace,
             secret,
         } => {
+            // Validate inputs
+            validate_environment(&environment)?;
+            if key.is_empty() {
+                anyhow::bail!("Configuration key cannot be empty");
+            }
+
             info!(
                 "Setting configuration {} in {} environment",
                 key, environment
@@ -1122,6 +1301,12 @@ async fn handle_config_command(
             key,
             namespace,
         } => {
+            // Validate inputs
+            validate_environment(&environment)?;
+            if key.is_empty() {
+                anyhow::bail!("Configuration key cannot be empty");
+            }
+
             let value = manager
                 .get_config(&environment, namespace.as_deref(), &key)
                 .await?;
@@ -1135,6 +1320,10 @@ async fn handle_config_command(
             include_secrets,
             output,
         } => {
+            // Validate inputs
+            validate_environment(&environment)?;
+            validate_output_format(&output)?;
+
             let configs = manager
                 .list_config(&environment, namespace.as_deref(), include_secrets)
                 .await?;
@@ -1167,12 +1356,8 @@ async fn handle_config_command(
                     let yaml = serde_yaml::to_string(&configs)?;
                     println!("{}", yaml);
                 }
-                _ => {
-                    return Err(anyhow::anyhow!(
-                        "Unsupported output format: {}. Use 'table', 'json', or 'yaml'",
-                        output
-                    ));
-                }
+                // Other formats already rejected by validate_output_format()
+                _ => unreachable!("Output format already validated"),
             }
         }
 
@@ -1181,6 +1366,12 @@ async fn handle_config_command(
             key,
             namespace,
         } => {
+            // Validate inputs
+            validate_environment(&environment)?;
+            if key.is_empty() {
+                anyhow::bail!("Configuration key cannot be empty");
+            }
+
             info!(
                 "Deleting configuration {} in {} environment",
                 key, environment
@@ -1199,6 +1390,12 @@ async fn handle_config_command(
             namespace,
             secrets,
         } => {
+            // Validate inputs
+            validate_environment(&environment)?;
+            if !file.exists() {
+                anyhow::bail!("Configuration file does not exist: {}", file.display());
+            }
+
             info!(
                 "Importing configuration from file for {} environment",
                 environment
@@ -1219,6 +1416,10 @@ async fn handle_config_command(
             include_secrets,
             format,
         } => {
+            // Validate inputs
+            validate_environment(&environment)?;
+            validate_export_format(&format)?;
+
             info!("Exporting configuration for {} environment", environment);
 
             manager
@@ -1245,6 +1446,12 @@ async fn handle_health(
     watch: bool,
     interval: u64,
 ) -> Result<()> {
+    // Validate inputs
+    validate_environment(&environment)?;
+    if interval == 0 {
+        anyhow::bail!("Health check interval must be greater than 0");
+    }
+
     if watch {
         info!("Monitoring deployment health (Ctrl+C to exit)");
 
@@ -1325,4 +1532,176 @@ async fn handle_health(
     }
 
     Ok(())
+}
+
+// ============================================================================
+// Tests
+// ============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_validate_environment_valid() {
+        assert!(validate_environment("dev").is_ok());
+        assert!(validate_environment("staging").is_ok());
+        assert!(validate_environment("prod").is_ok());
+        assert!(validate_environment("production").is_ok());
+    }
+
+    #[test]
+    fn test_validate_environment_invalid() {
+        let result = validate_environment("invalid");
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid environment"));
+    }
+
+    #[test]
+    fn test_validate_environment_with_all() {
+        assert!(validate_environment_with_all("dev").is_ok());
+        assert!(validate_environment_with_all("all").is_ok());
+
+        let result = validate_environment_with_all("invalid");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_replicas_valid() {
+        assert!(validate_replicas(1).is_ok());
+        assert!(validate_replicas(10).is_ok());
+        assert!(validate_replicas(100).is_ok());
+    }
+
+    #[test]
+    fn test_validate_replicas_zero() {
+        let result = validate_replicas(0);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Replicas must be greater than 0"));
+    }
+
+    #[test]
+    fn test_validate_strategy_valid() {
+        assert!(validate_strategy("rolling").is_ok());
+        assert!(validate_strategy("blue-green").is_ok());
+        assert!(validate_strategy("canary").is_ok());
+    }
+
+    #[test]
+    fn test_validate_strategy_invalid() {
+        let result = validate_strategy("invalid");
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid deployment strategy"));
+    }
+
+    #[test]
+    fn test_validate_output_format_valid() {
+        assert!(validate_output_format("table").is_ok());
+        assert!(validate_output_format("json").is_ok());
+        assert!(validate_output_format("yaml").is_ok());
+    }
+
+    #[test]
+    fn test_validate_output_format_invalid() {
+        let result = validate_output_format("xml");
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid output format"));
+    }
+
+    #[test]
+    fn test_validate_manifest_format_valid() {
+        assert!(validate_manifest_format("yaml").is_ok());
+        assert!(validate_manifest_format("helm").is_ok());
+    }
+
+    #[test]
+    fn test_validate_manifest_format_invalid() {
+        let result = validate_manifest_format("json");
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid manifest format"));
+    }
+
+    #[test]
+    fn test_validate_export_format_valid() {
+        assert!(validate_export_format("yaml").is_ok());
+        assert!(validate_export_format("json").is_ok());
+        assert!(validate_export_format("env").is_ok());
+    }
+
+    #[test]
+    fn test_validate_export_format_invalid() {
+        let result = validate_export_format("xml");
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid export format"));
+    }
+
+    #[test]
+    fn test_deploy_config_into_deployment_args() {
+        let config = DeployConfig {
+            environment: "prod".to_string(),
+            version: "v1.0.0".to_string(),
+            namespace: Some("production".to_string()),
+            replicas: Some(3),
+            values_file: None,
+            set_values: vec!["key1=value1".to_string(), "key2=value2".to_string()],
+            gpu: true,
+            skip_checks: false,
+            dry_run: false,
+            wait: true,
+            timeout: 300,
+        };
+
+        let args = config.into_deployment_args();
+
+        assert_eq!(args.environment, "prod");
+        assert_eq!(args.version, "v1.0.0");
+        assert_eq!(args.namespace, Some("production".to_string()));
+        assert_eq!(args.replicas, Some(3));
+        assert!(args.gpu_enabled);
+        assert!(!args.skip_pre_checks);
+        assert!(!args.dry_run);
+        assert!(args.wait_for_completion);
+        assert_eq!(args.timeout_seconds, 300);
+        assert_eq!(args.custom_values.get("key1"), Some(&"value1".to_string()));
+        assert_eq!(args.custom_values.get("key2"), Some(&"value2".to_string()));
+    }
+
+    #[test]
+    fn test_deploy_config_parse_invalid_set_values() {
+        let config = DeployConfig {
+            environment: "dev".to_string(),
+            version: "v1.0.0".to_string(),
+            namespace: None,
+            replicas: None,
+            values_file: None,
+            set_values: vec!["invalid_no_equals".to_string()],
+            gpu: false,
+            skip_checks: false,
+            dry_run: false,
+            wait: false,
+            timeout: 600,
+        };
+
+        // Invalid set_values should be silently ignored (with a warning logged)
+        let args = config.into_deployment_args();
+        assert!(args.custom_values.is_empty());
+    }
 }
