@@ -59,7 +59,7 @@ jobs:
     - name: Install system dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y pkg-config libssl-dev
+        sudo apt-get install -y pkg-config libssl-dev libglib2.0-dev
 
     - name: Install code quality tools
       run: |
@@ -291,7 +291,7 @@ jobs:
     - name: Install system dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y pkg-config libssl-dev
+        sudo apt-get install -y pkg-config libssl-dev libglib2.0-dev
 
     - name: Install security tools
       run: |
@@ -530,7 +530,7 @@ jobs:
     - name: Install system dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y pkg-config libssl-dev
+        sudo apt-get install -y pkg-config libssl-dev libglib2.0-dev
 
     - name: Build release binary
       run: |
