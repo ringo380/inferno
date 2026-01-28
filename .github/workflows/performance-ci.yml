@@ -55,7 +55,7 @@ jobs:
         components: rustfmt, clippy
 
     - name: Cache dependencies
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: |
           ~/.cargo/registry
@@ -147,7 +147,7 @@ jobs:
         ls -la benchmark_results/ >> benchmark_results/summary.md
 
     - name: Upload benchmark results
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: benchmark-results-${{ matrix.benchmark }}-${{ github.sha }}
         path: |
@@ -317,7 +317,7 @@ jobs:
       uses: dtolnay/rust-toolchain@stable
 
     - name: Cache dependencies
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: |
           ~/.cargo/registry
@@ -341,7 +341,7 @@ jobs:
           --output monitoring_results/monitoring_$(date +%Y%m%d_%H%M%S).json
 
     - name: Upload monitoring results
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: monitoring-results-${{ github.run_number }}
         path: monitoring_results/
@@ -361,7 +361,7 @@ jobs:
       uses: dtolnay/rust-toolchain@stable
 
     - name: Cache dependencies
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: |
           ~/.cargo/registry
@@ -399,7 +399,7 @@ jobs:
 
     steps:
     - name: Download all benchmark artifacts
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4
       with:
         path: all_results/
 
@@ -439,7 +439,7 @@ jobs:
         echo "4. Consider optimizations for slow operations" >> performance_summary.md
 
     - name: Upload performance summary
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: performance-summary-${{ github.run_number }}
         path: performance_summary.md
