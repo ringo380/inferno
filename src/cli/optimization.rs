@@ -495,19 +495,19 @@ async fn execute_batch_command(command: BatchCommand) -> Result<()> {
         } => {
             println!("🔧 Configuring dynamic batching...");
 
-            let mut config = crate::optimization::batching::BatchingConfig::default();
+            let mut _config = crate::optimization::batching::BatchingConfig::default();
 
             if let Some(size) = max_batch_size {
-                config.max_batch_size = size;
+                _config.max_batch_size = size;
                 println!("   Max batch size: {}", size);
             }
 
             if let Some(wait_time) = max_wait_time {
-                config.max_wait_time_ms = wait_time;
+                _config.max_wait_time_ms = wait_time;
                 println!("   Max wait time: {}ms", wait_time);
             }
 
-            config.adaptive_batching = adaptive;
+            _config.adaptive_batching = adaptive;
             println!("   Adaptive batching: {}", adaptive);
 
             println!("✅ Batching configuration updated!");
