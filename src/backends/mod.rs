@@ -1,4 +1,4 @@
-#![allow(dead_code, unused_imports, unused_variables)]
+#![allow(dead_code, unused_imports, unused_variables, clippy::needless_return)]
 #[cfg(feature = "gguf")]
 mod gguf;
 #[cfg(all(feature = "gpu-metal", target_os = "macos"))]

@@ -1,3 +1,5 @@
+#![allow(clippy::assign_op_pattern)]
+
 //! Tauri Command Handlers
 //!
 //! This module contains all 51 Tauri command handlers migrated from dashboard/src-tauri.

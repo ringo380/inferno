@@ -1,3 +1,5 @@
+#![allow(clippy::needless_question_mark, clippy::new_without_default)]
+
 use super::activity_logger::{ActivityLogger, ActivityStatus, ActivityType};
 use crate::backends::{
     BackendConfig, BackendHandle, BackendType, InferenceParams as InfernoInferenceParams,

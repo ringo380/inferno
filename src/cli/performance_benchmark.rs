@@ -1,4 +1,4 @@
-#![allow(dead_code, unused_imports, unused_variables)]
+#![allow(dead_code, unused_imports, unused_variables, clippy::useless_vec)]
 use crate::{
     backends::{Backend, BackendConfig, BackendHandle, BackendType, InferenceParams},
     models::ModelInfo,

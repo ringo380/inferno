@@ -134,6 +134,7 @@ mod batch_test_utils {
                 temperature: 0.7,
                 top_p: 0.9,
                 stream: false,
+                ..Default::default()
             },
             model_name: model_name.to_string(),
             batch_config: create_test_batch_config(),

@@ -369,6 +369,7 @@ mod integration_test_utils {
                 temperature: 0.7,
                 top_p: 0.9,
                 stream: false,
+                ..Default::default()
             },
             model_name: model_name.to_string(),
             batch_config: BatchConfig {
@@ -506,6 +507,7 @@ async fn test_end_to_end_model_lifecycle() -> Result<()> {
         temperature: 0.7,
         top_p: 0.9,
         stream: false,
+        ..Default::default()
     };
 
     let input = "What is artificial intelligence?";

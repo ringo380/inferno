@@ -1,3 +1,5 @@
+#![allow(clippy::manual_map)]
+
 //! Application State Management
 //!
 //! This module defines the global application state that is shared across

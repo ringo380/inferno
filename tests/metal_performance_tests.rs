@@ -1,16 +1,24 @@
-/// Metal GPU Performance Tests
-///
-/// These tests validate Metal GPU acceleration performance on macOS.
-/// They are automatically skipped on non-macOS platforms.
-///
-/// Performance targets (from CLAUDE.md):
-/// - 7B models: >30 tokens/sec on M1 Max
-/// - 13B models: >15 tokens/sec on M2 Max
-/// - 70B models: >5 tokens/sec on M4 Max (with unified memory)
+#![allow(
+    clippy::redundant_closure,
+    clippy::needless_borrow,
+    clippy::let_unit_value,
+    unused_imports,
+    dead_code,
+    unused_variables
+)]
+
+//! Metal GPU Performance Tests
+//!
+//! These tests validate Metal GPU acceleration performance on macOS.
+//! They are automatically skipped on non-macOS platforms.
+//!
+//! Performance targets (from CLAUDE.md):
+//! - 7B models: >30 tokens/sec on M1 Max
+//! - 13B models: >15 tokens/sec on M2 Max
+//! - 70B models: >5 tokens/sec on M4 Max (with unified memory)
 
 #[cfg(all(target_os = "macos", feature = "gguf"))]
 mod metal_tests {
-    use chrono;
     use inferno::backends::{Backend, BackendConfig, BackendType, InferenceParams};
     use inferno::models::ModelInfo;
     use std::path::PathBuf;
