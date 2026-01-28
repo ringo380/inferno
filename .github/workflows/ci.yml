@@ -9,10 +9,6 @@ on:
       - 'Cargo.lock'
       - 'build.rs'
       - '.github/workflows/ci.yml'
-    paths-ignore:
-      - '**.md'
-      - 'docs/**'
-      - '.github/ISSUE_TEMPLATE/**'
   pull_request:
     branches: [ main ]
     paths:
@@ -21,10 +17,6 @@ on:
       - 'Cargo.lock'
       - 'build.rs'
       - '.github/workflows/ci.yml'
-    paths-ignore:
-      - '**.md'
-      - 'docs/**'
-      - '.github/ISSUE_TEMPLATE/**'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
