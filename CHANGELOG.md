@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.1] - 2025-01-28
+
+### Fixed
+
+- **Dashboard UI**: Added MainLayout wrapper to 9 pages that were missing sidebar, header, and proper margins (batch, monitoring, observability, performance, pipeline, security, settings, tenants, versioning)
+- **CI Pipeline**: Optimized GitHub Actions to reduce CI minutes usage
+- **CI Pipeline**: Fixed cross-platform build failures
+- **Code Quality**: Resolved clippy warnings for CI linting compliance
+
+### Changed
+
+- Updated dashboard Cargo.lock dependencies
+
+## [0.10.0] - 2025-01-28
+
+### Fixed
+
+- Fixed benchmarks and examples for clippy compliance
+- Replaced broken async benchmarks with placeholders (criterion API changes)
+- Added crate-level clippy allows for common lint warnings
+
+## [0.9.0] - 2025-01
+
+### Added
+
+- Phase 5 enterprise features (see v0.9.0 release notes)
+
 ## [0.8.0] - 2024-Q4
 
 ### 🎯 Enterprise-Grade Production Readiness (Phase 4)
