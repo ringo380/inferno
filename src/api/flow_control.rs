@@ -155,7 +155,8 @@ impl StreamFlowControl {
             return 0;
         }
         // Calculate percentage with proper rounding, ensuring at least 1% when messages exist
-        let percent = ((pending as f32 / self.config.max_pending_messages as f32) * 100.0).round() as u32;
+        let percent =
+            ((pending as f32 / self.config.max_pending_messages as f32) * 100.0).round() as u32;
         percent.max(1) // At least 1% when there are any pending messages
     }
 

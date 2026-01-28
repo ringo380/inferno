@@ -567,7 +567,9 @@ pub async fn get_system_appearance() -> Result<String, String> {
 
         match output {
             Ok(result) if result.status.success() => {
-                let style = String::from_utf8_lossy(&result.stdout).trim().to_lowercase();
+                let style = String::from_utf8_lossy(&result.stdout)
+                    .trim()
+                    .to_lowercase();
                 if style == "dark" {
                     Ok("dark".to_string())
                 } else {
