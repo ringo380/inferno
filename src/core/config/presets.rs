@@ -6,7 +6,7 @@ use super::core::CoreConfig;
 use super::types::{LogFormat, LogLevel};
 
 /// Configuration presets for different deployment scenarios
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Preset {
     /// Development preset: verbose logging, minimal features, fast startup
     ///
@@ -15,6 +15,7 @@ pub enum Preset {
     /// - Cache disabled
     /// - Monitoring disabled
     /// - Faster compilation and startup
+    #[default]
     Development,
 
     /// Production preset: optimized for deployment
@@ -126,11 +127,6 @@ impl Preset {
     }
 }
 
-impl Default for Preset {
-    fn default() -> Self {
-        Self::Development
-    }
-}
 
 #[cfg(test)]
 mod tests {

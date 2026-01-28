@@ -386,11 +386,8 @@ fn print_batch_summary(progress: &crate::batch::BatchProgress, args: &BatchArgs)
 
     println!("Average rate: {:.2} items/second", progress.current_rate);
 
-    if args.output.is_some() {
-        println!(
-            "Output saved to: {}",
-            args.output.as_ref().unwrap().display()
-        );
+    if let Some(output) = &args.output {
+        println!("Output saved to: {}", output.display());
     }
 
     if progress.failed_items > 0 {

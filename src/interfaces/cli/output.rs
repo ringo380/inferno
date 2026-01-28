@@ -28,10 +28,11 @@ pub struct CommandOutput {
 }
 
 /// Output severity level
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum OutputLevel {
     /// Informational output
+    #[default]
     Info,
 
     /// Warning (non-fatal)
@@ -39,12 +40,6 @@ pub enum OutputLevel {
 
     /// Error (fatal)
     Error,
-}
-
-impl Default for OutputLevel {
-    fn default() -> Self {
-        Self::Info
-    }
 }
 
 impl CommandOutput {

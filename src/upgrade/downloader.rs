@@ -405,6 +405,7 @@ impl UpdateDownloader {
 
             if unsafe { statvfs(path.as_ptr(), &mut stat) } == 0 {
                 // Use saturating_mul to avoid overflow panic in debug mode
+                #[allow(clippy::unnecessary_cast)] // Types vary by platform
                 let available_bytes = (stat.f_bavail as u64).saturating_mul(stat.f_frsize as u64);
                 if available_bytes < required_bytes {
                     return Err(UpgradeError::InsufficientDiskSpace {
