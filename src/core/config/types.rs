@@ -8,20 +8,15 @@ use std::fmt;
 use std::str::FromStr;
 
 /// Logging level with typed safety
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum LogLevel {
     Trace,
     Debug,
+    #[default]
     Info,
     Warn,
     Error,
-}
-
-impl Default for LogLevel {
-    fn default() -> Self {
-        Self::Info
-    }
 }
 
 impl fmt::Display for LogLevel {
@@ -55,21 +50,16 @@ impl FromStr for LogLevel {
 }
 
 /// Log output format
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum LogFormat {
     /// Human-readable pretty format with colors
+    #[default]
     Pretty,
     /// Compact single-line format
     Compact,
     /// Structured JSON format for log aggregation
     Json,
-}
-
-impl Default for LogFormat {
-    fn default() -> Self {
-        Self::Pretty
-    }
 }
 
 impl fmt::Display for LogFormat {

@@ -580,17 +580,17 @@ async fn execute_memory_command(command: MemoryCommand) -> Result<()> {
         } => {
             println!("🔧 Configuring memory optimization...");
 
-            let mut config = crate::optimization::memory::MemoryConfig::default();
+            let mut _config = crate::optimization::memory::MemoryConfig::default();
 
             if let Some(size) = pool_size {
-                config.memory_pool_size_mb = size;
+                _config.memory_pool_size_mb = size;
                 println!("   Memory pool size: {}MB", size);
             }
 
-            config.memory_mapping_enabled = memory_mapping;
+            _config.memory_mapping_enabled = memory_mapping;
             println!("   Memory mapping: {}", memory_mapping);
 
-            config.zero_copy_operations = zero_copy;
+            _config.zero_copy_operations = zero_copy;
             println!("   Zero-copy operations: {}", zero_copy);
 
             println!("✅ Memory configuration updated!");
@@ -739,18 +739,18 @@ async fn execute_inference_command(command: InferenceCommand) -> Result<()> {
         } => {
             println!("🔧 Configuring inference optimization...");
 
-            let mut config = crate::optimization::inference::InferenceConfig::default();
+            let mut _config = crate::optimization::inference::InferenceConfig::default();
 
-            config.speculative_decoding = speculative;
+            _config.speculative_decoding = speculative;
             println!("   Speculative decoding: {}", speculative);
 
             if let Some(size) = cache_size {
-                config.cache_size_mb = size;
+                _config.cache_size_mb = size;
                 println!("   KV cache size: {}MB", size);
             }
 
             if let Some(tokens) = speculative_tokens {
-                config.speculative_tokens = tokens;
+                _config.speculative_tokens = tokens;
                 println!("   Speculative tokens: {}", tokens);
             }
 
@@ -764,7 +764,7 @@ async fn execute_inference_command(command: InferenceCommand) -> Result<()> {
                 _ => RequestSchedulingStrategy::FIFO,
             };
 
-            config.request_scheduling = strategy.clone();
+            _config.request_scheduling = strategy.clone();
             println!("   Scheduling strategy: {:?}", strategy);
 
             println!("✅ Inference configuration updated!");

@@ -227,18 +227,13 @@ pub enum UpgradeEventType {
 }
 
 /// Update channel for receiving different types of releases
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub enum UpdateChannel {
+    #[default]
     Stable,
     Beta,
     Nightly,
     Custom(String),
-}
-
-impl Default for UpdateChannel {
-    fn default() -> Self {
-        Self::Stable
-    }
 }
 
 impl UpdateChannel {
