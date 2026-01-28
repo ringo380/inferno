@@ -47,7 +47,10 @@ mod metal_tests {
     #[test]
     fn test_cpu_only_config() {
         let config = BackendConfig::cpu_only();
-        assert!(!config.gpu_enabled, "GPU should be disabled for CPU-only config");
+        assert!(
+            !config.gpu_enabled,
+            "GPU should be disabled for CPU-only config"
+        );
     }
 
     /// Test that BackendType::Metal creates a backend successfully
@@ -100,23 +103,22 @@ mod metal_tests {
     async fn test_inference_performance() {
         use std::env;
 
-        let models_dir = env::var("INFERNO_MODELS_DIR").unwrap_or_else(|_| "test_models".to_string());
+        let models_dir =
+            env::var("INFERNO_MODELS_DIR").unwrap_or_else(|_| "test_models".to_string());
         let model_path = PathBuf::from(&models_dir);
 
         // Find first .gguf file in models directory
-        let model_file = std::fs::read_dir(&model_path)
-            .ok()
-            .and_then(|entries| {
-                entries
-                    .filter_map(|e| e.ok())
-                    .find(|e| {
-                        e.path()
-                            .extension()
-                            .map(|ext| ext == "gguf")
-                            .unwrap_or(false)
-                    })
-                    .map(|e| e.path())
-            });
+        let model_file = std::fs::read_dir(&model_path).ok().and_then(|entries| {
+            entries
+                .filter_map(|e| e.ok())
+                .find(|e| {
+                    e.path()
+                        .extension()
+                        .map(|ext| ext == "gguf")
+                        .unwrap_or(false)
+                })
+                .map(|e| e.path())
+        });
 
         let model_file = match model_file {
             Some(path) => path,
@@ -133,8 +135,8 @@ mod metal_tests {
 
         // Create backend with Metal acceleration
         let config = BackendConfig::with_metal_acceleration();
-        let mut backend = Backend::new(BackendType::Gguf, &config)
-            .expect("Failed to create GGUF backend");
+        let mut backend =
+            Backend::new(BackendType::Gguf, &config).expect("Failed to create GGUF backend");
 
         // Create model info
         let model_metadata = std::fs::metadata(&model_file).ok();

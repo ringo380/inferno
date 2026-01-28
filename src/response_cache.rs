@@ -1,4 +1,9 @@
-#![allow(dead_code, unused_imports, unused_variables, clippy::inherent_to_string)]
+#![allow(
+    dead_code,
+    unused_imports,
+    unused_variables,
+    clippy::inherent_to_string
+)]
 use crate::metrics::MetricsCollector;
 use anyhow::{Context, Result};
 use blake3;

@@ -2,8 +2,7 @@ use serde::{Deserialize, Serialize};
 use tracing::debug;
 
 /// Sampling strategies for token generation
-#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, Default)]
 pub enum SamplingStrategy {
     /// Always pick the highest probability token (deterministic)
     Greedy,
@@ -17,7 +16,6 @@ pub enum SamplingStrategy {
     /// Combination of top-k and top-p
     TopKP,
 }
-
 
 /// Configuration for token sampling
 #[derive(Clone, Debug, Serialize, Deserialize)]

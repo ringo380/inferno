@@ -68,9 +68,7 @@ impl QueueMetricsCollector {
     /// Record a request being queued
     pub fn record_queued(&mut self, priority: u8) {
         self.total_queued += 1;
-        self.per_priority_metrics
-            .entry(priority)
-            .or_default();
+        self.per_priority_metrics.entry(priority).or_default();
     }
 
     /// Record a request being processed

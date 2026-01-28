@@ -5,12 +5,12 @@ use tokio::fs;
 
 #[tokio::test]
 async fn test_batch_queue_manager() {
+    use inferno::backends::InferenceParams;
     use inferno::batch::queue::{
-        BatchJob, JobPriority, JobQueueConfig, JobQueueManager, ResourceLimits,
-        ResourceRequirements, RetryConfig, RetryPolicy, NotificationConfig,
+        BatchJob, JobPriority, JobQueueConfig, JobQueueManager, NotificationConfig, ResourceLimits,
+        ResourceRequirements, RetryConfig, RetryPolicy,
     };
     use inferno::batch::{BatchConfig, BatchInput};
-    use inferno::backends::InferenceParams;
     use std::collections::HashMap;
 
     let config = JobQueueConfig {
@@ -93,9 +93,7 @@ async fn test_batch_queue_manager() {
 
 #[tokio::test]
 async fn test_model_versioning_config() {
-    use inferno::versioning::{
-        ModelVersionManager, SemanticVersion, VersioningConfig,
-    };
+    use inferno::versioning::{ModelVersionManager, SemanticVersion, VersioningConfig};
 
     let temp_dir = tempdir().unwrap();
     let version_dir = temp_dir.path().join("versions");

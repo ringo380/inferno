@@ -2,9 +2,7 @@
 //!
 //! Provides REST API endpoints for profiling data visualization
 
-use crate::infrastructure::profiling::{
-    BenchmarkResult, InferenceProfile, PhaseStats,
-};
+use crate::infrastructure::profiling::{BenchmarkResult, InferenceProfile, PhaseStats};
 use serde::{Deserialize, Serialize};
 
 /// Request to export profiling data

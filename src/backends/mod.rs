@@ -120,10 +120,10 @@ impl BackendConfig {
     pub fn with_metal_acceleration() -> Self {
         Self {
             gpu_enabled: true,
-            gpu_device: None, // Auto-detect Metal GPU
-            cpu_threads: None, // Let the backend choose optimal thread count
+            gpu_device: None,   // Auto-detect Metal GPU
+            cpu_threads: None,  // Let the backend choose optimal thread count
             context_size: 4096, // Larger context for Metal (unified memory)
-            batch_size: 64, // Larger batch size for GPU
+            batch_size: 64,     // Larger batch size for GPU
             memory_map: true,
         }
     }

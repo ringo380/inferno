@@ -1,4 +1,10 @@
-#![allow(dead_code, unused_imports, unused_variables, clippy::match_same_arms, clippy::wildcard_in_or_patterns)]
+#![allow(
+    dead_code,
+    unused_imports,
+    unused_variables,
+    clippy::match_same_arms,
+    clippy::wildcard_in_or_patterns
+)]
 use anyhow::Result;
 use clap::{Args, Subcommand};
 use std::path::PathBuf;
