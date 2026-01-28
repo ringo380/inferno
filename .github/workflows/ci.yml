@@ -49,7 +49,7 @@ jobs:
 
     - name: Run integration tests
       if: matrix.os == 'ubuntu-latest'  # Only run on Linux for now
-      run: cargo test --test integration_tests
+      run: cargo test --test integration_tests --features "gguf,onnx"
 
     - name: Run doctests
       run: cargo test --doc
@@ -81,7 +81,7 @@ jobs:
       run: cargo clippy --all-targets --all-features -- -D warnings
 
     - name: Check documentation
-      run: cargo doc --no-deps --document-private-items
+      run: cargo doc --no-deps --document-private-items --features "gguf,onnx,download"
 
   security:
     name: Security Audit
@@ -208,7 +208,10 @@ jobs:
     - name: Build release
       shell: bash
       run: |
-        if [[ "${{ matrix.target }}" != "x86_64-unknown-linux-gnu" && "${{ matrix.target }}" != "x86_64-pc-windows-msvc" && "${{ matrix.target }}" != "x86_64-apple-darwin" ]]; then
+        if [[ "${{ matrix.target }}" == "aarch64-unknown-linux-gnu" ]]; then
+          # Minimal features for cross-compilation (avoids native-tls/OpenSSL dependency)
+          cross build --release --target ${{ matrix.target }} --no-default-features --features "download"
+        elif [[ "${{ matrix.target }}" != "x86_64-unknown-linux-gnu" && "${{ matrix.target }}" != "x86_64-pc-windows-msvc" && "${{ matrix.target }}" != "x86_64-apple-darwin" ]]; then
           cross build --release --target ${{ matrix.target }}
         else
           cargo build --release --target ${{ matrix.target }}
