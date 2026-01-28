@@ -1,8 +1,9 @@
 name: Performance Benchmarking CI
 
 on:
-  push:
-    branches: [ main, develop ]
+  # Disabled push trigger - benchmarks run on schedule only
+  # push:
+  #   branches: [ main, develop ]
   pull_request:
     branches: [ main ]
   schedule:

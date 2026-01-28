@@ -3,13 +3,14 @@ name: Docker Publish
 on:
   release:
     types: [published]
-  push:
-    branches: [main]
-    paths:
-      - 'Dockerfile'
-      - 'src/**'
-      - 'Cargo.toml'
-      - 'Cargo.lock'
+  # Disabled push trigger - publish only on release
+  # push:
+  #   branches: [main]
+  #   paths:
+  #     - 'Dockerfile'
+  #     - 'src/**'
+  #     - 'Cargo.toml'
+  #     - 'Cargo.lock'
   workflow_dispatch:
 
 env:

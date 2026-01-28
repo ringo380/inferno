@@ -1,11 +1,13 @@
 name: Enhanced CI Pipeline
 
 on:
-  push:
-    branches: [ main, develop ]
+  # Disabled push trigger - ci.yml handles main CI
+  # push:
+  #   branches: [ main, develop ]
   pull_request:
     branches: [ main, develop ]
   merge_group:
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
