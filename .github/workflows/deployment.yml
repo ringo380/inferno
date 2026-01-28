@@ -1,8 +1,9 @@
 name: Deployment Automation
 
 on:
-  push:
-    branches: [main]
+  # Disabled push trigger - deploy only on release or manual
+  # push:
+  #   branches: [main]
   release:
     types: [published]
   workflow_dispatch:

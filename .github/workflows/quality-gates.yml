@@ -3,8 +3,9 @@ name: Quality Gates & Compliance
 on:
   pull_request:
     branches: [main, develop]
-  push:
-    branches: [main]
+  # Disabled push trigger - reduces CI load, run weekly instead
+  # push:
+  #   branches: [main]
   schedule:
     # Weekly compliance check
     - cron: '0 6 * * 1'

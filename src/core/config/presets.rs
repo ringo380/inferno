@@ -127,7 +127,6 @@ impl Preset {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;

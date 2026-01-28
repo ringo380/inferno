@@ -2,7 +2,8 @@ name: Container Build & Registry
 
 on:
   push:
-    branches: [main, develop]
+    # Only build containers on version tags, not branch pushes
+    # branches: [main, develop]
     tags: ['v*']
   pull_request:
     branches: [main]
