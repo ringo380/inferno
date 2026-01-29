@@ -63,7 +63,7 @@ jobs:
       if: matrix.os == 'ubuntu-latest'
       run: |
         sudo apt-get update
-        sudo apt-get install -y pkg-config libssl-dev libglib2.0-dev
+        sudo apt-get install -y pkg-config libssl-dev libglib2.0-dev cmake clang libclang-dev
 
     - name: Run tests
       run: cargo test --verbose
@@ -168,18 +168,18 @@ jobs:
     - name: Install tarpaulin
       run: cargo install cargo-tarpaulin
 
-    - name: Install GTK development libraries (for desktop feature)
+    - name: Install system dependencies for coverage
       run: |
         sudo apt-get update
-        sudo apt-get install -y libglib2.0-dev libgtk-3-dev libwebkit2gtk-4.1-dev
+        sudo apt-get install -y libglib2.0-dev cmake clang libclang-dev
 
     - name: Run coverage
-      run: cargo tarpaulin --verbose --all-features --workspace --timeout 120 --out xml
+      run: cargo tarpaulin --config tarpaulin.toml --out xml
 
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v4
       with:
-        file: ./cobertura.xml
+        file: ./coverage/cobertura.xml
         flags: unittests
         name: codecov-umbrella
 

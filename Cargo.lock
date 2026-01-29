@@ -2909,7 +2909,7 @@ dependencies = [
 
 [[package]]
 name = "inferno-ai"
-version = "0.8.1"
+version = "0.10.1"
 dependencies = [
  "aes-gcm",
  "anyhow",
@@ -2946,7 +2946,6 @@ dependencies = [
  "libc",
  "llama-cpp-2",
  "memmap2",
- "native-tls",
  "ndarray",
  "num-traits",
  "num_cpus",
@@ -3271,10 +3270,13 @@ dependencies = [
  "nom 8.0.0",
  "percent-encoding",
  "quoted_printable",
+ "rustls",
  "socket2 0.6.0",
  "tokio",
  "tokio-native-tls",
+ "tokio-rustls",
  "url",
+ "webpki-roots 1.0.2",
 ]
 
 [[package]]
@@ -6798,6 +6800,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bbae76ab933c85776efabc971569dd6119c580d8f5d448769dec1764bf796ef2"
 dependencies = [
  "native-tls",
+ "tokio",
+]
+
+[[package]]
+name = "tokio-rustls"
+version = "0.26.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1729aa945f29d91ba541258c8df89027d5792d85a8841fb65e8bf0f4ede4ef61"
+dependencies = [
+ "rustls",
  "tokio",
 ]
 
