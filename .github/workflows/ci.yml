@@ -239,7 +239,7 @@ jobs:
         fi
 
     - name: Strip binary (Unix)
-      if: matrix.os != 'windows-latest'
+      if: matrix.os != 'windows-latest' && matrix.target != 'aarch64-unknown-linux-gnu'
       run: strip target/${{ matrix.target }}/release/${{ matrix.artifact_name }}
 
     - name: Upload artifact
