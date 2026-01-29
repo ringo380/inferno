@@ -10,7 +10,7 @@ use std::{
     time::{Duration, SystemTime},
 };
 use tokio::{
-    sync::{mpsc, RwLock},
+    sync::{RwLock, mpsc},
     time::interval,
 };
 use tracing::{debug, error, info};
@@ -180,7 +180,10 @@ impl JobScheduler {
 
                                                 if should_disable {
                                                     updated_entry.enabled = false;
-                                                    info!("Disabled scheduled job {} after reaching max runs", entry.job.id);
+                                                    info!(
+                                                        "Disabled scheduled job {} after reaching max runs",
+                                                        entry.job.id
+                                                    );
                                                 }
                                             }
 
@@ -281,27 +284,14 @@ impl JobScheduler {
         let schedule = Schedule::from_str(&normalized_expression)
             .map_err(|e| anyhow::anyhow!("Invalid cron expression '{}': {}", expression, e))?;
 
-        // Find the next occurrence after the current time
-        let next_occurrence = schedule.upcoming(Utc).next().ok_or_else(|| {
+        // Find the next occurrence after the specified time
+        schedule.after(&from).next().ok_or_else(|| {
             anyhow::anyhow!(
-                "No future occurrence found for cron expression: {}",
+                "No future occurrence found after {} for cron expression: {}",
+                from,
                 expression
             )
-        })?;
-
-        // Ensure the next occurrence is after the from time
-        if next_occurrence <= from {
-            // If the calculated next time is not after 'from', get the one after that
-            schedule.after(&from).next().ok_or_else(|| {
-                anyhow::anyhow!(
-                    "No future occurrence found after {} for cron expression: {}",
-                    from,
-                    expression
-                )
-            })
-        } else {
-            Ok(next_occurrence)
-        }
+        })
     }
 
     fn normalize_cron_expression(expression: &str) -> Result<String> {
