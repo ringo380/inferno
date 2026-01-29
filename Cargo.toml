@@ -100,8 +100,8 @@ hex = "0.4"
 # Progress bars and indicators
 indicatif = "0.17"
 
-# HTTP client and server
-reqwest = { version = "0.11", features = ["json", "stream"], optional = true }
+# HTTP client and server (default-features = false to avoid native-tls for cross-compilation)
+reqwest = { version = "0.11", default-features = false, features = ["json", "stream"], optional = true }
 axum = { version = "0.7", features = ["ws"] }
 tower = "0.4"
 tower-http = { version = "0.5", features = ["cors", "trace"] }
@@ -196,11 +196,13 @@ criterion = { version = "0.5", features = ["html_reports"] }
 tauri-build = { version = "2.0", git = "https://github.com/tauri-apps/tauri", tag = "tauri-v2.8.5", package = "tauri-build" }
 
 [features]
-default = ["reqwest"]  # Minimal default - exclude heavy ML backends for fast development builds
+default = ["download-native-tls"]  # Minimal default with native TLS for fast development builds
 gguf = ["llama-cpp-2"]     # Enable GGUF/llama.cpp backend
 onnx = []                  # ONNX backend (stub mode - ort 2.0 lacks prebuilt binaries)
 ml-backends = ["gguf", "onnx"]  # Enable all ML backends
-download = ["reqwest"]
+# Download feature with TLS options (rustls for cross-compilation, native-tls for native builds)
+download = ["reqwest", "reqwest/rustls-tls"]  # Default to rustls for cross-compilation compatibility
+download-native-tls = ["reqwest", "reqwest/native-tls"]  # Use native-tls when building natively
 gpu-metal = []
 gpu-vulkan = []
 gpu-directml = []
