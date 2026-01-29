@@ -52,6 +52,10 @@ dashboard/**/*.log
 # Claude Code
 .claude/
 .claude-code/
+CLAUDE.md
+**/CLAUDE.md
+CLAUDE.local.md
+**/CLAUDE.local.md
 
 # Model files (too large for git)
 /models/*.gguf
