@@ -674,14 +674,16 @@ mod tests {
     #[test]
     fn test_cuda_optimizer_creation() {
         // This will only succeed if CUDA is available or simulated
-        std::env::set_var("SIMULATE_CUDA", "1");
+        // SAFETY: No other threads are accessing this environment variable in this test
+        unsafe { std::env::set_var("SIMULATE_CUDA", "1") };
         let optimizer = CudaOptimizer::new();
         assert!(optimizer.is_ok());
     }
 
     #[test]
     fn test_metal_optimizer_creation() {
-        std::env::set_var("SIMULATE_METAL", "1");
+        // SAFETY: No other threads are accessing this environment variable in this test
+        unsafe { std::env::set_var("SIMULATE_METAL", "1") };
         let optimizer = MetalOptimizer::new();
         assert!(optimizer.is_ok());
     }

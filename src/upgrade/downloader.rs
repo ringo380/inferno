@@ -396,7 +396,8 @@ impl UpdateDownloader {
                 f_namemax: c_ulong,
             }
 
-            extern "C" {
+            // SAFETY: FFI declaration for POSIX statvfs function
+            unsafe extern "C" {
                 fn statvfs(path: *const c_char, buf: *mut Statvfs) -> i32;
             }
 

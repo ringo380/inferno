@@ -10,7 +10,7 @@ use tracing::info;
 
 /// Validate init command parameters before execution
 fn validate_init(path: &Option<PathBuf>) -> Result<()> {
-    if let Some(ref path) = path {
+    if let Some(path) = path {
         // Check if path already exists
         if path.exists() {
             anyhow::bail!(

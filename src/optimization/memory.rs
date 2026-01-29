@@ -98,7 +98,8 @@ struct TrackedAllocator {
 
 unsafe impl GlobalAlloc for TrackedAllocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        let ptr = System.alloc(layout);
+        // SAFETY: System allocator is always available and layout is valid
+        let ptr = unsafe { System.alloc(layout) };
         if !ptr.is_null() {
             self.tracker.allocate(layout.size());
         }
@@ -106,7 +107,8 @@ unsafe impl GlobalAlloc for TrackedAllocator {
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-        System.dealloc(ptr, layout);
+        // SAFETY: ptr was allocated by System.alloc with the same layout
+        unsafe { System.dealloc(ptr, layout) };
         self.tracker.deallocate(layout.size());
     }
 }
