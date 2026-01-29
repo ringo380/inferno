@@ -17,12 +17,20 @@ async fn main() -> Result<()> {
     let cli = match EnhancedCliParser::try_parse() {
         Ok(cli) => cli,
         Err(e) => {
-            // Handle clap errors with helpful suggestions
+            // Let clap handle output routing:
+            // - Help/version → stdout, exit 0
+            // - Parse errors → stderr, exit non-zero
+            if e.kind() == clap::error::ErrorKind::DisplayHelp
+                || e.kind() == clap::error::ErrorKind::DisplayVersion
+            {
+                e.exit();
+            }
+            // For actual parsing errors, add helpful suggestions
             eprintln!("{}", e);
             eprintln!("\n💡 For help with commands, try:");
             eprintln!("   inferno --help");
             eprintln!("   inferno [command] --help");
-            std::process::exit(1);
+            std::process::exit(e.exit_code());
         }
     };
 
