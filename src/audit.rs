@@ -10,6 +10,7 @@ use anyhow::Result;
 use base64::{engine::general_purpose, Engine as _};
 use chrono::{DateTime, Datelike, Timelike, Utc};
 use flate2::{write::GzEncoder, Compression as GzCompression};
+#[cfg(feature = "email-alerts")]
 use lettre::{
     message::{header::ContentType, Mailbox, Message},
     transport::smtp::authentication::Credentials,
@@ -804,10 +805,16 @@ impl AuditLogger {
             }
         }
 
+        #[cfg(feature = "email-alerts")]
         if config.email.enabled {
             if let Err(e) = self.send_email_alert(&alert_context).await {
                 error!("Failed to send email alert: {}", e);
             }
+        }
+
+        #[cfg(not(feature = "email-alerts"))]
+        if config.email.enabled {
+            warn!("Email alerting is configured but the 'email-alerts' feature is not enabled");
         }
 
         if config.slack.enabled {
@@ -1313,6 +1320,7 @@ impl AuditLogger {
         ))
     }
 
+    #[cfg(feature = "email-alerts")]
     async fn send_email_alert(&self, context: &AlertContext) -> Result<()> {
         let config = &self.config.alerting.email;
 

@@ -1,0 +1,14 @@
+# Tarpaulin coverage configuration
+# Avoids --all-features to exclude Tauri/desktop (macOS-only, adds 3-5 min compile time)
+
+[coverage]
+run-types = ["Tests", "Doctests"]
+test-timeout = "5m"
+all-features = false
+features = "gguf onnx download"
+exclude-files = [
+    "src/interfaces/desktop/*",
+    "tests/*_integration_tests.rs",
+    "benches/*",
+]
+output-dir = "coverage"
