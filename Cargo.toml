@@ -79,7 +79,7 @@ tokenizers = "0.14"      # for text tokenization
 # Model format conversion dependencies
 safetensors = "0.4"      # for SafeTensors format support
 # tch = { version = "0.13", optional = true } # PyTorch bindings (optional) - temporarily disabled
-hf-hub = "0.3"           # for Hugging Face model downloads
+hf-hub = { version = "0.4", default-features = false, features = ["tokio", "rustls-tls"] }  # for Hugging Face model downloads (rustls for cross-compilation)
 memmap2 = "0.9"          # for memory-mapped file I/O
 byteorder = "1.5"        # for binary data handling
 half = "2.3"             # for half-precision floating point
