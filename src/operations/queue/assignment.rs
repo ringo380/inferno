@@ -173,16 +173,16 @@ impl LoadBalancer {
     fn find_least_loaded_worker(&self) -> Option<u32> {
         self.worker_load
             .iter()
-            .min_by_key(|(_, &load)| load)
-            .map(|(&id, _)| id)
+            .min_by_key(|(_, load)| **load)
+            .map(|(id, _)| *id)
     }
 
     /// Find worker with earliest completion time
     fn find_earliest_completion_worker(&self) -> Option<u32> {
         self.worker_eta
             .iter()
-            .min_by_key(|(_, &eta)| eta)
-            .map(|(&id, _)| id)
+            .min_by_key(|(_, eta)| **eta)
+            .map(|(id, _)| *id)
     }
 
     /// Round-robin worker selection (simple)

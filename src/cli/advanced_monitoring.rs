@@ -978,7 +978,7 @@ fn validate_alert_action(
     }
 
     // Validate severity if provided
-    if let Some(ref sev) = severity {
+    if let Some(sev) = severity {
         let valid_severities = ["critical", "warning", "info", "error"];
         if !valid_severities
             .iter()

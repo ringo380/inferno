@@ -1,7 +1,7 @@
 [package]
 name = "inferno-ai"
 version = "0.10.2"
-edition = "2021"
+edition = "2024"
 authors = ["Inferno Developers"]
 description = "Enterprise AI/ML model runner with automatic updates, real-time monitoring, and multi-interface support"
 readme = "README.md"

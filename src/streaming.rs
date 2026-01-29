@@ -201,7 +201,7 @@ impl StreamingManager {
         &self,
         stream_id: String,
         mut base_stream: TokenStream,
-    ) -> impl Stream<Item = Result<StreamingToken, InfernoError>> {
+    ) -> impl Stream<Item = Result<StreamingToken, InfernoError>> + 'static {
         let config = self.config.clone();
         let metrics = self.metrics.clone();
         let active_streams = self.active_streams.clone();

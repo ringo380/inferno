@@ -262,7 +262,7 @@ fn validate_server(max_connections: usize) -> Result<()> {
 
 /// Validate config export parameters
 fn validate_config_export(output: &Option<std::path::PathBuf>) -> Result<()> {
-    if let Some(ref path) = output {
+    if let Some(path) = output {
         if let Some(parent) = path.parent() {
             if !parent.as_os_str().is_empty() && !parent.exists() {
                 anyhow::bail!("Output directory does not exist: {}", parent.display());
