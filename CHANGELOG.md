@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.5] - 2026-01-30
+
+### Fixed
+
+- **Release Pipeline**: Added `shell: bash` for Windows build step compatibility
+- **Release Pipeline**: Added GTK3 dependencies to build artifacts job for Linux x86_64
+- **Release Pipeline**: Excluded `desktop` feature from Windows builds (requires WebView2)
+- **Release Pipeline**: Use minimal features for ARM64 cross-compiled builds
+- **Release Pipeline**: Added `--allow-dirty` flag to cargo package/publish for CI
+- **Release Pipeline**: Made post-release version bump more robust and idempotent
+- **Homebrew**: Updated formula with actual SHA256 checksums from v0.10.4 release
+
+### Changed
+
+- **Release Pipeline**: Platform-specific build configurations for optimal feature sets
+  - Linux x86_64/macOS: all features
+  - Windows: features without desktop
+  - Linux ARM64: minimal features (cross-compiled)
+
 ## [0.10.4] - 2026-01-29
 
 ### Fixed
