@@ -555,7 +555,7 @@ impl MetricsCollector {
             output.push_str("\n# Custom counters\n");
             for (name, value) in &snapshot.custom_counters {
                 // Sanitize metric name for Prometheus (replace . and - with _)
-                let safe_name = name.replace('.', "_").replace('-', "_");
+                let safe_name = name.replace(['.', '-'], "_");
                 output.push_str(&format!("# HELP {} Custom counter metric\n", safe_name));
                 output.push_str(&format!("# TYPE {} counter\n", safe_name));
                 output.push_str(&format!("{} {}\n", safe_name, value));
@@ -567,7 +567,7 @@ impl MetricsCollector {
             output.push_str("\n# Custom gauges\n");
             for (name, value) in &snapshot.custom_gauges {
                 // Sanitize metric name for Prometheus (replace . and - with _)
-                let safe_name = name.replace('.', "_").replace('-', "_");
+                let safe_name = name.replace(['.', '-'], "_");
                 output.push_str(&format!("# HELP {} Custom gauge metric\n", safe_name));
                 output.push_str(&format!("# TYPE {} gauge\n", safe_name));
                 output.push_str(&format!("{} {}\n", safe_name, value));

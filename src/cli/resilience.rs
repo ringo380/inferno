@@ -437,13 +437,11 @@ async fn test_resilience_pattern(pattern: String, requests: u32, failure_rate: f
                 for i in 1..=requests {
                     let bh = bulkhead.clone();
                     let handle = tokio::spawn(async move {
-                        let result = bh
-                            .execute(|| async {
-                                tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-                                Ok(format!("Request {}", i))
-                            })
-                            .await;
-                        result
+                        bh.execute(|| async {
+                            tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                            Ok(format!("Request {}", i))
+                        })
+                        .await
                     });
                     handles.push(handle);
 
