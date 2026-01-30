@@ -3,24 +3,24 @@ class Inferno < Formula
   desc "Enterprise AI/ML model runner with automatic updates and real-time monitoring"
   homepage "https://github.com/ringo380/inferno"
   license "MIT OR Apache-2.0"
-  version "0.10.4"
+  version "0.10.5"
 
   # Platform-specific downloads
   if OS.mac?
     if Hardware::CPU.arm?
       url "https://github.com/ringo380/inferno/releases/download/v#{version}/inferno-macos-aarch64.tar.gz"
-      sha256 "491cd2d33f7be554d6bcfa332bdb9ffc854299d18f4ec48444d53b0e4691b7f5"
+      sha256 "ea37fef8009c00a2bec5a6df0a52c95b6c2e2218182edc7808dcd97d52893208"
     else
       url "https://github.com/ringo380/inferno/releases/download/v#{version}/inferno-macos-x86_64.tar.gz"
-      sha256 "166cc6625170abe1d149c1979df79ca8d664b2af8f14b961890e2c428d526812"
+      sha256 "646b293bbbe467919f3e71a9671f1b0b0986057f712f44bfc1221ab29fc39d1f"
     end
   elsif OS.linux?
     if Hardware::CPU.arm?
       url "https://github.com/ringo380/inferno/releases/download/v#{version}/inferno-linux-aarch64.tar.gz"
-      sha256 "d438ee72653d5f517f4d5b6f720f5a62398c3031ed2582d068a714cecc690b94"
+      sha256 "f25d3164eeaa88d9174ef65e8f8a43f8cb06865871e11b8234fe8348ab63b514"
     else
       url "https://github.com/ringo380/inferno/releases/download/v#{version}/inferno-linux-x86_64.tar.gz"
-      sha256 "3811b4c9614b3c25e10336c16d6a845fe37cd023dbac43dda224e661ebe1bf32"
+      sha256 "b08e6936e6e73ad53bc74e373e42b5f6f9f6ac0bb9c6abe97308e2b8af947e99"
     end
   end
 
