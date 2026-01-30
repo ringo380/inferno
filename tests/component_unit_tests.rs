@@ -295,15 +295,12 @@ async fn test_performance_monitor() {
     assert!(!metrics.is_empty());
 }
 
-// TODO: This test hangs due to background cleanup task not being properly cleaned up
-// when the test ends. Need to add a shutdown mechanism to ResponseCache.
 #[tokio::test]
-#[ignore = "Hangs due to background cleanup task - needs shutdown mechanism"]
 async fn test_response_cache_system() {
     use inferno::response_cache::{CacheKey, ResponseCache, ResponseCacheConfig, ResponseMetadata};
 
     let config = ResponseCacheConfig::default();
-    let cache = ResponseCache::new(config, None).await.unwrap();
+    let mut cache = ResponseCache::new(config, None).await.unwrap();
 
     // Test cache operations with correct CacheKey structure
     let key = CacheKey {
@@ -333,6 +330,9 @@ async fn test_response_cache_system() {
     // Test cache statistics
     let stats = cache.get_stats().await;
     assert_eq!(stats.total_entries, 1);
+
+    // Properly shutdown background cleanup task
+    cache.shutdown().await;
 }
 
 #[tokio::test]

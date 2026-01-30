@@ -7,7 +7,7 @@
 use crate::metrics::MetricsCollector;
 use anyhow::{Context, Result};
 use blake3;
-use flate2::{read::GzDecoder, write::GzEncoder, Compression};
+use flate2::{Compression, read::GzDecoder, write::GzEncoder};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{
@@ -363,8 +363,10 @@ impl ResponseCache {
         // Check memory limits before inserting
         self.ensure_memory_limits(&cached_response).await?;
 
-        let mut cache = self.cache.write().await;
-        cache.insert(actual_key, cached_response);
+        {
+            let mut cache = self.cache.write().await;
+            cache.insert(actual_key, cached_response);
+        } // Release write lock before calling update_stats
 
         self.update_stats().await;
 
@@ -379,31 +381,35 @@ impl ResponseCache {
     }
 
     pub async fn invalidate(&self, pattern: &str) -> Result<usize> {
-        let mut cache = self.cache.write().await;
-        let mut dedup_map = self.deduplication_map.write().await;
+        let removed_count = {
+            let mut cache = self.cache.write().await;
+            let mut dedup_map = self.deduplication_map.write().await;
 
-        let keys_to_remove: Vec<String> = cache
-            .keys()
-            .filter(|key| key.contains(pattern))
-            .cloned()
-            .collect();
+            let keys_to_remove: Vec<String> = cache
+                .keys()
+                .filter(|key| key.contains(pattern))
+                .cloned()
+                .collect();
 
-        let removed_count = keys_to_remove.len();
+            let removed_count = keys_to_remove.len();
 
-        for key in &keys_to_remove {
-            cache.remove(key);
-        }
+            for key in &keys_to_remove {
+                cache.remove(key);
+            }
 
-        // Also remove from deduplication map
-        let dedup_keys_to_remove: Vec<String> = dedup_map
-            .iter()
-            .filter(|(k, v)| k.contains(pattern) || v.contains(pattern))
-            .map(|(k, _)| k.clone())
-            .collect();
+            // Also remove from deduplication map
+            let dedup_keys_to_remove: Vec<String> = dedup_map
+                .iter()
+                .filter(|(k, v)| k.contains(pattern) || v.contains(pattern))
+                .map(|(k, _)| k.clone())
+                .collect();
 
-        for key in &dedup_keys_to_remove {
-            dedup_map.remove(key);
-        }
+            for key in &dedup_keys_to_remove {
+                dedup_map.remove(key);
+            }
+
+            removed_count
+        }; // Release locks before calling update_stats
 
         self.update_stats().await;
 
@@ -917,9 +923,12 @@ mod tests {
                 let total_chars = hash1.len();
                 let change_ratio = different_chars as f64 / total_chars as f64;
 
-                assert!(change_ratio >= 0.25,
+                assert!(
+                    change_ratio >= 0.25,
                     "Cryptographic hash {:?} should have good avalanche effect. Change ratio: {:.3}",
-                    algorithm, change_ratio);
+                    algorithm,
+                    change_ratio
+                );
             }
         }
     }
