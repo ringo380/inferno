@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.3] - 2026-01-29
+
+### Added
+
+- **Metrics System**: Added generic counter and gauge support to MetricsCollector
+  - New `increment_counter()` and `record_gauge()` public methods
+  - Custom metrics included in MetricsSnapshot and Prometheus export
+  - Thread-safe implementation using `Arc<RwLock<...>>`
+- **Token Sampling**: Implemented proper RNG-based token sampling for inference
+
+### Fixed
+
+- **Dashboard API**: Fixed user permissions serialization (convert to strings)
+- **Response Cache**: Resolved deadlock issue and re-enabled cache tests
+- **Batch Processing**: Fixed cron parsing to use correct `from` parameter
+
+### Changed
+
+- **CLI Middleware**: Metrics middleware now records to MetricsCollector instead of just logging
+- **Code Style**: Applied consistent formatting across codebase
+- **Rust Edition**: Upgraded to Rust edition 2024
+
+## [0.10.2] - 2025-01-28
+
+### Fixed
+
+- **CLI**: Route help and version output to stdout with exit code 0
+- **CI Pipeline**: Skip strip for aarch64-linux-gnu cross-compilation
+- **Dependencies**: Update hf-hub to 0.4 with rustls-tls for cross-compilation
+- **Dependencies**: Use rustls for download feature to avoid OpenSSL cross-compilation issues
+- **CI Pipeline**: Various CI workflow fixes and optimizations
+
 ## [0.10.1] - 2025-01-28
 
 ### Fixed

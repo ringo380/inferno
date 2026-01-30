@@ -423,7 +423,7 @@ System health status.
 
 **Endpoint**: `GET /metrics`
 
-Prometheus-compatible metrics.
+Prometheus-compatible metrics including inference stats, system metrics, model metrics, and custom counters/gauges.
 
 ```
 # HELP inferno_requests_total Total number of requests
@@ -434,6 +434,16 @@ inferno_requests_total{model="gpt2",endpoint="chat"} 1234
 # TYPE inferno_request_duration_seconds histogram
 inferno_request_duration_seconds_bucket{le="0.1"} 100
 inferno_request_duration_seconds_bucket{le="0.5"} 500
+
+# Custom counters (from CLI commands, middleware, etc.)
+# HELP inferno_command_total Custom counter metric
+# TYPE inferno_command_total counter
+inferno_command_total 42
+
+# Custom gauges
+# HELP inferno_command_duration_ms Custom gauge metric
+# TYPE inferno_command_duration_ms gauge
+inferno_command_duration_ms 150.5
 ```
 
 ### Model Conversion
