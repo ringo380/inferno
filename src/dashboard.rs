@@ -3054,7 +3054,11 @@ async fn api_create_user(
                 is_active: new_user.is_active,
                 created_at: new_user.created_at,
                 last_login: new_user.last_login,
-                permissions: new_user.permissions.iter().map(|p| format!("{:?}", p)).collect(),
+                permissions: new_user
+                    .permissions
+                    .iter()
+                    .map(|p| format!("{:?}", p))
+                    .collect(),
             };
             (StatusCode::CREATED, Json(response)).into_response()
         }
