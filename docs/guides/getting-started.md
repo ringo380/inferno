@@ -126,9 +126,9 @@ Pre-built binaries for major platforms.
 #### Linux
 
 ```bash
-# Download latest release (replace v0.10.4 with current version)
+# Download latest release (replace v0.10.5 with current version)
 # Check https://github.com/ringo380/inferno/releases for latest version
-wget https://github.com/ringo380/inferno/releases/download/v0.10.4/inferno-linux-x86_64.tar.gz
+wget https://github.com/ringo380/inferno/releases/download/v0.10.5/inferno-linux-x86_64.tar.gz
 
 # Extract and install
 tar xzf inferno-linux-x86_64.tar.gz
@@ -143,7 +143,7 @@ inferno --version
 
 ```bash
 # Check https://github.com/ringo380/inferno/releases for latest version
-VERSION="v0.10.4"
+VERSION="v0.10.5"
 
 # Intel Macs
 curl -LO "https://github.com/ringo380/inferno/releases/download/${VERSION}/inferno-macos-x86_64.tar.gz"
@@ -165,7 +165,7 @@ inferno --version
 
 ```powershell
 # Check https://github.com/ringo380/inferno/releases for latest version
-$VERSION = "v0.10.4"
+$VERSION = "v0.10.5"
 
 # Download from releases page
 Invoke-WebRequest -Uri "https://github.com/ringo380/inferno/releases/download/$VERSION/inferno-windows-x86_64.exe.zip" -OutFile "inferno.zip"
