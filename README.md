@@ -72,9 +72,9 @@ cd dashboard && npm run tauri dev
 
 #### CLI Tools (for automation and scripting)
 
-**Homebrew**
+**Homebrew** (coming soon)
 ```bash
-# Add tap and install
+# Add tap and install (once tap is available)
 brew tap ringo380/tap
 brew install inferno
 
@@ -84,6 +84,8 @@ brew install ringo380/tap/inferno
 # Start as service
 brew services start inferno
 ```
+
+> **Note**: The Homebrew tap is being set up. Until then, use the Quick Install Script or build from source.
 
 **Quick Install Script**
 ```bash
@@ -129,11 +131,12 @@ services:
 
 #### Cargo (Rust)
 ```bash
-# From crates.io
-cargo install inferno
+# From crates.io (once published)
+cargo install inferno-ai
 
-# From GitHub Packages
-cargo install --registry github inferno
+# From source (recommended until crates.io publish)
+git clone https://github.com/ringo380/inferno.git
+cd inferno && cargo install --path .
 ```
 
 #### NPM (Desktop App)
@@ -167,7 +170,7 @@ sudo mv inferno-linux-* /usr/local/bin/inferno
 
 #### Via Cargo
 ```powershell
-cargo install inferno
+cargo install inferno-ai
 ```
 
 ### 🔨 Build from Source
@@ -204,7 +207,7 @@ brew upgrade inferno
 docker pull ghcr.io/ringo380/inferno:latest
 
 # Cargo
-cargo install inferno --force
+cargo install inferno-ai --force
 
 # NPM
 npm update @ringo380/inferno-desktop

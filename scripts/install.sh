@@ -11,7 +11,7 @@ BLUE='\033[0;34m'
 NC='\033[0m'
 
 # Configuration
-REPO_URL="https://github.com/inferno-ai/inferno"
+REPO_URL="https://github.com/ringo380/inferno"
 BINARY_NAME="inferno"
 INSTALL_DIR="${INSTALL_DIR:-/usr/local/bin}"
 VERSION="${VERSION:-latest}"
@@ -151,11 +151,11 @@ get_download_url() {
 
     local filename
     case "$platform" in
-        linux-x86_64) filename="inferno-linux-x86_64" ;;
-        linux-aarch64) filename="inferno-linux-aarch64" ;;
-        macos-x86_64) filename="inferno-macos-x86_64" ;;
-        macos-aarch64) filename="inferno-macos-aarch64" ;;
-        windows-x86_64) filename="inferno-windows-x86_64.exe" ;;
+        linux-x86_64) filename="inferno-linux-x86_64.tar.gz" ;;
+        linux-aarch64) filename="inferno-linux-aarch64.tar.gz" ;;
+        macos-x86_64) filename="inferno-macos-x86_64.tar.gz" ;;
+        macos-aarch64) filename="inferno-macos-aarch64.tar.gz" ;;
+        windows-x86_64) filename="inferno-windows-x86_64.exe.zip" ;;
         *) error "Unsupported platform: $platform" ;;
     esac
 
@@ -195,17 +195,42 @@ install_inferno() {
     trap "rm -rf $temp_dir" EXIT
 
     log "Downloading Inferno..."
-    local temp_file="$temp_dir/inferno_download"
+    local temp_archive="$temp_dir/inferno_archive"
 
-    if ! curl -fL "$download_url" -o "$temp_file"; then
+    if ! curl -fL "$download_url" -o "$temp_archive"; then
         error "Failed to download Inferno from $download_url"
     fi
 
-    # Make executable and install
-    chmod +x "$temp_file"
+    log "Extracting archive..."
+    cd "$temp_dir"
+
+    # Extract based on file type
+    if [[ "$download_url" == *.tar.gz ]]; then
+        if ! tar xzf "$temp_archive"; then
+            error "Failed to extract tar.gz archive"
+        fi
+    elif [[ "$download_url" == *.zip ]]; then
+        if ! unzip -q "$temp_archive"; then
+            error "Failed to extract zip archive"
+        fi
+    fi
+
+    # Find and install the binary
+    local extracted_binary
+    if [[ "$platform" == windows-* ]]; then
+        extracted_binary=$(find . -name "inferno*.exe" -type f | head -1)
+    else
+        extracted_binary=$(find . -name "inferno" -type f | head -1)
+    fi
+
+    if [[ -z "$extracted_binary" ]]; then
+        error "Could not find binary in archive"
+    fi
+
+    chmod +x "$extracted_binary"
 
     log "Installing to $binary_path..."
-    if ! mv "$temp_file" "$binary_path"; then
+    if ! mv "$extracted_binary" "$binary_path"; then
         error "Failed to install binary"
     fi
 

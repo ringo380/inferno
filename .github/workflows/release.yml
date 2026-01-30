@@ -176,7 +176,8 @@ jobs:
     - name: Install system dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y pkg-config libssl-dev libglib2.0-dev
+        sudo apt-get install -y pkg-config libssl-dev libglib2.0-dev \
+          libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev
 
     - name: Validate workspace
       run: |
@@ -341,7 +342,7 @@ jobs:
 
           ### Quick Install (Linux/macOS)
           ```bash
-          curl -L https://github.com/inferno-ai/inferno/releases/download/${{ needs.version-management.outputs.tag }}/inferno-linux-x86_64.tar.gz | tar xz
+          curl -L https://github.com/ringo380/inferno/releases/download/${{ needs.version-management.outputs.tag }}/inferno-linux-x86_64.tar.gz | tar xz
           sudo mv inferno /usr/local/bin/
           ```
 
@@ -418,8 +419,8 @@ jobs:
       with:
         formula-name: inferno
         formula-path: Formula/inferno.rb
-        homebrew-tap: inferno-ai/homebrew-tap
-        download-url: https://github.com/inferno-ai/inferno/releases/download/${{ needs.version-management.outputs.tag }}/inferno-macos-x86_64.tar.gz
+        homebrew-tap: ringo380/homebrew-tap
+        download-url: https://github.com/ringo380/inferno/releases/download/${{ needs.version-management.outputs.tag }}/inferno-macos-x86_64.tar.gz
         commit-message: |
           Bump inferno to ${{ needs.version-management.outputs.version }}
 
@@ -444,6 +445,11 @@ jobs:
         # Bump to next dev version
         CURRENT_VERSION="${{ needs.version-management.outputs.version }}"
         NEXT_VERSION=$(echo $CURRENT_VERSION | awk -F. '{print $1"."$2"."($3+1)"-dev"}')
+
+        # Ensure we're on main branch (checkout uses detached HEAD for tags)
+        git fetch origin main
+        git checkout main
+        git pull origin main
 
         sed -i "s/version = \"$CURRENT_VERSION\"/version = \"$NEXT_VERSION\"/" Cargo.toml
 

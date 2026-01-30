@@ -54,14 +54,14 @@ Docker provides the fastest and most reliable installation experience.
 
 ```bash
 # Pull and run Inferno
-docker run -p 8080:8080 inferno:latest serve
+docker run -p 8080:8080 ghcr.io/ringo380/inferno:latest serve
 
 # With persistent storage
 mkdir -p ./inferno-data/models ./inferno-data/cache
 docker run -p 8080:8080 \
   -v ./inferno-data/models:/data/models \
   -v ./inferno-data/cache:/data/cache \
-  inferno:latest serve
+  ghcr.io/ringo380/inferno:latest serve
 ```
 
 #### Production Docker Setup
@@ -97,7 +97,7 @@ docker run -d \
   -v ./inferno/config:/etc/inferno \
   -v ./inferno/logs:/var/log/inferno \
   --restart unless-stopped \
-  inferno:latest serve --config /etc/inferno/inferno.toml
+  ghcr.io/ringo380/inferno:latest serve --config /etc/inferno/inferno.toml
 ```
 
 #### GPU-Enabled Docker
@@ -106,17 +106,17 @@ docker run -d \
 # NVIDIA GPU support
 docker run --gpus all -p 8080:8080 \
   -v ./inferno-data:/data \
-  inferno:latest serve
+  ghcr.io/ringo380/inferno:latest serve
 
 # AMD GPU support (ROCm)
 docker run --device=/dev/kfd --device=/dev/dri \
   -p 8080:8080 -v ./inferno-data:/data \
-  inferno:rocm serve
+  ghcr.io/ringo380/inferno:rocm serve
 
 # Apple Silicon (automatic GPU support)
 docker run -p 8080:8080 \
   -v ./inferno-data:/data \
-  inferno:latest serve
+  ghcr.io/ringo380/inferno:latest serve
 ```
 
 ### Method 2: Binary Installation
@@ -126,8 +126,9 @@ Pre-built binaries for major platforms.
 #### Linux
 
 ```bash
-# Download latest release
-wget https://github.com/ringo380/inferno/releases/latest/download/inferno-linux-x86_64.tar.gz
+# Download latest release (replace v0.10.4 with current version)
+# Check https://github.com/ringo380/inferno/releases for latest version
+wget https://github.com/ringo380/inferno/releases/download/v0.10.4/inferno-linux-x86_64.tar.gz
 
 # Extract and install
 tar xzf inferno-linux-x86_64.tar.gz
@@ -141,13 +142,16 @@ inferno --version
 #### macOS
 
 ```bash
+# Check https://github.com/ringo380/inferno/releases for latest version
+VERSION="v0.10.4"
+
 # Intel Macs
-wget https://github.com/ringo380/inferno/releases/latest/download/inferno-macos-x86_64.tar.gz
+curl -LO "https://github.com/ringo380/inferno/releases/download/${VERSION}/inferno-macos-x86_64.tar.gz"
 tar xzf inferno-macos-x86_64.tar.gz
 
 # Apple Silicon Macs
-wget https://github.com/ringo380/inferno/releases/latest/download/inferno-macos-arm64.tar.gz
-tar xzf inferno-macos-arm64.tar.gz
+curl -LO "https://github.com/ringo380/inferno/releases/download/${VERSION}/inferno-macos-aarch64.tar.gz"
+tar xzf inferno-macos-aarch64.tar.gz
 
 # Install
 sudo mv inferno /usr/local/bin/
@@ -160,14 +164,17 @@ inferno --version
 #### Windows
 
 ```powershell
-# Download from releases page or use PowerShell
-Invoke-WebRequest -Uri "https://github.com/ringo380/inferno/releases/latest/download/inferno-windows-x86_64.zip" -OutFile "inferno.zip"
+# Check https://github.com/ringo380/inferno/releases for latest version
+$VERSION = "v0.10.4"
+
+# Download from releases page
+Invoke-WebRequest -Uri "https://github.com/ringo380/inferno/releases/download/$VERSION/inferno-windows-x86_64.exe.zip" -OutFile "inferno.zip"
 
 # Extract
-Expand-Archive -Path "inferno.zip" -DestinationPath "C:\\Program Files\\Inferno"
+Expand-Archive -Path "inferno.zip" -DestinationPath "C:\Program Files\Inferno"
 
 # Add to PATH
-$env:PATH += ";C:\\Program Files\\Inferno"
+$env:PATH += ";C:\Program Files\Inferno"
 
 # Verify installation
 inferno --version
@@ -597,7 +604,7 @@ version: '3.8'
 
 services:
   inferno:
-    image: inferno:latest
+    image: ghcr.io/ringo380/inferno:latest
     ports:
       - "8080:8080"
       - "9090:9090"

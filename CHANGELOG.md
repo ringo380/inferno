@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.4] - 2026-01-29
+
+### Fixed
+
+- **Release Pipeline**: Added missing GTK3 dependencies for Tauri desktop builds in pre-release validation
+- **Release Pipeline**: Fixed post-release git push failing due to detached HEAD state
+- **Release Pipeline**: Fixed release notes URL from incorrect organization
+- **Documentation**: Fixed `cargo install` command to use correct crate name `inferno-ai`
+- **Documentation**: Fixed install.sh script to use correct GitHub repository URL (`ringo380/inferno`)
+- **Documentation**: Standardized Docker image references to `ghcr.io/ringo380/inferno:latest`
+- **Documentation**: Fixed binary download URLs to use release tag pattern instead of non-existent `/latest/download/`
+- **Documentation**: Fixed macOS ARM binary name from `arm64` to `aarch64` in docs
+- **Homebrew**: Updated formula to version 0.10.4 with correct tar.gz archive handling
+- **Homebrew**: Fixed tap reference from `inferno-ai/homebrew-tap` to `ringo380/homebrew-tap`
+
+### Changed
+
+- **Install Script**: Updated to handle tar.gz archives properly instead of raw binaries
+- **Documentation**: Added notes about Homebrew tap availability and crates.io publication status
+
 ## [0.10.3] - 2026-01-29
 
 ### Added
