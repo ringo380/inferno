@@ -275,7 +275,11 @@ jobs:
           # Cross-compiled builds use minimal features to avoid native library issues
           # (GTK, OpenSSL, llama.cpp all have cross-compilation challenges)
           cross build --release --target ${{ matrix.target }} --no-default-features --features "download"
+        elif [[ "${{ matrix.os }}" == "windows-latest" ]]; then
+          # Windows builds exclude 'desktop' feature (requires WebView2 setup)
+          cargo build --release --target ${{ matrix.target }} --features "download-native-tls,gguf,ml-backends"
         else
+          # Linux x86_64 and macOS get all features
           cargo build --release --target ${{ matrix.target }} --all-features
         fi
 
