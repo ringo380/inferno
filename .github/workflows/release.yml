@@ -35,6 +35,11 @@ env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
 
+permissions:
+  contents: write
+  packages: write
+  issues: write
+
 jobs:
   # Determine release version and create tag if workflow_dispatch
   version-management:
@@ -438,6 +443,9 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        fetch-depth: 0
 
     - name: Update development version
       if: needs.version-management.outputs.is_prerelease == 'false'
