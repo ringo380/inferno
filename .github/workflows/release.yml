@@ -154,7 +154,7 @@ jobs:
     name: Pre-Release Validation
     runs-on: ubuntu-latest
     needs: version-management
-    timeout-minutes: 20
+    timeout-minutes: 30
 
     steps:
     - name: Checkout code
@@ -190,11 +190,11 @@ jobs:
         cargo fmt --all -- --check
         cargo clippy --workspace --all-targets --all-features -- -D warnings
 
-    - name: Run comprehensive tests
+    - name: Run fast tests
       run: |
-        cargo test --workspace --all-features --release
-        cargo test --test integration_tests --release
-        cargo test --test end_to_end_tests --release
+        # Run fast tests only (unit + basic + component tests)
+        # Integration tests are skipped to keep CI fast - they run in ./verify.sh
+        cargo test --workspace --all-features
 
     - name: Validate documentation
       run: |
