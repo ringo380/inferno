@@ -128,10 +128,10 @@ async fn main() -> Result<()> {
 
     if let Err(e) = result {
         // Stop background service if it was started
-        if let Some(service) = background_service {
-            if let Err(stop_err) = service.stop().await {
-                warn!("Failed to stop background service: {}", stop_err);
-            }
+        if let Some(service) = background_service
+            && let Err(stop_err) = service.stop().await
+        {
+            warn!("Failed to stop background service: {}", stop_err);
         }
 
         // Provide user-friendly error handling
