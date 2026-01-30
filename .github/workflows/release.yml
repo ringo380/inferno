@@ -458,16 +458,34 @@ jobs:
     - name: Update development version
       if: needs.version-management.outputs.is_prerelease == 'false'
       run: |
-        # Bump to next dev version
-        CURRENT_VERSION="${{ needs.version-management.outputs.version }}"
-        NEXT_VERSION=$(echo $CURRENT_VERSION | awk -F. '{print $1"."$2"."($3+1)"-dev"}')
-
-        # Ensure we're on main branch (checkout uses detached HEAD for tags)
+        # Ensure we're on main branch
         git fetch origin main
         git checkout main
         git pull origin main
 
-        sed -i "s/version = \"$CURRENT_VERSION\"/version = \"$NEXT_VERSION\"/" Cargo.toml
+        # Get actual current version from Cargo.toml on main
+        CARGO_VERSION=$(grep '^version = ' Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
+        RELEASE_VERSION="${{ needs.version-management.outputs.version }}"
+        NEXT_VERSION=$(echo $RELEASE_VERSION | awk -F. '{print $1"."$2"."($3+1)"-dev"}')
+
+        echo "Cargo.toml version: $CARGO_VERSION"
+        echo "Release version: $RELEASE_VERSION"
+        echo "Next dev version: $NEXT_VERSION"
+
+        # Only update if version needs to change
+        if [[ "$CARGO_VERSION" == "$NEXT_VERSION" ]]; then
+          echo "Version already at $NEXT_VERSION, skipping bump"
+          exit 0
+        fi
+
+        # Update version in Cargo.toml (match any version string)
+        sed -i "0,/^version = \".*\"/s//version = \"$NEXT_VERSION\"/" Cargo.toml
+
+        # Check if there are changes to commit
+        if git diff --quiet Cargo.toml; then
+          echo "No changes to Cargo.toml, skipping commit"
+          exit 0
+        fi
 
         git config user.name "github-actions[bot]"
         git config user.email "github-actions[bot]@users.noreply.github.com"
