@@ -1,11 +1,11 @@
 use crate::config::Config;
 use anyhow::{Context, Result};
 use axum::{
-    extract::{ws::WebSocket, Path, Query, State, WebSocketUpgrade},
+    Json, Router,
+    extract::{Path, Query, State, WebSocketUpgrade, ws::WebSocket},
     http::StatusCode,
     response::{Html, IntoResponse},
     routing::{get, post},
-    Json, Router,
 };
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -13,7 +13,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use sysinfo::SystemExt;
-use tokio::sync::{broadcast, RwLock};
+use tokio::sync::{RwLock, broadcast};
 use tower::ServiceBuilder;
 use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;

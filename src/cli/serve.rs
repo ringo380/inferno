@@ -10,11 +10,11 @@ use crate::{
 };
 use anyhow::Result;
 use axum::{
+    Json, Router,
     extract::State,
     http::StatusCode,
     response::IntoResponse,
     routing::{get, post},
-    Json, Router,
 };
 use clap::Args;
 use serde_json::json;
@@ -358,7 +358,7 @@ async fn server_status(State(state): State<Arc<ServerState>>) -> impl IntoRespon
                     "error": "Failed to get server status"
                 })),
             )
-                .into_response()
+                .into_response();
         }
     };
 
@@ -389,7 +389,7 @@ async fn upgrade_status(State(state): State<Arc<ServerState>>) -> impl IntoRespo
                     "error": "Upgrade system not available"
                 })),
             )
-                .into_response()
+                .into_response();
         }
     };
 
@@ -415,7 +415,7 @@ async fn upgrade_check(State(state): State<Arc<ServerState>>) -> impl IntoRespon
                     "error": "Upgrade system not available"
                 })),
             )
-                .into_response()
+                .into_response();
         }
     };
 
@@ -467,7 +467,7 @@ async fn upgrade_install(
                     "error": "Upgrade system not available"
                 })),
             )
-                .into_response()
+                .into_response();
         }
     };
 

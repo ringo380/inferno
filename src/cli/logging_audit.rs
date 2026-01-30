@@ -1546,7 +1546,10 @@ pub async fn execute(args: LoggingAuditArgs, config: &Config) -> Result<()> {
             performance,
         } => {
             if let Some(refresh_interval) = refresh {
-                println!("Monitoring logging and audit system (refresh every {}s, press Ctrl+C to exit)...", refresh_interval);
+                println!(
+                    "Monitoring logging and audit system (refresh every {}s, press Ctrl+C to exit)...",
+                    refresh_interval
+                );
                 loop {
                     display_system_status(
                         &system,
@@ -1677,7 +1680,9 @@ async fn handle_audit_command(command: AuditCommand, system: &LoggingAuditSystem
             {
                 Ok(result) => result?,
                 Err(_) => {
-                    return Err(anyhow::anyhow!("Search query timed out after 60 seconds. Please refine your search criteria."));
+                    return Err(anyhow::anyhow!(
+                        "Search query timed out after 60 seconds. Please refine your search criteria."
+                    ));
                 }
             };
             let search_duration = start_time.elapsed();
@@ -1798,7 +1803,9 @@ async fn handle_audit_command(command: AuditCommand, system: &LoggingAuditSystem
                     ));
                 }
                 // This would implement integrity fixing logic with proper validation
-                println!("✓ Integrity issues analysis completed (actual fixes would be implemented here)");
+                println!(
+                    "✓ Integrity issues analysis completed (actual fixes would be implemented here)"
+                );
             }
         }
 
@@ -1919,7 +1926,9 @@ async fn handle_audit_command(command: AuditCommand, system: &LoggingAuditSystem
                 HashMap::new()
             };
 
-            println!("✓ Manual audit event creation validated (implementation would create actual event here)");
+            println!(
+                "✓ Manual audit event creation validated (implementation would create actual event here)"
+            );
         }
 
         AuditCommand::Archive {
@@ -3155,10 +3164,12 @@ mod tests {
         let event_types: Vec<String> = (0..51).map(|i| format!("type_{}", i)).collect();
         let result = validate_search_parameters(&event_types, &[], &None, None, None);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Too many event types"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Too many event types")
+        );
     }
 
     #[test]
@@ -3166,20 +3177,24 @@ mod tests {
         let severities: Vec<String> = (0..11).map(|i| format!("sev_{}", i)).collect();
         let result = validate_search_parameters(&[], &severities, &None, None, None);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Too many severities"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Too many severities")
+        );
     }
 
     #[test]
     fn test_validate_search_parameters_empty_search_text() {
         let result = validate_search_parameters(&[], &[], &Some("".to_string()), None, None);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Search text cannot be empty"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Search text cannot be empty")
+        );
     }
 
     #[test]
@@ -3187,10 +3202,12 @@ mod tests {
         let long_text = "x".repeat(1001);
         let result = validate_search_parameters(&[], &[], &Some(long_text), None, None);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Search text too long"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Search text too long")
+        );
     }
 
     #[test]
@@ -3203,20 +3220,24 @@ mod tests {
             None,
         );
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("potentially unsafe"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("potentially unsafe")
+        );
     }
 
     #[test]
     fn test_validate_search_parameters_zero_limit() {
         let result = validate_search_parameters(&[], &[], &None, Some(0), None);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Limit must be greater than 0"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Limit must be greater than 0")
+        );
     }
 
     #[test]
@@ -3284,10 +3305,12 @@ mod tests {
         let fields: Vec<String> = (0..6).map(|i| format!("field_{}", i)).collect();
         let result = validate_group_by_fields(&fields);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Too many group by fields"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Too many group by fields")
+        );
     }
 
     #[test]
@@ -3295,10 +3318,12 @@ mod tests {
         let fields = vec!["invalid_field".to_string()];
         let result = validate_group_by_fields(&fields);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Invalid group by field"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Invalid group by field")
+        );
     }
 
     #[test]
@@ -3306,10 +3331,12 @@ mod tests {
         let path = PathBuf::from("/nonexistent/directory/file.json");
         let result = validate_export_path(&path);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("directory does not exist"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("directory does not exist")
+        );
     }
 
     #[test]
@@ -3317,10 +3344,12 @@ mod tests {
         let path = PathBuf::from("/tmp/file.exe");
         let result = validate_export_path(&path);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Unsupported export file extension"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Unsupported export file extension")
+        );
     }
 
     #[test]
@@ -3328,10 +3357,12 @@ mod tests {
         let path = PathBuf::from("/tmp/file");
         let result = validate_export_path(&path);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("must have an extension"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("must have an extension")
+        );
     }
 
     // ============================================================================
@@ -3342,10 +3373,12 @@ mod tests {
     fn test_sanitize_input_empty() {
         let result = sanitize_input("");
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Input cannot be empty"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Input cannot be empty")
+        );
     }
 
     #[test]
@@ -3378,10 +3411,12 @@ mod tests {
     fn test_sanitize_search_text_empty() {
         let result = sanitize_search_text("");
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Search text cannot be empty"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Search text cannot be empty")
+        );
     }
 
     #[test]
@@ -3389,10 +3424,12 @@ mod tests {
         let long_text = "x".repeat(1001);
         let result = sanitize_search_text(&long_text);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Search text too long"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Search text too long")
+        );
     }
 
     #[test]
@@ -3513,10 +3550,12 @@ mod tests {
     fn test_parse_sort_order_invalid() {
         let result = parse_sort_order("invalid");
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Invalid sort order"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Invalid sort order")
+        );
     }
 
     #[test]
@@ -3551,10 +3590,12 @@ mod tests {
     fn test_parse_sort_field_invalid() {
         let result = parse_sort_field("invalid");
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Invalid sort field"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Invalid sort field")
+        );
     }
 
     #[test]
@@ -3581,10 +3622,12 @@ mod tests {
     fn test_parse_export_format_invalid() {
         let result = parse_export_format("invalid");
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Invalid export format"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Invalid export format")
+        );
     }
 
     #[test]

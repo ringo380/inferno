@@ -601,10 +601,12 @@ mod tests {
 
         let result = execute(args, &config).await;
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Circuit breaker name cannot be empty"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Circuit breaker name cannot be empty")
+        );
     }
 
     #[tokio::test]
@@ -620,10 +622,12 @@ mod tests {
 
         let result = execute(args, &config).await;
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Pattern name cannot be empty"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Pattern name cannot be empty")
+        );
     }
 
     #[tokio::test]
@@ -639,10 +643,12 @@ mod tests {
 
         let result = execute(args, &config).await;
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Request count must be at least 1"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Request count must be at least 1")
+        );
     }
 
     #[tokio::test]
@@ -658,10 +664,12 @@ mod tests {
 
         let result = execute(args, &config).await;
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Request count cannot exceed 10000"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Request count cannot exceed 10000")
+        );
     }
 
     #[tokio::test]
@@ -677,10 +685,12 @@ mod tests {
 
         let result = execute(args, &config).await;
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Failure rate must be between 0.0 and 1.0"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Failure rate must be between 0.0 and 1.0")
+        );
     }
 
     #[tokio::test]
@@ -696,9 +706,11 @@ mod tests {
 
         let result = execute(args, &config).await;
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Failure rate must be between 0.0 and 1.0"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Failure rate must be between 0.0 and 1.0")
+        );
     }
 }

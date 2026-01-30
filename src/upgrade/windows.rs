@@ -3,7 +3,7 @@
 //! Handles Windows-specific upgrade operations including MSI/EXE installers,
 //! service management, and Windows Store integration.
 
-use super::{platform::BasePlatformHandler, PlatformUpgradeHandler, UpgradeConfig};
+use super::{PlatformUpgradeHandler, UpgradeConfig, platform::BasePlatformHandler};
 use anyhow::Result;
 use std::path::PathBuf;
 use std::process::Command;

@@ -442,10 +442,12 @@ mod tests {
 
         let result = validate_parameters(&args);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Model name cannot be empty"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Model name cannot be empty")
+        );
     }
 
     #[test]
@@ -457,10 +459,12 @@ mod tests {
 
         let result = validate_parameters(&args);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Max tokens must be greater than 0"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Max tokens must be greater than 0")
+        );
     }
 
     #[test]
@@ -472,10 +476,12 @@ mod tests {
 
         let result = validate_parameters(&args);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Max tokens cannot exceed 32768"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Max tokens cannot exceed 32768")
+        );
     }
 
     #[test]
@@ -502,10 +508,12 @@ mod tests {
 
         let result = validate_parameters(&args);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Temperature must be between 0.0 and 2.0"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Temperature must be between 0.0 and 2.0")
+        );
     }
 
     #[test]
@@ -517,10 +525,12 @@ mod tests {
 
         let result = validate_parameters(&args);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Temperature must be between 0.0 and 2.0"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Temperature must be between 0.0 and 2.0")
+        );
     }
 
     #[test]
@@ -547,10 +557,12 @@ mod tests {
 
         let result = validate_parameters(&args);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Top-p must be between 0.0 and 1.0"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Top-p must be between 0.0 and 1.0")
+        );
     }
 
     #[test]
@@ -562,10 +574,12 @@ mod tests {
 
         let result = validate_parameters(&args);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Top-p must be between 0.0 and 1.0"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Top-p must be between 0.0 and 1.0")
+        );
     }
 
     #[test]
@@ -592,10 +606,12 @@ mod tests {
 
         let result = validate_parameters(&args);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Concurrency must be at least 1"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Concurrency must be at least 1")
+        );
     }
 
     #[test]
@@ -607,10 +623,12 @@ mod tests {
 
         let result = validate_parameters(&args);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Concurrency cannot exceed 128"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Concurrency cannot exceed 128")
+        );
     }
 
     #[test]
@@ -637,10 +655,12 @@ mod tests {
 
         let result = validate_parameters(&args);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Timeout must be at least 1 second"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Timeout must be at least 1 second")
+        );
     }
 
     #[test]
@@ -663,10 +683,12 @@ mod tests {
 
         let result = validate_parameters(&args);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Checkpoint interval must be at least 1"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Checkpoint interval must be at least 1")
+        );
     }
 
     #[test]
@@ -706,10 +728,12 @@ mod tests {
 
         let result = validate_parameters(&args);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Input file does not exist"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Input file does not exist")
+        );
     }
 
     #[test]

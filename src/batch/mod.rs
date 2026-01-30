@@ -11,7 +11,7 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::{
     path::Path,
-    sync::{atomic::AtomicUsize, Arc},
+    sync::{Arc, atomic::AtomicUsize},
     time::{Duration, Instant},
 };
 // use tokio::sync::Semaphore; // Reserved for future concurrent processing

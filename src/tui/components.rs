@@ -1,8 +1,8 @@
 use ratatui::{
+    Frame,
     layout::Rect,
     style::{Color, Modifier, Style},
     widgets::{Block, Borders, Gauge, List, ListItem, Paragraph, Wrap},
-    Frame,
 };
 
 pub struct ProgressBar {

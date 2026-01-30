@@ -1,5 +1,6 @@
 #![allow(dead_code, unused_imports, unused_variables)]
 use crate::{
+    InfernoError,
     api::openai::{
         ChatChunkChoice, ChatCompletionChunk, ChatCompletionRequest, ChatDelta, ChatMessage,
     },
@@ -7,12 +8,11 @@ use crate::{
     cli::serve::ServerState,
     streaming::{StreamingConfig, StreamingManager},
     upgrade::{ApplicationVersion, UpgradeEvent, UpgradeStatus},
-    InfernoError,
 };
 use axum::{
     extract::{
-        ws::{Message, WebSocket, WebSocketUpgrade},
         State,
+        ws::{Message, WebSocket, WebSocketUpgrade},
     },
     response::Response,
 };

@@ -662,7 +662,7 @@ impl ModelVersionManager {
             VersionStatus::Draft => return Err(anyhow::anyhow!("Cannot deploy draft version")),
             VersionStatus::Failed => return Err(anyhow::anyhow!("Cannot deploy failed version")),
             VersionStatus::Archived => {
-                return Err(anyhow::anyhow!("Cannot deploy archived version"))
+                return Err(anyhow::anyhow!("Cannot deploy archived version"));
             }
             _ => {}
         }

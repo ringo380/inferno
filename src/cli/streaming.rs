@@ -676,10 +676,12 @@ mod tests {
     fn test_validate_interactive_empty_model() {
         let result = validate_interactive("", 0.7, 0.9);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Model name cannot be empty"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Model name cannot be empty")
+        );
     }
 
     #[test]
@@ -692,10 +694,12 @@ mod tests {
     fn test_validate_interactive_temperature_out_of_range() {
         let result = validate_interactive("model.gguf", 2.5, 0.9);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Temperature must be between"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Temperature must be between")
+        );
 
         let result = validate_interactive("model.gguf", -0.5, 0.9);
         assert!(result.is_err());
@@ -705,10 +709,12 @@ mod tests {
     fn test_validate_interactive_top_p_out_of_range() {
         let result = validate_interactive("model.gguf", 0.7, 1.5);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Top-p must be between"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Top-p must be between")
+        );
 
         let result = validate_interactive("model.gguf", 0.7, -0.1);
         assert!(result.is_err());
@@ -722,60 +728,72 @@ mod tests {
     fn test_validate_benchmark_empty_model() {
         let result = validate_benchmark("", "test prompt", 5, 30);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Model name cannot be empty"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Model name cannot be empty")
+        );
     }
 
     #[test]
     fn test_validate_benchmark_empty_prompt() {
         let result = validate_benchmark("model.gguf", "", 5, 30);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Prompt cannot be empty"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Prompt cannot be empty")
+        );
     }
 
     #[test]
     fn test_validate_benchmark_zero_concurrent() {
         let result = validate_benchmark("model.gguf", "test", 0, 30);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Concurrent streams must be at least 1"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Concurrent streams must be at least 1")
+        );
     }
 
     #[test]
     fn test_validate_benchmark_excessive_concurrent() {
         let result = validate_benchmark("model.gguf", "test", 200, 30);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Concurrent streams cannot exceed 100"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Concurrent streams cannot exceed 100")
+        );
     }
 
     #[test]
     fn test_validate_benchmark_zero_duration() {
         let result = validate_benchmark("model.gguf", "test", 5, 0);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Duration must be at least 1 second"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Duration must be at least 1 second")
+        );
     }
 
     #[test]
     fn test_validate_benchmark_excessive_duration() {
         let result = validate_benchmark("model.gguf", "test", 5, 5000);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Duration cannot exceed 3600 seconds"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Duration cannot exceed 3600 seconds")
+        );
     }
 
     #[test]
@@ -792,20 +810,24 @@ mod tests {
     fn test_validate_monitor_zero_interval() {
         let result = validate_monitor(0);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Monitor interval must be at least 1 second"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Monitor interval must be at least 1 second")
+        );
     }
 
     #[test]
     fn test_validate_monitor_excessive_interval() {
         let result = validate_monitor(4000);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Monitor interval cannot exceed 3600 seconds"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Monitor interval cannot exceed 3600 seconds")
+        );
     }
 
     #[test]
@@ -822,20 +844,24 @@ mod tests {
     fn test_validate_server_zero_connections() {
         let result = validate_server(0);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Maximum connections must be at least 1"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Maximum connections must be at least 1")
+        );
     }
 
     #[test]
     fn test_validate_server_excessive_connections() {
         let result = validate_server(20000);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Maximum connections cannot exceed 10000"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Maximum connections cannot exceed 10000")
+        );
     }
 
     #[test]
@@ -859,10 +885,12 @@ mod tests {
         let path = PathBuf::from("/nonexistent/directory/config.json");
         let result = validate_config_export(&Some(path));
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Output directory does not exist"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Output directory does not exist")
+        );
     }
 
     #[test]

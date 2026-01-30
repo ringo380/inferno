@@ -2,8 +2,8 @@
 mod dashboard_api_tests {
     use super::*;
     use axum::{
-        http::{Method, Request, StatusCode},
         Router,
+        http::{Method, Request, StatusCode},
     };
     use hyper::Body;
     use inferno::dashboard::{

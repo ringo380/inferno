@@ -3,25 +3,25 @@ use crate::logging_audit::{
     ComplianceReport, ComplianceStandard, IntegrityReport, IntegrityStatus,
 };
 use aes_gcm::{
-    aead::{Aead, AeadCore, KeyInit, OsRng},
     Aes256Gcm, Key, Nonce,
+    aead::{Aead, AeadCore, KeyInit, OsRng},
 };
 use anyhow::Result;
-use base64::{engine::general_purpose, Engine as _};
+use base64::{Engine as _, engine::general_purpose};
 use chrono::{DateTime, Datelike, Timelike, Utc};
-use flate2::{write::GzEncoder, Compression as GzCompression};
+use flate2::{Compression as GzCompression, write::GzEncoder};
 #[cfg(feature = "email-alerts")]
 use lettre::{
-    message::{header::ContentType, Mailbox, Message},
-    transport::smtp::authentication::Credentials,
     AsyncSmtpTransport, AsyncTransport, Tokio1Executor,
+    message::{Mailbox, Message, header::ContentType},
+    transport::smtp::authentication::Credentials,
 };
 use ring::rand::{SecureRandom, SystemRandom};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, io::Write, path::PathBuf, sync::Arc, time::SystemTime};
 use tokio::{
     fs,
-    sync::{mpsc, RwLock},
+    sync::{RwLock, mpsc},
     time::interval,
 };
 use tracing::{debug, error, info, warn};
@@ -609,7 +609,7 @@ impl AuditLogger {
                 return Err(anyhow::anyhow!(
                     "Unsupported export format: {:?}",
                     config.export_format
-                ))
+                ));
             }
         };
 
@@ -2747,10 +2747,12 @@ mod tests {
 
         let result = logger.query_events(invalid_query).await;
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Start time cannot be after end time"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Start time cannot be after end time")
+        );
 
         // Test oversized limit
         let oversized_query = AuditQuery {

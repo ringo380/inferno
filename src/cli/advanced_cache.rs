@@ -9,7 +9,7 @@ use crate::advanced_cache::{
     MockCacheOptimizer, MockCompressionEngine, SourceType, WarmingSource,
 };
 use crate::config::Config;
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use clap::{Args, Subcommand};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -2731,10 +2731,12 @@ mod tests {
         };
         let result = validate_cache_operation_command(&command);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("key cannot be empty"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("key cannot be empty")
+        );
     }
 
     #[test]
@@ -2759,10 +2761,12 @@ mod tests {
         };
         let result = validate_cache_operation_command(&command);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("key cannot be empty"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("key cannot be empty")
+        );
     }
 
     #[test]
@@ -2776,10 +2780,12 @@ mod tests {
         };
         let result = validate_cache_operation_command(&command);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("value cannot be empty"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("value cannot be empty")
+        );
     }
 
     #[test]
@@ -2793,10 +2799,12 @@ mod tests {
         };
         let result = validate_cache_operation_command(&command);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Priority must be between"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Priority must be between")
+        );
     }
 
     #[test]
@@ -2826,10 +2834,12 @@ mod tests {
         };
         let result = validate_eviction_command(&command);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Invalid eviction policy"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Invalid eviction policy")
+        );
     }
 
     #[test]
@@ -2877,10 +2887,12 @@ mod tests {
         };
         let result = validate_eviction_command(&command);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Priority threshold"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Priority threshold")
+        );
     }
 
     // -------------------------------------------------------------------------
@@ -2898,10 +2910,12 @@ mod tests {
         };
         let result = validate_prefetch_command(&command);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Invalid warmup source"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Invalid warmup source")
+        );
     }
 
     #[test]
@@ -2915,10 +2929,12 @@ mod tests {
         };
         let result = validate_prefetch_command(&command);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Location cannot be empty"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Location cannot be empty")
+        );
     }
 
     #[test]
@@ -2943,10 +2959,12 @@ mod tests {
         };
         let result = validate_prefetch_command(&command);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Confidence threshold"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Confidence threshold")
+        );
     }
 
     #[test]
@@ -2959,10 +2977,12 @@ mod tests {
         };
         let result = validate_prefetch_command(&command);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Invalid prefetch strategy"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Invalid prefetch strategy")
+        );
     }
 
     // -------------------------------------------------------------------------
@@ -2979,10 +2999,12 @@ mod tests {
         };
         let result = validate_tier_command(&command);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Invalid tier name"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Invalid tier name")
+        );
     }
 
     #[test]
@@ -3009,10 +3031,12 @@ mod tests {
         };
         let result = validate_tier_command(&command);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("cannot be the same"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("cannot be the same")
+        );
     }
 
     #[test]
@@ -3025,10 +3049,12 @@ mod tests {
         };
         let result = validate_tier_command(&command);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Invalid source tier"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Invalid source tier")
+        );
     }
 
     #[test]
@@ -3040,10 +3066,12 @@ mod tests {
         };
         let result = validate_tier_command(&command);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Migration threshold"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Migration threshold")
+        );
     }
 
     // -------------------------------------------------------------------------
@@ -3060,10 +3088,12 @@ mod tests {
         };
         let result = validate_distributed_command(&command);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Invalid consistency level"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Invalid consistency level")
+        );
     }
 
     #[test]
@@ -3076,10 +3106,12 @@ mod tests {
         };
         let result = validate_distributed_command(&command);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Replication factor"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Replication factor")
+        );
     }
 
     #[test]
@@ -3103,10 +3135,12 @@ mod tests {
         };
         let result = validate_node_command(&command);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("address cannot be empty"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("address cannot be empty")
+        );
     }
 
     #[test]
@@ -3118,10 +3152,12 @@ mod tests {
         };
         let result = validate_node_command(&command);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Invalid node address format"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Invalid node address format")
+        );
     }
 
     #[test]
@@ -3149,10 +3185,12 @@ mod tests {
         };
         let result = validate_compression_command(&command);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Invalid compression algorithm"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Invalid compression algorithm")
+        );
     }
 
     #[test]
@@ -3165,10 +3203,12 @@ mod tests {
         };
         let result = validate_compression_command(&command);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Compression level"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Compression level")
+        );
     }
 
     #[test]
@@ -3194,10 +3234,12 @@ mod tests {
         };
         let result = validate_compression_command(&command);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("size must be greater than 0"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("size must be greater than 0")
+        );
     }
 
     #[test]
@@ -3209,10 +3251,12 @@ mod tests {
         };
         let result = validate_compression_command(&command);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("ratio threshold must be at least 1.0"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("ratio threshold must be at least 1.0")
+        );
     }
 
     #[test]

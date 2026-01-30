@@ -4,7 +4,7 @@ use crate::{
     metrics::MetricsCollector,
     models::ModelManager,
 };
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use clap::{Args, Subcommand, ValueEnum};
 use serde_json;
 use std::{sync::Arc, time::Instant};

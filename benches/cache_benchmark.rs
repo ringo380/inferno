@@ -3,7 +3,7 @@
 // Cache benchmarks temporarily disabled due to dependency refactoring
 // Will be re-enabled once cache system is stabilized
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, black_box, criterion_group, criterion_main};
 use std::time::Duration;
 
 fn bench_cache_placeholder(c: &mut Criterion) {

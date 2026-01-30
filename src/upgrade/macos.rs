@@ -5,8 +5,8 @@
 //! code signing verification, and system integration.
 
 use super::{
-    platform::BasePlatformHandler, PlatformUpgradeHandler, UpgradeConfig, UpgradeError,
-    UpgradeResult,
+    PlatformUpgradeHandler, UpgradeConfig, UpgradeError, UpgradeResult,
+    platform::BasePlatformHandler,
 };
 use anyhow::Result;
 use std::path::PathBuf;
@@ -326,7 +326,9 @@ impl MacOSUpgradeHandler {
         if output.status.success() {
             let update_list = String::from_utf8_lossy(&output.stdout);
             if update_list.contains("restart") {
-                warn!("System updates requiring restart are available. Consider installing them after the upgrade.");
+                warn!(
+                    "System updates requiring restart are available. Consider installing them after the upgrade."
+                );
             }
         }
 

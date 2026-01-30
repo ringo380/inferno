@@ -3,7 +3,7 @@
 //! Handles Linux-specific upgrade operations including package management,
 //! systemd service integration, and distribution-specific handling.
 
-use super::{platform::BasePlatformHandler, PlatformUpgradeHandler, UpgradeConfig};
+use super::{PlatformUpgradeHandler, UpgradeConfig, platform::BasePlatformHandler};
 use anyhow::Result;
 use std::path::PathBuf;
 use std::process::Command;

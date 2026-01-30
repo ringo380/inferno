@@ -220,11 +220,7 @@ impl KVCacheManager {
         let misses = *self.miss_count.read().await as f64;
         let total = hits + misses;
 
-        if total > 0.0 {
-            hits / total
-        } else {
-            0.0
-        }
+        if total > 0.0 { hits / total } else { 0.0 }
     }
 }
 

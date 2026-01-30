@@ -479,10 +479,12 @@ mod tests {
 
         let result = cmd.validate(&ctx).await;
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Command name cannot be empty"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Command name cannot be empty")
+        );
     }
 
     #[tokio::test]
@@ -503,10 +505,12 @@ mod tests {
 
         let result = cmd.validate(&ctx).await;
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Limit must be at least 1"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Limit must be at least 1")
+        );
     }
 
     #[tokio::test]
@@ -517,10 +521,12 @@ mod tests {
 
         let result = cmd.validate(&ctx).await;
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Limit cannot exceed 20"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Limit cannot exceed 20")
+        );
     }
 
     #[tokio::test]

@@ -1,14 +1,14 @@
+use crate::InfernoError;
 use crate::backends::InferenceParams;
 use crate::multimodal::{
     AudioFeatures, ModelCapabilities, MultiModalConfig, MultiModalProcessor, ProcessingStatus,
     VisionFeatures,
 };
-use crate::InfernoError;
 use clap::{Args, Subcommand};
 use serde_json;
 use std::collections::HashMap;
 use std::path::PathBuf;
-use tokio::time::{sleep, Duration};
+use tokio::time::{Duration, sleep};
 
 #[derive(Args)]
 pub struct MultiModalArgs {
@@ -414,7 +414,7 @@ async fn handle_process_command(
             return Err(InfernoError::InvalidArgument(format!(
                 "Unsupported output format: {}",
                 config.output_format
-            )))
+            )));
         }
     };
 
@@ -495,7 +495,7 @@ async fn handle_process_base64_command(
             return Err(InfernoError::InvalidArgument(format!(
                 "Unsupported output format: {}",
                 config.output_format
-            )))
+            )));
         }
     };
 

@@ -2026,10 +2026,12 @@ mod tests {
 
         let result = handle_create_command(&config, version_config).await;
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Model name cannot be empty"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Model name cannot be empty")
+        );
     }
 
     #[tokio::test]
@@ -2048,10 +2050,12 @@ mod tests {
 
         let result = handle_create_command(&config, version_config).await;
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Version cannot be empty"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Version cannot be empty")
+        );
     }
 
     #[tokio::test]
@@ -2070,10 +2074,12 @@ mod tests {
 
         let result = handle_create_command(&config, version_config).await;
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Model file does not exist"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Model file does not exist")
+        );
     }
 
     #[tokio::test]
@@ -2083,18 +2089,22 @@ mod tests {
         // Test limit of 0
         let result = handle_list_command(&config, None, None, Some(0), None).await;
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Limit must be between 1 and 100"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Limit must be between 1 and 100")
+        );
 
         // Test limit over 100
         let result = handle_list_command(&config, None, None, Some(101), None).await;
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Limit must be between 1 and 100"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Limit must be between 1 and 100")
+        );
     }
 
     #[tokio::test]
@@ -2110,10 +2120,12 @@ mod tests {
         )
         .await;
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Status must be one of"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Status must be one of")
+        );
     }
 
     #[tokio::test]
@@ -2122,10 +2134,12 @@ mod tests {
 
         let result = handle_validate_command(&config, "".to_string(), None, false, false).await;
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Version ID cannot be empty"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Version ID cannot be empty")
+        );
     }
 
     #[tokio::test]
@@ -2141,10 +2155,12 @@ mod tests {
         )
         .await;
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Test suite must be one of"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Test suite must be one of")
+        );
     }
 
     #[tokio::test]
@@ -2161,10 +2177,12 @@ mod tests {
         )
         .await;
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Version ID cannot be empty"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Version ID cannot be empty")
+        );
     }
 
     #[tokio::test]
@@ -2181,10 +2199,12 @@ mod tests {
         )
         .await;
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Environment cannot be empty"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Environment cannot be empty")
+        );
     }
 
     #[tokio::test]
@@ -2201,10 +2221,12 @@ mod tests {
         )
         .await;
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Strategy must be one of"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Strategy must be one of")
+        );
     }
 
     #[tokio::test]
@@ -2222,10 +2244,12 @@ mod tests {
         )
         .await;
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Traffic percentage must be between"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Traffic percentage must be between")
+        );
 
         // Test traffic > 100
         let result = handle_deploy_command(
@@ -2238,10 +2262,12 @@ mod tests {
         )
         .await;
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Traffic percentage must be between"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Traffic percentage must be between")
+        );
     }
 
     #[tokio::test]
@@ -2251,10 +2277,12 @@ mod tests {
         let result =
             handle_rollback_command(&config, "v1.0".to_string(), "".to_string(), None, true).await;
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Environment cannot be empty"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Environment cannot be empty")
+        );
     }
 
     #[tokio::test]
@@ -2263,10 +2291,12 @@ mod tests {
 
         let result = handle_compare_command(&config, "v1.0".to_string(), None, false, None).await;
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("At least 2 versions required"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("At least 2 versions required")
+        );
     }
 
     #[tokio::test]
@@ -2276,10 +2306,12 @@ mod tests {
         let result =
             handle_compare_command(&config, "v1.0,v1.0".to_string(), None, false, None).await;
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Version IDs must be different"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Version IDs must be different")
+        );
     }
 
     #[tokio::test]
@@ -2288,10 +2320,12 @@ mod tests {
 
         let result = handle_compare_command(&config, "v1.0,".to_string(), None, false, None).await;
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Version IDs cannot be empty"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Version IDs cannot be empty")
+        );
     }
 
     #[tokio::test]
@@ -2309,9 +2343,11 @@ mod tests {
         )
         .await;
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Output directory does not exist"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Output directory does not exist")
+        );
     }
 }

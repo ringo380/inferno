@@ -120,9 +120,10 @@ mod tests {
 
         // Before hook
         middleware.before(&mut ctx).await.unwrap();
-        assert!(ctx
-            .get_state::<std::time::Instant>("logging_start")
-            .is_some());
+        assert!(
+            ctx.get_state::<std::time::Instant>("logging_start")
+                .is_some()
+        );
 
         // After hook with success
         let output = CommandOutput::success("Test passed");

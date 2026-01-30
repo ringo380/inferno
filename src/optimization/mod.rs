@@ -155,7 +155,7 @@ impl OptimizationManager {
                 return Err(anyhow::anyhow!(
                     "Unknown optimization type: {}",
                     optimization_type
-                ))
+                ));
             }
         }
 

@@ -2,7 +2,7 @@
 //!
 //! Comprehensive tests for the enhanced Inferno platform capabilities
 
-use inferno::{init_platform, PlatformInfo, Result};
+use inferno::{PlatformInfo, Result, init_platform};
 
 #[tokio::test]
 async fn test_platform_initialization() -> Result<()> {

@@ -1,12 +1,12 @@
 use anyhow::Result;
 use inferno::{
+    InfernoError,
     config::Config,
     conversion::{
         ConversionConfig, GgmlType, GgufType, ModelConverter, ModelFormat, OptimizationLevel,
         OptimizationOptions, Precision, QuantizationType,
     },
     models::{ModelInfo, ModelManager, ModelMetadata},
-    InfernoError,
 };
 use std::{collections::HashMap, fs, path::PathBuf, sync::Arc};
 use tempfile::TempDir;
@@ -69,7 +69,7 @@ mod conversion_test_utils {
     }
 
     pub fn create_mock_safetensors_file(path: &PathBuf) -> Result<()> {
-        use safetensors::{serialize, Dtype};
+        use safetensors::{Dtype, serialize};
         use std::collections::HashMap;
 
         let mut tensors = HashMap::new();

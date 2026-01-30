@@ -1,5 +1,5 @@
-use crate::backends::{Backend, InferenceParams, TokenStream};
 use crate::InfernoError;
+use crate::backends::{Backend, InferenceParams, TokenStream};
 use anyhow::Result;
 use async_stream;
 use futures::{Stream, StreamExt};

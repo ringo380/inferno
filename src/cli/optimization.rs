@@ -451,7 +451,7 @@ async fn quantize_model(
             return Err(anyhow::anyhow!(
                 "Precision must be one of: fp32, fp16, int8, int4. Got: {}",
                 precision
-            ))
+            ));
         }
     };
 
@@ -1256,30 +1256,36 @@ mod tests {
     fn test_quantize_validation_empty_input() {
         let result = validate_quantize_params("", "int8", 0.95);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Input path cannot be empty"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Input path cannot be empty")
+        );
     }
 
     #[test]
     fn test_quantize_validation_invalid_precision() {
         let result = validate_quantize_params("input.gguf", "invalid", 0.95);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Precision must be one of"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Precision must be one of")
+        );
     }
 
     #[test]
     fn test_quantize_validation_invalid_accuracy_threshold() {
         let result = validate_quantize_params("input.gguf", "int8", 1.5);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Accuracy threshold must be between"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Accuracy threshold must be between")
+        );
     }
 
     #[test]
@@ -1304,40 +1310,48 @@ mod tests {
     fn test_prune_validation_empty_input() {
         let result = validate_prune_params("", "output.gguf", 0.5);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Input path cannot be empty"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Input path cannot be empty")
+        );
     }
 
     #[test]
     fn test_prune_validation_empty_output() {
         let result = validate_prune_params("input.gguf", "", 0.5);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Output path cannot be empty"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Output path cannot be empty")
+        );
     }
 
     #[test]
     fn test_prune_validation_invalid_sparsity_too_high() {
         let result = validate_prune_params("input.gguf", "output.gguf", 1.5);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Sparsity must be between"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Sparsity must be between")
+        );
     }
 
     #[test]
     fn test_prune_validation_invalid_sparsity_negative() {
         let result = validate_prune_params("input.gguf", "output.gguf", -0.1);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Sparsity must be between"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Sparsity must be between")
+        );
     }
 
     #[test]
@@ -1361,50 +1375,60 @@ mod tests {
     fn test_distill_validation_empty_teacher() {
         let result = validate_distill_params("", "student.gguf", "output.gguf", 2.0);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Teacher path cannot be empty"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Teacher path cannot be empty")
+        );
     }
 
     #[test]
     fn test_distill_validation_empty_student() {
         let result = validate_distill_params("teacher.gguf", "", "output.gguf", 2.0);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Student path cannot be empty"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Student path cannot be empty")
+        );
     }
 
     #[test]
     fn test_distill_validation_empty_output() {
         let result = validate_distill_params("teacher.gguf", "student.gguf", "", 2.0);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Output path cannot be empty"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Output path cannot be empty")
+        );
     }
 
     #[test]
     fn test_distill_validation_zero_temperature() {
         let result = validate_distill_params("teacher.gguf", "student.gguf", "output.gguf", 0.0);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Temperature must be greater than 0"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Temperature must be greater than 0")
+        );
     }
 
     #[test]
     fn test_distill_validation_negative_temperature() {
         let result = validate_distill_params("teacher.gguf", "student.gguf", "output.gguf", -1.0);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Temperature must be greater than 0"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Temperature must be greater than 0")
+        );
     }
 
     #[test]
@@ -1421,10 +1445,12 @@ mod tests {
     fn test_profile_validation_empty_model() {
         let result = validate_profile_params("");
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Model path cannot be empty"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Model path cannot be empty")
+        );
     }
 
     #[test]
@@ -1441,20 +1467,24 @@ mod tests {
     fn test_benchmark_validation_empty_model() {
         let result = validate_benchmark_params("", "all");
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Model path cannot be empty"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Model path cannot be empty")
+        );
     }
 
     #[test]
     fn test_benchmark_validation_invalid_technique() {
         let result = validate_benchmark_params("model.gguf", "invalid");
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Invalid technique"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Invalid technique")
+        );
     }
 
     #[test]
@@ -1475,10 +1505,12 @@ mod tests {
     fn test_benchmark_validation_mixed_valid_invalid() {
         let result = validate_benchmark_params("model.gguf", "quantize, invalid");
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Invalid technique"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Invalid technique")
+        );
     }
 
     // ========================================================================
@@ -1489,10 +1521,12 @@ mod tests {
     async fn test_prune_model_validates() {
         let result = prune_model("".to_string(), "output.gguf".to_string(), 0.5, 0.95).await;
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Input path cannot be empty"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Input path cannot be empty")
+        );
     }
 
     #[tokio::test]
@@ -1506,20 +1540,24 @@ mod tests {
         )
         .await;
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Temperature must be greater than 0"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Temperature must be greater than 0")
+        );
     }
 
     #[tokio::test]
     async fn test_profile_model_validates() {
         let result = profile_model("".to_string(), false, "table".to_string()).await;
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Model path cannot be empty"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Model path cannot be empty")
+        );
     }
 
     #[tokio::test]
@@ -1534,9 +1572,11 @@ mod tests {
         )
         .await;
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Precision must be one of"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Precision must be one of")
+        );
     }
 }

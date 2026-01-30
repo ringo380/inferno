@@ -1,5 +1,6 @@
 use anyhow::Result;
 use inferno::{
+    InfernoError,
     backends::{BackendConfig, BackendHandle, BackendType},
     cache::{
         CacheConfig, CacheStats, CachedModel, ModelCache, ModelUsageStats, SerializableCacheEntry,
@@ -7,15 +8,14 @@ use inferno::{
     },
     metrics::MetricsCollector,
     models::{ModelInfo, ModelManager},
-    InfernoError,
 };
 use std::{
     collections::HashMap,
     fs,
     path::{Path, PathBuf},
     sync::{
-        atomic::{AtomicU64, Ordering},
         Arc,
+        atomic::{AtomicU64, Ordering},
     },
     time::{Duration, SystemTime, UNIX_EPOCH},
 };

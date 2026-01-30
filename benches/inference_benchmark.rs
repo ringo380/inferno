@@ -3,7 +3,7 @@
 // Inference benchmarks temporarily disabled due to criterion async API changes
 // Will be re-enabled once benchmarks are updated
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, black_box, criterion_group, criterion_main};
 
 fn bench_inference_placeholder(c: &mut Criterion) {
     c.bench_function("inference_placeholder", |b| {

@@ -630,7 +630,7 @@ pub async fn execute(args: GpuArgs, _config: &Config) -> Result<()> {
                     return Err(anyhow::anyhow!(
                         "Format {:?} not supported for export",
                         format
-                    ))
+                    ));
                 }
             };
 
@@ -927,10 +927,12 @@ mod tests {
     fn test_validate_allocation_excessive_memory() {
         let result = validate_allocation_params(200_000, "test");
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("cannot exceed 100,000"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("cannot exceed 100,000")
+        );
     }
 
     #[test]

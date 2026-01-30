@@ -7,7 +7,7 @@
 use super::{ApplicationVersion, UpgradeConfig};
 use anyhow::Result;
 use chrono::{DateTime, Utc};
-use flate2::{read::GzDecoder, write::GzEncoder, Compression};
+use flate2::{Compression, read::GzDecoder, write::GzEncoder};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::fs::{self, File};

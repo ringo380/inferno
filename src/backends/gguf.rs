@@ -5,22 +5,22 @@
 )]
 
 use crate::{
+    InfernoError,
     ai_features::sampling::{Sampler, SamplingConfig, SamplingStrategy},
-    ai_features::streaming::{create_stream_channel, StreamConfig, StreamToken},
+    ai_features::streaming::{StreamConfig, StreamToken, create_stream_channel},
     backends::{
         BackendConfig, BackendType, InferenceBackend, InferenceMetrics, InferenceParams,
         TokenStream,
     },
     models::ModelInfo,
-    InfernoError,
 };
 use anyhow::Result;
 use async_stream::stream;
 use llama_cpp_2::{
-    context::{params::LlamaContextParams, LlamaContext},
+    context::{LlamaContext, params::LlamaContextParams},
     llama_backend::LlamaBackend,
     llama_batch::LlamaBatch,
-    model::{params::LlamaModelParams, AddBos, LlamaModel, Special},
+    model::{AddBos, LlamaModel, Special, params::LlamaModelParams},
     sampling::LlamaSampler,
     token::LlamaToken,
 };

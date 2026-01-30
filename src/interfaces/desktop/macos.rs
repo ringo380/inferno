@@ -11,10 +11,9 @@
 
 use serde::{Deserialize, Serialize};
 use tauri::{
-    command,
+    AppHandle, Emitter, Manager, Runtime, Window, command,
     menu::{AboutMetadata, Menu, MenuBuilder, MenuItem, SubmenuBuilder},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    AppHandle, Emitter, Manager, Runtime, Window,
 };
 
 // ============================================================================

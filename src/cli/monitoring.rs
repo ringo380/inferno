@@ -1,7 +1,7 @@
 use crate::{
     config::Config,
     metrics::MetricsCollector,
-    monitoring::{create_test_metric, AlertSeverity, MonitoringConfig, PerformanceMonitor},
+    monitoring::{AlertSeverity, MonitoringConfig, PerformanceMonitor, create_test_metric},
 };
 use anyhow::Result;
 use clap::{Args, Subcommand, ValueEnum};
@@ -1114,10 +1114,12 @@ mod tests {
         };
         let result = validate_args(&cmd);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Limit must be greater than 0"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Limit must be greater than 0")
+        );
     }
 
     #[test]
@@ -1129,10 +1131,12 @@ mod tests {
         };
         let result = validate_args(&cmd);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Limit cannot exceed 1000"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Limit cannot exceed 1000")
+        );
     }
 
     #[test]
@@ -1160,10 +1164,12 @@ mod tests {
         };
         let result = validate_args(&cmd);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Error rate must be between 0.0 and 100.0"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Error rate must be between 0.0 and 100.0")
+        );
     }
 
     #[test]
@@ -1178,10 +1184,12 @@ mod tests {
         };
         let result = validate_args(&cmd);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("CPU usage must be between 0.0 and 100.0"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("CPU usage must be between 0.0 and 100.0")
+        );
     }
 
     #[test]
@@ -1196,10 +1204,12 @@ mod tests {
         };
         let result = validate_args(&cmd);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Cache hit rate must be between 0.0 and 100.0"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Cache hit rate must be between 0.0 and 100.0")
+        );
     }
 
     #[test]
@@ -1221,10 +1231,12 @@ mod tests {
         };
         let result = validate_args(&cmd);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Hours must be greater than 0"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Hours must be greater than 0")
+        );
     }
 
     #[test]
@@ -1236,10 +1248,12 @@ mod tests {
         };
         let result = validate_args(&cmd);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Hours cannot exceed 168"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Hours cannot exceed 168")
+        );
     }
 
     #[test]
@@ -1251,10 +1265,12 @@ mod tests {
         };
         let result = validate_args(&cmd);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Group by minutes must be greater than 0"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Group by minutes must be greater than 0")
+        );
     }
 
     #[test]
@@ -1266,10 +1282,12 @@ mod tests {
         };
         let result = validate_args(&cmd);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Group by minutes cannot exceed 1440"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Group by minutes cannot exceed 1440")
+        );
     }
 
     #[test]
@@ -1291,10 +1309,12 @@ mod tests {
         };
         let result = validate_args(&cmd);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Hours must be greater than 0"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Hours must be greater than 0")
+        );
     }
 
     #[test]
@@ -1306,10 +1326,12 @@ mod tests {
         };
         let result = validate_args(&cmd);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Hours cannot exceed 720"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Hours cannot exceed 720")
+        );
     }
 
     #[test]
@@ -1342,10 +1364,12 @@ mod tests {
         };
         let result = validate_args(&cmd);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Interval must be greater than 0"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Interval must be greater than 0")
+        );
     }
 
     #[test]
@@ -1357,10 +1381,12 @@ mod tests {
         };
         let result = validate_args(&cmd);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Interval must be greater than 0"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Interval must be greater than 0")
+        );
     }
 
     #[test]
@@ -1382,10 +1408,12 @@ mod tests {
         };
         let result = validate_args(&cmd);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Metrics count must be greater than 0"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Metrics count must be greater than 0")
+        );
     }
 
     #[test]
@@ -1397,10 +1425,12 @@ mod tests {
         };
         let result = validate_args(&cmd);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Concurrent writers must be greater than 0"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Concurrent writers must be greater than 0")
+        );
     }
 
     #[test]
@@ -1412,10 +1442,12 @@ mod tests {
         };
         let result = validate_args(&cmd);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Duration must be greater than 0"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Duration must be greater than 0")
+        );
     }
 
     #[test]
@@ -1433,10 +1465,12 @@ mod tests {
         };
         let result = validate_args(&cmd);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Alert ID cannot be empty"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Alert ID cannot be empty")
+        );
     }
 
     #[test]
@@ -1446,10 +1480,12 @@ mod tests {
         };
         let result = validate_args(&cmd);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Alert ID cannot be empty"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Alert ID cannot be empty")
+        );
     }
 
     #[test]

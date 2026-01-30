@@ -18,7 +18,7 @@
 //! - Model Repository (10 commands)
 
 use sysinfo::{CpuExt, SystemExt};
-use tauri::{command, AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, State, command};
 use uuid::Uuid;
 
 use super::types::{
@@ -161,7 +161,7 @@ pub async fn infer_stream(
     params: InferenceParams,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
-    use tokio::time::{sleep, Duration};
+    use tokio::time::{Duration, sleep};
 
     // Generate a unique inference ID for this session
     let inference_id = Uuid::new_v4().to_string();

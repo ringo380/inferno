@@ -2798,10 +2798,12 @@ mod tests {
 
         let result = validate_performance_args(&args);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Profile name cannot be empty"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Profile name cannot be empty")
+        );
     }
 
     #[test]
@@ -2824,10 +2826,12 @@ mod tests {
 
         let result = validate_performance_args(&args);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Duration must be greater than 0"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Duration must be greater than 0")
+        );
     }
 
     #[test]
@@ -2847,10 +2851,12 @@ mod tests {
 
         let result = validate_performance_args(&args);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Algorithm must be one of"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Algorithm must be one of")
+        );
     }
 
     #[test]
@@ -2870,10 +2876,12 @@ mod tests {
 
         let result = validate_performance_args(&args);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Max iterations must be greater than 0"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Max iterations must be greater than 0")
+        );
     }
 
     #[test]
@@ -2893,10 +2901,12 @@ mod tests {
 
         let result = validate_performance_args(&args);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Exploration factor must be between 0.0 and 1.0"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Exploration factor must be between 0.0 and 1.0")
+        );
     }
 
     #[test]
@@ -2916,10 +2926,12 @@ mod tests {
 
         let result = validate_performance_args(&args);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Optimization target cannot be empty"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Optimization target cannot be empty")
+        );
     }
 
     #[test]
@@ -2936,10 +2948,12 @@ mod tests {
 
         let result = validate_performance_args(&args);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Optimization ID cannot be empty"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Optimization ID cannot be empty")
+        );
     }
 
     #[test]
@@ -2957,10 +2971,12 @@ mod tests {
 
         let result = validate_performance_args(&args);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("At least one optimization target is required"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("At least one optimization target is required")
+        );
     }
 
     #[test]
@@ -2977,10 +2993,12 @@ mod tests {
 
         let result = validate_performance_args(&args);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Output format must be one of"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Output format must be one of")
+        );
     }
 
     #[test]
@@ -2997,10 +3015,12 @@ mod tests {
 
         let result = validate_performance_args(&args);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Session ID cannot be empty"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Session ID cannot be empty")
+        );
     }
 
     #[test]
@@ -3018,9 +3038,11 @@ mod tests {
 
         let result = validate_performance_args(&args);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("First profile name cannot be empty"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("First profile name cannot be empty")
+        );
     }
 }

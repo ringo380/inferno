@@ -4,20 +4,20 @@ use crate::{
     metrics::MetricsCollector,
     models::ModelManager,
 };
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use futures::{Stream, StreamExt};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     pin::Pin,
     sync::{
-        atomic::{AtomicUsize, Ordering},
         Arc,
+        atomic::{AtomicUsize, Ordering},
     },
     time::{Duration, Instant},
 };
 use tokio::{
-    sync::{mpsc, oneshot, RwLock, Semaphore},
+    sync::{RwLock, Semaphore, mpsc, oneshot},
     task::JoinHandle,
     time::timeout,
 };
