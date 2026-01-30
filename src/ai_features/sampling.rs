@@ -1,3 +1,5 @@
+use rand::{Rng, SeedableRng};
+use rand::rngs::StdRng;
 use serde::{Deserialize, Serialize};
 use tracing::debug;
 
@@ -65,15 +67,21 @@ pub struct TokenCandidate {
 pub struct Sampler {
     config: SamplingConfig,
     recent_tokens: Vec<i32>,
-    // TODO: Implement proper RNG for stochastic sampling
-    // rng: Box<dyn std::any::Any>, // Can be upgraded to actual RNG later
+    rng: StdRng,
 }
 
 impl Sampler {
     pub fn new(config: SamplingConfig) -> Self {
+        // Initialize RNG with seed if provided, otherwise use entropy
+        let rng = match config.seed {
+            Some(seed) => StdRng::seed_from_u64(seed),
+            None => StdRng::from_entropy(),
+        };
+
         Self {
             config,
             recent_tokens: Vec::new(),
+            rng,
         }
     }
 
@@ -137,7 +145,7 @@ impl Sampler {
         // Sample based on strategy
         let token = match self.config.strategy {
             SamplingStrategy::Greedy => Self::greedy_sample(&adjusted),
-            _ => Self::probabilistic_sample(&adjusted),
+            _ => self.probabilistic_sample(&adjusted),
         };
 
         // Track for repeat penalty
@@ -227,8 +235,8 @@ impl Sampler {
             .map(|t| t.id)
     }
 
-    /// Probabilistic sampling: sample from probability distribution
-    fn probabilistic_sample(candidates: &[TokenCandidate]) -> Option<i32> {
+    /// Probabilistic sampling: sample from probability distribution using RNG
+    fn probabilistic_sample(&mut self, candidates: &[TokenCandidate]) -> Option<i32> {
         if candidates.is_empty() {
             return None;
         }
@@ -251,25 +259,19 @@ impl Sampler {
 
         let probs: Vec<f32> = scores.iter().map(|s| s / sum).collect();
 
-        // Sample using cumulative distribution
-        // For now, use simple deterministic sampling (pick highest after temperature)
-        // In production, would use proper random number generation
-        let cumsum = probs.iter().map(|p| p.abs()).sum::<f32>();
+        // Sample using cumulative distribution with proper RNG
+        let threshold: f32 = self.rng.gen_range(0.0..1.0);
 
-        let mut cum = 0.0;
+        let mut cumulative = 0.0;
         for (i, prob) in probs.iter().enumerate() {
-            cum += prob.abs();
-            // Simple deterministic approach: use probability as weight
-            if cum >= cumsum * 0.5 {
+            cumulative += *prob;
+            if cumulative >= threshold {
                 return Some(candidates[i].id);
             }
         }
 
-        // Fallback to highest probability
-        candidates
-            .iter()
-            .max_by(|a, b| a.p.partial_cmp(&b.p).unwrap_or(std::cmp::Ordering::Equal))
-            .map(|t| t.id)
+        // Fallback to last candidate (handles floating point rounding)
+        candidates.last().map(|t| t.id)
     }
 
     /// Get recent token history
