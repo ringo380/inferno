@@ -272,8 +272,9 @@ jobs:
       shell: bash
       run: |
         if [[ "${{ matrix.cross }}" == "true" ]]; then
-          # Cross-compiled builds exclude 'desktop' feature (GTK can't be cross-compiled)
-          cross build --release --target ${{ matrix.target }} --features "download,gguf,ml-backends"
+          # Cross-compiled builds use minimal features to avoid native library issues
+          # (GTK, OpenSSL, llama.cpp all have cross-compilation challenges)
+          cross build --release --target ${{ matrix.target }} --no-default-features --features "download"
         else
           cargo build --release --target ${{ matrix.target }} --all-features
         fi
