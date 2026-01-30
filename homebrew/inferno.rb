@@ -6,22 +6,21 @@ class Inferno < Formula
   version "0.10.4"
 
   # Platform-specific downloads
-  # NOTE: SHA256 checksums will be populated by the release workflow after binaries are built
   if OS.mac?
     if Hardware::CPU.arm?
       url "https://github.com/ringo380/inferno/releases/download/v#{version}/inferno-macos-aarch64.tar.gz"
-      sha256 "PLACEHOLDER_MACOS_ARM64_SHA256"  # TODO: Update after v0.10.4 release
+      sha256 "491cd2d33f7be554d6bcfa332bdb9ffc854299d18f4ec48444d53b0e4691b7f5"
     else
       url "https://github.com/ringo380/inferno/releases/download/v#{version}/inferno-macos-x86_64.tar.gz"
-      sha256 "PLACEHOLDER_MACOS_X86_64_SHA256"  # TODO: Update after v0.10.4 release
+      sha256 "166cc6625170abe1d149c1979df79ca8d664b2af8f14b961890e2c428d526812"
     end
   elsif OS.linux?
     if Hardware::CPU.arm?
       url "https://github.com/ringo380/inferno/releases/download/v#{version}/inferno-linux-aarch64.tar.gz"
-      sha256 "PLACEHOLDER_LINUX_ARM64_SHA256"  # TODO: Update after v0.10.4 release
+      sha256 "d438ee72653d5f517f4d5b6f720f5a62398c3031ed2582d068a714cecc690b94"
     else
       url "https://github.com/ringo380/inferno/releases/download/v#{version}/inferno-linux-x86_64.tar.gz"
-      sha256 "PLACEHOLDER_LINUX_X86_64_SHA256"  # TODO: Update after v0.10.4 release
+      sha256 "3811b4c9614b3c25e10336c16d6a845fe37cd023dbac43dda224e661ebe1bf32"
     end
   end
 
