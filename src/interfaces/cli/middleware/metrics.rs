@@ -36,29 +36,27 @@ impl MetricsMiddleware {
         }
     }
 
-    /// Record a metric (placeholder - integrate with actual metrics system)
+    /// Record a gauge metric value
     fn record_metric(&self, name: &str, value: f64, ctx: &CommandContext) {
+        let full_name = format!("{}.{}", self.metric_prefix, name);
         debug!(
-            metric = format!("{}.{}", self.metric_prefix, name),
+            metric = %full_name,
             value = value,
             execution_id = %ctx.execution_id,
             "Recording metric"
         );
-
-        // TODO: Integrate with MetricsCollector
-        // ctx.metrics.record_gauge(name, value);
+        ctx.metrics.record_gauge(&full_name, value);
     }
 
-    /// Increment a counter (placeholder)
+    /// Increment a counter metric
     fn increment_counter(&self, name: &str, ctx: &CommandContext) {
+        let full_name = format!("{}.{}", self.metric_prefix, name);
         debug!(
-            counter = format!("{}.{}", self.metric_prefix, name),
+            counter = %full_name,
             execution_id = %ctx.execution_id,
             "Incrementing counter"
         );
-
-        // TODO: Integrate with MetricsCollector
-        // ctx.metrics.increment_counter(name);
+        ctx.metrics.increment_counter(&full_name);
     }
 }
 

@@ -17,6 +17,12 @@ pub struct MetricsSnapshot {
     pub inference_metrics: InferenceMetrics,
     pub system_metrics: SystemMetrics,
     pub model_metrics: ModelMetrics,
+    /// Custom counters from CLI commands and other sources
+    #[serde(default)]
+    pub custom_counters: HashMap<String, u64>,
+    /// Custom gauges from CLI commands and other sources
+    #[serde(default)]
+    pub custom_gauges: HashMap<String, f64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -136,6 +142,10 @@ pub struct MetricsCollector {
     inference_counters: Arc<InferenceCounters>,
     model_stats: Arc<RwLock<HashMap<String, ModelStats>>>,
     event_sender: mpsc::UnboundedSender<InferenceEvent>,
+    /// Generic counters for custom metrics (e.g., CLI command counts)
+    generic_counters: Arc<RwLock<HashMap<String, AtomicU64>>>,
+    /// Generic gauges for custom metrics (e.g., duration measurements)
+    generic_gauges: Arc<RwLock<HashMap<String, f64>>>,
 }
 
 #[derive(Debug)]
@@ -183,6 +193,8 @@ impl MetricsCollector {
             inference_counters: Arc::clone(&inference_counters),
             model_stats: Arc::clone(&model_stats),
             event_sender,
+            generic_counters: Arc::new(RwLock::new(HashMap::new())),
+            generic_gauges: Arc::new(RwLock::new(HashMap::new())),
         };
 
         let processor = MetricsEventProcessor {
@@ -226,6 +238,58 @@ impl MetricsCollector {
         }
     }
 
+    /// Increment a named counter by 1
+    ///
+    /// Counters are useful for tracking totals like command executions,
+    /// errors, or other discrete events.
+    pub fn increment_counter(&self, name: &str) {
+        // First try to read - most common case is counter already exists
+        if let Ok(counters) = self.generic_counters.read() {
+            if let Some(counter) = counters.get(name) {
+                counter.fetch_add(1, Ordering::Relaxed);
+                return;
+            }
+        }
+        // Counter doesn't exist, need write lock to create it
+        if let Ok(mut counters) = self.generic_counters.write() {
+            counters
+                .entry(name.to_string())
+                .or_insert_with(|| AtomicU64::new(0))
+                .fetch_add(1, Ordering::Relaxed);
+        }
+    }
+
+    /// Set a gauge value
+    ///
+    /// Gauges are useful for point-in-time measurements like durations,
+    /// resource usage, or other continuous values.
+    pub fn record_gauge(&self, name: &str, value: f64) {
+        if let Ok(mut gauges) = self.generic_gauges.write() {
+            gauges.insert(name.to_string(), value);
+        }
+    }
+
+    /// Get all custom counters (for snapshot/export)
+    pub fn get_counters(&self) -> HashMap<String, u64> {
+        if let Ok(counters) = self.generic_counters.read() {
+            counters
+                .iter()
+                .map(|(k, v)| (k.clone(), v.load(Ordering::Relaxed)))
+                .collect()
+        } else {
+            HashMap::new()
+        }
+    }
+
+    /// Get all custom gauges (for snapshot/export)
+    pub fn get_gauges(&self) -> HashMap<String, f64> {
+        if let Ok(gauges) = self.generic_gauges.read() {
+            gauges.clone()
+        } else {
+            HashMap::new()
+        }
+    }
+
     pub async fn get_snapshot(&self) -> Result<MetricsSnapshot> {
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -235,12 +299,16 @@ impl MetricsCollector {
         let inference_metrics = self.get_inference_metrics().await;
         let system_metrics = self.get_system_metrics().await?;
         let model_metrics = self.get_model_metrics().await;
+        let custom_counters = self.get_counters();
+        let custom_gauges = self.get_gauges();
 
         Ok(MetricsSnapshot {
             timestamp,
             inference_metrics,
             system_metrics,
             model_metrics,
+            custom_counters,
+            custom_gauges,
         })
     }
 
@@ -482,6 +550,36 @@ impl MetricsCollector {
             ));
         }
 
+        // Custom counters
+        if !snapshot.custom_counters.is_empty() {
+            output.push_str("\n# Custom counters\n");
+            for (name, value) in &snapshot.custom_counters {
+                // Sanitize metric name for Prometheus (replace . and - with _)
+                let safe_name = name.replace('.', "_").replace('-', "_");
+                output.push_str(&format!(
+                    "# HELP {} Custom counter metric\n",
+                    safe_name
+                ));
+                output.push_str(&format!("# TYPE {} counter\n", safe_name));
+                output.push_str(&format!("{} {}\n", safe_name, value));
+            }
+        }
+
+        // Custom gauges
+        if !snapshot.custom_gauges.is_empty() {
+            output.push_str("\n# Custom gauges\n");
+            for (name, value) in &snapshot.custom_gauges {
+                // Sanitize metric name for Prometheus (replace . and - with _)
+                let safe_name = name.replace('.', "_").replace('-', "_");
+                output.push_str(&format!(
+                    "# HELP {} Custom gauge metric\n",
+                    safe_name
+                ));
+                output.push_str(&format!("# TYPE {} gauge\n", safe_name));
+                output.push_str(&format!("{} {}\n", safe_name, value));
+            }
+        }
+
         Ok(output)
     }
 }
@@ -545,5 +643,67 @@ mod tests {
         assert!(prometheus_export.contains("inferno_inference_requests_total"));
         assert!(prometheus_export.contains("# HELP"));
         assert!(prometheus_export.contains("# TYPE"));
+    }
+
+    #[tokio::test]
+    async fn test_generic_counters() {
+        let (collector, processor) = MetricsCollector::new();
+        processor.start();
+
+        // Increment a new counter
+        collector.increment_counter("test.command.total");
+        collector.increment_counter("test.command.total");
+        collector.increment_counter("test.command.success");
+
+        let counters = collector.get_counters();
+        assert_eq!(counters.get("test.command.total"), Some(&2));
+        assert_eq!(counters.get("test.command.success"), Some(&1));
+
+        // Verify snapshot includes custom counters
+        let snapshot = collector.get_snapshot().await.unwrap();
+        assert_eq!(snapshot.custom_counters.get("test.command.total"), Some(&2));
+    }
+
+    #[tokio::test]
+    async fn test_generic_gauges() {
+        let (collector, processor) = MetricsCollector::new();
+        processor.start();
+
+        // Record gauge values
+        collector.record_gauge("test.duration_ms", 150.5);
+        collector.record_gauge("test.exit_code", 0.0);
+
+        let gauges = collector.get_gauges();
+        assert_eq!(gauges.get("test.duration_ms"), Some(&150.5));
+        assert_eq!(gauges.get("test.exit_code"), Some(&0.0));
+
+        // Update gauge value
+        collector.record_gauge("test.duration_ms", 200.0);
+        let gauges = collector.get_gauges();
+        assert_eq!(gauges.get("test.duration_ms"), Some(&200.0));
+
+        // Verify snapshot includes custom gauges
+        let snapshot = collector.get_snapshot().await.unwrap();
+        assert_eq!(snapshot.custom_gauges.get("test.duration_ms"), Some(&200.0));
+    }
+
+    #[tokio::test]
+    async fn test_custom_metrics_prometheus_export() {
+        let (collector, processor) = MetricsCollector::new();
+        processor.start();
+
+        // Add some custom metrics
+        collector.increment_counter("inferno.command.total");
+        collector.record_gauge("inferno.command.duration_ms", 42.5);
+
+        let prometheus_export = collector.export_prometheus_format().await.unwrap();
+
+        // Custom counters should be exported with sanitized names
+        assert!(prometheus_export.contains("inferno_command_total"));
+        assert!(prometheus_export.contains("# TYPE inferno_command_total counter"));
+
+        // Custom gauges should be exported with sanitized names
+        assert!(prometheus_export.contains("inferno_command_duration_ms"));
+        assert!(prometheus_export.contains("# TYPE inferno_command_duration_ms gauge"));
     }
 }
