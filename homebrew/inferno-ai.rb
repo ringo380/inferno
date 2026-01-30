@@ -1,5 +1,5 @@
-# Homebrew formula for Inferno
-class Inferno < Formula
+# Homebrew formula for Inferno AI
+class InfernoAi < Formula
   desc "Enterprise AI/ML model runner with automatic updates and real-time monitoring"
   homepage "https://github.com/ringo380/inferno"
   license "MIT OR Apache-2.0"
@@ -59,7 +59,7 @@ class Inferno < Formula
 
   def caveats
     <<~EOS
-      Inferno has been installed!
+      Inferno AI has been installed!
 
       Configuration file: #{etc}/inferno/config.toml
       Models directory: #{var}/inferno/models
