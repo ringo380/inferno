@@ -272,7 +272,8 @@ jobs:
       shell: bash
       run: |
         if [[ "${{ matrix.cross }}" == "true" ]]; then
-          cross build --release --target ${{ matrix.target }} --all-features
+          # Cross-compiled builds exclude 'desktop' feature (GTK can't be cross-compiled)
+          cross build --release --target ${{ matrix.target }} --features "download,gguf,ml-backends"
         else
           cargo build --release --target ${{ matrix.target }} --all-features
         fi
