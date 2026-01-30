@@ -45,11 +45,11 @@
 //! - 70B models: >5 tokens/sec on M4 Max (with unified memory)
 
 use crate::{
+    InfernoError,
     backends::{BackendType, InferenceBackend, InferenceMetrics, InferenceParams, TokenStream},
     models::ModelInfo,
-    InfernoError,
 };
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use async_stream::stream;
 use std::time::Instant;
 use tracing::{debug, info, warn};

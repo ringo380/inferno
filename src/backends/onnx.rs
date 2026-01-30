@@ -15,7 +15,7 @@ use crate::{
     },
     models::ModelInfo,
 };
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use async_stream::stream;
 use std::time::Instant;
 use tokenizers::Tokenizer;
@@ -43,7 +43,9 @@ impl OnnxBackend {
 
         // Note: Full ONNX Runtime initialization is disabled during ort 2.0 transition
         // The backend provides placeholder responses until ort 2.0 stabilizes
-        warn!("ONNX backend is in stub mode - ort 2.0 prebuilt binaries not available for all platforms");
+        warn!(
+            "ONNX backend is in stub mode - ort 2.0 prebuilt binaries not available for all platforms"
+        );
 
         Ok(Self {
             config,

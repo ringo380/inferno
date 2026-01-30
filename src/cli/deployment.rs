@@ -1554,10 +1554,12 @@ mod tests {
     fn test_validate_environment_invalid() {
         let result = validate_environment("invalid");
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Invalid environment"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Invalid environment")
+        );
     }
 
     #[test]
@@ -1580,10 +1582,12 @@ mod tests {
     fn test_validate_replicas_zero() {
         let result = validate_replicas(0);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Replicas must be greater than 0"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Replicas must be greater than 0")
+        );
     }
 
     #[test]
@@ -1597,10 +1601,12 @@ mod tests {
     fn test_validate_strategy_invalid() {
         let result = validate_strategy("invalid");
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Invalid deployment strategy"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Invalid deployment strategy")
+        );
     }
 
     #[test]
@@ -1614,10 +1620,12 @@ mod tests {
     fn test_validate_output_format_invalid() {
         let result = validate_output_format("xml");
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Invalid output format"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Invalid output format")
+        );
     }
 
     #[test]
@@ -1630,10 +1638,12 @@ mod tests {
     fn test_validate_manifest_format_invalid() {
         let result = validate_manifest_format("json");
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Invalid manifest format"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Invalid manifest format")
+        );
     }
 
     #[test]
@@ -1647,10 +1657,12 @@ mod tests {
     fn test_validate_export_format_invalid() {
         let result = validate_export_format("xml");
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Invalid export format"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Invalid export format")
+        );
     }
 
     #[test]

@@ -10,7 +10,7 @@ use serde_json;
 use serde_yaml;
 use std::collections::HashMap;
 use std::path::PathBuf;
-use tokio::time::{interval as tokio_interval, Duration};
+use tokio::time::{Duration, interval as tokio_interval};
 use tracing::{error, info};
 
 /// Configuration for marketplace search operations

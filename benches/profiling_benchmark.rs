@@ -3,7 +3,7 @@
 // Profiling benchmarks temporarily disabled due to API changes
 // Will be re-enabled once benchmarks are updated
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, black_box, criterion_group, criterion_main};
 
 fn bench_profiling_placeholder(c: &mut Criterion) {
     c.bench_function("profiling_placeholder", |b| {

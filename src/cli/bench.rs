@@ -294,10 +294,12 @@ mod tests {
         };
         let result = validate_args(&args);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Model name cannot be empty"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Model name cannot be empty")
+        );
     }
 
     #[test]
@@ -313,10 +315,12 @@ mod tests {
         };
         let result = validate_args(&args);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Iterations must be greater than 0"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Iterations must be greater than 0")
+        );
     }
 
     #[test]
@@ -348,10 +352,12 @@ mod tests {
         };
         let result = validate_args(&args);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Tokens must be greater than 0"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Tokens must be greater than 0")
+        );
     }
 
     #[test]
@@ -383,10 +389,12 @@ mod tests {
         };
         let result = validate_args(&args);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Warmup iterations must be 100 or less"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Warmup iterations must be 100 or less")
+        );
     }
 
     #[test]

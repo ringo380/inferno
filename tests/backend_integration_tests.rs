@@ -1,11 +1,11 @@
 use anyhow::Result;
 use futures::StreamExt;
 use inferno::{
+    InfernoError,
     backends::{Backend, BackendConfig, BackendHandle, BackendType, InferenceParams},
     cache::{CacheConfig, ModelCache},
     config::Config,
     models::{ModelInfo, ModelManager},
-    InfernoError,
 };
 use std::{path::PathBuf, sync::Arc, time::Duration};
 use tempfile::TempDir;

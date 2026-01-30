@@ -587,10 +587,12 @@ mod tests {
     fn test_validate_repo_name_empty() {
         let result = validate_repo_name("");
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Repository name cannot be empty"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Repository name cannot be empty")
+        );
     }
 
     #[test]
@@ -603,20 +605,24 @@ mod tests {
     fn test_validate_repo_url_empty() {
         let result = validate_repo_url("");
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Repository URL cannot be empty"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Repository URL cannot be empty")
+        );
     }
 
     #[test]
     fn test_validate_repo_url_invalid_protocol() {
         let result = validate_repo_url("ftp://example.com");
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("must start with http://"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("must start with http://")
+        );
     }
 
     #[test]
@@ -647,10 +653,12 @@ mod tests {
     fn test_validate_repo_priority_exceeded() {
         let result = validate_repo_priority(1001);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Priority cannot exceed 1000"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Priority cannot exceed 1000")
+        );
     }
 
     #[test]

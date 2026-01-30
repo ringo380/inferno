@@ -7,7 +7,7 @@ use crate::{
     },
     models::ModelManager,
 };
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use clap::{Args, Subcommand, ValueEnum};
 use std::{path::PathBuf, sync::Arc};
 use tracing::warn;
@@ -1124,10 +1124,12 @@ mod tests {
         let path = PathBuf::from("/nonexistent/directory/output.gguf");
         let result = validate_output_directory(&path);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Output directory does not exist"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Output directory does not exist")
+        );
     }
 
     #[test]
@@ -1148,10 +1150,12 @@ mod tests {
     fn test_validate_context_length_too_large() {
         let result = validate_context_length(Some(32769));
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("cannot exceed 32768"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("cannot exceed 32768")
+        );
     }
 
     #[test]
@@ -1177,10 +1181,12 @@ mod tests {
     fn test_validate_batch_size_too_large() {
         let result = validate_batch_size(Some(1025));
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("cannot exceed 1024"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("cannot exceed 1024")
+        );
     }
 
     #[test]

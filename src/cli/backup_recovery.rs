@@ -3722,10 +3722,12 @@ mod tests {
     fn test_parse_backup_type_invalid() {
         let result = parse_backup_type("invalid");
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Invalid backup type"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Invalid backup type")
+        );
     }
 
     #[test]
@@ -3757,10 +3759,12 @@ mod tests {
     fn test_parse_restore_type_invalid() {
         let result = parse_restore_type("invalid");
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Invalid restore type"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Invalid restore type")
+        );
     }
 
     #[test]
@@ -3803,10 +3807,12 @@ mod tests {
     fn test_parse_backup_status_invalid() {
         let result = parse_backup_status("invalid");
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Invalid backup status"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Invalid backup status")
+        );
     }
 
     #[test]
@@ -3845,10 +3851,12 @@ mod tests {
     fn test_parse_restore_status_invalid() {
         let result = parse_restore_status("invalid");
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Invalid restore status"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Invalid restore status")
+        );
     }
 
     #[test]
@@ -3869,10 +3877,12 @@ mod tests {
     fn test_parse_test_type_invalid() {
         let result = parse_test_type("invalid");
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Invalid test type"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Invalid test type")
+        );
     }
 
     #[test]

@@ -4,7 +4,7 @@
     clippy::manual_is_multiple_of
 )]
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use reqwest;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

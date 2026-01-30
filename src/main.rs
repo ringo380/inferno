@@ -1,15 +1,15 @@
 use anyhow::Result;
 use inferno::{
-    cli::{enhanced_parser::EnhancedCliParser, help::HelpSystem, Commands},
+    cli::{Commands, enhanced_parser::EnhancedCliParser, help::HelpSystem},
     config::Config,
     upgrade::{
-        background_service::BackgroundUpdateService, init_upgrade_system, ApplicationVersion,
+        ApplicationVersion, background_service::BackgroundUpdateService, init_upgrade_system,
     },
 };
 use std::sync::Arc;
 use tokio::sync::broadcast;
 use tracing::{error, info, warn};
-use tracing_subscriber::{fmt, EnvFilter};
+use tracing_subscriber::{EnvFilter, fmt};
 
 #[tokio::main]
 async fn main() -> Result<()> {

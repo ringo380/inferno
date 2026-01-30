@@ -5,7 +5,7 @@ use crate::{
         RollbackRecord, SemanticVersion, TriggerType, VersionStatus, VersioningConfig,
     },
 };
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use clap::{Args, Subcommand, ValueEnum};
 use serde_json;
 use std::{collections::HashMap, path::PathBuf};
@@ -614,8 +614,10 @@ pub async fn execute(args: VersioningArgs, _config: &Config) -> Result<()> {
             }
 
             if !force {
-                print!("Are you sure you want to delete version {} of {}? This cannot be undone. [y/N]: ",
-                        version_id, model_name);
+                print!(
+                    "Are you sure you want to delete version {} of {}? This cannot be undone. [y/N]: ",
+                    version_id, model_name
+                );
                 let mut input = String::new();
                 std::io::stdin().read_line(&mut input)?;
                 if !input.trim().to_lowercase().starts_with('y') {
@@ -987,10 +989,12 @@ mod tests {
 
         let result = execute(args, &config).await;
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Model name cannot be empty"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Model name cannot be empty")
+        );
     }
 
     #[tokio::test]
@@ -1015,10 +1019,12 @@ mod tests {
 
         let result = execute(args, &config).await;
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Model file does not exist"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Model file does not exist")
+        );
     }
 
     #[tokio::test]
@@ -1035,10 +1041,12 @@ mod tests {
 
         let result = execute(args, &config).await;
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Model name cannot be empty"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Model name cannot be empty")
+        );
     }
 
     #[tokio::test]
@@ -1055,10 +1063,12 @@ mod tests {
 
         let result = execute(args, &config).await;
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Version ID cannot be empty"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Version ID cannot be empty")
+        );
     }
 
     #[tokio::test]
@@ -1077,10 +1087,12 @@ mod tests {
 
         let result = execute(args, &config).await;
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Model name cannot be empty"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Model name cannot be empty")
+        );
     }
 
     #[tokio::test]
@@ -1099,10 +1111,12 @@ mod tests {
 
         let result = execute(args, &config).await;
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Version ID cannot be empty"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Version ID cannot be empty")
+        );
     }
 
     #[tokio::test]
@@ -1120,10 +1134,12 @@ mod tests {
 
         let result = execute(args, &config).await;
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Model name cannot be empty"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Model name cannot be empty")
+        );
     }
 
     #[tokio::test]
@@ -1141,10 +1157,12 @@ mod tests {
 
         let result = execute(args, &config).await;
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Cannot compare version to itself"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Cannot compare version to itself")
+        );
     }
 
     #[tokio::test]
@@ -1160,10 +1178,12 @@ mod tests {
 
         let result = execute(args, &config).await;
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Model name cannot be empty"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Model name cannot be empty")
+        );
     }
 
     #[tokio::test]
@@ -1179,10 +1199,12 @@ mod tests {
 
         let result = execute(args, &config).await;
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Version ID cannot be empty"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Version ID cannot be empty")
+        );
     }
 
     #[tokio::test]
@@ -1199,10 +1221,12 @@ mod tests {
 
         let result = execute(args, &config).await;
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Environment cannot be empty"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Environment cannot be empty")
+        );
     }
 
     #[tokio::test]
@@ -1219,10 +1243,12 @@ mod tests {
 
         let result = execute(args, &config).await;
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Model name cannot be empty"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Model name cannot be empty")
+        );
     }
 
     #[tokio::test]
@@ -1239,9 +1265,11 @@ mod tests {
 
         let result = execute(args, &config).await;
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Version ID cannot be empty"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Version ID cannot be empty")
+        );
     }
 }

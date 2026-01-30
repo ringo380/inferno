@@ -1,7 +1,7 @@
 #![allow(dead_code, unused_imports, unused_variables)]
-use crate::{backends::InferenceParams, InfernoError};
+use crate::{InfernoError, backends::InferenceParams};
 use anyhow::Result;
-use base64::{engine::general_purpose, Engine as _};
+use base64::{Engine as _, engine::general_purpose};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -914,13 +914,22 @@ impl MultiModalProcessor {
                 )
             }
             MediaInput::Image { format, .. } => {
-                format!("Image analysis result: Detected objects in {:?} image - cars, buildings, people", format)
+                format!(
+                    "Image analysis result: Detected objects in {:?} image - cars, buildings, people",
+                    format
+                )
             }
             MediaInput::Audio { format, .. } => {
-                format!("Audio analysis result: Transcribed speech from {:?} audio - 'Hello, this is a test recording'", format)
+                format!(
+                    "Audio analysis result: Transcribed speech from {:?} audio - 'Hello, this is a test recording'",
+                    format
+                )
             }
             MediaInput::Video { format, .. } => {
-                format!("Video analysis result: Scene analysis of {:?} video - outdoor scene with moving objects", format)
+                format!(
+                    "Video analysis result: Scene analysis of {:?} video - outdoor scene with moving objects",
+                    format
+                )
             }
             MediaInput::MultiModal {
                 text,

@@ -13,7 +13,7 @@ use crate::{
     batch::{BatchConfig, BatchInput},
     config::Config,
 };
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use chrono::{DateTime, Local, Utc};
 use clap::{Args, Subcommand, ValueEnum};
 use serde_json;
@@ -886,7 +886,10 @@ pub async fn execute(args: BatchQueueArgs, _config: &Config) -> Result<()> {
                                 manager.retry_job(&queue_id, &job_id, force).await?;
                                 println!("Job '{}' queued for retry", job_id);
                             } else {
-                                println!("Job '{}' has exceeded maximum retry attempts. Use --force to override.", job_id);
+                                println!(
+                                    "Job '{}' has exceeded maximum retry attempts. Use --force to override.",
+                                    job_id
+                                );
                             }
                         }
                         JobStatus::Cancelled => {
@@ -1571,60 +1574,72 @@ mod tests {
     fn test_validate_create_params_empty_queue_id() {
         let result = validate_create_params("", "Test Queue", 4, 1000);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Queue ID cannot be empty"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Queue ID cannot be empty")
+        );
     }
 
     #[test]
     fn test_validate_create_params_empty_name() {
         let result = validate_create_params("queue-1", "", 4, 1000);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Queue name cannot be empty"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Queue name cannot be empty")
+        );
     }
 
     #[test]
     fn test_validate_create_params_zero_concurrent() {
         let result = validate_create_params("queue-1", "Test Queue", 0, 1000);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Max concurrent jobs must be between 1 and"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Max concurrent jobs must be between 1 and")
+        );
     }
 
     #[test]
     fn test_validate_create_params_concurrent_exceeds_limit() {
         let result = validate_create_params("queue-1", "Test Queue", 101, 1000);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Max concurrent jobs must be between 1 and"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Max concurrent jobs must be between 1 and")
+        );
     }
 
     #[test]
     fn test_validate_create_params_zero_size() {
         let result = validate_create_params("queue-1", "Test Queue", 4, 0);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Max queue size must be between 1 and"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Max queue size must be between 1 and")
+        );
     }
 
     #[test]
     fn test_validate_create_params_size_exceeds_limit() {
         let result = validate_create_params("queue-1", "Test Queue", 4, 10001);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Max queue size must be between 1 and"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Max queue size must be between 1 and")
+        );
     }
 
     // -------------------------------------------------------------------------
@@ -1647,10 +1662,12 @@ mod tests {
         let path = PathBuf::from("/tmp/test.txt");
         let result = validate_submit_params("", "Test Job", &path, "model", 4, 60, 3);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Queue ID cannot be empty"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Queue ID cannot be empty")
+        );
     }
 
     #[test]
@@ -1658,10 +1675,12 @@ mod tests {
         let path = PathBuf::from("/tmp/test.txt");
         let result = validate_submit_params("queue-1", "", &path, "model", 4, 60, 3);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Job name cannot be empty"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Job name cannot be empty")
+        );
     }
 
     #[test]
@@ -1669,10 +1688,12 @@ mod tests {
         let path = PathBuf::from("/nonexistent/path/file.txt");
         let result = validate_submit_params("queue-1", "Test Job", &path, "model", 4, 60, 3);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Input file does not exist"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Input file does not exist")
+        );
     }
 
     #[test]
@@ -1683,10 +1704,12 @@ mod tests {
 
         let result = validate_submit_params("queue-1", "Test Job", &path, "", 4, 60, 3);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Model name cannot be empty"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Model name cannot be empty")
+        );
     }
 
     #[test]
@@ -1697,10 +1720,12 @@ mod tests {
 
         let result = validate_submit_params("queue-1", "Test Job", &path, "model", 0, 60, 3);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Concurrency must be between 1 and"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Concurrency must be between 1 and")
+        );
     }
 
     #[test]
@@ -1711,10 +1736,12 @@ mod tests {
 
         let result = validate_submit_params("queue-1", "Test Job", &path, "model", 33, 60, 3);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Concurrency must be between 1 and"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Concurrency must be between 1 and")
+        );
     }
 
     #[test]
@@ -1725,10 +1752,12 @@ mod tests {
 
         let result = validate_submit_params("queue-1", "Test Job", &path, "model", 4, 0, 3);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Timeout must be between 1 and"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Timeout must be between 1 and")
+        );
     }
 
     #[test]
@@ -1739,10 +1768,12 @@ mod tests {
 
         let result = validate_submit_params("queue-1", "Test Job", &path, "model", 4, 1441, 3);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Timeout must be between 1 and"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Timeout must be between 1 and")
+        );
     }
 
     #[test]
@@ -1753,10 +1784,12 @@ mod tests {
 
         let result = validate_submit_params("queue-1", "Test Job", &path, "model", 4, 60, 11);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Max retries must be <="));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Max retries must be <=")
+        );
     }
 
     // -------------------------------------------------------------------------
@@ -1779,30 +1812,36 @@ mod tests {
     fn test_validate_list_jobs_params_empty_queue_id() {
         let result = validate_list_jobs_params("", &None, 100);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Queue ID cannot be empty"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Queue ID cannot be empty")
+        );
     }
 
     #[test]
     fn test_validate_list_jobs_params_zero_limit() {
         let result = validate_list_jobs_params("queue-1", &None, 0);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Limit must be between 1 and"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Limit must be between 1 and")
+        );
     }
 
     #[test]
     fn test_validate_list_jobs_params_limit_exceeds_max() {
         let result = validate_list_jobs_params("queue-1", &None, 1001);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Limit must be between 1 and"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Limit must be between 1 and")
+        );
     }
 
     // -------------------------------------------------------------------------
@@ -1819,20 +1858,24 @@ mod tests {
     fn test_validate_job_status_params_empty_queue_id() {
         let result = validate_job_status_params("", "job-123");
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Queue ID cannot be empty"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Queue ID cannot be empty")
+        );
     }
 
     #[test]
     fn test_validate_job_status_params_empty_job_id() {
         let result = validate_job_status_params("queue-1", "");
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Job ID cannot be empty"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Job ID cannot be empty")
+        );
     }
 
     // -------------------------------------------------------------------------
@@ -1849,10 +1892,12 @@ mod tests {
     fn test_validate_queue_id_empty() {
         let result = validate_queue_id("");
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Queue ID cannot be empty"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Queue ID cannot be empty")
+        );
     }
 
     // -------------------------------------------------------------------------
@@ -1891,30 +1936,36 @@ mod tests {
     fn test_parse_schedule_invalid_format() {
         let result = parse_schedule("invalid");
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Invalid schedule format"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Invalid schedule format")
+        );
     }
 
     #[test]
     fn test_parse_schedule_unknown_type() {
         let result = parse_schedule("unknown:value");
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Unknown schedule type"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Unknown schedule type")
+        );
     }
 
     #[test]
     fn test_parse_schedule_invalid_interval() {
         let result = parse_schedule("interval:not_a_number");
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Invalid interval minutes"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Invalid interval minutes")
+        );
     }
 
     // -------------------------------------------------------------------------
@@ -1931,10 +1982,12 @@ mod tests {
     fn test_parse_time_invalid() {
         let result = parse_time("invalid-time");
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Invalid time format"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Invalid time format")
+        );
     }
 
     // -------------------------------------------------------------------------

@@ -12,7 +12,7 @@ use anyhow::Result;
 use chrono::{DateTime, Utc};
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::{broadcast, RwLock};
+use tokio::sync::{RwLock, broadcast};
 use tokio::time::{interval, sleep};
 use tracing::{debug, error, info, warn};
 

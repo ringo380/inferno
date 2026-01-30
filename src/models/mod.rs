@@ -664,30 +664,36 @@ mod tests {
         fs::write(&gguf_path, b"GGUF\x03\x00\x00\x00mock data")
             .await
             .expect("Failed to write valid GGUF file");
-        assert!(manager
-            .validate_model(&gguf_path)
-            .await
-            .expect("Failed to validate valid GGUF model"));
+        assert!(
+            manager
+                .validate_model(&gguf_path)
+                .await
+                .expect("Failed to validate valid GGUF model")
+        );
 
         // Invalid GGUF file (wrong magic bytes)
         let invalid_path = models_dir.join("invalid.gguf");
         fs::write(&invalid_path, b"INVALID_DATA")
             .await
             .expect("Failed to write invalid file");
-        assert!(!manager
-            .validate_model(&invalid_path)
-            .await
-            .expect("Failed to validate invalid model"));
+        assert!(
+            !manager
+                .validate_model(&invalid_path)
+                .await
+                .expect("Failed to validate invalid model")
+        );
 
         // Empty file
         let empty_path = models_dir.join("empty.gguf");
         fs::write(&empty_path, b"")
             .await
             .expect("Failed to write empty file");
-        assert!(!manager
-            .validate_model(&empty_path)
-            .await
-            .expect("Failed to validate empty model"));
+        assert!(
+            !manager
+                .validate_model(&empty_path)
+                .await
+                .expect("Failed to validate empty model")
+        );
     }
 
     #[tokio::test]

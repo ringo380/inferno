@@ -930,9 +930,11 @@ mod tests {
     async fn test_gpu_manager_creation() {
         let config = GpuConfiguration::default();
         let manager = GpuManager::new(config);
-        assert!(!manager
-            .monitoring_active
-            .load(std::sync::atomic::Ordering::SeqCst));
+        assert!(
+            !manager
+                .monitoring_active
+                .load(std::sync::atomic::Ordering::SeqCst)
+        );
     }
 
     #[tokio::test]

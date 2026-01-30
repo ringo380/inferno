@@ -9,7 +9,7 @@ use crate::{
     backends::InferenceParams, config::Config, distributed::DistributedInference,
     metrics::MetricsCollector, models::ModelManager,
 };
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use clap::{Args, Subcommand};
 use futures::StreamExt;
 use std::{sync::Arc, time::Instant};
@@ -581,30 +581,36 @@ mod tests {
     fn test_validate_start_args_too_many_workers() {
         let result = validate_start_args(100, 8);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Worker count cannot exceed 32"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Worker count cannot exceed 32")
+        );
     }
 
     #[test]
     fn test_validate_start_args_zero_max_concurrent() {
         let result = validate_start_args(4, 0);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Max concurrent must be greater than 0"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Max concurrent must be greater than 0")
+        );
     }
 
     #[test]
     fn test_validate_start_args_max_concurrent_exceeds_limit() {
         let result = validate_start_args(4, 200);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Max concurrent cannot exceed 100"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Max concurrent cannot exceed 100")
+        );
     }
 
     #[test]
@@ -617,50 +623,60 @@ mod tests {
     fn test_validate_benchmark_args_empty_model() {
         let result = validate_benchmark_args("", 10, 5, "Hello");
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Model name cannot be empty"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Model name cannot be empty")
+        );
     }
 
     #[test]
     fn test_validate_benchmark_args_zero_concurrent() {
         let result = validate_benchmark_args("test-model", 0, 5, "Hello");
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Concurrent must be greater than 0"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Concurrent must be greater than 0")
+        );
     }
 
     #[test]
     fn test_validate_benchmark_args_concurrent_exceeds_limit() {
         let result = validate_benchmark_args("test-model", 200, 5, "Hello");
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Concurrent cannot exceed 100"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Concurrent cannot exceed 100")
+        );
     }
 
     #[test]
     fn test_validate_benchmark_args_zero_requests() {
         let result = validate_benchmark_args("test-model", 10, 0, "Hello");
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Requests must be greater than 0"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Requests must be greater than 0")
+        );
     }
 
     #[test]
     fn test_validate_benchmark_args_empty_prompt() {
         let result = validate_benchmark_args("test-model", 10, 5, "");
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Prompt cannot be empty"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Prompt cannot be empty")
+        );
     }
 
     #[test]
@@ -673,50 +689,60 @@ mod tests {
     fn test_validate_test_args_empty_model() {
         let result = validate_test_args("", "Hello", 100, 0.7);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Model name cannot be empty"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Model name cannot be empty")
+        );
     }
 
     #[test]
     fn test_validate_test_args_empty_input() {
         let result = validate_test_args("test-model", "", 100, 0.7);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Input cannot be empty"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Input cannot be empty")
+        );
     }
 
     #[test]
     fn test_validate_test_args_zero_max_tokens() {
         let result = validate_test_args("test-model", "Hello", 0, 0.7);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Max tokens must be greater than 0"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Max tokens must be greater than 0")
+        );
     }
 
     #[test]
     fn test_validate_test_args_temperature_too_low() {
         let result = validate_test_args("test-model", "Hello", 100, -0.5);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Temperature must be between 0.0 and 2.0"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Temperature must be between 0.0 and 2.0")
+        );
     }
 
     #[test]
     fn test_validate_test_args_temperature_too_high() {
         let result = validate_test_args("test-model", "Hello", 100, 3.0);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Temperature must be between 0.0 and 2.0"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Temperature must be between 0.0 and 2.0")
+        );
     }
 
     #[test]

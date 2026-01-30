@@ -6,8 +6,8 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::sync::atomic::AtomicU32;
 use std::sync::Arc;
+use std::sync::atomic::AtomicU32;
 
 /// Worker state
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Serialize, Deserialize)]

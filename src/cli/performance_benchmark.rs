@@ -1721,10 +1721,12 @@ mod tests {
 
         let result = validate_benchmark_args(&args);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Benchmark type must be one of"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Benchmark type must be one of")
+        );
     }
 
     #[test]
@@ -1741,10 +1743,12 @@ mod tests {
 
         let result = validate_benchmark_args(&args);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Iterations must be greater than 0"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Iterations must be greater than 0")
+        );
     }
 
     #[test]
@@ -1768,10 +1772,12 @@ mod tests {
 
         let result = validate_benchmark_args(&args);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Threshold must be non-negative"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Threshold must be non-negative")
+        );
     }
 
     #[test]
@@ -1787,10 +1793,12 @@ mod tests {
 
         let result = validate_benchmark_args(&args);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Monitor format must be one of"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Monitor format must be one of")
+        );
     }
 
     #[test]
@@ -1806,10 +1814,12 @@ mod tests {
 
         let result = validate_benchmark_args(&args);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Interval must be greater than 0"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Interval must be greater than 0")
+        );
     }
 
     #[test]
@@ -1825,10 +1835,12 @@ mod tests {
 
         let result = validate_benchmark_args(&args);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Number of clients must be greater than 0"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Number of clients must be greater than 0")
+        );
     }
 
     #[test]
@@ -1844,10 +1856,12 @@ mod tests {
 
         let result = validate_benchmark_args(&args);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Request rate must be positive"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Request rate must be positive")
+        );
     }
 
     #[test]
@@ -1863,10 +1877,12 @@ mod tests {
 
         let result = validate_benchmark_args(&args);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Number of cycles must be greater than 0"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Number of cycles must be greater than 0")
+        );
     }
 
     #[test]
@@ -1882,10 +1898,12 @@ mod tests {
 
         let result = validate_benchmark_args(&args);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Backends cannot be empty"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Backends cannot be empty")
+        );
     }
 
     #[test]
@@ -1901,9 +1919,11 @@ mod tests {
 
         let result = validate_benchmark_args(&args);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Duration must be greater than 0"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Duration must be greater than 0")
+        );
     }
 }

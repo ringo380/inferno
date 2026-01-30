@@ -2,7 +2,7 @@ use crate::{
     config::Config,
     observability::{GrafanaDashboard, ObservabilityConfig, ObservabilityManager},
 };
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 use tracing::{info, warn};

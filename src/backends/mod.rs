@@ -6,8 +6,8 @@ mod metal;
 #[cfg(feature = "onnx")]
 mod onnx;
 
-use crate::{models::ModelInfo, InfernoError};
-use anyhow::{anyhow, Result};
+use crate::{InfernoError, models::ModelInfo};
+use anyhow::{Result, anyhow};
 use clap::ValueEnum;
 use futures::Stream;
 use serde::{Deserialize, Serialize};

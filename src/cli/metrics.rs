@@ -8,7 +8,7 @@ use crate::interfaces::cli::{Command, CommandContext, CommandOutput};
 use crate::{config::Config, metrics::MetricsCollector};
 use anyhow::Result;
 use async_trait::async_trait;
-use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
+use axum::{Json, extract::State, http::StatusCode, response::IntoResponse};
 use clap::{Args, Subcommand};
 use serde_json::json;
 use std::sync::Arc;
@@ -331,7 +331,7 @@ pub async fn execute(args: MetricsArgs, _config: &Config) -> Result<()> {
 }
 
 async fn start_metrics_server(bind_addr: &str) -> Result<()> {
-    use axum::{routing::get, Router};
+    use axum::{Router, routing::get};
 
     use std::sync::Arc;
 
@@ -506,10 +506,12 @@ mod tests {
         // Missing port
         let result = validate_bind_address("127.0.0.1");
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Invalid bind address format"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Invalid bind address format")
+        );
 
         // Too many colons
         let result = validate_bind_address("127.0.0.1:9090:extra");
@@ -526,10 +528,12 @@ mod tests {
         // Port 0
         let result = validate_bind_address("127.0.0.1:0");
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Port 0 is not allowed"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Port 0 is not allowed")
+        );
 
         // Port too large
         let result = validate_bind_address("127.0.0.1:70000");
@@ -540,10 +544,12 @@ mod tests {
     fn test_validate_bind_address_empty_host() {
         let result = validate_bind_address(":9090");
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Host cannot be empty"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Host cannot be empty")
+        );
     }
 
     #[tokio::test]

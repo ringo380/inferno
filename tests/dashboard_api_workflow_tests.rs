@@ -1,25 +1,25 @@
 use anyhow::Result;
 use axum::{
+    Router,
     body::Body,
     http::{Method, Request, StatusCode},
-    Router,
 };
 use hyper::body::to_bytes;
 use inferno::{
+    InfernoError,
     backends::{BackendConfig, BackendType},
     cache::{CacheConfig, ModelCache},
     dashboard::{
-        deployments::DeploymentManager, models::ModelRepository, BackupRequest,
-        CreateDeploymentRequest, CreateModelRequest, DashboardConfig, DashboardMetrics,
-        DashboardServer, DashboardState, DeployModelRequest, DeploymentInfo, DeploymentStatus,
-        ModelInfo as DashboardModelInfo, ModelStatus, RestoreRequest, ScaleDeploymentRequest,
-        UpdateDeploymentRequest, UpdateModelRequest,
+        BackupRequest, CreateDeploymentRequest, CreateModelRequest, DashboardConfig,
+        DashboardMetrics, DashboardServer, DashboardState, DeployModelRequest, DeploymentInfo,
+        DeploymentStatus, ModelInfo as DashboardModelInfo, ModelStatus, RestoreRequest,
+        ScaleDeploymentRequest, UpdateDeploymentRequest, UpdateModelRequest,
+        deployments::DeploymentManager, models::ModelRepository,
     },
     metrics::MetricsCollector,
     models::{ModelInfo, ModelManager},
-    InfernoError,
 };
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
 use tempfile::TempDir;
 use tokio::{

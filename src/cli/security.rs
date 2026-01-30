@@ -2,7 +2,7 @@ use crate::{
     config::Config,
     security::{Permission, SecurityManager, User, UserRole},
 };
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use chrono::Utc;
 use clap::{Args, Subcommand};
 use std::collections::HashSet;
@@ -1236,20 +1236,24 @@ mod tests {
     fn test_validate_user_operation_invalid_operation() {
         let result = validate_user_operation("invalid", &None, &None, &None);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Operation must be"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Operation must be")
+        );
     }
 
     #[test]
     fn test_validate_user_operation_create_missing_user_id() {
         let result = validate_user_operation("create", &None, &Some("user".to_string()), &None);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("User ID is required"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("User ID is required")
+        );
     }
 
     #[test]
@@ -1261,10 +1265,12 @@ mod tests {
             &Some(UserRoleArg::User),
         );
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Username is required"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Username is required")
+        );
     }
 
     #[test]
@@ -1294,10 +1300,12 @@ mod tests {
     fn test_validate_user_operation_delete_missing_id() {
         let result = validate_user_operation("delete", &None, &None, &None);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("User ID is required"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("User ID is required")
+        );
     }
 
     #[test]
@@ -1314,10 +1322,12 @@ mod tests {
     fn test_validate_api_key_operation_invalid_operation() {
         let result = validate_api_key_operation("invalid", &None, &None, &None, &None, None);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Operation must be"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Operation must be")
+        );
     }
 
     #[test]
@@ -1331,10 +1341,12 @@ mod tests {
             None,
         );
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("User ID is required"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("User ID is required")
+        );
     }
 
     #[test]
@@ -1348,10 +1360,12 @@ mod tests {
             None,
         );
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Key name is required"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Key name is required")
+        );
     }
 
     #[test]
@@ -1378,20 +1392,24 @@ mod tests {
             Some(400),
         );
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Expiration must be"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Expiration must be")
+        );
     }
 
     #[test]
     fn test_validate_api_key_operation_test_missing_key() {
         let result = validate_api_key_operation("test", &None, &None, &None, &None, None);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Key value is required"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Key value is required")
+        );
     }
 
     // -------------------------------------------------------------------------
@@ -1402,30 +1420,36 @@ mod tests {
     fn test_validate_token_operation_invalid_operation() {
         let result = validate_token_operation("invalid", &None, &None, &None);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Operation must be"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Operation must be")
+        );
     }
 
     #[test]
     fn test_validate_token_operation_generate_missing_user() {
         let result = validate_token_operation("generate", &None, &None, &None);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("User ID is required"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("User ID is required")
+        );
     }
 
     #[test]
     fn test_validate_token_operation_verify_missing_token() {
         let result = validate_token_operation("verify", &None, &None, &None);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Token is required"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Token is required")
+        );
     }
 
     #[test]
@@ -1450,10 +1474,12 @@ mod tests {
         let settings = RateLimitSettings::default();
         let result = validate_rate_limit_operation("invalid", &settings);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Operation must be"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Operation must be")
+        );
     }
 
     #[test]
@@ -1461,10 +1487,12 @@ mod tests {
         let settings = RateLimitSettings::default();
         let result = validate_rate_limit_operation("status", &settings);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Identifier is required"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Identifier is required")
+        );
     }
 
     #[test]
@@ -1475,10 +1503,12 @@ mod tests {
         };
         let result = validate_rate_limit_operation("set", &settings);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("At least one rate limit"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("At least one rate limit")
+        );
     }
 
     #[test]
@@ -1500,10 +1530,12 @@ mod tests {
         };
         let result = validate_rate_limit_operation("test", &settings);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Number of test requests"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Number of test requests")
+        );
     }
 
     #[test]
@@ -1515,10 +1547,12 @@ mod tests {
         };
         let result = validate_rate_limit_operation("test", &settings);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Test requests must be"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Test requests must be")
+        );
     }
 
     // -------------------------------------------------------------------------
@@ -1529,20 +1563,24 @@ mod tests {
     fn test_validate_ip_control_operation_invalid_operation() {
         let result = validate_ip_control_operation("invalid", &None);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Operation must be"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Operation must be")
+        );
     }
 
     #[test]
     fn test_validate_ip_control_operation_allow_missing_ip() {
         let result = validate_ip_control_operation("allow", &None);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("IP address is required"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("IP address is required")
+        );
     }
 
     #[test]
@@ -1583,10 +1621,12 @@ mod tests {
     fn test_validate_security_test_no_tests() {
         let result = validate_security_test(false, false, false, false);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("At least one test type"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("At least one test type")
+        );
     }
 
     #[test]

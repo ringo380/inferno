@@ -1,16 +1,16 @@
 /// Production-ready error recovery and resilience patterns for Inferno
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     sync::{
-        atomic::{AtomicU32, AtomicU64, AtomicUsize, Ordering},
         Arc, RwLock,
+        atomic::{AtomicU32, AtomicU64, AtomicUsize, Ordering},
     },
     time::{Duration, Instant, SystemTime},
 };
 use tokio::{
-    sync::{mpsc, oneshot, Semaphore},
+    sync::{Semaphore, mpsc, oneshot},
     time::{sleep, timeout},
 };
 use tracing::{debug, error, info, warn};

@@ -624,10 +624,12 @@ mod tests {
         let result = test_cache(&config, 0, false, false).await;
 
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Request count must be at least 1"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Request count must be at least 1")
+        );
     }
 
     #[tokio::test]
@@ -636,10 +638,12 @@ mod tests {
         let result = test_cache(&config, 20000, false, false).await;
 
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Request count cannot exceed 10000"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Request count cannot exceed 10000")
+        );
     }
 
     #[tokio::test]
@@ -648,10 +652,12 @@ mod tests {
         let result = invalidate_cache(&config, String::new()).await;
 
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Pattern cannot be empty"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Pattern cannot be empty")
+        );
     }
 
     #[tokio::test]
@@ -669,10 +675,12 @@ mod tests {
         let result = configure_cache(&config, settings).await;
 
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Max entries must be at least 1"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Max entries must be at least 1")
+        );
     }
 
     #[tokio::test]
@@ -681,9 +689,11 @@ mod tests {
         let result = benchmark_cache(&config, 100, 1024, 150).await;
 
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Hit rate cannot exceed 100%"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Hit rate cannot exceed 100%")
+        );
     }
 }

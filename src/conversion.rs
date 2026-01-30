@@ -1,6 +1,6 @@
 #![allow(dead_code, unused_imports, unused_variables, unexpected_cfgs)]
 use crate::{config::Config, models::ModelManager};
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use half::f16;
 use memmap2::Mmap;
@@ -40,7 +40,7 @@ use tokio::{fs as async_fs, io::AsyncReadExt};
 use tracing::{info, warn};
 
 #[cfg(feature = "pytorch")]
-use tch::{nn, Device as TchDevice, Kind as TchKind, Tensor as TchTensor};
+use tch::{Device as TchDevice, Kind as TchKind, Tensor as TchTensor, nn};
 
 // Placeholder types when pytorch is disabled
 #[cfg(not(feature = "pytorch"))]
@@ -1364,7 +1364,9 @@ impl ModelConverter {
         // let env = Arc::new(Environment::builder().build()?);
         // let session = SessionBuilder::new(&env)?.with_model_from_file(path)?;
 
-        warn!("ONNX model reading is currently unavailable - ort 2.0 lacks prebuilt binaries for some platforms");
+        warn!(
+            "ONNX model reading is currently unavailable - ort 2.0 lacks prebuilt binaries for some platforms"
+        );
         Err(anyhow!(
             "ONNX model reading unavailable: ort 2.0 is in transition and lacks prebuilt binaries for some platforms. \
              Use GGUF format instead, or wait for ort 2.0 stable release."

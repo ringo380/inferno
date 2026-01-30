@@ -934,10 +934,12 @@ mod tests {
         let result = handle_start("127.0.0.1".to_string(), 0, None, false, false, None).await;
 
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Port must be greater than 0"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Port must be greater than 0")
+        );
     }
 
     #[tokio::test]
@@ -945,10 +947,12 @@ mod tests {
         let result = handle_start("".to_string(), 8080, None, false, false, None).await;
 
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Address cannot be empty"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Address cannot be empty")
+        );
     }
 
     #[tokio::test]
@@ -956,10 +960,12 @@ mod tests {
         let result = handle_status("".to_string(), false).await;
 
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("URL cannot be empty"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("URL cannot be empty")
+        );
     }
 
     #[tokio::test]
@@ -970,10 +976,12 @@ mod tests {
         let result = handle_export(ExportType::Metrics, output_path, 0, false).await;
 
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Days must be greater than 0"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Days must be greater than 0")
+        );
     }
 
     #[tokio::test]
@@ -987,10 +995,12 @@ mod tests {
         .await;
 
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Import file does not exist"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Import file does not exist")
+        );
     }
 
     #[test]

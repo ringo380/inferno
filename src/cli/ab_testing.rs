@@ -142,40 +142,48 @@ mod tests {
     fn test_validate_start_empty_name() {
         let result = validate_start("", "model1", "model2");
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Test name cannot be empty"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Test name cannot be empty")
+        );
     }
 
     #[test]
     fn test_validate_start_empty_control_model() {
         let result = validate_start("test1", "", "model2");
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Control model name cannot be empty"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Control model name cannot be empty")
+        );
     }
 
     #[test]
     fn test_validate_start_empty_treatment_model() {
         let result = validate_start("test1", "model1", "");
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Treatment model name cannot be empty"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Treatment model name cannot be empty")
+        );
     }
 
     #[test]
     fn test_validate_start_same_models() {
         let result = validate_start("test1", "model1", "model1");
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Control and treatment models must be different"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Control and treatment models must be different")
+        );
     }
 
     #[test]
@@ -188,10 +196,12 @@ mod tests {
     fn test_validate_stop_empty_name() {
         let result = validate_stop("");
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Test name cannot be empty"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Test name cannot be empty")
+        );
     }
 
     #[test]
@@ -204,10 +214,12 @@ mod tests {
     fn test_validate_status_empty_name() {
         let result = validate_status("");
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Test name cannot be empty"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Test name cannot be empty")
+        );
     }
 
     #[test]
