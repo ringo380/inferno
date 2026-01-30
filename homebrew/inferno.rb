@@ -33,8 +33,8 @@ class Inferno < Formula
     (var/"inferno/cache").mkpath
     (etc/"inferno").mkpath
 
-    # Install shell completions
-    generate_completions_from_executable(bin/"inferno", "completions")
+    # Note: Shell completions not yet supported by inferno CLI
+    # TODO: Add completions when `inferno completions` command is implemented
   end
 
   def post_install
