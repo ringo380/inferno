@@ -72,20 +72,18 @@ cd dashboard && npm run tauri dev
 
 #### CLI Tools (for automation and scripting)
 
-**Homebrew** (coming soon)
+**Homebrew**
 ```bash
-# Add tap and install (once tap is available)
+# Add tap and install
 brew tap ringo380/tap
-brew install inferno
+brew install inferno-ai
 
 # Or directly
-brew install ringo380/tap/inferno
+brew install ringo380/tap/inferno-ai
 
 # Start as service
-brew services start inferno
+brew services start inferno-ai
 ```
-
-> **Note**: The Homebrew tap is being set up. Until then, use the Quick Install Script or build from source.
 
 **Quick Install Script**
 ```bash
@@ -201,7 +199,7 @@ inferno upgrade install   # Install latest version
 #### Package Managers
 ```bash
 # Homebrew
-brew upgrade inferno
+brew upgrade inferno-ai
 
 # Docker
 docker pull ghcr.io/ringo380/inferno:latest
