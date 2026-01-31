@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.6] - 2026-01-31
+
+### Security
+
+- **Dashboard**: Upgraded Next.js 14→15 to fix high severity vulnerabilities
+
+### Changed
+
+- **Homebrew**: Renamed formula from `inferno` to `inferno-ai` for consistency with crate name
+- **Homebrew**: Removed shell completions generation (CLI doesn't support `completions` subcommand yet)
+
 ## [0.10.5] - 2026-01-30
 
 ### Fixed
