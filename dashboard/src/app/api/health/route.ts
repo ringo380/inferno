@@ -1,5 +1,8 @@
 import { NextResponse } from 'next/server';
 
+// Required for static export in Next.js 15+
+export const dynamic = 'force-static';
+
 export async function GET() {
   try {
     // Basic health check
