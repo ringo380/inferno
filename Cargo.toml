@@ -157,7 +157,7 @@ base64 = "0.21"
 regex = "1.10"
 aes-gcm = "0.10"
 ring = "0.17"
-jsonwebtoken = "9.2"
+jsonwebtoken = "10.3"
 argon2 = "0.5"
 
 # Email support for alerting (optional - avoids OpenSSL dependency for cross-compilation)
