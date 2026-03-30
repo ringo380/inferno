@@ -1,5 +1,3 @@
-#![allow(clippy::explicit_counter_loop)]
-
 //! # ONNX Runtime Backend
 //!
 //! Provides ONNX model inference support using the ort crate with load-dynamic
@@ -37,9 +35,10 @@ pub struct OnnxBackend {
     session: Option<Arc<Mutex<Session>>>,
     tokenizer: Option<Tokenizer>,
     model_info: Option<ModelInfo>,
-    metrics: Option<InferenceMetrics>,
+    metrics: Arc<Mutex<Option<InferenceMetrics>>>,
     model_type: ModelType,
     input_names: InputNames,
+    eos_token_id: Option<u32>,
 }
 
 #[derive(Debug, Clone)]
@@ -74,9 +73,10 @@ impl OnnxBackend {
             session: None,
             tokenizer: None,
             model_info: None,
-            metrics: None,
+            metrics: Arc::new(Mutex::new(None)),
             model_type: ModelType::Unknown,
             input_names: InputNames::default(),
+            eos_token_id: None,
         })
     }
 
@@ -92,6 +92,8 @@ impl OnnxBackend {
                     Ok(tokenizer) => {
                         info!("Loaded tokenizer from: {}", tokenizer_path.display());
                         self.tokenizer = Some(tokenizer);
+                        // Try to detect EOS token ID from tokenizer config
+                        self.detect_eos_token(model_dir);
                         return Ok(());
                     }
                     Err(e) => {
@@ -108,6 +110,91 @@ impl OnnxBackend {
         warn!(
             "No tokenizer found alongside model, tokenization-dependent features will be limited"
         );
+        Ok(())
+    }
+
+    fn detect_eos_token(&mut self, model_dir: &std::path::Path) {
+        // Try reading tokenizer_config.json for eos_token_id
+        let config_path = model_dir.join("tokenizer_config.json");
+        if config_path.exists() {
+            if let Ok(content) = std::fs::read_to_string(&config_path) {
+                // Simple JSON parse for eos_token_id
+                if let Some(pos) = content.find("\"eos_token_id\"") {
+                    let rest = &content[pos..];
+                    if let Some(colon) = rest.find(':') {
+                        let value_str = rest[colon + 1..].trim();
+                        if let Some(end) = value_str.find(|c: char| !c.is_ascii_digit()) {
+                            if let Ok(id) = value_str[..end].trim().parse::<u32>() {
+                                self.eos_token_id = Some(id);
+                                debug!("Detected EOS token ID: {}", id);
+                                return;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Try common special_tokens_map.json
+        let special_path = model_dir.join("special_tokens_map.json");
+        if special_path.exists() {
+            debug!("Found special_tokens_map.json but EOS extraction requires full JSON parsing");
+        }
+
+        // Default EOS token ID for many HuggingFace models
+        self.eos_token_id = Some(2);
+        debug!("Using default EOS token ID: 2");
+    }
+
+    /// Validate ONNX file format by checking protobuf structure.
+    fn validate_onnx_file(path: &std::path::Path) -> Result<()> {
+        use std::io::Read;
+        let mut file = std::fs::File::open(path)
+            .map_err(|e| InfernoError::Backend(format!("Cannot open model file: {}", e)))?;
+
+        let mut header = [0u8; 8];
+        file.read_exact(&mut header)
+            .map_err(|e| InfernoError::Backend(format!("Cannot read model file header: {}", e)))?;
+
+        // ONNX files are Protocol Buffers. Check for valid protobuf wire types
+        // in the first few bytes. The first byte should have a valid field number
+        // and wire type (0-5).
+        let wire_type = header[0] & 0x07;
+        if wire_type > 5 {
+            return Err(InfernoError::Backend(
+                "File does not appear to be a valid ONNX model (invalid protobuf header)"
+                    .to_string(),
+            )
+            .into());
+        }
+
+        // Check that the file contains ONNX-related strings in the header region
+        let mut extended_header = vec![
+            0u8;
+            512.min(
+                std::fs::metadata(path)
+                    .map(|m| m.len() as usize)
+                    .unwrap_or(512),
+            )
+        ];
+        file = std::fs::File::open(path)
+            .map_err(|e| InfernoError::Backend(format!("Cannot reopen model file: {}", e)))?;
+        let bytes_read = file
+            .read(&mut extended_header)
+            .map_err(|e| InfernoError::Backend(format!("Cannot read model header: {}", e)))?;
+        extended_header.truncate(bytes_read);
+
+        let header_str = String::from_utf8_lossy(&extended_header);
+        let has_onnx_markers = header_str.contains("onnx")
+            || header_str.contains("ONNX")
+            || header_str.contains("ir_version")
+            || header_str.contains("graph")
+            || header_str.contains("producer");
+
+        if !has_onnx_markers {
+            warn!("ONNX file header does not contain typical ONNX markers, proceeding anyway");
+        }
+
         Ok(())
     }
 
@@ -243,6 +330,20 @@ impl OnnxBackend {
         }
     }
 
+    /// Compute softmax probabilities from logits.
+    fn softmax(logits: &[f32]) -> Vec<f32> {
+        if logits.is_empty() {
+            return Vec::new();
+        }
+        let max_logit = logits.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+        let exps: Vec<f32> = logits.iter().map(|&l| (l - max_logit).exp()).collect();
+        let sum: f32 = exps.iter().sum();
+        if sum <= 0.0 {
+            return vec![0.0; logits.len()];
+        }
+        exps.iter().map(|&e| e / sum).collect()
+    }
+
     /// Run a single forward pass and return raw logits for the last token position.
     /// Uses shape tuples to avoid ndarray version conflicts between ort and the project.
     fn forward_pass(
@@ -283,15 +384,34 @@ impl OnnxBackend {
         // Get logits for the last position
         // Typical shapes: [batch, seq_len, vocab_size] or [batch, vocab_size]
         let last_logits = if shape.len() == 3 {
-            // [batch, seq_len, vocab_size]
+            let seq_dim = shape[1] as usize;
             let vocab_size = shape[2] as usize;
-            let last_pos = shape[1] as usize - 1;
+            if seq_dim == 0 || vocab_size == 0 {
+                return Err(anyhow!(
+                    "Model returned empty output tensor (shape: {:?})",
+                    shape
+                ));
+            }
+            let last_pos = seq_dim - 1;
             let start = last_pos * vocab_size;
             let end = start + vocab_size;
+            if end > data.len() {
+                return Err(anyhow!(
+                    "Output tensor data too short for shape {:?} (got {} elements)",
+                    shape,
+                    data.len()
+                ));
+            }
             data[start..end].to_vec()
         } else if shape.len() == 2 {
-            // [batch, vocab_size] - already last position
             let vocab_size = shape[1] as usize;
+            if vocab_size == 0 || vocab_size > data.len() {
+                return Err(anyhow!(
+                    "Output tensor data size mismatch for shape {:?} (got {} elements)",
+                    shape,
+                    data.len()
+                ));
+            }
             data[..vocab_size].to_vec()
         } else {
             data.to_vec()
@@ -306,6 +426,8 @@ impl OnnxBackend {
         initial_tokens: Vec<i64>,
         input_names: &InputNames,
         params: &InferenceParams,
+        eos_token_id: Option<u32>,
+        tokenizer: Option<&Tokenizer>,
     ) -> Result<Vec<u32>> {
         let mut all_tokens = initial_tokens.clone();
         let mut sampler = Sampler::new(Self::build_sampling_config(params));
@@ -313,10 +435,13 @@ impl OnnxBackend {
         for _ in 0..params.max_tokens {
             let logits = Self::forward_pass(session, &all_tokens, input_names)?;
 
+            // Compute softmax probabilities so sampling strategies (greedy, top-k, top-p) work correctly
+            let probs = Self::softmax(&logits);
             let candidates: Vec<(i32, f32, f32)> = logits
                 .iter()
+                .zip(probs.iter())
                 .enumerate()
-                .map(|(id, &logit)| (id as i32, logit, 0.0))
+                .map(|(id, (&logit, &p))| (id as i32, logit, p))
                 .collect();
 
             let next_token = match sampler.sample_from_candidates(&candidates) {
@@ -324,7 +449,31 @@ impl OnnxBackend {
                 None => break,
             };
 
+            // Check for EOS token
+            if let Some(eos_id) = eos_token_id {
+                if next_token as u32 == eos_id {
+                    debug!("EOS token encountered, stopping generation");
+                    break;
+                }
+            }
+
             all_tokens.push(next_token as i64);
+
+            // Check stop sequences
+            if !params.stop_sequences.is_empty() {
+                if let Some(tok) = tokenizer {
+                    let generated: Vec<u32> = all_tokens[initial_tokens.len()..]
+                        .iter()
+                        .map(|&t| t as u32)
+                        .collect();
+                    if let Ok(text) = tok.decode(&generated, true) {
+                        if params.stop_sequences.iter().any(|stop| text.contains(stop)) {
+                            debug!("Stop sequence matched, stopping generation");
+                            break;
+                        }
+                    }
+                }
+            }
         }
 
         // Return only the generated tokens (not the prompt)
@@ -360,6 +509,9 @@ impl InferenceBackend for OnnxBackend {
         }
 
         debug!("ONNX model file size: {} bytes", file_size);
+
+        // Validate ONNX file format (protobuf header check)
+        Self::validate_onnx_file(&model_info.path)?;
 
         let providers = self.build_execution_providers();
         let cpu_threads = self.config.cpu_threads;
@@ -421,9 +573,10 @@ impl InferenceBackend for OnnxBackend {
         self.session = None;
         self.tokenizer = None;
         self.model_info = None;
-        self.metrics = None;
+        *self.metrics.lock().unwrap() = None;
         self.model_type = ModelType::Unknown;
         self.input_names = InputNames::default();
+        self.eos_token_id = None;
         info!("ONNX model unloaded successfully");
         Ok(())
     }
@@ -447,6 +600,8 @@ impl InferenceBackend for OnnxBackend {
         let session = self.session.as_ref().unwrap().clone();
         let input_names = self.input_names.clone();
 
+        let metrics = self.metrics.clone();
+
         match self.model_type {
             ModelType::TextGeneration | ModelType::Unknown => {
                 let token_ids = self.tokenize(input)?;
@@ -455,6 +610,8 @@ impl InferenceBackend for OnnxBackend {
 
                 let initial_tokens: Vec<i64> = token_ids.iter().map(|&t| t as i64).collect();
                 let params_clone = params.clone();
+                let eos_token_id = self.eos_token_id;
+                let tokenizer = self.tokenizer.clone();
 
                 let generated_tokens = tokio::task::spawn_blocking(move || {
                     let mut session = session
@@ -465,6 +622,8 @@ impl InferenceBackend for OnnxBackend {
                         initial_tokens,
                         &input_names,
                         &params_clone,
+                        eos_token_id,
+                        tokenizer.as_ref(),
                     )
                 })
                 .await
@@ -476,7 +635,7 @@ impl InferenceBackend for OnnxBackend {
 
                 let response = self.detokenize(&generated_tokens)?;
 
-                self.metrics = Some(InferenceMetrics {
+                *metrics.lock().unwrap() = Some(InferenceMetrics {
                     total_tokens: prompt_tokens + completion_tokens,
                     prompt_tokens,
                     completion_tokens,
@@ -526,7 +685,7 @@ impl InferenceBackend for OnnxBackend {
                     .collect::<Vec<_>>()
                     .join(", ");
 
-                self.metrics = Some(InferenceMetrics {
+                *metrics.lock().unwrap() = Some(InferenceMetrics {
                     total_tokens: prompt_tokens,
                     prompt_tokens,
                     completion_tokens: 0,
@@ -559,9 +718,12 @@ impl InferenceBackend for OnnxBackend {
         let input_names = self.input_names.clone();
 
         let token_ids = self.tokenize(input)?;
+        let prompt_tokens = token_ids.len() as u32;
         let initial_tokens: Vec<i64> = token_ids.iter().map(|&t| t as i64).collect();
         let max_tokens = params.max_tokens;
         let sampling_config = Self::build_sampling_config(params);
+        let stop_sequences = params.stop_sequences.clone();
+        let eos_token_id = self.eos_token_id;
 
         let tokenizer = self
             .tokenizer
@@ -575,12 +737,14 @@ impl InferenceBackend for OnnxBackend {
             max_tokens_per_sec: 0,
         };
         let (tx, rx) = create_stream_channel(stream_config);
+        let metrics = self.metrics.clone();
 
         tokio::task::spawn_blocking(move || {
             let start_time = Instant::now();
-            let mut all_tokens = initial_tokens;
+            let prompt_time = start_time.elapsed();
+            let mut all_tokens = initial_tokens.clone();
             let mut sampler = Sampler::new(sampling_config);
-            let mut sequence = 0u32;
+            let mut generated_text = String::new();
 
             let mut session_guard = match session.lock() {
                 Ok(guard) => guard,
@@ -595,14 +759,16 @@ impl InferenceBackend for OnnxBackend {
                 }
             };
 
-            for _ in 0..max_tokens {
+            let mut completion_tokens = 0u32;
+
+            for seq in 0..max_tokens {
                 let logits = match Self::forward_pass(&mut session_guard, &all_tokens, &input_names)
                 {
                     Ok(l) => l,
                     Err(e) => {
                         let _ = tx.blocking_send(StreamToken {
                             content: format!("Error: {}", e),
-                            sequence,
+                            sequence: seq,
                             is_valid: false,
                             timestamp_ms: Some(start_time.elapsed().as_millis() as u64),
                         });
@@ -610,10 +776,12 @@ impl InferenceBackend for OnnxBackend {
                     }
                 };
 
+                let probs = Self::softmax(&logits);
                 let candidates: Vec<(i32, f32, f32)> = logits
                     .iter()
+                    .zip(probs.iter())
                     .enumerate()
-                    .map(|(id, &logit)| (id as i32, logit, 0.0))
+                    .map(|(id, (&logit, &p))| (id as i32, logit, p))
                     .collect();
 
                 let next_token = match sampler.sample_from_candidates(&candidates) {
@@ -621,7 +789,7 @@ impl InferenceBackend for OnnxBackend {
                     None => {
                         let _ = tx.blocking_send(StreamToken {
                             content: "[ERROR: No candidates available]".to_string(),
-                            sequence,
+                            sequence: seq,
                             is_valid: false,
                             timestamp_ms: Some(start_time.elapsed().as_millis() as u64),
                         });
@@ -629,13 +797,35 @@ impl InferenceBackend for OnnxBackend {
                     }
                 };
 
+                // Check for EOS token
+                if let Some(eos_id) = eos_token_id {
+                    if next_token as u32 == eos_id {
+                        debug!("EOS token encountered in stream, stopping generation");
+                        break;
+                    }
+                }
+
                 all_tokens.push(next_token as i64);
+                completion_tokens += 1;
 
                 match tokenizer.decode(&[next_token as u32], true) {
                     Ok(token_str) => {
+                        generated_text.push_str(&token_str);
+
+                        // Check stop sequences
+                        if stop_sequences
+                            .iter()
+                            .any(|stop| generated_text.contains(stop))
+                        {
+                            debug!("Stop sequence matched in stream, stopping generation");
+                            // Still send this last token
+                            let _ = tx.blocking_send(StreamToken::new(token_str, seq));
+                            break;
+                        }
+
                         let stream_token = StreamToken {
                             content: token_str,
-                            sequence,
+                            sequence: seq,
                             is_valid: true,
                             timestamp_ms: Some(start_time.elapsed().as_millis() as u64),
                         };
@@ -645,18 +835,34 @@ impl InferenceBackend for OnnxBackend {
                         }
                     }
                     Err(_) => {
-                        let stream_token = StreamToken::invalid(sequence)
-                            .with_timing(start_time.elapsed().as_millis() as u64);
-                        let _ = tx.blocking_send(stream_token);
+                        // Skip invalid tokens rather than sending empty strings
+                        debug!("Failed to detokenize token {}, skipping", next_token);
                     }
                 }
+            }
 
-                sequence += 1;
+            // Update metrics from the streaming task
+            let completion_time = start_time.elapsed() - prompt_time;
+            let total_time = start_time.elapsed();
+            if let Ok(mut m) = metrics.lock() {
+                *m = Some(InferenceMetrics {
+                    total_tokens: prompt_tokens + completion_tokens,
+                    prompt_tokens,
+                    completion_tokens,
+                    total_time_ms: total_time.as_millis() as u64,
+                    tokens_per_second: if completion_time.as_secs_f32() > 0.0 {
+                        completion_tokens as f32 / completion_time.as_secs_f32()
+                    } else {
+                        0.0
+                    },
+                    prompt_time_ms: prompt_time.as_millis() as u64,
+                    completion_time_ms: completion_time.as_millis() as u64,
+                });
             }
 
             debug!(
                 "ONNX streaming complete: generated {} tokens in {:?}",
-                sequence,
+                completion_tokens,
                 start_time.elapsed()
             );
         });
@@ -664,7 +870,9 @@ impl InferenceBackend for OnnxBackend {
         let result_stream = stream! {
             let mut rx = rx;
             while let Some(stream_token) = rx.recv().await {
-                yield Ok(stream_token.content);
+                if stream_token.is_valid {
+                    yield Ok(stream_token.content);
+                }
             }
         };
 
@@ -758,7 +966,7 @@ impl InferenceBackend for OnnxBackend {
     }
 
     fn get_metrics(&self) -> Option<InferenceMetrics> {
-        self.metrics.as_ref().cloned()
+        self.metrics.lock().ok().and_then(|m| m.clone())
     }
 }
 
