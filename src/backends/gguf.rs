@@ -628,6 +628,10 @@ impl InferenceBackend for GgufBackend {
         self.model_info = Some(model_info.clone());
 
         info!("✅ GGUF model loaded successfully with Metal GPU support");
+
+        // Best-effort: record usage in the local model registry
+        crate::models::record_model_usage(&model_info.path).await;
+
         Ok(())
     }
 

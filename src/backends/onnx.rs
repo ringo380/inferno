@@ -565,6 +565,10 @@ impl InferenceBackend for OnnxBackend {
             "ONNX model loaded successfully (type: {:?}, GPU: {})",
             self.model_type, self.config.gpu_enabled
         );
+
+        // Best-effort: record usage in the local model registry
+        crate::models::record_model_usage(&model_info.path).await;
+
         Ok(())
     }
 
