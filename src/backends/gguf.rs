@@ -165,6 +165,7 @@ impl GgufBackend {
         let top_k = params.top_k;
         let top_p = params.top_p;
         let seed = params.seed;
+        let stop_sequences = params.stop_sequences.clone();
 
         // Perform inference in spawn_blocking since LlamaContext is !Send
         let response = tokio::task::spawn_blocking(move || {
@@ -228,6 +229,7 @@ impl GgufBackend {
 
             // Generate tokens one by one
             let mut output_tokens = Vec::new();
+            let mut generated_text = String::new();
             let max_new_tokens = max_tokens as usize;
 
             debug!(
@@ -239,10 +241,15 @@ impl GgufBackend {
                 // Get logits for sampling - collect iterator to vec
                 let candidates_llama: Vec<_> = context.candidates().collect();
 
+                // Compute softmax probabilities from raw logits
+                let logits: Vec<f32> = candidates_llama.iter().map(|c| c.logit()).collect();
+                let probs = GgufBackend::softmax(&logits);
+
                 // Convert LlamaTokenData to our TokenCandidate format
                 let candidates: Vec<(i32, f32, f32)> = candidates_llama
                     .iter()
-                    .map(|c| (c.id().0, c.logit(), c.p()))
+                    .zip(probs.iter())
+                    .map(|(c, &p)| (c.id().0, c.logit(), p))
                     .collect();
 
                 // Use configured sampling strategy
@@ -254,6 +261,19 @@ impl GgufBackend {
                 if next_token == model.token_eos().0 {
                     debug!("🏁 End of generation token encountered");
                     break;
+                }
+
+                // Accumulate text and check stop sequences before committing token to output
+                if !stop_sequences.is_empty() {
+                    if let Ok(tok_str) =
+                        model.token_to_str(LlamaToken(next_token), Special::Tokenize)
+                    {
+                        generated_text.push_str(&tok_str);
+                        if stop_sequences.iter().any(|s| generated_text.contains(s)) {
+                            debug!("Stop sequence matched, stopping generation");
+                            break;
+                        }
+                    }
                 }
 
                 output_tokens.push(next_token);
@@ -320,6 +340,7 @@ impl GgufBackend {
         let top_k = params.top_k;
         let top_p = params.top_p;
         let seed = params.seed;
+        let stop_sequences = params.stop_sequences.clone();
 
         // Create streaming channel
         let stream_config = StreamConfig {
@@ -424,6 +445,7 @@ impl GgufBackend {
             // Generate tokens and stream them one by one
             let max_new_tokens = max_tokens as usize;
             let mut sequence = 0u32;
+            let mut generated_text = String::new();
 
             debug!(
                 "🔀 Starting streaming token generation with strategy: {:?}, temp: {:.2}",
@@ -434,10 +456,15 @@ impl GgufBackend {
                 // Get logits for sampling
                 let candidates_llama: Vec<_> = context.candidates().collect();
 
+                // Compute softmax probabilities from raw logits
+                let logits: Vec<f32> = candidates_llama.iter().map(|c| c.logit()).collect();
+                let probs = GgufBackend::softmax(&logits);
+
                 // Convert LlamaTokenData to our sampling format
                 let candidates: Vec<(i32, f32, f32)> = candidates_llama
                     .iter()
-                    .map(|c| (c.id().0, c.logit(), c.p()))
+                    .zip(probs.iter())
+                    .map(|(c, &p)| (c.id().0, c.logit(), p))
                     .collect();
 
                 // Sample next token
@@ -466,6 +493,15 @@ impl GgufBackend {
                     llama_cpp_2::model::Special::Tokenize,
                 ) {
                     Ok(token_str) => {
+                        // Check stop sequences on accumulated text
+                        if !stop_sequences.is_empty() {
+                            generated_text.push_str(&token_str);
+                            if stop_sequences.iter().any(|s| generated_text.contains(s)) {
+                                debug!("Stop sequence matched, stopping generation");
+                                break;
+                            }
+                        }
+
                         let stream_token = StreamToken {
                             content: token_str.clone(),
                             sequence,
@@ -523,6 +559,19 @@ impl GgufBackend {
         };
 
         Ok(Box::pin(result_stream))
+    }
+
+    fn softmax(logits: &[f32]) -> Vec<f32> {
+        if logits.is_empty() {
+            return Vec::new();
+        }
+        let max_logit = logits.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+        let exps: Vec<f32> = logits.iter().map(|&l| (l - max_logit).exp()).collect();
+        let sum: f32 = exps.iter().sum();
+        if sum <= 0.0 {
+            return vec![0.0; logits.len()];
+        }
+        exps.iter().map(|&e| e / sum).collect()
     }
 }
 
@@ -628,6 +677,7 @@ impl InferenceBackend for GgufBackend {
         self.model_info = Some(model_info.clone());
 
         info!("✅ GGUF model loaded successfully with Metal GPU support");
+
         Ok(())
     }
 
@@ -651,6 +701,11 @@ impl InferenceBackend for GgufBackend {
     async fn infer(&mut self, input: &str, params: &InferenceParams) -> Result<String> {
         if !self.is_loaded().await {
             return Err(InfernoError::Backend("Model not loaded".to_string()).into());
+        }
+
+        // Best-effort: record this inference run in the local model registry
+        if let Some(info) = &self.model_info {
+            crate::models::record_model_usage(&info.path).await;
         }
 
         let start_time = Instant::now();
@@ -697,6 +752,11 @@ impl InferenceBackend for GgufBackend {
     async fn infer_stream(&mut self, input: &str, params: &InferenceParams) -> Result<TokenStream> {
         if !self.is_loaded().await {
             return Err(InfernoError::Backend("Model not loaded".to_string()).into());
+        }
+
+        // Best-effort: record this inference run in the local model registry
+        if let Some(info) = &self.model_info {
+            crate::models::record_model_usage(&info.path).await;
         }
 
         info!("Starting GGUF streaming inference");
