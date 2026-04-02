@@ -417,7 +417,8 @@ impl ModelManager {
     /// Increment the use count and update `last_used` for a model.
     pub async fn record_usage(&self, path: &Path) -> Result<()> {
         let mut registry = self.load_registry().await.unwrap_or_default();
-        let key = path.to_string_lossy().to_string();
+        let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+        let key = canonical.to_string_lossy().to_string();
         let name = path
             .file_name()
             .and_then(|n| n.to_str())
@@ -447,7 +448,8 @@ impl ModelManager {
     /// Add (or replace) the tags for a model.
     pub async fn tag_model(&self, path: &Path, tags: &[String]) -> Result<()> {
         let mut registry = self.load_registry().await.unwrap_or_default();
-        let key = path.to_string_lossy().to_string();
+        let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+        let key = canonical.to_string_lossy().to_string();
         let name = path
             .file_name()
             .and_then(|n| n.to_str())
@@ -477,7 +479,8 @@ impl ModelManager {
     /// Register a newly installed model in the registry.
     pub async fn register_model(&self, path: &Path) -> Result<()> {
         let mut registry = self.load_registry().await.unwrap_or_default();
-        let key = path.to_string_lossy().to_string();
+        let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+        let key = canonical.to_string_lossy().to_string();
         let name = path
             .file_name()
             .and_then(|n| n.to_str())
@@ -805,7 +808,10 @@ impl ModelManager {
 fn parse_gguf_kv_metadata(data: &[u8]) -> Result<GgufMetadata> {
     let mut cursor = Cursor::new(data);
 
-    // Magic already verified by the validator; skip it
+    // Verify GGUF magic bytes
+    if data.len() < 4 || &data[..4] != b"GGUF" {
+        return Err(anyhow::anyhow!("Not a GGUF file: invalid magic bytes"));
+    }
     cursor.set_position(4);
     let _version = cursor.read_u32::<LittleEndian>()?;
     let _n_tensors = cursor.read_u64::<LittleEndian>()?;
@@ -1100,8 +1106,8 @@ fn get_available_ram_gb() -> f64 {
     use sysinfo::{System, SystemExt};
     let mut sys = System::new();
     sys.refresh_memory();
-    // sysinfo 0.29 returns memory in KB (per existing usage in metrics/mod.rs)
-    sys.available_memory() as f64 / 1_048_576.0
+    // sysinfo 0.29+ returns memory in bytes
+    sys.available_memory() as f64 / 1_073_741_824.0
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -1231,11 +1237,14 @@ mod tests {
             .await
             .unwrap();
 
+        let canonical_key = model_path
+            .canonicalize()
+            .unwrap()
+            .to_string_lossy()
+            .to_string();
+
         let registry = manager.load_registry().await.unwrap();
-        let entry = registry
-            .entries
-            .get(&model_path.to_string_lossy().to_string())
-            .unwrap();
+        let entry = registry.entries.get(&canonical_key).unwrap();
         assert!(entry.tags.contains(&"chat".to_string()));
         assert_eq!(entry.use_count, 0);
 
@@ -1244,10 +1253,7 @@ mod tests {
         manager.record_usage(&model_path).await.unwrap();
 
         let registry = manager.load_registry().await.unwrap();
-        let entry = registry
-            .entries
-            .get(&model_path.to_string_lossy().to_string())
-            .unwrap();
+        let entry = registry.entries.get(&canonical_key).unwrap();
         assert_eq!(entry.use_count, 2);
         assert!(entry.last_used.is_some());
     }

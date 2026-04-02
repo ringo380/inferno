@@ -263,9 +263,7 @@ impl GgufBackend {
                     break;
                 }
 
-                output_tokens.push(next_token);
-
-                // Accumulate text and check stop sequences
+                // Accumulate text and check stop sequences before committing token to output
                 if !stop_sequences.is_empty() {
                     if let Ok(tok_str) =
                         model.token_to_str(LlamaToken(next_token), Special::Tokenize)
@@ -277,6 +275,8 @@ impl GgufBackend {
                         }
                     }
                 }
+
+                output_tokens.push(next_token);
 
                 // Prepare next batch with the sampled token
                 batch.clear();
@@ -678,9 +678,6 @@ impl InferenceBackend for GgufBackend {
 
         info!("✅ GGUF model loaded successfully with Metal GPU support");
 
-        // Best-effort: record usage in the local model registry
-        crate::models::record_model_usage(&model_info.path).await;
-
         Ok(())
     }
 
@@ -704,6 +701,11 @@ impl InferenceBackend for GgufBackend {
     async fn infer(&mut self, input: &str, params: &InferenceParams) -> Result<String> {
         if !self.is_loaded().await {
             return Err(InfernoError::Backend("Model not loaded".to_string()).into());
+        }
+
+        // Best-effort: record this inference run in the local model registry
+        if let Some(info) = &self.model_info {
+            crate::models::record_model_usage(&info.path).await;
         }
 
         let start_time = Instant::now();
@@ -750,6 +752,11 @@ impl InferenceBackend for GgufBackend {
     async fn infer_stream(&mut self, input: &str, params: &InferenceParams) -> Result<TokenStream> {
         if !self.is_loaded().await {
             return Err(InfernoError::Backend("Model not loaded".to_string()).into());
+        }
+
+        // Best-effort: record this inference run in the local model registry
+        if let Some(info) = &self.model_info {
+            crate::models::record_model_usage(&info.path).await;
         }
 
         info!("Starting GGUF streaming inference");

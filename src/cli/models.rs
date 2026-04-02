@@ -218,12 +218,7 @@ pub async fn execute(args: ModelsArgs, config: &Config) -> Result<()> {
                     }
                 }
                 "onnx" => {
-                    if let Ok(metadata) = model_manager.get_onnx_metadata(&model_info.path).await {
-                        println!("  ONNX Version: {}", metadata.version);
-                        println!("  Producer: {}", metadata.producer);
-                        println!("  Inputs: {}", metadata.input_count);
-                        println!("  Outputs: {}", metadata.output_count);
-                    }
+                    println!("  (ONNX metadata parsing not yet implemented)");
                 }
                 _ => {}
             }
@@ -296,6 +291,11 @@ pub async fn execute(args: ModelsArgs, config: &Config) -> Result<()> {
                 async_std_create_dir(&config.models_dir).await?;
             }
 
+            if model.starts_with("http://") {
+                eprintln!(
+                    "Warning: downloading over unencrypted HTTP; consider using an https:// URL"
+                );
+            }
             if model.starts_with("http://") || model.starts_with("https://") {
                 // Direct URL download
                 let filename = name

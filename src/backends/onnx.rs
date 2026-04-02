@@ -566,9 +566,6 @@ impl InferenceBackend for OnnxBackend {
             self.model_type, self.config.gpu_enabled
         );
 
-        // Best-effort: record usage in the local model registry
-        crate::models::record_model_usage(&model_info.path).await;
-
         Ok(())
     }
 
@@ -596,6 +593,11 @@ impl InferenceBackend for OnnxBackend {
     async fn infer(&mut self, input: &str, params: &InferenceParams) -> Result<String> {
         if !self.is_loaded().await {
             return Err(InfernoError::Backend("Model not loaded".to_string()).into());
+        }
+
+        // Best-effort: record this inference run in the local model registry
+        if let Some(info) = &self.model_info {
+            crate::models::record_model_usage(&info.path).await;
         }
 
         let start_time = Instant::now();
@@ -714,6 +716,11 @@ impl InferenceBackend for OnnxBackend {
     async fn infer_stream(&mut self, input: &str, params: &InferenceParams) -> Result<TokenStream> {
         if !self.is_loaded().await {
             return Err(InfernoError::Backend("Model not loaded".to_string()).into());
+        }
+
+        // Best-effort: record this inference run in the local model registry
+        if let Some(info) = &self.model_info {
+            crate::models::record_model_usage(&info.path).await;
         }
 
         info!("Starting ONNX streaming inference");
