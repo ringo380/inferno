@@ -343,11 +343,23 @@ impl ModelManager {
     }
 
     fn metadata_cache_path(&self, model_path: &Path) -> PathBuf {
+        // Use a hash of the full absolute path so same-named models in different
+        // subdirectories each get a distinct cache entry.
+        let abs = model_path
+            .canonicalize()
+            .unwrap_or_else(|_| model_path.to_path_buf());
+        let hash = {
+            let mut h = Sha256::new();
+            h.update(abs.to_string_lossy().as_bytes());
+            format!("{:x}", h.finalize())
+        };
+        // Prefix with the bare filename for human readability when browsing the cache.
         let filename = model_path
             .file_name()
             .and_then(|n| n.to_str())
             .unwrap_or("unknown");
-        self.cache_dir().join(format!("{}.json", filename))
+        self.cache_dir()
+            .join(format!("{}-{}.json", filename, &hash[..12]))
     }
 
     fn cache_dir(&self) -> PathBuf {
@@ -894,7 +906,10 @@ fn read_gguf_value(cursor: &mut Cursor<&[u8]>, value_type: u32) -> Result<String
         9 => {
             let elem_type = cursor.read_u32::<LittleEndian>()?;
             let count = cursor.read_u64::<LittleEndian>()?;
-            for _ in 0..count.min(65536) {
+            if count > 10_000_000 {
+                return Err(anyhow::anyhow!("GGUF array count {} exceeds sanity limit", count));
+            }
+            for _ in 0..count {
                 skip_gguf_value(cursor, elem_type)?;
             }
             Ok(String::new())
@@ -926,7 +941,10 @@ fn skip_gguf_value(cursor: &mut Cursor<&[u8]>, value_type: u32) -> Result<()> {
         9 => {
             let elem_type = cursor.read_u32::<LittleEndian>()?;
             let count = cursor.read_u64::<LittleEndian>()?;
-            for _ in 0..count.min(65536) {
+            if count > 10_000_000 {
+                return Err(anyhow::anyhow!("GGUF array count {} exceeds sanity limit", count));
+            }
+            for _ in 0..count {
                 skip_gguf_value(cursor, elem_type)?;
             }
         }
@@ -1057,12 +1075,14 @@ pub async fn record_model_usage(model_path: &Path) {
     }
 }
 
-/// Walk up from `model_path` to find the directory containing `.inferno_registry.json`.
-/// Falls back to the immediate parent directory.
+/// Walk up from `model_path` to find the directory containing `.inferno_registry.json`
+/// or an `.inferno_cache` subdirectory. Falls back to the immediate parent directory.
 fn infer_models_dir(model_path: &Path) -> PathBuf {
     let mut candidate = model_path.parent().unwrap_or(model_path);
     for _ in 0..5 {
-        if candidate.join(".inferno_registry.json").exists() {
+        if candidate.join(".inferno_registry.json").exists()
+            || candidate.join(".inferno_cache").is_dir()
+        {
             return candidate.to_path_buf();
         }
         match candidate.parent() {

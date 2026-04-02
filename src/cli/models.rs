@@ -307,6 +307,9 @@ pub async fn execute(args: ModelsArgs, config: &Config) -> Result<()> {
                             .map(|s| s.split('?').next().unwrap_or(s).to_string())
                     })
                     .unwrap_or_else(|| "model.gguf".to_string());
+                if filename.contains("..") || filename.contains('/') || filename.contains('\\') {
+                    anyhow::bail!("Invalid filename: path traversal not allowed");
+                }
                 let dest = config.models_dir.join(&filename);
                 println!("Downloading {} → {}...", model, dest.display());
                 download_to_file(&model, &dest).await?;
@@ -349,6 +352,9 @@ pub async fn execute(args: ModelsArgs, config: &Config) -> Result<()> {
 
                 let (fname, _) = chosen;
                 let out_name = name.clone().unwrap_or_else(|| fname.clone());
+                if out_name.contains("..") || out_name.contains('/') || out_name.contains('\\') {
+                    anyhow::bail!("Invalid filename: path traversal not allowed");
+                }
                 let dest = config.models_dir.join(&out_name);
                 let url = format!("https://huggingface.co/{}/resolve/main/{}", model, fname);
                 println!("Downloading {}...", fname);
@@ -499,42 +505,51 @@ async fn list_hf_gguf_files(repo_id: &str) -> Result<Vec<(String, Option<u64>)>>
 }
 
 /// Stream-download a URL to a local file with progress reporting.
+/// Removes the partial file if any error occurs mid-download.
 async fn download_to_file(url: &str, dest: &PathBuf) -> Result<()> {
-    let client = reqwest::Client::builder()
-        .user_agent("inferno/1.0")
-        .build()?;
-    let resp = client.get(url).send().await?;
-    if !resp.status().is_success() {
-        anyhow::bail!("Download failed: HTTP {}", resp.status());
-    }
-
-    let total = resp.content_length();
-    let mut downloaded: u64 = 0;
-
-    let mut file = tokio::fs::File::create(dest).await?;
-    let mut stream = resp.bytes_stream();
-    use futures::StreamExt;
-    use tokio::io::AsyncWriteExt;
-
-    while let Some(chunk) = stream.next().await {
-        let chunk = chunk?;
-        file.write_all(&chunk).await?;
-        downloaded += chunk.len() as u64;
-        if let Some(total) = total {
-            let pct = downloaded * 100 / total;
-            print!(
-                "\r  {:.1} MB / {:.1} MB  ({}%)",
-                mb(downloaded),
-                mb(total),
-                pct
-            );
-        } else {
-            print!("\r  {:.1} MB downloaded", mb(downloaded));
+    let result = async {
+        let client = reqwest::Client::builder()
+            .user_agent("inferno/1.0")
+            .build()?;
+        let resp = client.get(url).send().await?;
+        if !resp.status().is_success() {
+            anyhow::bail!("Download failed: HTTP {}", resp.status());
         }
+
+        let total = resp.content_length();
+        let mut downloaded: u64 = 0;
+
+        let mut file = tokio::fs::File::create(dest).await?;
+        let mut stream = resp.bytes_stream();
+        use futures::StreamExt;
+        use tokio::io::AsyncWriteExt;
+
+        while let Some(chunk) = stream.next().await {
+            let chunk = chunk?;
+            file.write_all(&chunk).await?;
+            downloaded += chunk.len() as u64;
+            if let Some(total) = total {
+                let pct = downloaded * 100 / total;
+                print!(
+                    "\r  {:.1} MB / {:.1} MB  ({}%)",
+                    mb(downloaded),
+                    mb(total),
+                    pct
+                );
+            } else {
+                print!("\r  {:.1} MB downloaded", mb(downloaded));
+            }
+        }
+        println!(); // newline after progress
+        file.flush().await?;
+        Ok(())
     }
-    println!(); // newline after progress
-    file.flush().await?;
-    Ok(())
+    .await;
+
+    if result.is_err() {
+        let _ = tokio::fs::remove_file(dest).await;
+    }
+    result
 }
 
 async fn async_std_create_dir(path: &PathBuf) -> Result<()> {
