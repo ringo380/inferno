@@ -3,6 +3,7 @@ use crate::config::Config;
 use crate::models::ModelManager;
 use anyhow::Result;
 use clap::Args;
+use std::path::PathBuf;
 use std::time::{Duration, Instant};
 use tracing::info;
 
@@ -28,6 +29,29 @@ pub struct BenchArgs {
 
     #[arg(long, help = "Enable detailed per-iteration output")]
     pub verbose: bool,
+
+    #[arg(long, value_name = "FILE", help = "Write results to JSON file for comparison tracking")]
+    pub output_json: Option<PathBuf>,
+}
+
+#[derive(serde::Serialize)]
+struct BenchmarkJsonResult {
+    model: String,
+    backend: String,
+    iterations: u32,
+    max_tokens: u32,
+    throughput_tokens_per_sec: f64,
+    mean_latency_ms: f64,
+    min_latency_ms: f64,
+    max_latency_ms: f64,
+    median_latency_ms: f64,
+    total_tokens: u32,
+    load_time_ms: u64,
+    memory_used_gb: Option<f64>,
+    total_memory_gb: Option<f64>,
+    hostname: Option<String>,
+    os_version: Option<String>,
+    timestamp: String,
 }
 
 pub async fn execute(args: BenchArgs, config: &Config) -> Result<()> {
@@ -172,8 +196,35 @@ pub async fn execute(args: BenchArgs, config: &Config) -> Result<()> {
     println!("Performance: {}", performance_rating);
 
     // Memory usage estimation
-    if let Ok(memory_info) = get_memory_info() {
-        println!("Estimated memory usage: {:.1} GB", memory_info.used_gb);
+    let memory_used_gb = get_memory_info().ok().map(|m| m.used_gb);
+    if let Some(gb) = memory_used_gb {
+        println!("Estimated memory usage: {:.1} GB", gb);
+    }
+
+    // Write JSON results if requested
+    if let Some(json_path) = &args.output_json {
+        let hw = get_hardware_info();
+        let result = BenchmarkJsonResult {
+            model: model_info.name.clone(),
+            backend: backend_type.to_string(),
+            iterations: args.iterations,
+            max_tokens: args.tokens,
+            throughput_tokens_per_sec: total_tokens_per_sec,
+            mean_latency_ms: mean.as_secs_f64() * 1000.0,
+            min_latency_ms: min.as_secs_f64() * 1000.0,
+            max_latency_ms: max.as_secs_f64() * 1000.0,
+            median_latency_ms: median.as_secs_f64() * 1000.0,
+            total_tokens,
+            load_time_ms: load_time.as_millis() as u64,
+            memory_used_gb,
+            total_memory_gb: hw.total_memory_gb,
+            hostname: hw.hostname,
+            os_version: hw.os_version,
+            timestamp: chrono::Utc::now().to_rfc3339(),
+        };
+        let json = serde_json::to_string_pretty(&result)?;
+        std::fs::write(json_path, json)?;
+        println!("\nResults written to {}", json_path.display());
     }
 
     Ok(())
@@ -209,6 +260,18 @@ fn validate_args(args: &BenchArgs) -> Result<()> {
         anyhow::bail!("Warmup iterations must be 100 or less");
     }
 
+    // Validate output JSON parent directory exists
+    if let Some(json_path) = &args.output_json {
+        if let Some(parent) = json_path.parent() {
+            if !parent.as_os_str().is_empty() && !parent.exists() {
+                anyhow::bail!(
+                    "Output directory does not exist: {}",
+                    parent.display()
+                );
+            }
+        }
+    }
+
     Ok(())
 }
 
@@ -240,8 +303,8 @@ fn get_memory_info() -> Result<MemoryInfo> {
     sys.refresh_memory();
 
     Ok(MemoryInfo {
-        used_gb: sys.used_memory() as f64 / 1024.0 / 1024.0 / 1024.0,
-        total_gb: sys.total_memory() as f64 / 1024.0 / 1024.0 / 1024.0,
+        used_gb: sys.used_memory() as f64 / 1_073_741_824.0,
+        total_gb: sys.total_memory() as f64 / 1_073_741_824.0,
     })
 }
 
@@ -249,6 +312,23 @@ struct MemoryInfo {
     used_gb: f64,
     #[allow(dead_code)]
     total_gb: f64,
+}
+
+struct HardwareInfo {
+    total_memory_gb: Option<f64>,
+    hostname: Option<String>,
+    os_version: Option<String>,
+}
+
+fn get_hardware_info() -> HardwareInfo {
+    use sysinfo::{System, SystemExt};
+    let mut sys = System::new_all();
+    sys.refresh_all();
+    HardwareInfo {
+        total_memory_gb: Some(sys.total_memory() as f64 / 1_073_741_824.0),
+        hostname: sys.host_name(),
+        os_version: sys.os_version(),
+    }
 }
 
 #[cfg(test)]
@@ -291,6 +371,7 @@ mod tests {
             warmup: 3,
             backend: None,
             verbose: false,
+            output_json: None,
         };
         let result = validate_args(&args);
         assert!(result.is_err());
@@ -312,6 +393,7 @@ mod tests {
             warmup: 3,
             backend: None,
             verbose: false,
+            output_json: None,
         };
         let result = validate_args(&args);
         assert!(result.is_err());
@@ -333,6 +415,7 @@ mod tests {
             warmup: 3,
             backend: None,
             verbose: false,
+            output_json: None,
         };
         let result = validate_args(&args);
         assert!(result.is_err());
@@ -349,6 +432,7 @@ mod tests {
             warmup: 3,
             backend: None,
             verbose: false,
+            output_json: None,
         };
         let result = validate_args(&args);
         assert!(result.is_err());
@@ -370,6 +454,7 @@ mod tests {
             warmup: 3,
             backend: None,
             verbose: false,
+            output_json: None,
         };
         let result = validate_args(&args);
         assert!(result.is_err());
@@ -386,6 +471,7 @@ mod tests {
             warmup: 101,
             backend: None,
             verbose: false,
+            output_json: None,
         };
         let result = validate_args(&args);
         assert!(result.is_err());
@@ -407,6 +493,7 @@ mod tests {
             warmup: 3,
             backend: None,
             verbose: true,
+            output_json: None,
         };
         let result = validate_args(&args);
         assert!(result.is_ok());
