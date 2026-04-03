@@ -103,19 +103,40 @@ mod metal_tests {
         );
     }
 
-    /// Performance test: Measure tokens per second for inference
-    /// This test requires a real model file to run meaningful benchmarks.
-    /// Set INFERNO_MODELS_DIR and have a valid .gguf model available.
+    /// Performance test: Measure tokens per second for inference.
+    ///
+    /// Collects the full metric set needed for issue #7:
+    /// throughput, load time, GPU config, and hardware info.
+    ///
+    /// Requires a real model file. Set INFERNO_MODELS_DIR and ensure a
+    /// valid .gguf model is present, then run:
+    ///
+    ///   cargo test --test metal_performance_tests test_inference_performance -- --ignored
+    ///
+    /// To contribute results to issue #7, use scripts/benchmark_metal.sh instead,
+    /// which writes a structured JSON file you can share.
     #[tokio::test]
-    #[ignore = "Requires real model file - run with: cargo test --test metal_performance_tests test_inference_performance -- --ignored"]
+    #[ignore = "Requires real model file — see doc comment above"]
     async fn test_inference_performance() {
         use std::env;
+        use sysinfo::{System, SystemExt};
 
+        // ── Hardware / environment info ────────────────────────────────────
+        let mut sys = System::new_all();
+        sys.refresh_all();
+        let hostname = sys.host_name().unwrap_or_else(|| "unknown".to_string());
+        let total_memory_gb = sys.total_memory() as f64 / 1_073_741_824.0;
+
+        println!("=== Metal GPU Performance Test ===");
+        println!("Host:         {}", hostname);
+        println!("Total RAM:    {:.1} GB", total_memory_gb);
+        println!("Platform:     macOS (Apple Silicon)");
+
+        // ── Locate model ────────────────────────────────────────────────────
         let models_dir =
             env::var("INFERNO_MODELS_DIR").unwrap_or_else(|_| "test_models".to_string());
         let model_path = PathBuf::from(&models_dir);
 
-        // Find first .gguf file in models directory
         let model_file = std::fs::read_dir(&model_path).ok().and_then(|entries| {
             entries
                 .filter_map(|e| e.ok())
@@ -139,16 +160,23 @@ mod metal_tests {
             }
         };
 
-        println!("Testing with model: {:?}", model_file);
+        let model_size_bytes = std::fs::metadata(&model_file)
+            .map(|m| m.len())
+            .unwrap_or(0);
+        let model_size_mb = model_size_bytes as f64 / 1_048_576.0;
+        println!("Model:        {}", model_file.display());
+        println!("Model size:   {:.0} MB", model_size_mb);
 
-        // Create backend with Metal acceleration
+        // ── Backend config ──────────────────────────────────────────────────
         let config = BackendConfig::with_metal_acceleration();
+        println!("GPU enabled:  {}", config.gpu_enabled);
+        println!("Context size: {}", config.context_size);
+        println!("Batch size:   {}", config.batch_size);
+
         let mut backend =
             Backend::new(BackendType::Gguf, &config).expect("Failed to create GGUF backend");
 
-        // Create model info
         let model_metadata = std::fs::metadata(&model_file).ok();
-        let model_size = model_metadata.as_ref().map(|m| m.len()).unwrap_or(0);
         let model_modified = model_metadata
             .and_then(|m| m.modified().ok())
             .map(|t| chrono::DateTime::<chrono::Utc>::from(t))
@@ -162,8 +190,8 @@ mod metal_tests {
                 .to_string(),
             path: model_file.clone(),
             file_path: model_file.clone(),
-            size: model_size,
-            size_bytes: model_size,
+            size: model_size_bytes,
+            size_bytes: model_size_bytes,
             modified: model_modified,
             format: "gguf".to_string(),
             backend_type: "gguf".to_string(),
@@ -171,70 +199,99 @@ mod metal_tests {
             metadata: Default::default(),
         };
 
-        // Load the model
+        // ── Load model ──────────────────────────────────────────────────────
         let load_start = Instant::now();
         backend
             .load_model(&model_info)
             .await
             .expect("Failed to load model");
         let load_time = load_start.elapsed();
-        println!("Model loaded in {:?}", load_time);
+        println!("\nLoad time:    {:?}", load_time);
 
-        // Run inference benchmark
+        // ── Inference benchmark ─────────────────────────────────────────────
         let params = InferenceParams {
             max_tokens: 100,
-            temperature: 0.0, // Deterministic for benchmarking
+            temperature: 0.0, // Deterministic
             ..Default::default()
         };
 
         let prompt = "The quick brown fox";
-        let num_runs = 3;
-        let mut total_tokens = 0u32;
-        let mut total_time_ms = 0u64;
+        let num_runs = 5;
+        let mut run_tokens = Vec::new();
+        let mut run_times_ms = Vec::new();
 
+        println!("\nRunning {} inference iterations...", num_runs);
         for i in 0..num_runs {
             let start = Instant::now();
             let result = backend.infer(prompt, &params).await;
             let elapsed = start.elapsed();
+            let elapsed_ms = elapsed.as_millis() as u64;
 
             match result {
                 Ok(output) => {
-                    let tokens = output.split_whitespace().count() as u32;
-                    total_tokens += tokens;
-                    total_time_ms += elapsed.as_millis() as u64;
+                    // Use same heuristic as bench CLI: ~4 chars per token
+                    let tokens = (output.len() as f32 / 4.0).ceil() as u32;
+                    let tps = tokens as f64 / elapsed.as_secs_f64();
+                    run_tokens.push(tokens);
+                    run_times_ms.push(elapsed_ms);
                     println!(
-                        "Run {}: {} tokens in {:?} ({:.1} tok/s)",
+                        "  Run {:2}: {:>5} est. tokens  {:>7.1} ms  {:>7.1} tok/s",
                         i + 1,
                         tokens,
-                        elapsed,
-                        tokens as f64 / elapsed.as_secs_f64()
+                        elapsed_ms,
+                        tps
                     );
                 }
                 Err(e) => {
-                    eprintln!("Inference failed on run {}: {}", i + 1, e);
+                    eprintln!("  Run {}: inference failed — {}", i + 1, e);
                 }
             }
         }
 
-        if total_tokens > 0 && total_time_ms > 0 {
-            let avg_tokens_per_sec = (total_tokens as f64) / (total_time_ms as f64 / 1000.0);
+        // ── Summary ─────────────────────────────────────────────────────────
+        if !run_tokens.is_empty() {
+            let total_tokens: u32 = run_tokens.iter().sum();
+            let total_ms: u64 = run_times_ms.iter().sum();
+            let avg_tps = (total_tokens as f64) / (total_ms as f64 / 1000.0);
+
+            let mut sorted_ms = run_times_ms.clone();
+            sorted_ms.sort_unstable();
+            let min_ms = *sorted_ms.first().unwrap() as f64;
+            let max_ms = *sorted_ms.last().unwrap() as f64;
+            let n = sorted_ms.len();
+            let median_ms = if n % 2 == 1 {
+                sorted_ms[n / 2] as f64
+            } else {
+                (sorted_ms[n / 2 - 1] + sorted_ms[n / 2]) as f64 / 2.0
+            };
+
+            println!("\n=== Results ===");
+            println!("Throughput:   {:.1} tok/s (average)", avg_tps);
+            println!("Latency min:  {:.1} ms", min_ms);
+            println!("Latency max:  {:.1} ms", max_ms);
+            println!("Latency med:  {:.1} ms", median_ms);
+            println!("Total tokens: {}", total_tokens);
+            println!("Load time:    {:?}", load_time);
             println!(
-                "\nAverage: {:.1} tokens/sec ({} tokens in {} ms)",
-                avg_tokens_per_sec, total_tokens, total_time_ms
+                "\nGPU memory:   check Activity Monitor > GPU tab during inference"
+            );
+            println!(
+                "Layer offload: check logs for 'offloaded X/X layers to GPU'"
+            );
+            println!(
+                "\nTo contribute these results to issue #7:\n  https://github.com/ringo380/inferno/issues/7"
             );
 
-            // Performance assertion - adjust threshold based on model size
-            // For a 7B model on M1 Max, we expect >30 tok/s
-            // This is a soft assertion - we log the result regardless
-            if avg_tokens_per_sec < 10.0 {
+            // Sanity check: warn if GPU doesn't appear to be active
+            if avg_tps < 10.0 {
                 eprintln!(
-                    "Warning: Performance below 10 tok/s ({:.1}). GPU may not be enabled.",
-                    avg_tokens_per_sec
+                    "\nWARNING: throughput {:.1} tok/s is below 10 tok/s. \
+                     GPU acceleration may not be active — check logs for GPU offload confirmation.",
+                    avg_tps
                 );
             }
         }
 
-        // Cleanup
         backend.unload_model().await.ok();
     }
 }
