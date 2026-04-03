@@ -229,9 +229,8 @@ mod metal_tests {
 
             match result {
                 Ok(output) => {
-                    // Use word-count heuristic (~0.75 words per token for English)
-                    let words = output.split_whitespace().count();
-                    let tokens = ((words as f64) / 0.75).ceil() as u32;
+                    // Use same heuristic as bench CLI: ~4 chars per token
+                    let tokens = (output.len() as f32 / 4.0).ceil() as u32;
                     let tps = tokens as f64 / elapsed.as_secs_f64();
                     run_tokens.push(tokens);
                     run_times_ms.push(elapsed_ms);
@@ -259,7 +258,12 @@ mod metal_tests {
             sorted_ms.sort_unstable();
             let min_ms = *sorted_ms.first().unwrap() as f64;
             let max_ms = *sorted_ms.last().unwrap() as f64;
-            let median_ms = sorted_ms[sorted_ms.len() / 2] as f64;
+            let n = sorted_ms.len();
+            let median_ms = if n % 2 == 1 {
+                sorted_ms[n / 2] as f64
+            } else {
+                (sorted_ms[n / 2 - 1] + sorted_ms[n / 2]) as f64 / 2.0
+            };
 
             println!("\n=== Results ===");
             println!("Throughput:   {:.1} tok/s (average)", avg_tps);

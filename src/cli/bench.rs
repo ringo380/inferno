@@ -48,6 +48,9 @@ struct BenchmarkJsonResult {
     total_tokens: u32,
     load_time_ms: u64,
     memory_used_gb: Option<f64>,
+    total_memory_gb: Option<f64>,
+    hostname: Option<String>,
+    os_version: Option<String>,
     timestamp: String,
 }
 
@@ -200,6 +203,7 @@ pub async fn execute(args: BenchArgs, config: &Config) -> Result<()> {
 
     // Write JSON results if requested
     if let Some(json_path) = &args.output_json {
+        let hw = get_hardware_info();
         let result = BenchmarkJsonResult {
             model: model_info.name.clone(),
             backend: backend_type.to_string(),
@@ -213,6 +217,9 @@ pub async fn execute(args: BenchArgs, config: &Config) -> Result<()> {
             total_tokens,
             load_time_ms: load_time.as_millis() as u64,
             memory_used_gb,
+            total_memory_gb: hw.total_memory_gb,
+            hostname: hw.hostname,
+            os_version: hw.os_version,
             timestamp: chrono::Utc::now().to_rfc3339(),
         };
         let json = serde_json::to_string_pretty(&result)?;
@@ -253,6 +260,18 @@ fn validate_args(args: &BenchArgs) -> Result<()> {
         anyhow::bail!("Warmup iterations must be 100 or less");
     }
 
+    // Validate output JSON parent directory exists
+    if let Some(json_path) = &args.output_json {
+        if let Some(parent) = json_path.parent() {
+            if !parent.as_os_str().is_empty() && !parent.exists() {
+                anyhow::bail!(
+                    "Output directory does not exist: {}",
+                    parent.display()
+                );
+            }
+        }
+    }
+
     Ok(())
 }
 
@@ -284,8 +303,8 @@ fn get_memory_info() -> Result<MemoryInfo> {
     sys.refresh_memory();
 
     Ok(MemoryInfo {
-        used_gb: sys.used_memory() as f64 / 1024.0 / 1024.0 / 1024.0,
-        total_gb: sys.total_memory() as f64 / 1024.0 / 1024.0 / 1024.0,
+        used_gb: sys.used_memory() as f64 / 1_073_741_824.0,
+        total_gb: sys.total_memory() as f64 / 1_073_741_824.0,
     })
 }
 
@@ -293,6 +312,23 @@ struct MemoryInfo {
     used_gb: f64,
     #[allow(dead_code)]
     total_gb: f64,
+}
+
+struct HardwareInfo {
+    total_memory_gb: Option<f64>,
+    hostname: Option<String>,
+    os_version: Option<String>,
+}
+
+fn get_hardware_info() -> HardwareInfo {
+    use sysinfo::{System, SystemExt};
+    let mut sys = System::new_all();
+    sys.refresh_all();
+    HardwareInfo {
+        total_memory_gb: Some(sys.total_memory() as f64 / 1_073_741_824.0),
+        hostname: sys.host_name(),
+        os_version: sys.os_version(),
+    }
 }
 
 #[cfg(test)]
