@@ -427,19 +427,60 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Update Homebrew formula
-      uses: mislav/bump-homebrew-formula-action@v3
-      with:
-        formula-name: inferno
-        formula-path: Formula/inferno.rb
-        homebrew-tap: robworks-code/homebrew-tap
-        download-url: https://github.com/ringo380/inferno/releases/download/${{ needs.version-management.outputs.tag }}/inferno-macos-x86_64.tar.gz
-        commit-message: |
-          Bump inferno to ${{ needs.version-management.outputs.version }}
-
-          Updated by automated release pipeline
+    # Single source of truth for the Homebrew formula. The formula in
+    # robworks-code/homebrew-tap is multi-platform (4 url/sha256 pairs), which the
+    # generic bump-formula action can't maintain — so we fetch the per-asset .sha256
+    # sidecars the release publishes and rewrite version + all four sha256 lines.
+    - name: Update Homebrew formula (robworks-code/homebrew-tap)
       env:
-        COMMITTER_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        VERSION: ${{ needs.version-management.outputs.version }}
+        TAG: ${{ needs.version-management.outputs.tag }}
+      run: |
+        set -euo pipefail
+        base="https://github.com/ringo380/inferno/releases/download/${TAG}"
+        declare -A sha
+        for asset in inferno-macos-aarch64 inferno-macos-x86_64 inferno-linux-aarch64 inferno-linux-x86_64; do
+          sha[$asset]=$(curl -fsSL "${base}/${asset}.tar.gz.sha256" | awk '{print $1}')
+          [ -n "${sha[$asset]}" ] || { echo "::error::missing sha256 for ${asset}"; exit 1; }
+          echo "${asset} -> ${sha[$asset]}"
+        done
+        git clone --depth 1 "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/robworks-code/homebrew-tap.git" tap
+        python3 - tap/Formula/inferno.rb "$VERSION" \
+          "${sha[inferno-macos-aarch64]}" "${sha[inferno-macos-x86_64]}" \
+          "${sha[inferno-linux-aarch64]}" "${sha[inferno-linux-x86_64]}" <<'PY'
+        import re, sys
+        path, version, mac_arm, mac_x86, lin_arm, lin_x86 = sys.argv[1:7]
+        shas = {
+            "inferno-macos-aarch64": mac_arm, "inferno-macos-x86_64": mac_x86,
+            "inferno-linux-aarch64": lin_arm, "inferno-linux-x86_64": lin_x86,
+        }
+        lines = open(path).read().splitlines(keepends=True)
+        out = []
+        for i, line in enumerate(lines):
+            if line.lstrip().startswith("version "):
+                line = re.sub(r'version "[^"]*"', f'version "{version}"', line)
+            out.append(line)
+        # Replace the sha256 line that immediately follows each asset's url line.
+        for i, line in enumerate(out):
+            for asset, digest in shas.items():
+                if f"{asset}.tar.gz\"" in line:
+                    for j in range(i + 1, min(i + 4, len(out))):
+                        if "sha256" in out[j]:
+                            out[j] = re.sub(r'sha256 "[^"]*"', f'sha256 "{digest}"', out[j])
+                            break
+        open(path, "w").write("".join(out))
+        PY
+        cd tap
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        git add Formula/inferno.rb
+        if git diff --cached --quiet; then
+          echo "formula already up to date for ${VERSION}"
+          exit 0
+        fi
+        git commit -m "inferno: update to ${VERSION}"
+        git push origin HEAD:main
 
   # Post-release tasks
   post-release:
