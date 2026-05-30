@@ -432,7 +432,7 @@ jobs:
       with:
         formula-name: inferno
         formula-path: Formula/inferno.rb
-        homebrew-tap: ringo380/homebrew-tap
+        homebrew-tap: robworks-code/homebrew-tap
         download-url: https://github.com/ringo380/inferno/releases/download/${{ needs.version-management.outputs.tag }}/inferno-macos-x86_64.tar.gz
         commit-message: |
           Bump inferno to ${{ needs.version-management.outputs.version }}
