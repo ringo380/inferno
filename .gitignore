@@ -134,3 +134,4 @@ check_build.sh
 run_tests.sh
 start_build.sh
 test_*.sh
+test_*.rs
