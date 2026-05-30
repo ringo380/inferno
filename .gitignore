@@ -56,7 +56,11 @@ CLAUDE.md
 **/CLAUDE.md
 CLAUDE.local.md
 **/CLAUDE.local.md
+.claude.local.md
+**/.claude.local.md
 .browser-pilot/
+.claude-dev-helper/
+.plugin-config/
 
 # Model files (too large for git)
 /models/*.gguf
