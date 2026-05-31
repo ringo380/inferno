@@ -101,7 +101,7 @@ hex = "0.4"
 indicatif = "0.17"
 
 # HTTP client and server (default-features = false to avoid native-tls for cross-compilation)
-reqwest = { version = "0.11", default-features = false, features = ["json", "stream"], optional = true }
+reqwest = { version = "0.12", default-features = false, features = ["json", "stream"], optional = true }
 axum = { version = "0.7", features = ["ws"] }
 tower = "0.4"
 tower-http = { version = "0.5", features = ["cors", "trace"] }
