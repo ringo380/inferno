@@ -646,7 +646,7 @@ jobs:
         performance_compliant = "${{ needs.performance-standards.outputs.performance-compliant }}" == "true"
 
         # Set compliance level thresholds
-        compliance_level = "${{ github.event.inputs.compliance_level or 'enterprise' }}"
+        compliance_level = "${{ github.event.inputs.compliance_level || 'enterprise' }}"
 
         thresholds = {
             'basic': {'quality': 70, 'security': 70, 'complexity': 60},
