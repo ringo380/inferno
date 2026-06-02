@@ -181,7 +181,7 @@ impl ModelManager {
             }
         }
 
-        models.sort_by(|a, b| b.modified.cmp(&a.modified));
+        models.sort_by_key(|b| std::cmp::Reverse(b.modified));
         info!(
             "Found {} models under {}",
             models.len(),

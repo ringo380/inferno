@@ -482,7 +482,7 @@ fn count_by_event_type(events: &[AuditEvent]) -> Vec<(String, usize)> {
         *counts.entry(key).or_insert(0) += 1;
     }
     let mut result: Vec<_> = counts.into_iter().collect();
-    result.sort_by(|a, b| b.1.cmp(&a.1));
+    result.sort_by_key(|b| std::cmp::Reverse(b.1));
     result
 }
 
@@ -494,7 +494,7 @@ fn count_by_severity(events: &[AuditEvent]) -> Vec<(String, usize)> {
         *counts.entry(key).or_insert(0) += 1;
     }
     let mut result: Vec<_> = counts.into_iter().collect();
-    result.sort_by(|a, b| b.1.cmp(&a.1));
+    result.sort_by_key(|b| std::cmp::Reverse(b.1));
     result
 }
 

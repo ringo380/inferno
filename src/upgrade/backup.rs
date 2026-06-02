@@ -220,7 +220,7 @@ impl BackupManager {
 
         // Sort by creation date (newest first)
         let mut backups = all_metadata;
-        backups.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+        backups.sort_by_key(|b| std::cmp::Reverse(b.created_at));
 
         Ok(backups)
     }
@@ -344,7 +344,7 @@ impl BackupManager {
 
         // Sort by creation date (oldest first)
         let mut sorted_backups = backups;
-        sorted_backups.sort_by(|a, b| a.created_at.cmp(&b.created_at));
+        sorted_backups.sort_by_key(|a| a.created_at);
 
         // Keep only the most recent max_backups
         let total_backups = sorted_backups.len();

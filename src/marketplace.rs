@@ -1068,7 +1068,7 @@ impl ModelMarketplace {
                 .retain(|pkg| pkg.name.contains(filter_str) || pkg.model_id.contains(filter_str));
         }
 
-        packages.sort_by(|a, b| a.install_date.cmp(&b.install_date));
+        packages.sort_by_key(|a| a.install_date);
         Ok(packages)
     }
 
