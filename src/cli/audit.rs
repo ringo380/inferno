@@ -1439,20 +1439,20 @@ mod tests {
 
     #[test]
     fn test_validate_export_params_zero_limit() {
-        let result = validate_export_params(&PathBuf::from("/tmp/test.json"), Some(0));
+        let result = validate_export_params(&std::env::temp_dir().join("test.json"), Some(0));
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("at least 1"));
     }
 
     #[test]
     fn test_validate_export_params_valid() {
-        let result = validate_export_params(&PathBuf::from("/tmp/test.json"), Some(100));
+        let result = validate_export_params(&std::env::temp_dir().join("test.json"), Some(100));
         assert!(result.is_ok());
     }
 
     #[test]
     fn test_validate_export_params_no_limit() {
-        let result = validate_export_params(&PathBuf::from("/tmp/test.json"), None);
+        let result = validate_export_params(&std::env::temp_dir().join("test.json"), None);
         assert!(result.is_ok());
     }
 

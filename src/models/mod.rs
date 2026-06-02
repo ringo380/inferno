@@ -913,7 +913,10 @@ fn read_gguf_value(cursor: &mut Cursor<&[u8]>, value_type: u32) -> Result<String
             let elem_type = cursor.read_u32::<LittleEndian>()?;
             let count = cursor.read_u64::<LittleEndian>()?;
             if count > 10_000_000 {
-                return Err(anyhow::anyhow!("GGUF array count {} exceeds sanity limit", count));
+                return Err(anyhow::anyhow!(
+                    "GGUF array count {} exceeds sanity limit",
+                    count
+                ));
             }
             for _ in 0..count {
                 skip_gguf_value(cursor, elem_type)?;
@@ -948,7 +951,10 @@ fn skip_gguf_value(cursor: &mut Cursor<&[u8]>, value_type: u32) -> Result<()> {
             let elem_type = cursor.read_u32::<LittleEndian>()?;
             let count = cursor.read_u64::<LittleEndian>()?;
             if count > 10_000_000 {
-                return Err(anyhow::anyhow!("GGUF array count {} exceeds sanity limit", count));
+                return Err(anyhow::anyhow!(
+                    "GGUF array count {} exceeds sanity limit",
+                    count
+                ));
             }
             for _ in 0..count {
                 skip_gguf_value(cursor, elem_type)?;
