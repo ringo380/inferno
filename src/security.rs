@@ -1762,3 +1762,70 @@ impl SecurityScanner {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn test_user() -> User {
+        User {
+            id: "user-123".to_string(),
+            username: "alice".to_string(),
+            email: None,
+            password_hash: None,
+            role: UserRole::Admin,
+            api_keys: vec![],
+            created_at: Utc::now(),
+            last_login: None,
+            is_active: true,
+            permissions: HashSet::new(),
+            rate_limit_override: None,
+        }
+    }
+
+    fn test_manager() -> SecurityManager {
+        let mut config = SecurityConfig::default();
+        config.jwt_secret = "test-secret-at-least-32-characters-long!!".to_string();
+        SecurityManager::new(config)
+    }
+
+    /// Round-trips a JWT through the v10 `rust_crypto` HMAC backend to prove the
+    /// crypto-provider migration kept HS256 sign/verify working end to end.
+    #[tokio::test]
+    async fn test_jwt_round_trip() {
+        let manager = test_manager();
+        let user = test_user();
+
+        let token = manager
+            .generate_jwt_token(&user)
+            .await
+            .expect("token generation should succeed");
+
+        let claims = manager
+            .verify_jwt_token(&token)
+            .await
+            .expect("token verification should succeed");
+
+        assert_eq!(claims.sub, user.id);
+        assert_eq!(claims.username, user.username);
+    }
+
+    /// A token signed with a different secret must fail signature verification.
+    #[tokio::test]
+    async fn test_jwt_rejects_wrong_secret() {
+        let signer = test_manager();
+        let token = signer
+            .generate_jwt_token(&test_user())
+            .await
+            .expect("token generation should succeed");
+
+        let mut config = SecurityConfig::default();
+        config.jwt_secret = "a-completely-different-secret-32-chars!!!".to_string();
+        let verifier = SecurityManager::new(config);
+
+        assert!(
+            verifier.verify_jwt_token(&token).await.is_err(),
+            "token signed with a different secret must not verify"
+        );
+    }
+}
