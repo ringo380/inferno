@@ -170,8 +170,9 @@ jobs:
         cat > Dockerfile.minimal << 'EOF'
         # Smallest image: static musl binary on Alpine, built natively for amd64.
         # rust:alpine tracks current stable (edition 2024 needs >= 1.85).
-        # --no-default-features drops reqwest/native-tls; hf-hub still uses rustls
-        # (ring), which builds fine on musl with build-base.
+        # Use the rustls "download" feature (not the native-tls default): the code
+        # references reqwest unconditionally, and rustls/ring builds on musl with
+        # build-base without needing openssl.
         FROM rust:alpine AS builder
 
         RUN apk add --no-cache \
@@ -189,7 +190,7 @@ jobs:
         COPY benches ./benches
         COPY tests ./tests
 
-        RUN cargo build --release --no-default-features --bin inferno
+        RUN cargo build --release --no-default-features --features download --bin inferno
 
         # Runtime stage - tiny Alpine image
         FROM alpine:3.20
@@ -287,6 +288,7 @@ jobs:
         RUN apt-get update && apt-get install -y \
             ca-certificates \
             libssl3 \
+            libgomp1 \
             curl \
             htop \
             procps \
