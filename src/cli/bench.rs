@@ -30,7 +30,11 @@ pub struct BenchArgs {
     #[arg(long, help = "Enable detailed per-iteration output")]
     pub verbose: bool,
 
-    #[arg(long, value_name = "FILE", help = "Write results to JSON file for comparison tracking")]
+    #[arg(
+        long,
+        value_name = "FILE",
+        help = "Write results to JSON file for comparison tracking"
+    )]
     pub output_json: Option<PathBuf>,
 }
 
@@ -264,10 +268,7 @@ fn validate_args(args: &BenchArgs) -> Result<()> {
     if let Some(json_path) = &args.output_json {
         if let Some(parent) = json_path.parent() {
             if !parent.as_os_str().is_empty() && !parent.exists() {
-                anyhow::bail!(
-                    "Output directory does not exist: {}",
-                    parent.display()
-                );
+                anyhow::bail!("Output directory does not exist: {}", parent.display());
             }
         }
     }

@@ -160,9 +160,7 @@ mod metal_tests {
             }
         };
 
-        let model_size_bytes = std::fs::metadata(&model_file)
-            .map(|m| m.len())
-            .unwrap_or(0);
+        let model_size_bytes = std::fs::metadata(&model_file).map(|m| m.len()).unwrap_or(0);
         let model_size_mb = model_size_bytes as f64 / 1_048_576.0;
         println!("Model:        {}", model_file.display());
         println!("Model size:   {:.0} MB", model_size_mb);
@@ -272,12 +270,8 @@ mod metal_tests {
             println!("Latency med:  {:.1} ms", median_ms);
             println!("Total tokens: {}", total_tokens);
             println!("Load time:    {:?}", load_time);
-            println!(
-                "\nGPU memory:   check Activity Monitor > GPU tab during inference"
-            );
-            println!(
-                "Layer offload: check logs for 'offloaded X/X layers to GPU'"
-            );
+            println!("\nGPU memory:   check Activity Monitor > GPU tab during inference");
+            println!("Layer offload: check logs for 'offloaded X/X layers to GPU'");
             println!(
                 "\nTo contribute these results to issue #7:\n  https://github.com/ringo380/inferno/issues/7"
             );

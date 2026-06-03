@@ -383,15 +383,12 @@ async fn benchmark_distributed_inference(
     let total_failed = all_stats.iter().map(|s| s.failed_requests).sum::<u64>();
     let total_tokens = all_stats.iter().map(|s| s.total_tokens).sum::<u32>();
 
-    let avg_response_time = if total_successful > 0 {
-        all_stats
-            .iter()
-            .map(|s| s.total_response_time.as_millis() as u64)
-            .sum::<u64>()
-            / total_successful
-    } else {
-        0
-    };
+    let avg_response_time = all_stats
+        .iter()
+        .map(|s| s.total_response_time.as_millis() as u64)
+        .sum::<u64>()
+        .checked_div(total_successful)
+        .unwrap_or(0);
 
     println!("\n=== Benchmark Results ===");
     println!("Total Duration: {:?}", total_duration);
