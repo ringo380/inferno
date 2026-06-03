@@ -94,27 +94,27 @@ jobs:
         # Base Dockerfile (standard build)
         cat > Dockerfile << 'EOF'
         # Multi-stage build for optimal size
-        FROM rust:1.75-slim as builder
+        # rust 1.90 (edition 2024 needs >= 1.85); bookworm matches the runtime stage's glibc/openssl
+        FROM rust:1.90-slim-bookworm as builder
 
         # Install system dependencies
         RUN apt-get update && apt-get install -y \
             pkg-config \
             libssl-dev \
             build-essential \
+            cmake \
             && rm -rf /var/lib/apt/lists/*
 
         WORKDIR /app
 
-        # Copy manifests and cache dependencies
-        COPY Cargo.toml Cargo.lock ./
-        RUN mkdir src && echo "fn main() {}" > src/main.rs
-        RUN cargo build --release && rm -rf src
-
-        # Copy source and build
+        # Copy manifests, build script, and source.
+        # benches/ and tests/ must be present: Cargo.toml declares explicit
+        # [[bench]]/[[test]] targets, so the manifest fails to parse without them
+        # even though we only build the binary here.
+        COPY Cargo.toml Cargo.lock build.rs ./
         COPY src ./src
         COPY benches ./benches
         COPY tests ./tests
-        COPY examples ./examples
 
         RUN cargo build --release --bin inferno
 
