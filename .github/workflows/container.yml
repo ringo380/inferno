@@ -30,6 +30,11 @@ env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
 
+permissions:
+  contents: read
+  packages: write        # push images to ghcr.io on main/tags
+  pull-requests: write   # post the container build report comment on PRs
+
 jobs:
   # Build matrix for multiple architectures and variants
   build-matrix:
@@ -709,6 +714,7 @@ jobs:
 
     - name: Post report to PR
       if: github.event_name == 'pull_request'
+      continue-on-error: true  # commenting may be blocked (e.g. fork PRs); don't fail the report
       uses: actions/github-script@v7
       with:
         script: |
