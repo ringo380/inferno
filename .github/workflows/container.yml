@@ -48,7 +48,7 @@ jobs:
             {
               "variant": "minimal",
               "dockerfile": "Dockerfile.minimal",
-              "platforms": "linux/amd64,linux/arm64",
+              "platforms": "linux/amd64",
               "tags": "minimal",
               "features": "--no-default-features"
             },
@@ -69,7 +69,7 @@ jobs:
             {
               "variant": "enterprise",
               "dockerfile": "Dockerfile.enterprise",
-              "platforms": "linux/amd64,linux/arm64",
+              "platforms": "linux/amd64",
               "tags": "enterprise",
               "features": "--all-features"
             }
@@ -168,27 +168,31 @@ jobs:
 
         # Minimal Dockerfile (smallest possible image)
         cat > Dockerfile.minimal << 'EOF'
-        FROM rust:1.75-alpine as builder
+        # Smallest image: static musl binary on Alpine, built natively for amd64.
+        # rust:alpine tracks current stable (edition 2024 needs >= 1.85).
+        # --no-default-features drops reqwest/native-tls; hf-hub still uses rustls
+        # (ring), which builds fine on musl with build-base.
+        FROM rust:alpine AS builder
 
         RUN apk add --no-cache \
             musl-dev \
+            build-base \
             pkgconfig \
-            openssl-dev \
-            openssl-libs-static
+            cmake
 
         WORKDIR /app
 
-        # Copy manifests and build dependencies
-        COPY Cargo.toml Cargo.lock ./
-        RUN mkdir src && echo "fn main() {}" > src/main.rs
-        RUN cargo build --release --no-default-features && rm -rf src
-
-        # Build application
+        # benches/ and tests/ must be present so cargo can parse the manifest's
+        # explicit [[bench]]/[[test]] targets; build.rs is required at the root.
+        COPY Cargo.toml Cargo.lock build.rs ./
         COPY src ./src
+        COPY benches ./benches
+        COPY tests ./tests
+
         RUN cargo build --release --no-default-features --bin inferno
 
-        # Runtime stage - use scratch for minimal size
-        FROM alpine:3.18
+        # Runtime stage - tiny Alpine image
+        FROM alpine:3.20
 
         RUN apk add --no-cache ca-certificates libgcc
 
@@ -204,35 +208,37 @@ jobs:
 
         # GPU-enabled Dockerfile
         cat > Dockerfile.gpu << 'EOF'
-        FROM nvidia/cuda:12.2-devel-ubuntu22.04 as builder
+        # Vulkan-oriented image, built natively for amd64.
+        # NOTE: the gpu-vulkan/cuda features are currently no-op cfg flags (no GPU
+        # compute is wired through them yet), so this uses a plain Debian base plus
+        # Vulkan runtime libs rather than a heavy nvidia/cuda image (whose old
+        # 12.2 tag was also removed from Docker Hub). rust 1.90: edition 2024.
+        FROM rust:1.90-slim-bookworm AS builder
 
         RUN apt-get update && apt-get install -y \
-            curl \
             pkg-config \
             libssl-dev \
             build-essential \
+            cmake \
             && rm -rf /var/lib/apt/lists/*
-
-        # Install Rust
-        RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-        ENV PATH="/root/.cargo/bin:${PATH}"
 
         WORKDIR /app
 
-        # Copy and build
-        COPY Cargo.toml Cargo.lock ./
-        RUN mkdir src && echo "fn main() {}" > src/main.rs
-        RUN cargo build --release --features gpu-vulkan && rm -rf src
-
+        # benches/ and tests/ required for manifest parse; build.rs required.
+        COPY Cargo.toml Cargo.lock build.rs ./
         COPY src ./src
+        COPY benches ./benches
+        COPY tests ./tests
+
         RUN cargo build --release --features gpu-vulkan --bin inferno
 
-        # Runtime stage
-        FROM nvidia/cuda:12.2-runtime-ubuntu22.04
+        # Runtime stage with Vulkan loader/tools
+        FROM debian:bookworm-slim
 
         RUN apt-get update && apt-get install -y \
             ca-certificates \
             libssl3 \
+            libvulkan1 \
             vulkan-tools \
             && rm -rf /var/lib/apt/lists/*
 
@@ -248,25 +254,32 @@ jobs:
 
         # Enterprise Dockerfile (all features)
         cat > Dockerfile.enterprise << 'EOF'
-        FROM rust:1.75-slim as builder
+        # Server "enterprise" image: all ML backends, built natively for amd64.
+        # NOTE: deliberately NOT --all-features. That pulls the `desktop` feature
+        # (tauri -> GTK/webkit) which cannot build in a headless server container.
+        # We build ml-backends (gguf + onnx) plus the rustls `download` feature.
+        # llama-cpp-2 (gguf) needs cmake + clang/libclang (bindgen). rust 1.90: edition 2024.
+        FROM rust:1.90-slim-bookworm AS builder
 
         RUN apt-get update && apt-get install -y \
             pkg-config \
             libssl-dev \
             build-essential \
+            cmake \
+            clang \
+            libclang-dev \
             protobuf-compiler \
             && rm -rf /var/lib/apt/lists/*
 
         WORKDIR /app
 
-        # Copy manifests
-        COPY Cargo.toml Cargo.lock ./
-        RUN mkdir src && echo "fn main() {}" > src/main.rs
-        RUN cargo build --release --all-features && rm -rf src
+        # benches/ and tests/ required for manifest parse; build.rs required.
+        COPY Cargo.toml Cargo.lock build.rs ./
+        COPY src ./src
+        COPY benches ./benches
+        COPY tests ./tests
 
-        # Build with all features
-        COPY . .
-        RUN cargo build --release --all-features --bin inferno
+        RUN cargo build --release --no-default-features --features ml-backends,download --bin inferno
 
         # Runtime stage with enterprise monitoring tools
         FROM debian:bookworm-slim
