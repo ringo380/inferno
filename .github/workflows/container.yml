@@ -32,8 +32,9 @@ env:
 
 permissions:
   contents: read
-  packages: write        # push images to ghcr.io on main/tags
-  pull-requests: write   # post the container build report comment on PRs
+  packages: write          # push images to ghcr.io on main/tags
+  pull-requests: write     # post the container build report comment on PRs
+  security-events: write   # upload Trivy SARIF results to code scanning
 
 jobs:
   # Build matrix for multiple architectures and variants
@@ -442,6 +443,7 @@ jobs:
     if: github.event.inputs.scan_vulnerabilities != 'false'
     timeout-minutes: 20
     strategy:
+      fail-fast: false
       matrix:
         variant: [minimal, standard, gpu, enterprise]
 
@@ -460,8 +462,9 @@ jobs:
     - name: Build image for scanning
       run: |
         docker buildx build \
-          --file Dockerfile.${{ matrix.variant == 'standard' && '' || matrix.variant }} \
+          --file ${{ matrix.variant == 'standard' && 'Dockerfile' || format('Dockerfile.{0}', matrix.variant) }} \
           --tag scan-image:${{ matrix.variant }} \
+          --cache-from type=gha \
           --load \
           .
 
@@ -485,7 +488,7 @@ jobs:
         SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
       with:
         image: scan-image:${{ matrix.variant }}
-        args: --severity-threshold=high --file=Dockerfile.${{ matrix.variant == 'standard' && '' || matrix.variant }}
+        args: --severity-threshold=high --file=${{ matrix.variant == 'standard' && 'Dockerfile' || format('Dockerfile.{0}', matrix.variant) }}
 
     - name: Container structure test
       run: |
