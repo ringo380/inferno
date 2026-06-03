@@ -93,16 +93,21 @@ jobs:
       run: |
         # Base Dockerfile (standard build)
         cat > Dockerfile << 'EOF'
-        # Multi-stage build for optimal size
-        # rust 1.90 (edition 2024 needs >= 1.85); bookworm matches the runtime stage's glibc/openssl
-        FROM rust:1.90-slim-bookworm as builder
+        # Multi-stage, cross-compiled build.
+        # The builder always runs on the native build platform ($BUILDPLATFORM, no
+        # QEMU) and cross-compiles to the target arch - far faster than emulating
+        # an arm64 LTO release build (which times out). Uses the rustls "download"
+        # feature instead of the native-tls default, so only ring needs the cross
+        # C toolchain and no openssl cross-compilation is required.
+        # rust 1.90: edition 2024 needs >= 1.85.
+        FROM --platform=$BUILDPLATFORM rust:1.90-slim-bookworm AS builder
 
-        # Install system dependencies
+        # Build deps + aarch64 cross toolchain (provides aarch64-linux-gnu-gcc)
         RUN apt-get update && apt-get install -y \
             pkg-config \
-            libssl-dev \
             build-essential \
             cmake \
+            gcc-aarch64-linux-gnu \
             && rm -rf /var/lib/apt/lists/*
 
         WORKDIR /app
@@ -116,19 +121,30 @@ jobs:
         COPY benches ./benches
         COPY tests ./tests
 
-        RUN cargo build --release --bin inferno
+        # Map Docker's TARGETARCH to the Rust target triple and cross-compile.
+        ARG TARGETARCH
+        RUN set -eux; \
+            case "$TARGETARCH" in \
+              amd64) tgt=x86_64-unknown-linux-gnu ;; \
+              arm64) tgt=aarch64-unknown-linux-gnu ;; \
+              *) echo "unsupported TARGETARCH=$TARGETARCH"; exit 1 ;; \
+            esac; \
+            rustup target add "$tgt"; \
+            export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc; \
+            export CC_aarch64_unknown_linux_gnu=aarch64-linux-gnu-gcc; \
+            cargo build --release --no-default-features --features download --target "$tgt" --bin inferno; \
+            cp "target/$tgt/release/inferno" /usr/local/bin/inferno
 
-        # Runtime stage
+        # Runtime stage (built for the target platform; only runs apt + the binary)
         FROM debian:bookworm-slim
 
-        # Install runtime dependencies
+        # Install runtime dependencies (rustls is used, so no libssl needed)
         RUN apt-get update && apt-get install -y \
             ca-certificates \
-            libssl3 \
             && rm -rf /var/lib/apt/lists/* \
             && useradd -r -s /bin/false -m -d /var/lib/inferno inferno
 
-        COPY --from=builder /app/target/release/inferno /usr/local/bin/inferno
+        COPY --from=builder /usr/local/bin/inferno /usr/local/bin/inferno
 
         # Create directories and set permissions
         RUN mkdir -p /var/lib/inferno/models /var/lib/inferno/config /var/lib/inferno/cache \
