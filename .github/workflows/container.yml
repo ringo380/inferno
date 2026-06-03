@@ -102,12 +102,14 @@ jobs:
         # rust 1.90: edition 2024 needs >= 1.85.
         FROM --platform=$BUILDPLATFORM rust:1.90-slim-bookworm AS builder
 
-        # Build deps + aarch64 cross toolchain (provides aarch64-linux-gnu-gcc)
+        # Build deps + aarch64 cross toolchain. Both gcc and g++ are needed:
+        # some deps build C (ring) and others C++ (esaxx-rs via tokenizers).
         RUN apt-get update && apt-get install -y \
             pkg-config \
             build-essential \
             cmake \
             gcc-aarch64-linux-gnu \
+            g++-aarch64-linux-gnu \
             && rm -rf /var/lib/apt/lists/*
 
         WORKDIR /app
@@ -132,6 +134,7 @@ jobs:
             rustup target add "$tgt"; \
             export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc; \
             export CC_aarch64_unknown_linux_gnu=aarch64-linux-gnu-gcc; \
+            export CXX_aarch64_unknown_linux_gnu=aarch64-linux-gnu-g++; \
             cargo build --release --no-default-features --features download --target "$tgt" --bin inferno; \
             cp "target/$tgt/release/inferno" /usr/local/bin/inferno
 
