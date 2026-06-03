@@ -288,7 +288,7 @@ impl SecurityManager {
 
         // Return most recent events first
         let mut sorted_events = events.clone();
-        sorted_events.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+        sorted_events.sort_by_key(|b| std::cmp::Reverse(b.timestamp));
         sorted_events.truncate(limit);
 
         Ok(sorted_events)

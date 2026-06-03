@@ -378,7 +378,7 @@ pub async fn execute(args: ModelsArgs, config: &Config) -> Result<()> {
             }
 
             let mut entries: Vec<_> = registry.entries.values().collect();
-            entries.sort_by(|a, b| b.use_count.cmp(&a.use_count));
+            entries.sort_by_key(|b| std::cmp::Reverse(b.use_count));
 
             println!("{:<35} {:<10} {:<25} Tags", "Model", "Uses", "Last Used");
             println!("{}", "─".repeat(90));

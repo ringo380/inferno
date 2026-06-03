@@ -536,7 +536,7 @@ impl ModelDownloadManager {
                     != (downloaded - chunk.len() as u64) * 20 / total_size
             {
                 let elapsed = start_time.elapsed().as_secs();
-                let speed = if elapsed > 0 { downloaded / elapsed } else { 0 };
+                let speed = downloaded.checked_div(elapsed).unwrap_or(0);
                 let eta = if speed > 0 && total_size > downloaded {
                     Some((total_size - downloaded) / speed)
                 } else {

@@ -3341,7 +3341,7 @@ mod tests {
 
     #[test]
     fn test_validate_export_path_unsupported_extension() {
-        let path = PathBuf::from("/tmp/file.exe");
+        let path = std::env::temp_dir().join("file.exe");
         let result = validate_export_path(&path);
         assert!(result.is_err());
         assert!(
@@ -3354,7 +3354,7 @@ mod tests {
 
     #[test]
     fn test_validate_export_path_no_extension() {
-        let path = PathBuf::from("/tmp/file");
+        let path = std::env::temp_dir().join("file");
         let result = validate_export_path(&path);
         assert!(result.is_err());
         assert!(

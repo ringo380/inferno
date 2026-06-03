@@ -683,7 +683,7 @@ impl ModelCache {
         // Get all available models and sort by size
         if let Ok(models) = self.model_manager.list_models().await {
             let mut sorted_models = models;
-            sorted_models.sort_by(|a, b| a.size.cmp(&b.size));
+            sorted_models.sort_by_key(|a| a.size);
 
             // Warm up smaller models first
             for model in sorted_models.iter().take(3) {

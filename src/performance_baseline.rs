@@ -522,8 +522,8 @@ impl PerformanceBaseline {
             .filter(|m| m.backend_type == "onnx")
             .collect();
 
-        gguf_metrics.sort_by(|a, b| a.model_size_mb.cmp(&b.model_size_mb));
-        onnx_metrics.sort_by(|a, b| a.model_size_mb.cmp(&b.model_size_mb));
+        gguf_metrics.sort_by_key(|a| a.model_size_mb);
+        onnx_metrics.sort_by_key(|a| a.model_size_mb);
 
         report.push_str("## GGUF Backend Results\n\n");
         report.push_str("| Model | Size (MB) | Avg Latency (ms) | P99 Latency (ms) | RPS | Memory (MB) | Loading (ms) |\n");
