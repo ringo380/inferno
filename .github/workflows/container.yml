@@ -441,7 +441,11 @@ jobs:
     runs-on: ubuntu-latest
     needs: [build-containers]
     if: github.event.inputs.scan_vulnerabilities != 'false'
-    timeout-minutes: 20
+    # The scan rebuilds each image to load it locally; the alpine/musl minimal
+    # build recompiles from scratch and needs more than 20 min. (A future
+    # improvement would export the image from build-containers as an artifact
+    # and docker-load it here instead of rebuilding.)
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
