@@ -17,9 +17,10 @@ target/
 .DS_Store
 Thumbs.db
 
-# Testing
-tests/
-benches/
+# Note: tests/ and benches/ are intentionally NOT ignored. Cargo.toml declares
+# explicit [[test]] and [[bench]] targets, so cargo fails to parse the manifest
+# if those source files are absent - even when only building the binary. They are
+# only used in the builder stage and never reach the final multi-stage image.
 
 # Documentation (can be added to image if needed)
 *.md
