@@ -16,6 +16,7 @@ on:
       - 'docs/**'
       - 'README.md'
       - 'Cargo.toml'
+      - '.github/workflows/documentation.yml'
   workflow_dispatch:
     inputs:
       deploy_preview:
@@ -108,7 +109,6 @@ jobs:
         [book]
         authors = ["Inferno Developers"]
         language = "en"
-        multilingual = false
         src = "src"
         title = "Inferno User Guide"
         description = "Complete guide to using Inferno AI/ML platform"
@@ -145,8 +145,10 @@ jobs:
         EOF
         fi
 
-        # Create basic book structure
-        mkdir -p docs/src/{user-guide,developer-guide,api-reference,tutorials}
+        # Create basic book structure. `appendices` is included so the later
+        # git-cliff step can write docs/src/appendices/changelog.md even if mdbook
+        # has not yet materialised the stub for that SUMMARY entry.
+        mkdir -p docs/src/{user-guide,developer-guide,api-reference,tutorials,appendices}
 
         # Generate SUMMARY.md if it doesn't exist
         if [ ! -f "docs/src/SUMMARY.md" ]; then
@@ -393,6 +395,7 @@ jobs:
         path: docs
 
     - name: Deploy to Netlify Preview
+      continue-on-error: true  # optional preview; no-op when Netlify secrets are unset
       uses: nwtgck/actions-netlify@v2.1
       with:
         publish-dir: './docs/book'
@@ -424,10 +427,11 @@ jobs:
         path: docs_artifacts
 
     - name: Install quality tools
+      continue-on-error: true  # advisory tooling; externally-managed pip/npm may reject installs
       run: |
         npm install -g alex
         npm install -g write-good
-        pip install doc8
+        pip install doc8 --break-system-packages || pip install doc8
 
     - name: Check documentation quality
       run: |
@@ -486,6 +490,9 @@ jobs:
     name: API Documentation Diff
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+      pull-requests: write     # post the API diff comment
     timeout-minutes: 15
 
     steps:
@@ -539,6 +546,7 @@ jobs:
         fi
 
     - name: Post API diff comment
+      continue-on-error: true  # commenting may be blocked (e.g. fork PRs); don't fail the job
       uses: actions/github-script@v7
       with:
         script: |

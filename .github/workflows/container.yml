@@ -30,6 +30,10 @@ env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
 
+# Least-privilege default; individual jobs widen scope only as needed.
+permissions:
+  contents: read
+
 jobs:
   # Build matrix for multiple architectures and variants
   build-matrix:
@@ -48,30 +52,26 @@ jobs:
             {
               "variant": "minimal",
               "dockerfile": "Dockerfile.minimal",
-              "platforms": "linux/amd64,linux/arm64",
-              "tags": "minimal",
-              "features": "--no-default-features"
+              "platforms": "linux/amd64",
+              "tags": "minimal"
             },
             {
               "variant": "standard",
               "dockerfile": "Dockerfile",
               "platforms": "linux/amd64,linux/arm64",
-              "tags": "latest,standard",
-              "features": ""
+              "tags": "latest,standard"
             },
             {
               "variant": "gpu",
               "dockerfile": "Dockerfile.gpu",
               "platforms": "linux/amd64",
-              "tags": "gpu",
-              "features": "--features gpu-vulkan"
+              "tags": "gpu"
             },
             {
               "variant": "enterprise",
               "dockerfile": "Dockerfile.enterprise",
-              "platforms": "linux/amd64,linux/arm64",
-              "tags": "enterprise",
-              "features": "--all-features"
+              "platforms": "linux/amd64",
+              "tags": "enterprise"
             }
           ]
         }
@@ -93,42 +93,61 @@ jobs:
       run: |
         # Base Dockerfile (standard build)
         cat > Dockerfile << 'EOF'
-        # Multi-stage build for optimal size
-        FROM rust:1.75-slim as builder
+        # Multi-stage, cross-compiled build.
+        # The builder always runs on the native build platform ($BUILDPLATFORM, no
+        # QEMU) and cross-compiles to the target arch - far faster than emulating
+        # an arm64 LTO release build (which times out). Uses the rustls "download"
+        # feature instead of the native-tls default, so only ring needs the cross
+        # C toolchain and no openssl cross-compilation is required.
+        # rust 1.90: edition 2024 needs >= 1.85.
+        FROM --platform=$BUILDPLATFORM rust:1.90-slim-bookworm AS builder
 
-        # Install system dependencies
+        # Build deps + aarch64 cross toolchain. Both gcc and g++ are needed:
+        # some deps build C (ring) and others C++ (esaxx-rs via tokenizers).
         RUN apt-get update && apt-get install -y \
             pkg-config \
-            libssl-dev \
             build-essential \
+            cmake \
+            gcc-aarch64-linux-gnu \
+            g++-aarch64-linux-gnu \
             && rm -rf /var/lib/apt/lists/*
 
         WORKDIR /app
 
-        # Copy manifests and cache dependencies
-        COPY Cargo.toml Cargo.lock ./
-        RUN mkdir src && echo "fn main() {}" > src/main.rs
-        RUN cargo build --release && rm -rf src
-
-        # Copy source and build
+        # Copy manifests, build script, and source.
+        # benches/ and tests/ must be present: Cargo.toml declares explicit
+        # [[bench]]/[[test]] targets, so the manifest fails to parse without them
+        # even though we only build the binary here.
+        COPY Cargo.toml Cargo.lock build.rs ./
         COPY src ./src
         COPY benches ./benches
         COPY tests ./tests
-        COPY examples ./examples
 
-        RUN cargo build --release --bin inferno
+        # Map Docker's TARGETARCH to the Rust target triple and cross-compile.
+        ARG TARGETARCH
+        RUN set -eux; \
+            case "$TARGETARCH" in \
+              amd64) tgt=x86_64-unknown-linux-gnu ;; \
+              arm64) tgt=aarch64-unknown-linux-gnu ;; \
+              *) echo "unsupported TARGETARCH=$TARGETARCH"; exit 1 ;; \
+            esac; \
+            rustup target add "$tgt"; \
+            export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc; \
+            export CC_aarch64_unknown_linux_gnu=aarch64-linux-gnu-gcc; \
+            export CXX_aarch64_unknown_linux_gnu=aarch64-linux-gnu-g++; \
+            cargo build --release --no-default-features --features download --target "$tgt" --bin inferno; \
+            cp "target/$tgt/release/inferno" /usr/local/bin/inferno
 
-        # Runtime stage
+        # Runtime stage (built for the target platform; only runs apt + the binary)
         FROM debian:bookworm-slim
 
-        # Install runtime dependencies
+        # Install runtime dependencies (rustls is used, so no libssl needed)
         RUN apt-get update && apt-get install -y \
             ca-certificates \
-            libssl3 \
             && rm -rf /var/lib/apt/lists/* \
             && useradd -r -s /bin/false -m -d /var/lib/inferno inferno
 
-        COPY --from=builder /app/target/release/inferno /usr/local/bin/inferno
+        COPY --from=builder /usr/local/bin/inferno /usr/local/bin/inferno
 
         # Create directories and set permissions
         RUN mkdir -p /var/lib/inferno/models /var/lib/inferno/config /var/lib/inferno/cache \
@@ -144,32 +163,40 @@ jobs:
             CMD inferno --version || exit 1
 
         ENTRYPOINT ["inferno"]
-        CMD ["serve", "--host", "0.0.0.0", "--port", "8080"]
+        # serve only accepts --bind <addr:port> (see src/cli/serve.rs); there is no
+        # --host/--port/--gpu/--enterprise flag. Bind all interfaces so the mapped
+        # port is reachable from the host.
+        CMD ["serve", "--bind", "0.0.0.0:8080"]
         EOF
 
         # Minimal Dockerfile (smallest possible image)
         cat > Dockerfile.minimal << 'EOF'
-        FROM rust:1.75-alpine as builder
+        # Smallest image: static musl binary on Alpine, built natively for amd64.
+        # rust:alpine tracks current stable (edition 2024 needs >= 1.85).
+        # Use the rustls "download" feature (not the native-tls default): the code
+        # references reqwest unconditionally, and rustls/ring builds on musl with
+        # build-base without needing openssl.
+        FROM rust:alpine AS builder
 
         RUN apk add --no-cache \
             musl-dev \
+            build-base \
             pkgconfig \
-            openssl-dev \
-            openssl-libs-static
+            cmake
 
         WORKDIR /app
 
-        # Copy manifests and build dependencies
-        COPY Cargo.toml Cargo.lock ./
-        RUN mkdir src && echo "fn main() {}" > src/main.rs
-        RUN cargo build --release --no-default-features && rm -rf src
-
-        # Build application
+        # benches/ and tests/ must be present so cargo can parse the manifest's
+        # explicit [[bench]]/[[test]] targets; build.rs is required at the root.
+        COPY Cargo.toml Cargo.lock build.rs ./
         COPY src ./src
-        RUN cargo build --release --no-default-features --bin inferno
+        COPY benches ./benches
+        COPY tests ./tests
 
-        # Runtime stage - use scratch for minimal size
-        FROM alpine:3.18
+        RUN cargo build --release --no-default-features --features download --bin inferno
+
+        # Runtime stage - tiny Alpine image
+        FROM alpine:3.20
 
         RUN apk add --no-cache ca-certificates libgcc
 
@@ -185,35 +212,37 @@ jobs:
 
         # GPU-enabled Dockerfile
         cat > Dockerfile.gpu << 'EOF'
-        FROM nvidia/cuda:12.2-devel-ubuntu22.04 as builder
+        # Vulkan-oriented image, built natively for amd64.
+        # NOTE: the gpu-vulkan/cuda features are currently no-op cfg flags (no GPU
+        # compute is wired through them yet), so this uses a plain Debian base plus
+        # Vulkan runtime libs rather than a heavy nvidia/cuda image (whose old
+        # 12.2 tag was also removed from Docker Hub). rust 1.90: edition 2024.
+        FROM rust:1.90-slim-bookworm AS builder
 
         RUN apt-get update && apt-get install -y \
-            curl \
             pkg-config \
             libssl-dev \
             build-essential \
+            cmake \
             && rm -rf /var/lib/apt/lists/*
-
-        # Install Rust
-        RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-        ENV PATH="/root/.cargo/bin:${PATH}"
 
         WORKDIR /app
 
-        # Copy and build
-        COPY Cargo.toml Cargo.lock ./
-        RUN mkdir src && echo "fn main() {}" > src/main.rs
-        RUN cargo build --release --features gpu-vulkan && rm -rf src
-
+        # benches/ and tests/ required for manifest parse; build.rs required.
+        COPY Cargo.toml Cargo.lock build.rs ./
         COPY src ./src
+        COPY benches ./benches
+        COPY tests ./tests
+
         RUN cargo build --release --features gpu-vulkan --bin inferno
 
-        # Runtime stage
-        FROM nvidia/cuda:12.2-runtime-ubuntu22.04
+        # Runtime stage with Vulkan loader/tools
+        FROM debian:bookworm-slim
 
         RUN apt-get update && apt-get install -y \
             ca-certificates \
             libssl3 \
+            libvulkan1 \
             vulkan-tools \
             && rm -rf /var/lib/apt/lists/*
 
@@ -224,30 +253,38 @@ jobs:
         EXPOSE 8080
 
         ENTRYPOINT ["inferno"]
-        CMD ["serve", "--gpu"]
+        # serve has no --gpu flag; GPU use is selected by backend config, not CLI.
+        CMD ["serve", "--bind", "0.0.0.0:8080"]
         EOF
 
         # Enterprise Dockerfile (all features)
         cat > Dockerfile.enterprise << 'EOF'
-        FROM rust:1.75-slim as builder
+        # Server "enterprise" image: all ML backends, built natively for amd64.
+        # NOTE: deliberately NOT --all-features. That pulls the `desktop` feature
+        # (tauri -> GTK/webkit) which cannot build in a headless server container.
+        # We build ml-backends (gguf + onnx) plus the rustls `download` feature.
+        # llama-cpp-2 (gguf) needs cmake + clang/libclang (bindgen). rust 1.90: edition 2024.
+        FROM rust:1.90-slim-bookworm AS builder
 
         RUN apt-get update && apt-get install -y \
             pkg-config \
             libssl-dev \
             build-essential \
+            cmake \
+            clang \
+            libclang-dev \
             protobuf-compiler \
             && rm -rf /var/lib/apt/lists/*
 
         WORKDIR /app
 
-        # Copy manifests
-        COPY Cargo.toml Cargo.lock ./
-        RUN mkdir src && echo "fn main() {}" > src/main.rs
-        RUN cargo build --release --all-features && rm -rf src
+        # benches/ and tests/ required for manifest parse; build.rs required.
+        COPY Cargo.toml Cargo.lock build.rs ./
+        COPY src ./src
+        COPY benches ./benches
+        COPY tests ./tests
 
-        # Build with all features
-        COPY . .
-        RUN cargo build --release --all-features --bin inferno
+        RUN cargo build --release --no-default-features --features ml-backends,download --bin inferno
 
         # Runtime stage with enterprise monitoring tools
         FROM debian:bookworm-slim
@@ -255,6 +292,7 @@ jobs:
         RUN apt-get update && apt-get install -y \
             ca-certificates \
             libssl3 \
+            libgomp1 \
             curl \
             htop \
             procps \
@@ -263,6 +301,20 @@ jobs:
         # Add monitoring and management tools
         RUN curl -L https://github.com/prometheus/node_exporter/releases/download/v1.6.1/node_exporter-1.6.1.linux-amd64.tar.gz \
             | tar xz --strip-components=1 -C /usr/local/bin/ node_exporter-1.6.1.linux-amd64/node_exporter
+
+        # ONNX Runtime shared library. The enterprise image builds the onnx backend
+        # (ml-backends -> onnx -> ort with the load-dynamic feature), which dlopens
+        # libonnxruntime at runtime rather than linking it. Without this the binary
+        # runs but any onnx inference fails with a dlopen error. ort 2.0.0-rc.12
+        # targets ONNX Runtime 1.24, so pin the matching shared library.
+        RUN curl -L https://github.com/microsoft/onnxruntime/releases/download/v1.24.1/onnxruntime-linux-x64-1.24.1.tgz \
+              -o /tmp/onnxruntime.tgz \
+            && tar xzf /tmp/onnxruntime.tgz -C /tmp \
+            && cp /tmp/onnxruntime-linux-x64-1.24.1/lib/libonnxruntime.so* /usr/local/lib/ \
+            && ln -sf /usr/local/lib/libonnxruntime.so.1.24.1 /usr/local/lib/libonnxruntime.so \
+            && ldconfig \
+            && rm -rf /tmp/onnxruntime.tgz /tmp/onnxruntime-linux-x64-1.24.1
+        ENV ORT_DYLIB_PATH=/usr/local/lib/libonnxruntime.so
 
         COPY --from=builder /app/target/release/inferno /usr/local/bin/inferno
 
@@ -280,7 +332,8 @@ jobs:
             CMD curl -f http://localhost:8080/health || exit 1
 
         ENTRYPOINT ["inferno"]
-        CMD ["serve", "--enterprise"]
+        # serve has no --enterprise flag; enterprise features are compiled in.
+        CMD ["serve", "--bind", "0.0.0.0:8080"]
         EOF
 
     - name: Upload Dockerfiles
@@ -295,6 +348,9 @@ jobs:
     name: Build Containers
     runs-on: ubuntu-latest
     needs: [build-matrix, prepare-dockerfiles]
+    permissions:
+      contents: read
+      packages: write          # push images to ghcr.io on main/tags
     timeout-minutes: 60
     strategy:
       fail-fast: false
@@ -378,8 +434,22 @@ jobs:
         # Test configuration validation
         docker run --rm test-image:${{ matrix.variant }} config validate || echo "Config validation test completed"
 
-        # Test server startup (timeout after 10 seconds)
-        timeout 10s docker run --rm -p 8080:8080 test-image:${{ matrix.variant }} serve --test-mode || echo "Server startup test completed"
+        # Test server startup. The server should stay up until killed; `timeout`
+        # returns 124 when it has to kill a still-running process (the success case).
+        # Any other non-zero exit means the binary crashed on boot, which must fail
+        # the job (this previously hid behind `serve --test-mode || echo`, a flag
+        # that does not exist - the command errored and was swallowed).
+        echo "Testing server startup for ${{ matrix.variant }}"
+        set +e
+        timeout 10s docker run --rm -p 8080:8080 test-image:${{ matrix.variant }} serve --bind 0.0.0.0:8080
+        code=$?
+        set -e
+        if [ "$code" -eq 124 ]; then
+          echo "Server stayed up until timeout (ok)"
+        else
+          echo "Server exited early with code $code"
+          exit 1
+        fi
 
     - name: Generate SBOM
       uses: anchore/sbom-action@v0
@@ -400,9 +470,17 @@ jobs:
     name: Security Scan
     runs-on: ubuntu-latest
     needs: [build-containers]
+    permissions:
+      contents: read
+      security-events: write   # upload Trivy SARIF results to code scanning
     if: github.event.inputs.scan_vulnerabilities != 'false'
-    timeout-minutes: 20
+    # The scan rebuilds each image to load it locally; the alpine/musl minimal
+    # build recompiles from scratch and needs more than 20 min. (A future
+    # improvement would export the image from build-containers as an artifact
+    # and docker-load it here instead of rebuilding.)
+    timeout-minutes: 45
     strategy:
+      fail-fast: false
       matrix:
         variant: [minimal, standard, gpu, enterprise]
 
@@ -421,8 +499,9 @@ jobs:
     - name: Build image for scanning
       run: |
         docker buildx build \
-          --file Dockerfile.${{ matrix.variant == 'standard' && '' || matrix.variant }} \
+          --file ${{ matrix.variant == 'standard' && 'Dockerfile' || format('Dockerfile.{0}', matrix.variant) }} \
           --tag scan-image:${{ matrix.variant }} \
+          --cache-from type=gha \
           --load \
           .
 
@@ -446,7 +525,7 @@ jobs:
         SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
       with:
         image: scan-image:${{ matrix.variant }}
-        args: --severity-threshold=high --file=Dockerfile.${{ matrix.variant == 'standard' && '' || matrix.variant }}
+        args: --severity-threshold=high --file=${{ matrix.variant == 'standard' && 'Dockerfile' || format('Dockerfile.{0}', matrix.variant) }}
 
     - name: Container structure test
       run: |
@@ -484,6 +563,10 @@ jobs:
     name: Sign Container Images
     runs-on: ubuntu-latest
     needs: [build-containers, security-scan]
+    permissions:
+      contents: read
+      packages: write          # read/write image manifests in ghcr.io
+      id-token: write          # keyless cosign signing via OIDC
     if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/'))
     timeout-minutes: 15
     strategy:
@@ -585,6 +668,9 @@ jobs:
     name: Container Build Report
     runs-on: ubuntu-latest
     needs: [build-containers, security-scan, sign-images, publish-registries]
+    permissions:
+      contents: read
+      pull-requests: write     # post the container build report comment on PRs
     if: always()
     timeout-minutes: 10
 
@@ -607,10 +693,10 @@ jobs:
 
         | Variant | Status | Platforms | Features |
         |---------|--------|-----------|----------|
-        | Minimal | ${{ needs.build-containers.result }} | linux/amd64,linux/arm64 | Basic CLI only |
-        | Standard | ${{ needs.build-containers.result }} | linux/amd64,linux/arm64 | Full features |
-        | GPU | ${{ needs.build-containers.result }} | linux/amd64 | GPU acceleration |
-        | Enterprise | ${{ needs.build-containers.result }} | linux/amd64,linux/arm64 | All features + monitoring |
+        | Minimal | ${{ needs.build-containers.result }} | linux/amd64 | Basic CLI, no default features (musl/alpine) |
+        | Standard | ${{ needs.build-containers.result }} | linux/amd64,linux/arm64 | Default features (rustls download) |
+        | GPU | ${{ needs.build-containers.result }} | linux/amd64 | gpu-vulkan + Vulkan runtime libs |
+        | Enterprise | ${{ needs.build-containers.result }} | linux/amd64 | ML backends (gguf+onnx) + monitoring |
 
         ## 🔒 Security Status
 
@@ -662,7 +748,7 @@ jobs:
         docker run -p 8080:8080 ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest serve
 
         # With GPU support
-        docker run --gpus all -p 8080:8080 ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:gpu serve --gpu
+        docker run --gpus all -p 8080:8080 ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:gpu serve --bind 0.0.0.0:8080
         ```
         EOF
 
@@ -675,6 +761,7 @@ jobs:
 
     - name: Post report to PR
       if: github.event_name == 'pull_request'
+      continue-on-error: true  # commenting may be blocked (e.g. fork PRs); don't fail the report
       uses: actions/github-script@v7
       with:
         script: |
