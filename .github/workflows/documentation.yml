@@ -69,10 +69,10 @@ jobs:
 
     - name: Install documentation tools
       run: |
+        # mdbook 0.5 broke the third-party preprocessor ecosystem (admonish/mermaid/
+        # linkcheck fail to parse the 0.5 preprocessor context), so we no longer
+        # configure or install them - the book builds with core HTML output + search.
         cargo install mdbook --locked
-        cargo install mdbook-admonish --locked
-        cargo install mdbook-mermaid --locked
-        cargo install mdbook-linkcheck --locked
         cargo install cargo-readme --locked
 
     - name: Generate API documentation
@@ -113,21 +113,9 @@ jobs:
         title = "Inferno User Guide"
         description = "Complete guide to using Inferno AI/ML platform"
 
-        [preprocessor.admonish]
-        command = "mdbook-admonish"
-        assets_version = "3.0.0"
-
-        [preprocessor.mermaid]
-        command = "mdbook-mermaid"
-
-        [preprocessor.linkcheck]
-        command = "mdbook-linkcheck"
-
         [output.html]
-        additional-css = ["theme/custom.css"]
-        additional-js = ["theme/custom.js"]
-        git-repository-url = "https://github.com/inferno-ai/inferno"
-        edit-url-template = "https://github.com/inferno-ai/inferno/edit/main/docs/{path}"
+        git-repository-url = "https://github.com/ringo380/inferno"
+        edit-url-template = "https://github.com/ringo380/inferno/edit/main/docs/{path}"
 
         [output.html.search]
         enable = true

@@ -273,6 +273,9 @@ jobs:
   security-compliance:
     name: Security Compliance
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write   # upload the Semgrep SARIF to code scanning
     # Only run on PR, schedule, or manual trigger (not push)
     if: github.event_name != 'push'
     timeout-minutes: 25
@@ -325,16 +328,21 @@ jobs:
         cargo geiger > security_reports/geiger.txt 2>&1 || true
 
     - name: SAST with Semgrep
-      uses: returntocorp/semgrep-action@v1
-      with:
-        config: >-
-          p/security-audit
-          p/rust
-          p/secrets
-          p/owasp-top-ten
-        generateSarif: "1"
+      continue-on-error: true  # SAST is advisory; registry/network hiccups must not fail the gate
+      run: |
+        # returntocorp/semgrep-action@v1 is deprecated and its SARIF path is broken;
+        # run the maintained CLI directly instead.
+        pip install semgrep --break-system-packages || pip install semgrep
+        semgrep scan \
+          --config p/security-audit \
+          --config p/rust \
+          --config p/secrets \
+          --config p/owasp-top-ten \
+          --sarif --output semgrep.sarif --metrics=off || true
 
     - name: Upload Semgrep SARIF
+      if: hashFiles('semgrep.sarif') != ''
+      continue-on-error: true  # code scanning upload may be unavailable (e.g. fork PRs)
       uses: github/codeql-action/upload-sarif@v3
       with:
         sarif_file: semgrep.sarif
