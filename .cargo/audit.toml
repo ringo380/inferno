@@ -1,0 +1,11 @@
+# cargo-audit configuration.
+# Advisories listed here are acknowledged and intentionally not failing CI.
+[advisories]
+ignore = [
+    # rsa "Marvin Attack" timing sidechannel. No fixed upgrade is available.
+    # rsa is pulled in transitively by jsonwebtoken's rust_crypto backend; we
+    # only issue and verify HMAC (HS256) JWTs and never use RSA-based JWT
+    # algorithms, so the vulnerable code path is not exercised. Revisit if a
+    # fixed rsa release ships or if RSA JWT support is ever added.
+    "RUSTSEC-2023-0071",
+]
