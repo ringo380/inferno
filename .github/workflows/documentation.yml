@@ -16,6 +16,7 @@ on:
       - 'docs/**'
       - 'README.md'
       - 'Cargo.toml'
+      - '.github/workflows/documentation.yml'
   workflow_dispatch:
     inputs:
       deploy_preview:
