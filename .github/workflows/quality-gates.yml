@@ -33,7 +33,9 @@ jobs:
     runs-on: ubuntu-latest
     # Only run on PR, schedule, or manual trigger (not push)
     if: github.event_name != 'push'
-    timeout-minutes: 30
+    # Installs 7 cargo tools from source + clippy(all-features) + a release build
+    # + cargo-bloat; the cold-cache first run overran the old 30m limit.
+    timeout-minutes: 60
     outputs:
       quality-score: ${{ steps.quality-score.outputs.score }}
       complexity-score: ${{ steps.complexity.outputs.score }}

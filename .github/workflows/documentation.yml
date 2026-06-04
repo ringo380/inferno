@@ -38,7 +38,9 @@ jobs:
   build-docs:
     name: Build Documentation
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # cargo doc(all-features) + a release build + mdbook + git-cliff; the
+    # cold-cache first run overran the old 20m limit.
+    timeout-minutes: 45
 
     steps:
     - name: Checkout code
