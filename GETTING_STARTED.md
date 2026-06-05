@@ -477,7 +477,6 @@ fi
 ### Documentation
 
 - [Full API Reference](API.md)
-- [Configuration Guide](DEVELOPMENT.md)
 - [Examples Directory](examples/)
 - [Architecture Overview](ARCHITECTURE.md)
 

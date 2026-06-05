@@ -311,7 +311,6 @@ max_size_gb = 10
 
 ## 🛠️ Development
 
-See [DEVELOPMENT.md](DEVELOPMENT.md) for comprehensive development documentation.
 
 ```bash
 # Run tests

@@ -12,7 +12,7 @@
 //! These tests validate Metal GPU acceleration performance on macOS.
 //! They are automatically skipped on non-macOS platforms.
 //!
-//! Performance targets :
+//! Performance targets:
 //! - 7B models: >30 tokens/sec on M1 Max
 //! - 13B models: >15 tokens/sec on M2 Max
 //! - 70B models: >5 tokens/sec on M4 Max (with unified memory)

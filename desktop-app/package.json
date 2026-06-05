@@ -29,8 +29,7 @@
     "machine-learning"
   ],
   "files": [
-    "README.md",
-    "DEVELOPMENT.md"
+    "README.md"
   ],
   "engines": {
     "node": ">=18.0.0"

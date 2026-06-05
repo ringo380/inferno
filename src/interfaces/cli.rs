@@ -143,7 +143,6 @@
 //! }
 //! ```
 //!
-//! See `docs/plans/phase2-cli-architecture.md` for migration guide.
 
 pub mod command;
 pub mod context;

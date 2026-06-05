@@ -530,6 +530,5 @@ let value = ctx.get_state::<Type>("key");  // Get
 ## See Also
 
 - **Examples**: `examples/cli_architecture.rs`
-- **Planning Doc**: `docs/plans/phase2-cli-architecture.md`
 - **Core Config**: `src/core/config/README.md`
 - **Legacy CLI**: `src/cli/` (old command files)

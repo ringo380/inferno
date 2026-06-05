@@ -227,7 +227,6 @@ build-desktop:
 
 ## See Also
 
-- [DEVELOPMENT.md](../DEVELOPMENT.md) - Development workflow and commands
 - [README.md](../README.md) - Project overview
 - [Cargo.toml](../Cargo.toml) - Dependency configuration
 - [.cargo/config.toml](../.cargo/config.toml) - Platform-specific compiler flags

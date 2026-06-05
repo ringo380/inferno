@@ -161,7 +161,7 @@ fn test_error_handling_scenarios() {
 fn test_configuration_integration() {
     println!("\n⚙️ Testing Configuration Integration...");
 
-    // Test configuration loading hierarchy 
+    // Test configuration loading hierarchy
     let config_tests = vec![
         ("Default configuration", true),
         ("Environment variable override", true),

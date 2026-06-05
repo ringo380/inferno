@@ -488,7 +488,6 @@ export INFERNO_GPU_MEMORY_FRACTION=0.8
 ## 📚 Additional Resources
 
 - [Full API Documentation](../API.md)
-- [Configuration Guide](../DEVELOPMENT.md)
 - [Security Best Practices](../SECURITY.md)
 - [Performance Optimization](../PERFORMANCE.md)
 - [Contributing Guide](../CONTRIBUTING.md)

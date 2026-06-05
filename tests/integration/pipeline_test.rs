@@ -128,7 +128,7 @@ fn test_configuration_structure() {
     println!("   ✓ Model info structure defined");
     println!("   ✓ Inference parameters structure defined");
 
-    // Test configuration hierarchy 
+    // Test configuration hierarchy
     let config_sources = vec![
         "CLI arguments (highest priority)",
         "Environment variables (INFERNO_*)",
