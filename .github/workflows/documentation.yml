@@ -314,6 +314,8 @@ jobs:
 
     - name: Setup Pages
       uses: actions/configure-pages@v4
+      with:
+        enablement: true
 
     - name: Prepare pages content
       run: |
@@ -347,7 +349,7 @@ jobs:
             <div class="nav">
                 <a href="./book.html">User Guide</a>
                 <a href="./api/inferno/index.html">API Documentation</a>
-                <a href="https://github.com/inferno-ai/inferno">GitHub Repository</a>
+                <a href="https://github.com/ringo380/inferno">GitHub Repository</a>
             </div>
             <p>Welcome to the Inferno AI/ML platform documentation.</p>
             <ul>
