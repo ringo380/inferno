@@ -69,7 +69,7 @@
     "lucide-react": "^0.298.0",
     "next": "^15.5.18",
     "next-themes": "^0.2.1",
-    "postcss": "^8",
+    "postcss": "^8.5.10",
     "react": "^18",
     "react-dom": "^18",
     "react-dropzone": "^14.2.3",
@@ -81,6 +81,10 @@
     "tailwindcss": "^3.3.0",
     "typescript": "^5",
     "zod": "^3.22.4"
+  },
+  "overrides": {
+    "postcss": "$postcss",
+    "uuid": "^11.1.1"
   },
   "devDependencies": {
     "@playwright/test": "^1.40.1",
