@@ -40,7 +40,7 @@ source ~/.cargo/env
 
 ```bash
 # Clone the repository
-git clone https://github.com/inferno-ai/inferno.git
+git clone https://github.com/ringo380/inferno.git
 cd inferno
 
 # Build the project
@@ -63,7 +63,7 @@ docker build -t inferno .
 
 ```bash
 # Download for your platform
-curl -L -o inferno https://github.com/inferno-ai/inferno/releases/latest/download/inferno-linux-x86_64
+curl -L -o inferno https://github.com/ringo380/inferno/releases/latest/download/inferno-linux-x86_64
 chmod +x inferno
 sudo mv inferno /usr/local/bin/
 ```
@@ -382,7 +382,7 @@ inferno observability status
 
 ```bash
 # Clone the examples
-git clone https://github.com/inferno-ai/inferno.git
+git clone https://github.com/ringo380/inferno.git
 cd inferno/examples
 
 # Start the full stack

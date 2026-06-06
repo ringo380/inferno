@@ -618,12 +618,12 @@ jobs:
             url: "docker.io"
             username_secret: "DOCKERHUB_USERNAME"
             password_secret: "DOCKERHUB_TOKEN"
-            image_name: "inferno-ai/inferno"
+            image_name: "ringo380/inferno"
           - name: "AWS ECR"
             url: "public.ecr.aws"
             username_secret: "AWS_ACCESS_KEY_ID"
             password_secret: "AWS_SECRET_ACCESS_KEY"
-            image_name: "inferno-ai/inferno"
+            image_name: "ringo380/inferno"
 
     steps:
     - name: Checkout code

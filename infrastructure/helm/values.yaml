@@ -9,7 +9,7 @@ global:
 # Image configuration
 image:
   registry: ghcr.io
-  repository: inferno-ai/inferno
+  repository: ringo380/inferno
   tag: "latest"
   pullPolicy: Always
   # Overrides the image tag whose default is the chart appVersion
@@ -18,13 +18,13 @@ image:
 # Image variants
 images:
   api:
-    repository: inferno-ai/inferno
+    repository: ringo380/inferno
     tag: "latest"
   worker:
-    repository: inferno-ai/inferno
+    repository: ringo380/inferno
     tag: "latest"
   gpu:
-    repository: inferno-ai/inferno
+    repository: ringo380/inferno
     tag: "gpu"
 
 # Service account configuration
@@ -58,7 +58,7 @@ api:
   replicaCount: 3
 
   image:
-    repository: inferno-ai/inferno
+    repository: ringo380/inferno
     tag: "latest"
     pullPolicy: Always
 
@@ -146,7 +146,7 @@ worker:
   replicaCount: 2
 
   image:
-    repository: inferno-ai/inferno
+    repository: ringo380/inferno
     tag: "latest"
     pullPolicy: Always
 
@@ -188,7 +188,7 @@ gpu:
   replicaCount: 1
 
   image:
-    repository: inferno-ai/inferno
+    repository: ringo380/inferno
     tag: "gpu"
     pullPolicy: Always
 

@@ -278,7 +278,7 @@ jobs:
         EOF
 
     - name: Upload documentation artifacts
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v5
       with:
         name: documentation-${{ github.sha }}
         path: |
@@ -307,13 +307,13 @@ jobs:
 
     steps:
     - name: Download documentation artifacts
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v5
       with:
         name: documentation-${{ github.sha }}
         path: docs
 
     - name: Setup Pages
-      uses: actions/configure-pages@v4
+      uses: actions/configure-pages@v5
       with:
         enablement: true
 
@@ -381,7 +381,7 @@ jobs:
 
     steps:
     - name: Download documentation artifacts
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v5
       with:
         name: documentation-${{ github.sha }}
         path: docs
@@ -413,7 +413,7 @@ jobs:
       uses: actions/checkout@v4
 
     - name: Download documentation artifacts
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v5
       with:
         name: documentation-${{ github.sha }}
         path: docs_artifacts

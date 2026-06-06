@@ -48,7 +48,7 @@ spec:
         fsGroup: 1000
       containers:
       - name: inferno-api
-        image: ghcr.io/inferno-ai/inferno:latest
+        image: ghcr.io/ringo380/inferno:latest
         imagePullPolicy: Always
         args:
           - "serve"
@@ -224,7 +224,7 @@ spec:
         fsGroup: 1000
       containers:
       - name: inferno-worker
-        image: ghcr.io/inferno-ai/inferno:latest
+        image: ghcr.io/ringo380/inferno:latest
         imagePullPolicy: Always
         args:
           - "worker"
@@ -367,7 +367,7 @@ spec:
         fsGroup: 1000
       containers:
       - name: inferno-gpu-worker
-        image: ghcr.io/inferno-ai/inferno:gpu
+        image: ghcr.io/ringo380/inferno:gpu
         imagePullPolicy: Always
         args:
           - "worker"

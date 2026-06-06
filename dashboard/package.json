@@ -4,10 +4,10 @@
   "description": "Enterprise-grade offline AI/ML model runner dashboard",
   "author": "Inferno Developers",
   "license": "MIT OR Apache-2.0",
-  "homepage": "https://github.com/inferno-ai/inferno",
+  "homepage": "https://github.com/ringo380/inferno",
   "repository": {
     "type": "git",
-    "url": "https://github.com/inferno-ai/inferno.git"
+    "url": "https://github.com/ringo380/inferno.git"
   },
   "keywords": [
     "ai",

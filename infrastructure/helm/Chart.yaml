@@ -6,9 +6,9 @@ description: A Helm chart for Inferno AI/ML platform
 type: application
 version: 1.0.0
 appVersion: "1.0.0"
-home: https://github.com/inferno-ai/inferno
+home: https://github.com/ringo380/inferno
 sources:
-  - https://github.com/inferno-ai/inferno
+  - https://github.com/ringo380/inferno
 maintainers:
   - name: Inferno Team
     email: team@inferno-ai.dev
