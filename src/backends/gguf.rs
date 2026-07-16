@@ -609,11 +609,29 @@ impl GgufBackend {
             );
         });
 
-        // Return stream that yields from channel receiver
+        // Return stream that yields from channel receiver.
+        //
+        // An invalid token is never model output, so it must not be yielded as
+        // text. The generator marks a fatal failure with a message and stops,
+        // while `StreamToken::invalid` reports a single detokenization failure
+        // with empty content and keeps going - so a message means the stream
+        // ends in an error, and an empty one means skip this token.
         let result_stream = stream! {
             let mut rx = rx;
             while let Some(stream_token) = rx.recv().await {
-                yield Ok(stream_token.content);
+                if stream_token.is_valid {
+                    yield Ok(stream_token.content);
+                } else if !stream_token.content.is_empty() {
+                    // These messages are written with an "Error: " prefix for the
+                    // channel; drop it so InfernoError does not restate it.
+                    let message = stream_token
+                        .content
+                        .strip_prefix("Error: ")
+                        .unwrap_or(&stream_token.content)
+                        .to_string();
+                    yield Err(InfernoError::Backend(message));
+                    return;
+                }
             }
         };
 

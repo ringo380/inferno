@@ -327,6 +327,45 @@ async fn test_streaming_inference() -> Result<()> {
     Ok(())
 }
 
+/// A prompt too large for the context window must reach the caller as a stream
+/// error. The rejection travels the same channel as generated tokens, so if the
+/// stream did not distinguish them it would hand callers the rejection message
+/// as if the model had written it.
+#[tokio::test]
+async fn test_streaming_rejects_oversized_prompt() -> Result<()> {
+    let Some(model_path) = test_utils::require_gguf_model() else {
+        return Ok(());
+    };
+    let config = test_utils::create_test_config();
+
+    let mut backend = Backend::new(BackendType::Gguf, &config)?;
+    let model_info = test_utils::model_info_for(&model_path).await?;
+    backend.load_model(&model_info).await?;
+
+    // Comfortably beyond the 512-token context window of the test config.
+    let oversized_prompt = "word ".repeat(4096);
+    let params = InferenceParams::default();
+
+    let mut stream = timeout(
+        Duration::from_secs(10),
+        backend.infer_stream(&oversized_prompt, &params),
+    )
+    .await??;
+
+    let first = timeout(Duration::from_secs(10), stream.next())
+        .await?
+        .expect("stream should report an outcome");
+    let error = first.expect_err("an over-context prompt must fail, not stream text");
+    assert!(
+        error.to_string().contains("context window"),
+        "Should report the context window as the cause, got: {}",
+        error
+    );
+
+    backend.unload_model().await?;
+    Ok(())
+}
+
 /// Test BackendHandle thread safety
 #[tokio::test]
 async fn test_backend_handle_thread_safety() -> Result<()> {
