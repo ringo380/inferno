@@ -26,9 +26,10 @@ fn test_ab_testing_start_command() {
         .arg("--treatment-model")
         .arg("model2");
 
-    cmd.assert().success().stdout(predicate::str::contains(
-        "A/B testing functionality is not yet implemented",
-    ));
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("A/B Test Configuration"))
+        .stdout(predicate::str::contains("Name: test1"));
 }
 
 #[test]
@@ -38,7 +39,7 @@ fn test_ab_testing_list_command() {
 
     cmd.assert()
         .success()
-        .stdout(predicate::str::contains("Would list all A/B tests"));
+        .stdout(predicate::str::contains("A/B Tests"));
 }
 
 /// Test Job Queue Feature Integration
@@ -58,7 +59,7 @@ fn test_queue_list_empty() {
 
     cmd.assert()
         .success()
-        .stdout(predicate::str::contains("No job queues found"));
+        .stdout(predicate::str::contains("No queues found"));
 }
 
 #[test]
@@ -70,11 +71,14 @@ fn test_queue_create_command() {
         .arg("test-queue")
         .arg("--max-concurrent")
         .arg("5")
-        .arg("--priority-enabled");
+        .arg("test-queue-id");
 
-    cmd.assert().success().stdout(predicate::str::contains(
-        "Job queue management functionality is not yet implemented",
-    ));
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "Queue 'test-queue-id' created successfully",
+        ))
+        .stdout(predicate::str::contains("Max concurrent jobs: 5"));
 }
 
 /// Test GPU Management Feature Integration
@@ -92,9 +96,11 @@ fn test_gpu_list_command() {
     let mut cmd = Command::cargo_bin("inferno").unwrap();
     cmd.arg("gpu").arg("list");
 
-    cmd.assert().success().stdout(predicate::str::contains(
-        "GPU management functionality is not yet implemented",
-    ));
+    // Output depends on the host: a table of GPUs where one is present, the
+    // empty-set message otherwise. Both are a successful listing.
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("No GPUs found").or(predicate::str::contains("Vendor")));
 }
 
 #[test]
@@ -126,12 +132,17 @@ fn test_versioning_cli_integration() {
 
 #[test]
 fn test_versioning_list_command() {
-    let mut cmd = Command::cargo_bin("inferno").unwrap();
-    cmd.arg("version").arg("list");
+    // The version registry lives at "./models/versions" relative to the working
+    // directory (VersioningConfig::default), so run from a tempdir to get an
+    // empty registry instead of whatever exists in the checkout.
+    let temp_dir = tempdir().unwrap();
 
-    cmd.assert().success().stdout(predicate::str::contains(
-        "Model versioning functionality is not yet implemented",
-    ));
+    let mut cmd = Command::cargo_bin("inferno").unwrap();
+    cmd.arg("version").arg("list").current_dir(temp_dir.path());
+
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("No models found in registry"));
 }
 
 #[test]
@@ -140,18 +151,31 @@ fn test_versioning_create_command() {
     let model_path = temp_dir.path().join("test.gguf");
     fs::write(&model_path, b"GGUF\x00\x00\x00\x01test data").unwrap();
 
+    // `version create` writes its registry to "./models/versions" relative to the
+    // working directory, so run from the tempdir to keep it out of the checkout.
     let mut cmd = Command::cargo_bin("inferno").unwrap();
     cmd.arg("version")
         .arg("create")
-        .arg("--model")
-        .arg("test-model")
+        .arg("--model-type")
+        .arg("llm")
+        .arg("--architecture")
+        .arg("transformer")
+        .arg("--framework")
+        .arg("onnx")
+        .arg("--framework-version")
+        .arg("1.0")
+        .arg("--format")
+        .arg("gguf")
+        .arg("--created-by")
+        .arg("integration-test")
         .arg("--version")
         .arg("1.0.0")
-        .arg("--file")
-        .arg(model_path.to_str().unwrap());
+        .arg("test-model")
+        .arg(model_path.to_str().unwrap())
+        .current_dir(temp_dir.path());
 
     cmd.assert().success().stdout(predicate::str::contains(
-        "Model versioning functionality is not yet implemented",
+        "Model version created successfully",
     ));
 }
 
@@ -170,9 +194,9 @@ fn test_monitoring_status_command() {
     let mut cmd = Command::cargo_bin("inferno").unwrap();
     cmd.arg("monitor").arg("status");
 
-    cmd.assert().success().stdout(predicate::str::contains(
-        "Real-time monitoring functionality is not yet implemented",
-    ));
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("Monitoring System Status"));
 }
 
 /// Test Audit Feature Integration
@@ -190,9 +214,9 @@ fn test_audit_query_command() {
     let mut cmd = Command::cargo_bin("inferno").unwrap();
     cmd.arg("audit").arg("query").arg("--limit").arg("10");
 
-    cmd.assert().success().stdout(predicate::str::contains(
-        "Audit logging functionality is not yet implemented",
-    ));
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("No events found"));
 }
 
 /// Test Distributed Processing Feature Integration
@@ -208,11 +232,11 @@ fn test_distributed_cli_integration() {
 #[test]
 fn test_distributed_status_command() {
     let mut cmd = Command::cargo_bin("inferno").unwrap();
-    cmd.arg("distributed").arg("status");
+    cmd.arg("distributed").arg("stats");
 
-    cmd.assert().success().stdout(predicate::str::contains(
-        "Distributed processing functionality is not yet implemented",
-    ));
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("Distributed Configuration"));
 }
 
 /// Test Metrics Feature Integration
@@ -228,11 +252,11 @@ fn test_metrics_cli_integration() {
 #[test]
 fn test_metrics_show_command() {
     let mut cmd = Command::cargo_bin("inferno").unwrap();
-    cmd.arg("metrics").arg("show");
+    cmd.arg("metrics").arg("snapshot");
 
-    cmd.assert().success().stdout(predicate::str::contains(
-        "Metrics functionality is not yet implemented",
-    ));
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("inference_metrics"));
 }
 
 /// Test Cache Feature Integration
@@ -248,11 +272,11 @@ fn test_cache_cli_integration() {
 #[test]
 fn test_cache_status_command() {
     let mut cmd = Command::cargo_bin("inferno").unwrap();
-    cmd.arg("cache").arg("status");
+    cmd.arg("cache").arg("stats");
 
-    cmd.assert().success().stdout(predicate::str::contains(
-        "Model cache functionality is not yet implemented",
-    ));
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("Model Cache Statistics"));
 }
 
 /// Test Response Cache Feature Integration
