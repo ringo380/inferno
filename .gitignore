@@ -55,6 +55,7 @@ dashboard/**/*.log
 /models/*.onnx
 /test_models/*.gguf
 /test_models/*.onnx
+/test_models/.inferno_cache/
 /dashboard/test_models/
 
 # Runtime files

@@ -70,7 +70,7 @@ impl EnhancedCliParser {
             crate::cli::fuzzy::CommandValidation::Valid => {
                 // Command is valid, check for subcommand suggestions if applicable
                 if args.len() > 2 {
-                    let subcommand = format!("{} {}", command, &args[2]);
+                    let subcommand = format!("{} {}", command, args[2]);
                     if let Some(suggestion) = self.fuzzy_matcher.suggest_command(&subcommand) {
                         if suggestion != subcommand {
                             self.print_subcommand_suggestion(&subcommand, &suggestion);

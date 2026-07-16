@@ -254,10 +254,9 @@ impl StatisticsAggregator {
     pub fn calculate_trend(&self, metric_name: &str) -> Option<TrendDirection> {
         let values = if let Some(vals) = self.phase_durations.get(metric_name) {
             vals.clone()
-        } else if let Some(vals) = self.per_model_stats.get(metric_name) {
-            vals.clone()
         } else {
-            return None;
+            let vals = self.per_model_stats.get(metric_name)?;
+            vals.clone()
         };
 
         if values.len() < 2 {

@@ -136,7 +136,7 @@ impl JobScheduler {
         // Read jobs and identify which ones need to run
         {
             let jobs = scheduled_jobs.read().await;
-            for (_job_id, entry) in jobs.iter() {
+            for entry in jobs.values() {
                 if !entry.enabled {
                     continue;
                 }
