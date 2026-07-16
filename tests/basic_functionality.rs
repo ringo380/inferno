@@ -13,11 +13,11 @@ fn test_config_creation() {
 
 #[test]
 fn test_backend_types() {
-    use backends::BackendType;
-
     // Note: BackendType variants are feature-gated, using Gguf as default
     #[cfg(feature = "gguf")]
     {
+        use backends::BackendType;
+
         let gguf_type = BackendType::Gguf;
         assert_eq!(format!("{:?}", gguf_type), "Gguf");
     }

@@ -744,8 +744,8 @@ impl TrafficRouter {
         match self.routing_strategy {
             RoutingStrategy::Random => {
                 use rand::Rng;
-                let mut rng = rand::thread_rng();
-                let random_value: f64 = rng.gen();
+                let mut rng = rand::rng();
+                let random_value: f64 = rng.random();
 
                 if random_value < test.traffic_allocation.treatment_percentage / 100.0 {
                     Ok("treatment".to_string())

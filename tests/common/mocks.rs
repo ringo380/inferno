@@ -60,7 +60,7 @@ impl MockBackend {
 
     fn should_fail(&self) -> bool {
         use rand::Rng;
-        rand::thread_rng().gen::<f64>() < self.failure_rate
+        rand::rng().random::<f64>() < self.failure_rate
     }
 
     fn simulate_inference(&mut self, input: &str) -> Result<String> {
@@ -212,7 +212,7 @@ impl MockModelManager {
 
         if self.failure_rate > 0.0 {
             use rand::Rng;
-            if rand::thread_rng().gen::<f64>() < self.failure_rate {
+            if rand::rng().random::<f64>() < self.failure_rate {
                 return Err(anyhow::anyhow!("Mock model discovery failed"));
             }
         }
@@ -289,7 +289,7 @@ impl MockAuditSystem {
 
         if self.failure_rate > 0.0 {
             use rand::Rng;
-            if rand::thread_rng().gen::<f64>() < self.failure_rate {
+            if rand::rng().random::<f64>() < self.failure_rate {
                 return Err(anyhow::anyhow!("Mock audit system failed"));
             }
         }
@@ -370,7 +370,7 @@ impl MockBatchProcessor {
 
         if self.failure_rate > 0.0 {
             use rand::Rng;
-            if rand::thread_rng().gen::<f64>() < self.failure_rate {
+            if rand::rng().random::<f64>() < self.failure_rate {
                 return Err(anyhow::anyhow!("Mock processor failed to process job"));
             }
         }
@@ -424,7 +424,7 @@ impl MockResponseCache {
     pub async fn get(&self, key: &str) -> Result<Option<String>> {
         if self.failure_rate > 0.0 {
             use rand::Rng;
-            if rand::thread_rng().gen::<f64>() < self.failure_rate {
+            if rand::rng().random::<f64>() < self.failure_rate {
                 return Err(anyhow::anyhow!("Mock cache get failed"));
             }
         }
@@ -444,7 +444,7 @@ impl MockResponseCache {
     pub async fn set(&self, key: &str, value: &str) -> Result<()> {
         if self.failure_rate > 0.0 {
             use rand::Rng;
-            if rand::thread_rng().gen::<f64>() < self.failure_rate {
+            if rand::rng().random::<f64>() < self.failure_rate {
                 return Err(anyhow::anyhow!("Mock cache set failed"));
             }
         }

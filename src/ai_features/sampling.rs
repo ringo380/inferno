@@ -75,7 +75,7 @@ impl Sampler {
         // Initialize RNG with seed if provided, otherwise use entropy
         let rng = match config.seed {
             Some(seed) => StdRng::seed_from_u64(seed),
-            None => StdRng::from_entropy(),
+            None => StdRng::from_os_rng(),
         };
 
         Self {
@@ -260,7 +260,7 @@ impl Sampler {
         let probs: Vec<f32> = scores.iter().map(|s| s / sum).collect();
 
         // Sample using cumulative distribution with proper RNG
-        let threshold: f32 = self.rng.gen_range(0.0..1.0);
+        let threshold: f32 = self.rng.random_range(0.0..1.0);
 
         let mut cumulative = 0.0;
         for (i, prob) in probs.iter().enumerate() {
