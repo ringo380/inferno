@@ -126,7 +126,7 @@ impl BatchProcessor {
     ) -> Result<BatchProgress> {
         if self.config.shuffle_inputs {
             use rand::seq::SliceRandom;
-            inputs.shuffle(&mut rand::thread_rng());
+            inputs.shuffle(&mut rand::rng());
         }
 
         let total_items = inputs.len();

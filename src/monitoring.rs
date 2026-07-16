@@ -785,21 +785,21 @@ pub struct AggregatedMetrics {
 // Utility function to create test metrics for monitoring
 pub fn create_test_metric(model_id: &str) -> PerformanceMetric {
     use rand::Rng;
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
 
     PerformanceMetric {
         timestamp: SystemTime::now(),
         model_id: model_id.to_string(),
-        response_time_ms: rng.gen_range(100..2000),
-        throughput_rps: rng.gen_range(1.0..10.0),
-        error_rate_percent: rng.gen_range(0.0..5.0),
-        memory_usage_mb: rng.gen_range(512..4096),
-        cpu_usage_percent: rng.gen_range(10.0..80.0),
-        queue_depth: rng.gen_range(0..50),
-        cache_hit_rate_percent: rng.gen_range(60.0..95.0),
-        active_connections: rng.gen_range(1..20),
-        total_requests: rng.gen_range(100..1000),
-        successful_requests: rng.gen_range(90..950),
-        failed_requests: rng.gen_range(0..50),
+        response_time_ms: rng.random_range(100..2000),
+        throughput_rps: rng.random_range(1.0..10.0),
+        error_rate_percent: rng.random_range(0.0..5.0),
+        memory_usage_mb: rng.random_range(512..4096),
+        cpu_usage_percent: rng.random_range(10.0..80.0),
+        queue_depth: rng.random_range(0..50),
+        cache_hit_rate_percent: rng.random_range(60.0..95.0),
+        active_connections: rng.random_range(1..20),
+        total_requests: rng.random_range(100..1000),
+        successful_requests: rng.random_range(90..950),
+        failed_requests: rng.random_range(0..50),
     }
 }

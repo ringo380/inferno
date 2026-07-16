@@ -620,13 +620,13 @@ impl SecurityManager {
 
     fn generate_secure_key(&self) -> String {
         const CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
 
         // Generate a 32-character key with prefix
         let prefix = "inf_";
         let key_part: String = (0..28)
             .map(|_| {
-                let idx = rng.gen_range(0..CHARSET.len());
+                let idx = rng.random_range(0..CHARSET.len());
                 CHARSET[idx] as char
             })
             .collect();
