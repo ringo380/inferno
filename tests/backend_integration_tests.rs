@@ -1,10 +1,8 @@
 use anyhow::Result;
 use futures::StreamExt;
 use inferno::{
-    InfernoError,
     backends::{Backend, BackendConfig, BackendHandle, BackendType, InferenceParams},
     cache::{CacheConfig, ModelCache},
-    config::Config,
     models::{ModelInfo, ModelManager},
 };
 use std::{path::PathBuf, sync::Arc, time::Duration};
@@ -72,6 +70,75 @@ mod test_utils {
         content
     }
 
+    /// Real model files to exercise loading and inference against.
+    ///
+    /// Loading runs the genuine llama.cpp / ONNX Runtime loaders, which reject
+    /// the synthetic fixtures above - those only carry a plausible header, not a
+    /// real model. So these paths must come from the environment:
+    /// `INFERNO_TEST_MODEL` for a GGUF file, `INFERNO_TEST_ONNX_MODEL` for ONNX.
+    /// Set either (or both) to run the load tests; with neither set they skip.
+    pub fn real_models() -> Vec<(BackendType, PathBuf)> {
+        let mut models = Vec::new();
+
+        for (var, backend_type) in [
+            ("INFERNO_TEST_MODEL", BackendType::Gguf),
+            ("INFERNO_TEST_ONNX_MODEL", BackendType::Onnx),
+        ] {
+            if let Some(value) = std::env::var_os(var) {
+                let path = PathBuf::from(value);
+                // A typo'd path must fail loudly rather than skip silently -
+                // a skip here would look identical to "not configured".
+                assert!(
+                    path.is_file(),
+                    "{} is set to {}, which is not a file",
+                    var,
+                    path.display()
+                );
+                models.push((backend_type, path));
+            }
+        }
+
+        models
+    }
+
+    /// The configured real models, or `None` after reporting a skip when the
+    /// environment supplies none.
+    pub fn require_real_models() -> Option<Vec<(BackendType, PathBuf)>> {
+        let models = real_models();
+        if models.is_empty() {
+            eprintln!(
+                "SKIP: set INFERNO_TEST_MODEL (GGUF) and/or INFERNO_TEST_ONNX_MODEL (ONNX) \
+                 to real model files to run this test"
+            );
+            return None;
+        }
+        Some(models)
+    }
+
+    /// A real GGUF model, or `None` after reporting a skip. For tests that are
+    /// GGUF-specific and cannot fall back to ONNX.
+    pub fn require_gguf_model() -> Option<PathBuf> {
+        let path = real_models()
+            .into_iter()
+            .find(|(backend_type, _)| *backend_type == BackendType::Gguf)
+            .map(|(_, path)| path);
+
+        if path.is_none() {
+            eprintln!("SKIP: set INFERNO_TEST_MODEL to a real GGUF file to run this test");
+        }
+        path
+    }
+
+    /// Resolve a real model file into the `ModelInfo` the backends consume.
+    pub async fn model_info_for(path: &std::path::Path) -> Result<ModelInfo> {
+        let models_dir = path
+            .parent()
+            .expect("model path should have a parent directory");
+        ModelManager::new(models_dir)
+            .resolve_model(path.to_str().expect("model path should be UTF-8"))
+            .await
+    }
+
     pub fn create_test_config() -> BackendConfig {
         BackendConfig {
             gpu_enabled: false,
@@ -82,41 +149,21 @@ mod test_utils {
             memory_map: true,
         }
     }
-
-    pub async fn wait_for_condition<F, Fut>(
-        mut condition: F,
-        timeout_duration: Duration,
-    ) -> Result<()>
-    where
-        F: FnMut() -> Fut,
-        Fut: std::future::Future<Output = bool>,
-    {
-        let start = std::time::Instant::now();
-        while start.elapsed() < timeout_duration {
-            if condition().await {
-                return Ok(());
-            }
-            tokio::time::sleep(Duration::from_millis(50)).await;
-        }
-        anyhow::bail!("Condition not met within timeout")
-    }
 }
 
 /// Test backend creation and basic operations
 #[tokio::test]
 async fn test_backend_creation_and_basic_ops() -> Result<()> {
-    let temp_dir = TempDir::new()?;
-    let model_files = test_utils::create_test_model_files(&temp_dir)?;
     let config = test_utils::create_test_config();
 
     // Test GGUF backend creation
-    let mut gguf_backend = Backend::new(BackendType::Gguf, &config)?;
+    let gguf_backend = Backend::new(BackendType::Gguf, &config)?;
     assert_eq!(gguf_backend.get_backend_type(), BackendType::Gguf);
     assert!(!gguf_backend.is_loaded().await);
     assert!(gguf_backend.get_model_info().await.is_none());
 
     // Test ONNX backend creation
-    let mut onnx_backend = Backend::new(BackendType::Onnx, &config)?;
+    let onnx_backend = Backend::new(BackendType::Onnx, &config)?;
     assert_eq!(onnx_backend.get_backend_type(), BackendType::Onnx);
     assert!(!onnx_backend.is_loaded().await);
     assert!(onnx_backend.get_model_info().await.is_none());
@@ -127,29 +174,18 @@ async fn test_backend_creation_and_basic_ops() -> Result<()> {
 /// Test model loading and unloading
 #[tokio::test]
 async fn test_model_loading_lifecycle() -> Result<()> {
-    let temp_dir = TempDir::new()?;
-    let model_files = test_utils::create_test_model_files(&temp_dir)?;
+    let Some(models) = test_utils::require_real_models() else {
+        return Ok(());
+    };
     let config = test_utils::create_test_config();
 
-    let mut model_manager = ModelManager::new(temp_dir.path().to_path_buf());
-    let models = model_manager.discover_models().await?;
-    assert!(!models.is_empty(), "Should discover test models");
-
-    for (backend_type, model_path) in [
-        (BackendType::Gguf, &model_files[0]),
-        (BackendType::Onnx, &model_files[1]),
-    ] {
+    for (backend_type, model_path) in models {
         let mut backend = Backend::new(backend_type, &config)?;
-
-        // Find the corresponding model info
-        let model_info = models
-            .iter()
-            .find(|m| m.path == *model_path)
-            .expect("Should find model info");
+        let model_info = test_utils::model_info_for(&model_path).await?;
 
         // Test loading
         assert!(!backend.is_loaded().await);
-        backend.load_model(model_info).await?;
+        backend.load_model(&model_info).await?;
         assert!(backend.is_loaded().await);
 
         let loaded_info = backend.get_model_info().await;
@@ -165,28 +201,45 @@ async fn test_model_loading_lifecycle() -> Result<()> {
     Ok(())
 }
 
+/// Test that model discovery finds files by extension. This needs only the
+/// synthetic fixtures - discovery inspects the directory, never loading a model.
+#[tokio::test]
+async fn test_model_discovery() -> Result<()> {
+    let temp_dir = TempDir::new()?;
+    let model_files = test_utils::create_test_model_files(&temp_dir)?;
+
+    let model_manager = ModelManager::new(temp_dir.path());
+    let models = model_manager.list_models().await?;
+
+    assert_eq!(
+        models.len(),
+        model_files.len(),
+        "Should discover every model file written to the directory"
+    );
+    for model_path in &model_files {
+        assert!(
+            models.iter().any(|m| m.path == *model_path),
+            "Discovery should include {}",
+            model_path.display()
+        );
+    }
+
+    Ok(())
+}
+
 /// Test inference operations
 #[tokio::test]
 async fn test_backend_inference() -> Result<()> {
-    let temp_dir = TempDir::new()?;
-    let model_files = test_utils::create_test_model_files(&temp_dir)?;
+    let Some(models) = test_utils::require_real_models() else {
+        return Ok(());
+    };
     let config = test_utils::create_test_config();
 
-    let mut model_manager = ModelManager::new(temp_dir.path().to_path_buf());
-    let models = model_manager.discover_models().await?;
-
-    for (backend_type, model_path) in [
-        (BackendType::Gguf, &model_files[0]),
-        (BackendType::Onnx, &model_files[1]),
-    ] {
+    for (backend_type, model_path) in models {
         let mut backend = Backend::new(backend_type, &config)?;
+        let model_info = test_utils::model_info_for(&model_path).await?;
 
-        let model_info = models
-            .iter()
-            .find(|m| m.path == *model_path)
-            .expect("Should find model info");
-
-        backend.load_model(model_info).await?;
+        backend.load_model(&model_info).await?;
 
         // Test basic inference
         let params = InferenceParams::default();
@@ -221,20 +274,15 @@ async fn test_backend_inference() -> Result<()> {
 /// Test streaming inference
 #[tokio::test]
 async fn test_streaming_inference() -> Result<()> {
-    let temp_dir = TempDir::new()?;
-    let model_files = test_utils::create_test_model_files(&temp_dir)?;
+    let Some(model_path) = test_utils::require_gguf_model() else {
+        return Ok(());
+    };
     let config = test_utils::create_test_config();
 
-    let mut model_manager = ModelManager::new(temp_dir.path().to_path_buf());
-    let models = model_manager.discover_models().await?;
-
     let mut backend = Backend::new(BackendType::Gguf, &config)?;
-    let model_info = models
-        .iter()
-        .find(|m| m.path == model_files[0])
-        .expect("Should find GGUF model info");
+    let model_info = test_utils::model_info_for(&model_path).await?;
 
-    backend.load_model(model_info).await?;
+    backend.load_model(&model_info).await?;
 
     let mut params = InferenceParams::default();
     params.stream = true;
@@ -279,24 +327,58 @@ async fn test_streaming_inference() -> Result<()> {
     Ok(())
 }
 
+/// A prompt too large for the context window must reach the caller as a stream
+/// error. The rejection travels the same channel as generated tokens, so if the
+/// stream did not distinguish them it would hand callers the rejection message
+/// as if the model had written it.
+#[tokio::test]
+async fn test_streaming_rejects_oversized_prompt() -> Result<()> {
+    let Some(model_path) = test_utils::require_gguf_model() else {
+        return Ok(());
+    };
+    let config = test_utils::create_test_config();
+
+    let mut backend = Backend::new(BackendType::Gguf, &config)?;
+    let model_info = test_utils::model_info_for(&model_path).await?;
+    backend.load_model(&model_info).await?;
+
+    // Comfortably beyond the 512-token context window of the test config.
+    let oversized_prompt = "word ".repeat(4096);
+    let params = InferenceParams::default();
+
+    let mut stream = timeout(
+        Duration::from_secs(10),
+        backend.infer_stream(&oversized_prompt, &params),
+    )
+    .await??;
+
+    let first = timeout(Duration::from_secs(10), stream.next())
+        .await?
+        .expect("stream should report an outcome");
+    let error = first.expect_err("an over-context prompt must fail, not stream text");
+    assert!(
+        error.to_string().contains("context window"),
+        "Should report the context window as the cause, got: {}",
+        error
+    );
+
+    backend.unload_model().await?;
+    Ok(())
+}
+
 /// Test BackendHandle thread safety
 #[tokio::test]
 async fn test_backend_handle_thread_safety() -> Result<()> {
-    let temp_dir = TempDir::new()?;
-    let model_files = test_utils::create_test_model_files(&temp_dir)?;
+    let Some(model_path) = test_utils::require_gguf_model() else {
+        return Ok(());
+    };
     let config = test_utils::create_test_config();
 
-    let mut model_manager = ModelManager::new(temp_dir.path().to_path_buf());
-    let models = model_manager.discover_models().await?;
-
     let handle = BackendHandle::new_shared(BackendType::Gguf, &config)?;
-    let model_info = models
-        .iter()
-        .find(|m| m.path == model_files[0])
-        .expect("Should find GGUF model info");
+    let model_info = test_utils::model_info_for(&model_path).await?;
 
     // Load model in handle
-    handle.load_model(model_info).await?;
+    handle.load_model(&model_info).await?;
     assert!(handle.is_loaded().await);
 
     // Test concurrent access
@@ -307,9 +389,17 @@ async fn test_backend_handle_thread_safety() -> Result<()> {
     let params = InferenceParams::default();
     let input = "Test concurrent access";
 
+    // Each spawned task takes ownership of what it captures, so every task needs
+    // its own copy of the params rather than sharing one binding.
     let tasks = vec![
-        tokio::spawn(async move { handle1.infer(input, &params).await }),
-        tokio::spawn(async move { handle2.infer(input, &params).await }),
+        tokio::spawn({
+            let params = params.clone();
+            async move { handle1.infer(input, &params).await }
+        }),
+        tokio::spawn({
+            let params = params.clone();
+            async move { handle2.infer(input, &params).await }
+        }),
         tokio::spawn(async move { handle3.infer(input, &params).await }),
     ];
 
@@ -340,8 +430,8 @@ async fn test_backend_config_validation() -> Result<()> {
     let temp_dir = TempDir::new()?;
     let model_files = test_utils::create_test_model_files(&temp_dir)?;
 
-    let mut model_manager = ModelManager::new(temp_dir.path().to_path_buf());
-    let models = model_manager.discover_models().await?;
+    let model_manager = ModelManager::new(temp_dir.path());
+    let models = model_manager.list_models().await?;
 
     let mut backend = Backend::new(BackendType::Gguf, &invalid_config)?;
     let model_info = models
@@ -349,9 +439,16 @@ async fn test_backend_config_validation() -> Result<()> {
         .find(|m| m.path == model_files[0])
         .expect("Should find GGUF model info");
 
-    // Should fail to load with invalid config
+    // Config validation must reject the load before the model file is ever read.
+    // Assert on the reason, not just on failure: this fixture is not a loadable
+    // model, so a bare is_err() would pass even with validation removed.
     let load_result = backend.load_model(model_info).await;
-    assert!(load_result.is_err(), "Should fail with invalid config");
+    let error = load_result.expect_err("Should fail with invalid config");
+    assert!(
+        error.to_string().contains("Context size too small"),
+        "Should fail on context-size validation, got: {}",
+        error
+    );
 
     Ok(())
 }
@@ -393,27 +490,28 @@ async fn test_backend_type_detection() -> Result<()> {
     // Test extension-based detection
     assert_eq!(
         BackendType::from_model_path(&PathBuf::from("model.gguf")),
-        BackendType::Gguf
+        Some(BackendType::Gguf)
     );
     assert_eq!(
         BackendType::from_model_path(&PathBuf::from("model.onnx")),
-        BackendType::Onnx
+        Some(BackendType::Onnx)
     );
 
     // Test filename pattern-based detection
     assert_eq!(
         BackendType::from_model_path(&PathBuf::from("llama-7b-chat")),
-        BackendType::Gguf
+        Some(BackendType::Gguf)
     );
     assert_eq!(
         BackendType::from_model_path(&PathBuf::from("bert-base-onnx")),
-        BackendType::Onnx
+        Some(BackendType::Onnx)
     );
 
-    // Test default fallback
+    // An unrecognized path has no backend: detection returns None rather than
+    // guessing a format, so callers must handle the undetectable case.
     assert_eq!(
         BackendType::from_model_path(&PathBuf::from("unknown")),
-        BackendType::Gguf
+        None
     );
 
     Ok(())
@@ -422,20 +520,15 @@ async fn test_backend_type_detection() -> Result<()> {
 /// Test backend performance metrics
 #[tokio::test]
 async fn test_backend_metrics_collection() -> Result<()> {
-    let temp_dir = TempDir::new()?;
-    let model_files = test_utils::create_test_model_files(&temp_dir)?;
+    let Some(model_path) = test_utils::require_gguf_model() else {
+        return Ok(());
+    };
     let config = test_utils::create_test_config();
 
-    let mut model_manager = ModelManager::new(temp_dir.path().to_path_buf());
-    let models = model_manager.discover_models().await?;
-
     let mut backend = Backend::new(BackendType::Gguf, &config)?;
-    let model_info = models
-        .iter()
-        .find(|m| m.path == model_files[0])
-        .expect("Should find GGUF model info");
+    let model_info = test_utils::model_info_for(&model_path).await?;
 
-    backend.load_model(model_info).await?;
+    backend.load_model(&model_info).await?;
 
     // Perform multiple inferences to generate metrics
     let params = InferenceParams::default();
@@ -463,8 +556,9 @@ async fn test_backend_metrics_collection() -> Result<()> {
 /// Integration test combining backends with caching
 #[tokio::test]
 async fn test_backend_cache_integration() -> Result<()> {
-    let temp_dir = TempDir::new()?;
-    let model_files = test_utils::create_test_model_files(&temp_dir)?;
+    let Some(model_path) = test_utils::require_gguf_model() else {
+        return Ok(());
+    };
 
     let cache_config = CacheConfig {
         max_cached_models: 2,
@@ -474,40 +568,38 @@ async fn test_backend_cache_integration() -> Result<()> {
     };
 
     let backend_config = test_utils::create_test_config();
-    let model_manager = Arc::new(ModelManager::new(temp_dir.path().to_path_buf()));
-    let models = model_manager.discover_models().await?;
+    let models_dir = model_path
+        .parent()
+        .expect("model path should have a parent directory");
+    let model_manager = Arc::new(ModelManager::new(models_dir));
 
-    let cache = ModelCache::new(cache_config, model_manager.clone()).await?;
+    // The cache owns the backend config and resolves models through the manager,
+    // so the backend type comes from each model's path rather than the caller.
+    let cache = ModelCache::new(cache_config, backend_config, model_manager.clone(), None).await?;
 
-    // Get cached backend for GGUF model
-    let gguf_model = models
-        .iter()
-        .find(|m| m.path == model_files[0])
-        .expect("Should find GGUF model");
+    let gguf_model = test_utils::model_info_for(&model_path).await?;
 
-    let handle1 = cache
-        .get_or_load_model(&gguf_model.id, BackendType::Gguf, &backend_config)
-        .await?;
-    assert!(handle1.is_loaded().await);
+    let cached1 = cache.get_model(&gguf_model.name).await?;
+    assert!(cached1.backend.is_loaded().await);
 
-    // Get the same model again - should be cached
-    let handle2 = cache
-        .get_or_load_model(&gguf_model.id, BackendType::Gguf, &backend_config)
-        .await?;
-    assert!(handle2.is_loaded().await);
+    // Get the same model again - should be served from cache
+    let cached2 = cache.get_model(&gguf_model.name).await?;
+    assert!(cached2.backend.is_loaded().await);
 
     // Perform inference on both handles
     let params = InferenceParams::default();
-    let result1 = handle1.infer("test1", &params).await?;
-    let result2 = handle2.infer("test2", &params).await?;
+    let result1 = cached1.backend.infer("test1", &params).await?;
+    let result2 = cached2.backend.infer("test2", &params).await?;
 
     assert!(!result1.is_empty());
     assert!(!result2.is_empty());
 
-    // Verify cache statistics
+    // Verify cache statistics. The second get_model is a hit against the single
+    // entry the first one loaded, so both a cached model and a nonzero hit rate
+    // must be visible.
     let stats = cache.get_stats().await;
-    assert!(stats.cache_hits > 0, "Should have cache hits");
-    assert!(stats.cached_models > 0, "Should have cached models");
+    assert!(stats.total_models > 0, "Should have cached models");
+    assert!(stats.hit_rate > 0.0, "Should have cache hits");
 
     Ok(())
 }

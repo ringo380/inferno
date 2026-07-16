@@ -24,8 +24,34 @@ use llama_cpp_2::{
     sampling::LlamaSampler,
     token::LlamaToken,
 };
-use std::{num::NonZeroU32, sync::Arc, time::Instant};
+use std::{
+    num::NonZeroU32,
+    sync::{Arc, OnceLock},
+    time::Instant,
+};
 use tracing::{debug, info, warn};
+
+/// `LlamaBackend::init` initializes llama.cpp's process-global state and errors
+/// with `BackendAlreadyInitialized` on any later call, so every model load must
+/// share one handle - otherwise the second load in a process can never succeed.
+///
+/// The init outcome is cached rather than just the handle: `get_or_init` runs
+/// its closure exactly once and blocks concurrent callers, so init is never
+/// raced, and a genuine init failure is reported to every caller.
+static LLAMA_BACKEND: OnceLock<std::result::Result<Arc<LlamaBackend>, String>> = OnceLock::new();
+
+fn shared_llama_backend() -> Result<Arc<LlamaBackend>> {
+    LLAMA_BACKEND
+        .get_or_init(|| {
+            LlamaBackend::init()
+                .map(Arc::new)
+                .map_err(|e| e.to_string())
+        })
+        .clone()
+        .map_err(|e| {
+            InfernoError::Backend(format!("Failed to initialize llama backend: {}", e)).into()
+        })
+}
 
 // Real GGUF implementation using llama-cpp-2
 pub struct GgufBackend {
@@ -187,6 +213,17 @@ impl GgufBackend {
 
             // Create batch and add input tokens
             let n_ctx = context.n_ctx();
+
+            // A prompt at or beyond the context window leaves no room to
+            // generate, and would underflow the token budget below.
+            if input_tokens.len() >= n_ctx as usize {
+                return Err(InfernoError::Backend(format!(
+                    "Input is {} tokens, which does not fit the {}-token context window",
+                    input_tokens.len(),
+                    n_ctx
+                )));
+            }
+
             let mut batch = LlamaBatch::new(n_ctx as usize, 1);
 
             for (i, token) in input_tokens.iter().enumerate() {
@@ -230,7 +267,12 @@ impl GgufBackend {
             // Generate tokens one by one
             let mut output_tokens = Vec::new();
             let mut generated_text = String::new();
-            let max_new_tokens = max_tokens as usize;
+
+            // The KV cache holds the prompt plus every generated token, so
+            // generation has to stop at the context window. Without this cap a
+            // max_tokens near context_size overruns the cache and llama.cpp
+            // fails mid-generation with an opaque NoKvCacheSlot decode error.
+            let max_new_tokens = (max_tokens as usize).min(n_ctx as usize - input_tokens.len());
 
             debug!(
                 "🔀 Starting token generation with sampling strategy: {:?}, temp: {:.2}",
@@ -391,9 +433,24 @@ impl GgufBackend {
 
             // Create batch and add input tokens
             let n_ctx = context.n_ctx();
-            let mut batch = match llama_cpp_2::llama_batch::LlamaBatch::new(n_ctx as usize, 1) {
-                batch => batch,
-            };
+
+            // A prompt at or beyond the context window leaves no room to
+            // generate, and would underflow the token budget below.
+            if input_tokens.len() >= n_ctx as usize {
+                let _ = tx.blocking_send(StreamToken {
+                    content: format!(
+                        "Error: Input is {} tokens, which does not fit the {}-token context window",
+                        input_tokens.len(),
+                        n_ctx
+                    ),
+                    sequence: 0,
+                    is_valid: false,
+                    timestamp_ms: Some(start_time.elapsed().as_millis() as u64),
+                });
+                return;
+            }
+
+            let mut batch = llama_cpp_2::llama_batch::LlamaBatch::new(n_ctx as usize, 1);
 
             for (i, token) in input_tokens.iter().enumerate() {
                 let is_last = i == input_tokens.len() - 1;
@@ -442,8 +499,10 @@ impl GgufBackend {
 
             let mut sampler = Sampler::new(sampling_config);
 
-            // Generate tokens and stream them one by one
-            let max_new_tokens = max_tokens as usize;
+            // Generate tokens and stream them one by one. As in `generate_response`,
+            // the KV cache holds the prompt plus every generated token, so the
+            // budget is capped by the context window.
+            let max_new_tokens = (max_tokens as usize).min(n_ctx as usize - input_tokens.len());
             let mut sequence = 0u32;
             let mut generated_text = String::new();
 
@@ -550,11 +609,29 @@ impl GgufBackend {
             );
         });
 
-        // Return stream that yields from channel receiver
+        // Return stream that yields from channel receiver.
+        //
+        // An invalid token is never model output, so it must not be yielded as
+        // text. The generator marks a fatal failure with a message and stops,
+        // while `StreamToken::invalid` reports a single detokenization failure
+        // with empty content and keeps going - so a message means the stream
+        // ends in an error, and an empty one means skip this token.
         let result_stream = stream! {
             let mut rx = rx;
             while let Some(stream_token) = rx.recv().await {
-                yield Ok(stream_token.content);
+                if stream_token.is_valid {
+                    yield Ok(stream_token.content);
+                } else if !stream_token.content.is_empty() {
+                    // These messages are written with an "Error: " prefix for the
+                    // channel; drop it so InfernoError does not restate it.
+                    let message = stream_token
+                        .content
+                        .strip_prefix("Error: ")
+                        .unwrap_or(&stream_token.content)
+                        .to_string();
+                    yield Err(InfernoError::Backend(message));
+                    return;
+                }
             }
         };
 
@@ -633,19 +710,12 @@ impl InferenceBackend for GgufBackend {
             model_info.path.display()
         );
 
-        // Initialize the llama backend
-        let backend = Arc::new(
-            tokio::task::spawn_blocking(|| {
-                LlamaBackend::init().map_err(|e| {
-                    InfernoError::Backend(format!("Failed to initialize llama backend: {}", e))
-                })
-            })
+        // Get the process-wide llama backend, initializing it on first use.
+        let backend = tokio::task::spawn_blocking(shared_llama_backend)
             .await
             .map_err(|e| {
                 InfernoError::Backend(format!("Backend initialization task failed: {}", e))
-            })?
-            .map_err(anyhow::Error::from)?,
-        );
+            })??;
 
         // Configure model parameters with GPU support
         // On macOS, Metal is automatically used when n_gpu_layers > 0
