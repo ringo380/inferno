@@ -3,7 +3,6 @@ use predicates::prelude::*;
 use std::fs;
 use std::time::Duration;
 use tempfile::tempdir;
-use tokio::time::sleep;
 
 /// Test A/B Testing Feature Integration
 #[test]
@@ -100,12 +99,19 @@ fn test_gpu_list_command() {
 
 #[test]
 fn test_gpu_monitor_command() {
+    // `gpu monitor` is a live watcher: it loops until interrupted and never
+    // exits on its own. Cap it so a stuck watcher cannot block the suite, and
+    // assert it reached the monitor loop before being killed.
     let mut cmd = Command::cargo_bin("inferno").unwrap();
-    cmd.arg("gpu").arg("monitor").arg("--interval").arg("1");
+    cmd.arg("gpu")
+        .arg("monitor")
+        .arg("--interval")
+        .arg("1")
+        .timeout(Duration::from_secs(10));
 
-    cmd.assert().success().stdout(predicate::str::contains(
-        "GPU management functionality is not yet implemented",
-    ));
+    cmd.assert()
+        .interrupted()
+        .stdout(predicate::str::contains("Monitoring GPUs"));
 }
 
 /// Test Model Versioning Feature Integration
