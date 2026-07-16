@@ -1,7 +1,7 @@
 use inferno::{
     backends::InferenceParams,
     batch::queue::{
-        BatchJob, JobPriority, JobQueue, JobQueueConfig, JobQueueManager, JobStatus, QueueStatus,
+        BatchJob, JobPriority, JobQueueConfig, JobQueueManager, JobStatus, RetryConfig,
     },
     batch::{BatchConfig, BatchInput},
 };
@@ -48,6 +48,7 @@ async fn test_batch_queue_basic_operations() {
         timeout_minutes: Some(30),
         retry_count: 0,
         max_retries: 3,
+        retry_config: RetryConfig::default(),
         created_at: SystemTime::now(),
         scheduled_at: None,
         tags: HashMap::new(),
@@ -200,6 +201,7 @@ async fn test_job_retry_functionality() {
         timeout_minutes: Some(30),
         retry_count: 0,
         max_retries: 3,
+        retry_config: RetryConfig::default(),
         created_at: SystemTime::now(),
         scheduled_at: None,
         tags: HashMap::new(),

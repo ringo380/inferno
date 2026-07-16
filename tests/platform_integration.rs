@@ -2,12 +2,32 @@
 //!
 //! Comprehensive tests for the enhanced Inferno platform capabilities
 
-use inferno::{PlatformInfo, Result, init_platform};
+use inferno::{InfernoError, PlatformInfo, Result, init_platform};
+use std::sync::Once;
+use std::sync::atomic::{AtomicBool, Ordering};
+
+/// `init_platform` installs a global tracing dispatcher, which can only be set
+/// once per process. Tests in a suite share one process, so route every call
+/// through a `Once` - otherwise whichever test runs second fails on the
+/// already-set dispatcher.
+fn ensure_platform_initialized() {
+    static INIT: Once = Once::new();
+    static INIT_OK: AtomicBool = AtomicBool::new(false);
+
+    INIT.call_once(|| {
+        INIT_OK.store(init_platform().is_ok(), Ordering::SeqCst);
+    });
+
+    assert!(
+        INIT_OK.load(Ordering::SeqCst),
+        "init_platform() failed on its first call"
+    );
+}
 
 #[tokio::test]
 async fn test_platform_initialization() -> Result<()> {
     // Test platform initialization
-    init_platform()?;
+    ensure_platform_initialized();
     println!("✅ Platform initialized successfully");
     Ok(())
 }
@@ -113,7 +133,7 @@ fn test_tauri_integration() {
 #[tokio::test]
 async fn test_platform_enhancement_integration() -> Result<()> {
     // Initialize the platform
-    init_platform()?;
+    ensure_platform_initialized();
 
     // Get platform information
     let info = PlatformInfo::new();
