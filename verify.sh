@@ -115,11 +115,31 @@ INTEGRATION_TESTS=(
     "metrics_thread_safety"
 )
 
+# BackendType::Gguf and ::Onnx are feature-gated, so the suites that name them
+# fail to compile without these. Matches the features used by CI.
+INTEGRATION_FEATURES="gguf,onnx"
+
+# Cap each suite so one hung test cannot block the whole run. timeout is stock
+# on Linux and ships via coreutils on macOS; run uncapped when it is absent.
+TIMEOUT_CMD=()
+if command -v timeout &> /dev/null; then
+    TIMEOUT_CMD=(timeout 300)
+elif command -v gtimeout &> /dev/null; then
+    TIMEOUT_CMD=(gtimeout 300)
+fi
+
 for test in "${INTEGRATION_TESTS[@]}"; do
-    if cargo test --test "$test" > /dev/null 2>&1; then
+    log=$(mktemp "${TMPDIR:-/tmp}/inferno-verify-${test}.XXXXXX")
+    if "${TIMEOUT_CMD[@]}" cargo test --test "$test" --features "$INTEGRATION_FEATURES" > "$log" 2>&1; then
         print_status 0 "Integration: $test"
+        rm -f "$log"
     else
-        print_status 1 "Integration: $test"
+        rc=$?
+        if [ $rc -eq 124 ]; then
+            print_status 1 "Integration: $test (timed out after 300s, log: $log)"
+        else
+            print_status 1 "Integration: $test (log: $log)"
+        fi
     fi
 done
 echo
