@@ -1,49 +1,90 @@
 use anyhow::Result;
 use inferno::{
-    InfernoError,
-    backends::{BackendConfig, BackendHandle, BackendType},
+    backends::BackendConfig,
     cache::{
-        CacheConfig, CacheStats, CachedModel, ModelCache, ModelUsageStats, SerializableCacheEntry,
-        SerializableCacheState, WarmupStrategy,
+        CacheConfig, ModelCache, ModelUsageStats, SerializableCacheEntry, SerializableCacheState,
+        WarmupStrategy,
     },
-    metrics::MetricsCollector,
     models::{ModelInfo, ModelManager},
 };
 use std::{
     collections::HashMap,
     fs,
     path::{Path, PathBuf},
-    sync::{
-        Arc,
-        atomic::{AtomicU64, Ordering},
-    },
+    sync::Arc,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 use tempfile::TempDir;
-use tokio::{
-    fs as async_fs,
-    time::{sleep, timeout},
-};
+use tokio::time::sleep;
 
 /// Test utilities for cache persistence integration tests
 mod cache_test_utils {
     use super::*;
+
+    /// Names the cache tests expect to find in the models directory. The
+    /// `always_warm` entry below refers to the first of these.
+    pub const TEST_MODEL_NAMES: [&str; 3] = ["test_model_1", "test_model_2", "test_model_3"];
 
     pub fn create_test_cache_config(cache_dir: Option<PathBuf>) -> CacheConfig {
         CacheConfig {
             max_cached_models: 3,
             max_memory_mb: 1024,
             model_ttl_seconds: 300, // 5 minutes
-            enable_warmup: true,
+            // Warmup loads models of its own accord, which would show up in
+            // every test's cache contents and counts. The test that cares about
+            // warmup turns it on.
+            enable_warmup: false,
             warmup_strategy: WarmupStrategy::UsageBased,
-            always_warm: vec!["test_model_1".to_string()],
+            always_warm: Vec::new(),
             predictive_loading: true,
             usage_window_seconds: 3600, // 1 hour
             min_usage_frequency: 0.1,
             memory_based_eviction: true,
             persist_cache: cache_dir.is_some(),
             cache_dir,
+            persist_interval_seconds: 300,
         }
+    }
+
+    /// A real GGUF file to populate the cache with, taken from
+    /// `INFERNO_TEST_MODEL`.
+    ///
+    /// Populating the cache means loading through the genuine llama.cpp loader,
+    /// which rejects the synthetic fixture below - that file carries a
+    /// plausible header, not a model. So any test that caches a model needs a
+    /// real one from the environment, and skips without it.
+    pub fn real_model_path() -> Option<PathBuf> {
+        let value = std::env::var_os("INFERNO_TEST_MODEL")?;
+        let path = PathBuf::from(value);
+        // A typo'd path must fail loudly rather than skip silently - a skip
+        // here would look identical to "not configured".
+        assert!(
+            path.is_file(),
+            "INFERNO_TEST_MODEL is set to {}, which is not a file",
+            path.display()
+        );
+        Some(path)
+    }
+
+    /// Fill `models_dir` with real, loadable models under the names the cache
+    /// tests use, or report that none is configured.
+    pub fn require_real_models(models_dir: &Path) -> Option<Vec<PathBuf>> {
+        let Some(source) = real_model_path() else {
+            eprintln!("SKIP: set INFERNO_TEST_MODEL to a real GGUF file to run this test");
+            return None;
+        };
+
+        let mut paths = Vec::new();
+        for name in TEST_MODEL_NAMES {
+            let dest = models_dir.join(format!("{}.gguf", name));
+            // Hard-link so each name is a real file without copying the model
+            // once per name; fall back to a copy across filesystems.
+            if fs::hard_link(&source, &dest).is_err() {
+                fs::copy(&source, &dest).expect("should provision test model");
+            }
+            paths.push(dest);
+        }
+        Some(paths)
     }
 
     pub fn create_test_backend_config() -> BackendConfig {
@@ -57,44 +98,40 @@ mod cache_test_utils {
         }
     }
 
-    pub fn create_mock_gguf_file(path: &Path) -> Result<()> {
-        let mut content = Vec::new();
-        // GGUF magic number
-        content.extend_from_slice(b"GGUF");
-        // Version
-        content.extend_from_slice(&3u32.to_le_bytes());
-        // Tensor count
-        content.extend_from_slice(&0u64.to_le_bytes());
-        // Metadata count
-        content.extend_from_slice(&1u64.to_le_bytes());
-
-        // Simple metadata entry
-        let key = "general.name";
-        content.extend_from_slice(&(key.len() as u64).to_le_bytes());
-        content.extend_from_slice(key.as_bytes());
-
-        // Value type (string = 8)
-        content.extend_from_slice(&8u32.to_le_bytes());
-        let value = path.file_stem().unwrap().to_str().unwrap();
-        content.extend_from_slice(&(value.len() as u64).to_le_bytes());
-        content.extend_from_slice(value.as_bytes());
-
-        // Pad to reasonable size
-        content.resize(2048, 0);
-        fs::write(path, content)?;
-        Ok(())
+    /// A `ModelInfo` standing in for a discovered model in serialized state.
+    /// Nothing reads this file - it only has to round-trip.
+    pub fn test_model_info(name: &str) -> ModelInfo {
+        let path = PathBuf::from(format!("/test/{}.gguf", name));
+        ModelInfo {
+            name: name.to_string(),
+            file_path: path.clone(),
+            path,
+            size: 2048,
+            size_bytes: 2048,
+            modified: chrono::Utc::now(),
+            backend_type: "gguf".to_string(),
+            format: "gguf".to_string(),
+            checksum: None,
+            metadata: HashMap::new(),
+        }
     }
 
-    pub async fn create_test_models(models_dir: &Path) -> Result<Vec<PathBuf>> {
-        let mut model_paths = Vec::new();
+    /// Total requests the cache actually served.
+    ///
+    /// `CacheStats` reports hit/miss as rates, and `miss_rate` is `1.0 -
+    /// hit_rate`, so an untouched cache reports a miss rate of 1.0 - asserting
+    /// on it would pass without the cache doing anything. The per-model request
+    /// counts are the honest source.
+    pub fn total_requests(stats: &inferno::cache::CacheStats) -> u64 {
+        stats.model_stats.values().map(|s| s.request_count).sum()
+    }
 
-        for i in 1..=3 {
-            let model_path = models_dir.join(format!("test_model_{}.gguf", i));
-            create_mock_gguf_file(&model_path)?;
-            model_paths.push(model_path);
-        }
-
-        Ok(model_paths)
+    /// Read a persisted cache file, mirroring how the cache writes it
+    /// (bincode, then zstd).
+    pub fn read_cache_state(cache_file: &Path) -> Result<SerializableCacheState> {
+        let compressed = fs::read(cache_file)?;
+        let decompressed = zstd::decode_all(&compressed[..])?;
+        Ok(bincode::deserialize(&decompressed)?)
     }
 
     pub async fn wait_for_cache_persistence(
@@ -123,18 +160,7 @@ mod cache_test_utils {
         let cache_entries = vec![
             SerializableCacheEntry {
                 model_name: "test_model_1".to_string(),
-                model_info: ModelInfo {
-                    id: "test_model_1".to_string(),
-                    name: "Test Model 1".to_string(),
-                    path: PathBuf::from("/test/test_model_1.gguf"),
-                    format: "gguf".to_string(),
-                    size: 2048,
-                    metadata: HashMap::new(),
-                    backend_type: None,
-                    created_at: SystemTime::now(),
-                    modified_at: SystemTime::now(),
-                    checksum: None,
-                },
+                model_info: test_model_info("test_model_1"),
                 last_used_timestamp: now,
                 created_at_timestamp: now - 300,
                 usage_count: 5,
@@ -143,18 +169,7 @@ mod cache_test_utils {
             },
             SerializableCacheEntry {
                 model_name: "test_model_2".to_string(),
-                model_info: ModelInfo {
-                    id: "test_model_2".to_string(),
-                    name: "Test Model 2".to_string(),
-                    path: PathBuf::from("/test/test_model_2.gguf"),
-                    format: "gguf".to_string(),
-                    size: 2048,
-                    metadata: HashMap::new(),
-                    backend_type: None,
-                    created_at: SystemTime::now(),
-                    modified_at: SystemTime::now(),
-                    checksum: None,
-                },
+                model_info: test_model_info("test_model_2"),
                 last_used_timestamp: now - 60,
                 created_at_timestamp: now - 600,
                 usage_count: 3,
@@ -202,14 +217,17 @@ async fn test_cache_persistence_basic() -> Result<()> {
     fs::create_dir_all(&models_dir)?;
     fs::create_dir_all(&cache_dir)?;
 
-    let model_paths = cache_test_utils::create_test_models(&models_dir).await?;
+    if cache_test_utils::require_real_models(&models_dir).is_none() {
+        return Ok(());
+    }
 
-    let cache_config = cache_test_utils::create_test_cache_config(Some(cache_dir.clone()));
+    let mut cache_config = cache_test_utils::create_test_cache_config(Some(cache_dir.clone()));
+
     let backend_config = cache_test_utils::create_test_backend_config();
-    let model_manager = Arc::new(ModelManager::new(models_dir));
+    let model_manager = Arc::new(ModelManager::new(&models_dir));
 
     // Discover models
-    let models = model_manager.discover_models().await?;
+    let models = model_manager.list_models().await?;
     assert!(!models.is_empty(), "Should discover test models");
 
     // Create cache with persistence enabled
@@ -223,21 +241,81 @@ async fn test_cache_persistence_basic() -> Result<()> {
 
     // Load some models to populate cache
     for model in &models[0..2] {
-        let _ = cache
-            .get_or_load_model(&model.id, BackendType::Gguf, &backend_config)
-            .await?;
+        cache.get_model(&model.name).await?;
     }
 
-    // Wait for cache to be persisted
-    cache_test_utils::wait_for_cache_persistence(&cache_dir, Duration::from_secs(5)).await?;
+    // Save explicitly rather than waiting on the background interval, so the
+    // file under test is the one holding these models.
+    cache.save_cache().await?;
 
-    // Verify cache file exists
     let cache_file = cache_dir.join("cache_state.bin.zst");
     assert!(cache_file.exists(), "Cache state file should exist");
 
-    // Verify cache file is not empty
-    let file_size = fs::metadata(&cache_file)?.len();
-    assert!(file_size > 0, "Cache file should not be empty");
+    // The file existing is not enough: the background task writes an empty
+    // state as soon as the cache starts, so assert the loaded models actually
+    // reached the file.
+    let state = cache_test_utils::read_cache_state(&cache_file)?;
+    assert_eq!(
+        state.cache_entries.len(),
+        2,
+        "Both loaded models should be persisted, got {:?}",
+        state
+            .cache_entries
+            .iter()
+            .map(|e| &e.model_name)
+            .collect::<Vec<_>>()
+    );
+
+    Ok(())
+}
+
+/// The background save must report the statistics as of the save, not as of
+/// startup. It runs on its own task, so it can only see the counters if it
+/// shares them - holding copies of their startup values would pin every
+/// persisted count to zero for the life of the process.
+///
+/// No model is needed: a cache miss is counted before the load is attempted,
+/// so asking for a model that does not exist moves the counter on its own.
+#[tokio::test]
+async fn test_periodic_save_persists_live_statistics() -> Result<()> {
+    let temp_dir = TempDir::new()?;
+    let models_dir = temp_dir.path().join("models");
+    let cache_dir = temp_dir.path().join("cache");
+
+    fs::create_dir_all(&models_dir)?;
+    fs::create_dir_all(&cache_dir)?;
+
+    let mut cache_config = cache_test_utils::create_test_cache_config(Some(cache_dir.clone()));
+    // Tick often enough to observe a save.
+    cache_config.persist_interval_seconds = 1;
+
+    let backend_config = cache_test_utils::create_test_backend_config();
+    let model_manager = Arc::new(ModelManager::new(&models_dir));
+    let cache = ModelCache::new(cache_config, backend_config, model_manager, None).await?;
+
+    // Counted as a miss before the load fails, which is all this needs.
+    let missed = cache.get_model("no-such-model").await;
+    assert!(missed.is_err(), "a model that does not exist cannot load");
+
+    let cache_file = cache_dir.join("cache_state.bin.zst");
+    // Long enough for a tick after the miss, short enough to fail fast.
+    cache_test_utils::wait_for_cache_persistence(&cache_dir, Duration::from_secs(5)).await?;
+
+    // The first tick fires immediately at startup, before the miss above, so
+    // poll until a save reflects it rather than trusting the first file.
+    let mut persisted_misses = 0;
+    for _ in 0..30 {
+        persisted_misses = cache_test_utils::read_cache_state(&cache_file)?.cache_misses;
+        if persisted_misses > 0 {
+            break;
+        }
+        sleep(Duration::from_millis(200)).await;
+    }
+
+    assert_eq!(
+        persisted_misses, 1,
+        "the periodic save should report the miss that happened after startup"
+    );
 
     Ok(())
 }
@@ -252,13 +330,16 @@ async fn test_cache_persistence_across_restarts() -> Result<()> {
     fs::create_dir_all(&models_dir)?;
     fs::create_dir_all(&cache_dir)?;
 
-    let _model_paths = cache_test_utils::create_test_models(&models_dir).await?;
+    if cache_test_utils::require_real_models(&models_dir).is_none() {
+        return Ok(());
+    }
 
     let cache_config = cache_test_utils::create_test_cache_config(Some(cache_dir.clone()));
     let backend_config = cache_test_utils::create_test_backend_config();
-    let model_manager = Arc::new(ModelManager::new(models_dir));
+    let model_manager = Arc::new(ModelManager::new(&models_dir));
 
-    let models = model_manager.discover_models().await?;
+    let models = model_manager.list_models().await?;
+    let first_model = models[0].name.clone();
 
     // First cache instance - populate cache
     {
@@ -270,49 +351,34 @@ async fn test_cache_persistence_across_restarts() -> Result<()> {
         )
         .await?;
 
-        // Load models and track usage
         for model in &models[0..2] {
-            let _ = cache1
-                .get_or_load_model(&model.id, BackendType::Gguf, &backend_config)
-                .await?;
+            cache1.get_model(&model.name).await?;
         }
 
-        // Get initial stats
-        let initial_stats = cache1.get_stats().await;
-        assert!(initial_stats.cache_hits + initial_stats.cache_misses > 0);
+        // Every load was a miss, so the cache did real work.
+        assert!(
+            cache_test_utils::total_requests(&cache1.get_stats().await) > 0,
+            "Loading models should register cache activity"
+        );
 
-        // Wait for persistence
-        cache_test_utils::wait_for_cache_persistence(&cache_dir, Duration::from_secs(5)).await?;
-
-        // Drop cache to simulate restart
+        cache1.save_cache().await?;
         drop(cache1);
     }
 
-    // Second cache instance - should load from persistence
+    // Second cache instance - should restore the persisted entries
     {
         let cache2 =
             ModelCache::new(cache_config, backend_config.clone(), model_manager, None).await?;
 
-        // Wait a bit for background loading
-        sleep(Duration::from_millis(500)).await;
-
-        // Access a previously cached model - should be faster (cache hit)
-        let start = std::time::Instant::now();
-        let _cached_model = cache2
-            .get_or_load_model(&models[0].id, BackendType::Gguf, &backend_config)
-            .await?;
-        let access_time = start.elapsed();
-
-        // Should be relatively fast since it was restored from cache
-        assert!(
-            access_time < Duration::from_secs(2),
-            "Restored model access should be fast"
-        );
+        // Asking for a restored model must be served from the cache rather
+        // than loaded again, which is what persistence is for.
+        cache2.get_model(&first_model).await?;
 
         let stats = cache2.get_stats().await;
         assert!(
-            stats.cache_hits > 0,
-            "Should have cache hits from restored cache"
+            stats.hit_rate > 0.0,
+            "A restored model should be served as a cache hit, got hit_rate {}",
+            stats.hit_rate
         );
     }
 
@@ -370,46 +436,56 @@ async fn test_cache_eviction_with_persistence() -> Result<()> {
     fs::create_dir_all(&models_dir)?;
     fs::create_dir_all(&cache_dir)?;
 
-    let _model_paths = cache_test_utils::create_test_models(&models_dir).await?;
+    if cache_test_utils::require_real_models(&models_dir).is_none() {
+        return Ok(());
+    }
 
     let mut cache_config = cache_test_utils::create_test_cache_config(Some(cache_dir.clone()));
     cache_config.max_cached_models = 2; // Small cache to force eviction
-    cache_config.max_memory_mb = 512; // Small memory limit
 
     let backend_config = cache_test_utils::create_test_backend_config();
-    let model_manager = Arc::new(ModelManager::new(models_dir));
+    let model_manager = Arc::new(ModelManager::new(&models_dir));
 
-    let models = model_manager.discover_models().await?;
+    let models = model_manager.list_models().await?;
+    assert!(
+        models.len() > 2,
+        "This test needs more models than the cache can hold"
+    );
 
     let cache = ModelCache::new(cache_config, backend_config.clone(), model_manager, None).await?;
 
-    // Load models until eviction occurs
+    // Load more models than the cache holds, forcing eviction.
     for model in &models {
-        let _ = cache
-            .get_or_load_model(&model.id, BackendType::Gguf, &backend_config)
-            .await?;
-
-        // Small delay to allow background processing
-        sleep(Duration::from_millis(100)).await;
+        cache.get_model(&model.name).await?;
     }
-
-    // Wait for cache operations to complete
-    sleep(Duration::from_millis(500)).await;
 
     let stats = cache.get_stats().await;
 
-    // Should have evictions due to cache size limit
+    // Assert the limit is enforced, not just that it happens to hold. Testing
+    // `total_models <= 2` alone would pass even if nothing were ever cached.
     assert!(
-        stats.eviction_count > 0 || stats.cached_models <= 2,
-        "Should have evictions or be within cache limit"
+        stats.total_models <= 2,
+        "Cache should hold at most max_cached_models, got {}",
+        stats.total_models
+    );
+    assert!(
+        stats.total_models > 0,
+        "Cache should still hold the most recent models"
+    );
+    assert!(
+        stats.eviction_count > 0,
+        "Loading {} models into a cache of 2 must evict",
+        models.len()
     );
 
-    // Wait for persistence
-    cache_test_utils::wait_for_cache_persistence(&cache_dir, Duration::from_secs(5)).await?;
-
-    // Verify persistence file reflects evictions
-    let cache_file = cache_dir.join("cache_state.bin.zst");
-    assert!(cache_file.exists());
+    // The persisted state must reflect the eviction, not the pre-eviction set.
+    cache.save_cache().await?;
+    let state = cache_test_utils::read_cache_state(&cache_dir.join("cache_state.bin.zst"))?;
+    assert!(
+        state.cache_entries.len() <= 2,
+        "Persisted state should reflect evictions, got {} entries",
+        state.cache_entries.len()
+    );
 
     Ok(())
 }
@@ -424,35 +500,48 @@ async fn test_cache_statistics_persistence() -> Result<()> {
     fs::create_dir_all(&models_dir)?;
     fs::create_dir_all(&cache_dir)?;
 
-    let _model_paths = cache_test_utils::create_test_models(&models_dir).await?;
+    if cache_test_utils::require_real_models(&models_dir).is_none() {
+        return Ok(());
+    }
 
     let cache_config = cache_test_utils::create_test_cache_config(Some(cache_dir.clone()));
     let backend_config = cache_test_utils::create_test_backend_config();
-    let model_manager = Arc::new(ModelManager::new(models_dir));
+    let model_manager = Arc::new(ModelManager::new(&models_dir));
 
-    let models = model_manager.discover_models().await?;
+    let models = model_manager.list_models().await?;
 
-    let cache = ModelCache::new(cache_config, backend_config.clone(), model_manager, None).await?;
+    let cache = ModelCache::new(
+        cache_config,
+        backend_config.clone(),
+        model_manager.clone(),
+        None,
+    )
+    .await?;
 
-    // Generate some cache activity
+    // Generate cache activity: the first pass over each model misses, the
+    // later passes hit.
     for _ in 0..3 {
         for model in &models[0..2] {
-            let _ = cache
-                .get_or_load_model(&model.id, BackendType::Gguf, &backend_config)
-                .await?;
+            cache.get_model(&model.name).await?;
         }
     }
 
     let initial_stats = cache.get_stats().await;
-    assert!(initial_stats.cache_hits > 0);
-    assert!(initial_stats.cache_misses > 0);
+    assert!(
+        initial_stats.hit_rate > 0.0,
+        "Repeated access should produce cache hits"
+    );
+    let requests_before = cache_test_utils::total_requests(&initial_stats);
+    assert_eq!(
+        requests_before, 6,
+        "Six accesses should be counted, got {}",
+        requests_before
+    );
 
-    // Wait for persistence
-    cache_test_utils::wait_for_cache_persistence(&cache_dir, Duration::from_secs(5)).await?;
-
-    // Create new cache instance and verify stats are restored
+    cache.save_cache().await?;
     drop(cache);
 
+    // A restarted cache must recover the counts, not start from zero.
     let cache2 = ModelCache::new(
         cache_test_utils::create_test_cache_config(Some(cache_dir)),
         backend_config,
@@ -461,13 +550,12 @@ async fn test_cache_statistics_persistence() -> Result<()> {
     )
     .await?;
 
-    sleep(Duration::from_millis(500)).await; // Allow loading
-
     let restored_stats = cache2.get_stats().await;
-
-    // Stats should be restored (or at least partially)
-    assert!(restored_stats.cache_hits >= 0);
-    assert!(restored_stats.cache_misses >= 0);
+    assert_eq!(
+        cache_test_utils::total_requests(&restored_stats),
+        requests_before,
+        "Restored cache should recover the persisted request counts"
+    );
 
     Ok(())
 }
@@ -482,53 +570,56 @@ async fn test_concurrent_cache_with_persistence() -> Result<()> {
     fs::create_dir_all(&models_dir)?;
     fs::create_dir_all(&cache_dir)?;
 
-    let _model_paths = cache_test_utils::create_test_models(&models_dir).await?;
+    if cache_test_utils::require_real_models(&models_dir).is_none() {
+        return Ok(());
+    }
 
     let cache_config = cache_test_utils::create_test_cache_config(Some(cache_dir.clone()));
     let backend_config = cache_test_utils::create_test_backend_config();
-    let model_manager = Arc::new(ModelManager::new(models_dir));
+    let model_manager = Arc::new(ModelManager::new(&models_dir));
 
-    let models = model_manager.discover_models().await?;
+    let models = model_manager.list_models().await?;
 
-    let cache =
-        Arc::new(ModelCache::new(cache_config, backend_config.clone(), model_manager, None).await?);
+    let cache = Arc::new(ModelCache::new(cache_config, backend_config, model_manager, None).await?);
 
     // Launch concurrent cache operations
     let mut tasks = Vec::new();
 
     for i in 0..5 {
         let cache_clone = cache.clone();
-        let models_clone = models.clone();
-        let backend_config_clone = backend_config.clone();
+        let names: Vec<String> = models.iter().map(|m| m.name.clone()).collect();
 
         let task = tokio::spawn(async move {
             for j in 0..3 {
-                let model_idx = (i + j) % models_clone.len();
-                let model = &models_clone[model_idx];
-
-                let result = cache_clone
-                    .get_or_load_model(&model.id, BackendType::Gguf, &backend_config_clone)
-                    .await;
-
-                assert!(result.is_ok(), "Concurrent cache access should succeed");
-
-                // Small delay between accesses
-                sleep(Duration::from_millis(50)).await;
+                let name = &names[(i + j) % names.len()];
+                cache_clone
+                    .get_model(name)
+                    .await
+                    .expect("concurrent cache access should succeed");
             }
         });
 
         tasks.push(task);
     }
 
-    // Wait for all tasks to complete
-    futures::future::join_all(tasks).await;
+    // A panic inside a task must fail the test rather than be swallowed.
+    for task in tasks {
+        task.await?;
+    }
 
-    // Verify cache state is consistent
+    // All 15 accesses must be accounted for, and the cache must not have
+    // exceeded its limit under concurrency.
     let stats = cache.get_stats().await;
-    assert!(stats.cache_hits + stats.cache_misses > 0);
-
-    // Wait for persistence
-    cache_test_utils::wait_for_cache_persistence(&cache_dir, Duration::from_secs(5)).await?;
+    assert_eq!(
+        cache_test_utils::total_requests(&stats),
+        15,
+        "Every concurrent access should be counted exactly once"
+    );
+    assert!(
+        stats.total_models <= 3,
+        "Concurrent loads should still respect max_cached_models, got {}",
+        stats.total_models
+    );
 
     Ok(())
 }
@@ -543,38 +634,26 @@ async fn test_cache_corruption_recovery() -> Result<()> {
     fs::create_dir_all(&models_dir)?;
     fs::create_dir_all(&cache_dir)?;
 
-    let _model_paths = cache_test_utils::create_test_models(&models_dir).await?;
-
-    // Create a corrupted cache file
+    // A corrupt cache file must not stop the cache from starting. This needs
+    // no model: starting up is the whole behaviour under test.
     let cache_file = cache_dir.join("cache_state.bin.zst");
     fs::write(&cache_file, b"corrupted data")?;
 
-    let cache_config = cache_test_utils::create_test_cache_config(Some(cache_dir));
+    let mut cache_config = cache_test_utils::create_test_cache_config(Some(cache_dir));
+
     let backend_config = cache_test_utils::create_test_backend_config();
-    let model_manager = Arc::new(ModelManager::new(models_dir));
+    let model_manager = Arc::new(ModelManager::new(&models_dir));
 
-    // Cache should still initialize despite corrupted file
-    let cache_result =
-        ModelCache::new(cache_config, backend_config.clone(), model_manager, None).await;
+    let cache = ModelCache::new(cache_config, backend_config, model_manager, None)
+        .await
+        .expect("cache should start despite a corrupt state file");
 
-    assert!(
-        cache_result.is_ok(),
-        "Cache should handle corruption gracefully"
+    // Recovery means starting empty, not carrying over garbage.
+    let stats = cache.get_stats().await;
+    assert_eq!(
+        stats.total_models, 0,
+        "A corrupt state file should yield an empty cache"
     );
-
-    let cache = cache_result?;
-    let models = cache.list_available_models().await?;
-
-    // Should still be able to load models
-    if !models.is_empty() {
-        let result = cache
-            .get_or_load_model(&models[0].id, BackendType::Gguf, &backend_config)
-            .await;
-        assert!(
-            result.is_ok(),
-            "Should be able to load models after corruption recovery"
-        );
-    }
 
     Ok(())
 }
@@ -589,43 +668,41 @@ async fn test_cache_memory_management() -> Result<()> {
     fs::create_dir_all(&models_dir)?;
     fs::create_dir_all(&cache_dir)?;
 
-    let _model_paths = cache_test_utils::create_test_models(&models_dir).await?;
+    if cache_test_utils::require_real_models(&models_dir).is_none() {
+        return Ok(());
+    }
 
-    let mut cache_config = cache_test_utils::create_test_cache_config(Some(cache_dir.clone()));
+    let mut cache_config = cache_test_utils::create_test_cache_config(Some(cache_dir));
     cache_config.max_memory_mb = 256; // Very low memory limit
     cache_config.memory_based_eviction = true;
 
     let backend_config = cache_test_utils::create_test_backend_config();
-    let model_manager = Arc::new(ModelManager::new(models_dir));
+    let model_manager = Arc::new(ModelManager::new(&models_dir));
 
-    let models = model_manager.discover_models().await?;
+    let models = model_manager.list_models().await?;
 
-    let cache = ModelCache::new(cache_config, backend_config.clone(), model_manager, None).await?;
+    let cache = ModelCache::new(cache_config, backend_config, model_manager, None).await?;
 
-    // Load models and monitor memory usage
     for model in &models {
-        let _ = cache
-            .get_or_load_model(&model.id, BackendType::Gguf, &backend_config)
-            .await?;
-
-        let stats = cache.get_stats().await;
-
-        // Memory usage should be tracked
-        assert!(stats.memory_usage_mb >= 0.0);
-
-        sleep(Duration::from_millis(100)).await;
+        cache.get_model(&model.name).await?;
     }
-
-    // Wait for any evictions to complete
-    sleep(Duration::from_millis(500)).await;
 
     let final_stats = cache.get_stats().await;
 
-    // Memory should be within limits or evictions should have occurred
-    assert!(final_stats.memory_usage_mb <= 256.0 || final_stats.eviction_count > 0);
+    // Caching a model has to account for its memory. Asserting `>= 0.0` on an
+    // unsigned-derived figure would hold even if nothing were tracked at all.
+    assert!(
+        final_stats.memory_usage_mb > 0.0,
+        "Cached models should contribute tracked memory"
+    );
 
-    // Wait for persistence
-    cache_test_utils::wait_for_cache_persistence(&cache_dir, Duration::from_secs(5)).await?;
+    // The limit is the point: either usage stays under it, or eviction brought
+    // it back under.
+    assert!(
+        final_stats.memory_usage_mb <= 256.0,
+        "Memory-based eviction should keep usage within max_memory_mb, got {} MB",
+        final_stats.memory_usage_mb
+    );
 
     Ok(())
 }
@@ -640,35 +717,33 @@ async fn test_cache_warmup_with_persistence() -> Result<()> {
     fs::create_dir_all(&models_dir)?;
     fs::create_dir_all(&cache_dir)?;
 
-    let _model_paths = cache_test_utils::create_test_models(&models_dir).await?;
+    if cache_test_utils::require_real_models(&models_dir).is_none() {
+        return Ok(());
+    }
 
-    let mut cache_config = cache_test_utils::create_test_cache_config(Some(cache_dir.clone()));
+    let mut cache_config = cache_test_utils::create_test_cache_config(Some(cache_dir));
     cache_config.enable_warmup = true;
     cache_config.always_warm = vec!["test_model_1".to_string()];
 
     let backend_config = cache_test_utils::create_test_backend_config();
-    let model_manager = Arc::new(ModelManager::new(models_dir));
+    let model_manager = Arc::new(ModelManager::new(&models_dir));
 
-    let cache = ModelCache::new(cache_config, backend_config.clone(), model_manager, None).await?;
-
-    // Wait for warmup to complete
-    sleep(Duration::from_secs(2)).await;
+    // Always-warm models are loaded during construction.
+    let cache = ModelCache::new(cache_config, backend_config, model_manager, None).await?;
 
     let stats = cache.get_stats().await;
 
-    // Should have at least one warmed up model
-    assert!(stats.warmup_count > 0 || stats.cached_models > 0);
-
-    // Check if always-warm model is loaded
-    let model_list = cache.list_cached_models().await;
-    let has_always_warm = model_list.iter().any(|m| m.contains("test_model_1"));
-
-    if has_always_warm {
-        println!("Always-warm model successfully loaded");
-    }
-
-    // Wait for persistence
-    cache_test_utils::wait_for_cache_persistence(&cache_dir, Duration::from_secs(5)).await?;
+    // The always-warm model must actually be resident - the original test only
+    // printed when it was, so it passed whether warmup worked or not.
+    assert!(
+        stats.active_models.iter().any(|m| m == "test_model_1"),
+        "always_warm model should be cached after startup, got {:?}",
+        stats.active_models
+    );
+    assert!(
+        stats.warmup_count > 0,
+        "Warming a model should be counted as a warmup"
+    );
 
     Ok(())
 }
