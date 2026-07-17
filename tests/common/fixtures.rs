@@ -191,6 +191,7 @@ impl ConfigFixtures {
             memory_based_eviction: true,
             persist_cache: cache_dir.is_some(),
             cache_dir,
+            persist_interval_seconds: 300,
         }
     }
 

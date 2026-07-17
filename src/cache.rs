@@ -50,6 +50,8 @@ pub struct CacheConfig {
     pub persist_cache: bool,
     /// Cache directory for persistence
     pub cache_dir: Option<PathBuf>,
+    /// How often the cache is written to disk in the background (seconds)
+    pub persist_interval_seconds: u64,
 }
 
 impl Default for CacheConfig {
@@ -67,6 +69,7 @@ impl Default for CacheConfig {
             memory_based_eviction: true,
             persist_cache: false,
             cache_dir: None,
+            persist_interval_seconds: 300, // 5 minutes
         }
     }
 }
@@ -178,6 +181,24 @@ const CACHE_FORMAT_VERSION: u32 = 1;
 const CACHE_FILE_NAME: &str = "cache_state.bin.zst";
 const CACHE_STATS_FILE_NAME: &str = "cache_stats.bin.zst";
 
+/// Distinguishes concurrent saves' temporary files.
+static SAVE_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+
+/// A scratch path for one save.
+///
+/// The rename onto the real file is atomic, but the temporary file it renames
+/// from must be unique: a shared name lets two saves in flight write the same
+/// scratch file, and whichever renames second fails because the first already
+/// moved it away. The periodic save and an explicit `save_cache` can overlap
+/// exactly this way.
+fn temp_save_path(file_path: &std::path::Path) -> PathBuf {
+    file_path.with_extension(format!(
+        "tmp.{}.{}",
+        std::process::id(),
+        SAVE_SEQUENCE.fetch_add(1, Ordering::Relaxed)
+    ))
+}
+
 /// Advanced model cache with intelligent warm-up strategies
 pub struct ModelCache {
     pub config: CacheConfig,
@@ -190,11 +211,15 @@ pub struct ModelCache {
     usage_stats: Arc<RwLock<HashMap<String, ModelUsageStats>>>,
 
     // Statistics
-    cache_hits: AtomicU64,
-    cache_misses: AtomicU64,
-    evictions: AtomicU64,
-    warmups: AtomicU64,
-    total_memory: AtomicU64,
+    //
+    // These are shared with the background persistence task, which must observe
+    // the live counts. Copying their values into the task would freeze the
+    // persisted statistics at whatever they were when the cache was built.
+    cache_hits: Arc<AtomicU64>,
+    cache_misses: Arc<AtomicU64>,
+    evictions: Arc<AtomicU64>,
+    warmups: Arc<AtomicU64>,
+    total_memory: Arc<AtomicU64>,
 
     // Background tasks
     cleanup_task: Option<JoinHandle<()>>,
@@ -228,11 +253,11 @@ impl ModelCache {
             metrics,
             cached_models: cached_models.clone(),
             usage_stats: usage_stats.clone(),
-            cache_hits: AtomicU64::new(0),
-            cache_misses: AtomicU64::new(0),
-            evictions: AtomicU64::new(0),
-            warmups: AtomicU64::new(0),
-            total_memory: AtomicU64::new(0),
+            cache_hits: Arc::new(AtomicU64::new(0)),
+            cache_misses: Arc::new(AtomicU64::new(0)),
+            evictions: Arc::new(AtomicU64::new(0)),
+            warmups: Arc::new(AtomicU64::new(0)),
+            total_memory: Arc::new(AtomicU64::new(0)),
             cleanup_task: None,
             warmup_task: None,
             stats_task: None,
@@ -531,16 +556,17 @@ impl ModelCache {
             let save_cache_dir = self.config.cache_dir.clone();
             let save_cached_models = self.cached_models.clone();
             let save_usage_stats = self.usage_stats.clone();
-            let save_cache_hits = Arc::new(AtomicU64::new(self.cache_hits.load(Ordering::Relaxed)));
-            let save_cache_misses =
-                Arc::new(AtomicU64::new(self.cache_misses.load(Ordering::Relaxed)));
-            let save_evictions = Arc::new(AtomicU64::new(self.evictions.load(Ordering::Relaxed)));
-            let save_warmups = Arc::new(AtomicU64::new(self.warmups.load(Ordering::Relaxed)));
-            let save_total_memory =
-                Arc::new(AtomicU64::new(self.total_memory.load(Ordering::Relaxed)));
+            // Share the counters rather than their current values: a periodic
+            // save has to report the counts as of the save, not as of startup.
+            let save_cache_hits = self.cache_hits.clone();
+            let save_cache_misses = self.cache_misses.clone();
+            let save_evictions = self.evictions.clone();
+            let save_warmups = self.warmups.clone();
+            let save_total_memory = self.total_memory.clone();
+            let save_interval_seconds = self.config.persist_interval_seconds;
 
             self.stats_task = Some(tokio::spawn(async move {
-                let mut save_interval = interval(Duration::from_secs(300)); // Save every 5 minutes
+                let mut save_interval = interval(Duration::from_secs(save_interval_seconds));
 
                 loop {
                     save_interval.tick().await;
@@ -892,7 +918,7 @@ impl ModelCache {
                 .map_err(|e| anyhow!("Failed to compress cache data: {}", e))?;
 
         // Write to temporary file first, then atomically rename
-        let temp_file = file_path.with_extension("tmp");
+        let temp_file = temp_save_path(file_path);
         async_fs::write(&temp_file, &compressed_data)
             .await
             .map_err(|e| {
@@ -1027,7 +1053,7 @@ async fn save_cache_state_to_file_static(
         .map_err(|e| anyhow!("Failed to compress cache data: {}", e))?;
 
     // Write to temporary file first, then atomically rename
-    let temp_file = file_path.with_extension("tmp");
+    let temp_file = temp_save_path(file_path);
     async_fs::write(&temp_file, &compressed_data)
         .await
         .map_err(|e| {
@@ -1063,14 +1089,105 @@ impl Drop for ModelCache {
             task.abort();
         }
 
-        // Save cache state to disk on shutdown if persistence is enabled
-        if self.config.persist_cache {
-            // We need to block here since Drop is synchronous
-            if let Ok(rt) = tokio::runtime::Runtime::new() {
-                if let Err(e) = rt.block_on(self.save_to_disk()) {
-                    error!("Failed to save cache state on shutdown: {}", e);
-                }
-            }
+        // Save cache state to disk on shutdown if persistence is enabled.
+        let Some(cache_dir) = self.config.cache_dir.clone() else {
+            return;
+        };
+        if !self.config.persist_cache {
+            return;
         }
+
+        // Drop is synchronous, but blocking on a new runtime panics when this
+        // thread is already driving one - and a panic in Drop aborts the
+        // process. Building the runtime succeeds inside an async context, so
+        // it cannot be used to detect one; ask the runtime directly.
+        //
+        // The state is behind shared handles, so a save can run without `self`
+        // either way.
+        let cache_state = SaveHandles {
+            cached_models: self.cached_models.clone(),
+            usage_stats: self.usage_stats.clone(),
+            cache_hits: self.cache_hits.clone(),
+            cache_misses: self.cache_misses.clone(),
+            evictions: self.evictions.clone(),
+            warmups: self.warmups.clone(),
+            total_memory: self.total_memory.clone(),
+        };
+
+        match tokio::runtime::Handle::try_current() {
+            // Already inside a runtime: hand the save to it. Callers that need
+            // the save to be durable should use `save_cache` before dropping.
+            Ok(handle) => {
+                handle.spawn(async move {
+                    if let Err(e) = cache_state.save(&cache_dir).await {
+                        error!("Failed to save cache state on shutdown: {}", e);
+                    }
+                });
+            }
+            // No runtime driving this thread, so blocking is safe.
+            Err(_) => match tokio::runtime::Runtime::new() {
+                Ok(rt) => {
+                    if let Err(e) = rt.block_on(cache_state.save(&cache_dir)) {
+                        error!("Failed to save cache state on shutdown: {}", e);
+                    }
+                }
+                Err(e) => error!("Failed to save cache state on shutdown: {}", e),
+            },
+        }
+    }
+}
+
+/// The shared state a save needs, detached from the cache itself so it can
+/// outlive `Drop`.
+struct SaveHandles {
+    cached_models: Arc<RwLock<HashMap<String, Arc<CachedModel>>>>,
+    usage_stats: Arc<RwLock<HashMap<String, ModelUsageStats>>>,
+    cache_hits: Arc<AtomicU64>,
+    cache_misses: Arc<AtomicU64>,
+    evictions: Arc<AtomicU64>,
+    warmups: Arc<AtomicU64>,
+    total_memory: Arc<AtomicU64>,
+}
+
+impl SaveHandles {
+    async fn save(&self, cache_dir: &std::path::Path) -> Result<()> {
+        async_fs::create_dir_all(cache_dir)
+            .await
+            .map_err(|e| anyhow!("Failed to create cache directory {:?}: {}", cache_dir, e))?;
+
+        let now_timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+
+        let cache_entries = {
+            let cached_models = self.cached_models.read().await;
+            cached_models
+                .iter()
+                .map(|(model_name, cached_model)| SerializableCacheEntry {
+                    model_name: model_name.clone(),
+                    model_info: cached_model.model_info.clone(),
+                    last_used_timestamp: now_timestamp,
+                    created_at_timestamp: now_timestamp,
+                    usage_count: cached_model.usage_count.load(Ordering::Relaxed),
+                    memory_estimate: cached_model.memory_estimate,
+                    warmup_priority: cached_model.warmup_priority,
+                })
+                .collect()
+        };
+
+        let cache_state = SerializableCacheState {
+            version: CACHE_FORMAT_VERSION,
+            cache_entries,
+            usage_stats: self.usage_stats.read().await.clone(),
+            cache_hits: self.cache_hits.load(Ordering::Relaxed),
+            cache_misses: self.cache_misses.load(Ordering::Relaxed),
+            evictions: self.evictions.load(Ordering::Relaxed),
+            warmups: self.warmups.load(Ordering::Relaxed),
+            total_memory: self.total_memory.load(Ordering::Relaxed),
+            saved_at: now_timestamp,
+        };
+
+        save_cache_state_to_file_static(&cache_state, &cache_dir.join(CACHE_FILE_NAME)).await
     }
 }
