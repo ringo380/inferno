@@ -1,5 +1,6 @@
 use crate::config::Config;
 use crate::models::ModelManager;
+use crate::resilience::{RetryConfig, RetryPolicy};
 use anyhow::Result;
 use clap::{Args, Subcommand};
 use std::path::PathBuf;
@@ -421,25 +422,36 @@ async fn search_huggingface(
         .user_agent("inferno/1.0")
         .build()?;
 
-    let mut req = client
-        .get("https://huggingface.co/api/models")
-        .query(&[
-            ("search", query),
-            ("sort", "downloads"),
-            ("direction", "-1"),
-        ])
-        .query(&[("limit", &limit.to_string())]);
+    // The HuggingFace API is an external network dependency, so wrap the fetch in
+    // a retry policy with exponential backoff and jitter to ride out transient
+    // failures. Response parsing below is deterministic and stays outside the retry.
+    let limit_str = limit.to_string();
+    let retry = RetryPolicy::new(RetryConfig::default());
+    let raw: serde_json::Value = retry
+        .execute(|| async {
+            let mut req = client
+                .get("https://huggingface.co/api/models")
+                .query(&[
+                    ("search", query),
+                    ("sort", "downloads"),
+                    ("direction", "-1"),
+                ])
+                .query(&[("limit", limit_str.as_str())]);
 
-    if let Some(t) = task {
-        req = req.query(&[("pipeline_tag", t)]);
-    }
+            if let Some(t) = task {
+                req = req.query(&[("pipeline_tag", t)]);
+            }
 
-    let resp = req.send().await?;
-    if !resp.status().is_success() {
-        anyhow::bail!("HuggingFace API returned {}", resp.status());
-    }
+            let resp = req.send().await?;
+            if !resp.status().is_success() {
+                anyhow::bail!("HuggingFace API returned {}", resp.status());
+            }
 
-    let raw: serde_json::Value = resp.json().await?;
+            let raw: serde_json::Value = resp.json().await?;
+            Ok(raw)
+        })
+        .await?;
+
     let arr = raw
         .as_array()
         .ok_or_else(|| anyhow::anyhow!("Unexpected API response format"))?;

@@ -850,3 +850,59 @@ impl GracefulShutdown {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    // Fast config so tests do not sleep on the default 1s+ backoff.
+    fn fast_retry_config(max_attempts: usize) -> RetryConfig {
+        RetryConfig {
+            max_attempts,
+            initial_delay_ms: 1,
+            max_delay_ms: 5,
+            backoff_multiplier: 2.0,
+            jitter_enabled: false,
+            retry_on_timeout: true,
+        }
+    }
+
+    #[tokio::test]
+    async fn retry_succeeds_after_transient_failures() {
+        let attempts = AtomicUsize::new(0);
+        let policy = RetryPolicy::new(fast_retry_config(3));
+
+        let result: Result<&str> = policy
+            .execute(|| async {
+                let n = attempts.fetch_add(1, Ordering::SeqCst) + 1;
+                if n < 3 {
+                    Err(anyhow!("transient failure on attempt {n}"))
+                } else {
+                    Ok("ok")
+                }
+            })
+            .await;
+
+        assert_eq!(result.unwrap(), "ok");
+        // Failed twice, succeeded on the third attempt.
+        assert_eq!(attempts.load(Ordering::SeqCst), 3);
+    }
+
+    #[tokio::test]
+    async fn retry_exhausts_attempts_and_returns_last_error() {
+        let attempts = AtomicUsize::new(0);
+        let policy = RetryPolicy::new(fast_retry_config(3));
+
+        let result: Result<()> = policy
+            .execute(|| async {
+                attempts.fetch_add(1, Ordering::SeqCst);
+                Err(anyhow!("always fails"))
+            })
+            .await;
+
+        assert!(result.is_err());
+        // Exactly max_attempts calls, no more.
+        assert_eq!(attempts.load(Ordering::SeqCst), 3);
+    }
+}
