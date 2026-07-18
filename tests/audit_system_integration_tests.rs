@@ -1,972 +1,551 @@
+//! Integration tests for the audit logging subsystem.
+//!
+//! These exercise the real `inferno::audit::AuditLogger` API end to end:
+//! construct a logger over a temp directory, log events, then query, export,
+//! and summarize them. Assertions are anchored to observable behavior
+//! (retrieved events, statistics, export contents) rather than internal state.
+//!
+//! Notes on the real API that shape these tests:
+//! - `AuditLogger::log_event` pushes the event into an in-memory buffer
+//!   synchronously (under a write lock) before returning, so a subsequent
+//!   `query_events`/`get_statistics` sees it without any sleep.
+//! - The default `log_level` is `MediumAndAbove`, which drops `Info`/`Low`
+//!   events. Tests that log `Info` set `log_level: LogLevel::All`.
+//! - Query/statistics read the in-memory buffer, which only drains once it
+//!   exceeds `batch_size * 2` (default 1000), so counts below that are exact.
+
 use anyhow::Result;
-use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use inferno::{
-    InfernoError,
     audit::{
-        Actor, ActorType, AlertAction, AlertCondition, AlertConfig, AlertRule, AlertingConfig,
-        AuditConfig, AuditEvent, AuditMetrics, AuditQuery, AuditSystem, ComplianceConfig,
-        CompressionType, EncryptionConfig, EventContext, EventDetails, EventExportFormat,
-        EventOutcome, EventType, QueryFilter, Resource, ResourceType, RetentionPolicy, Severity,
+        Actor, ActorType, AuditConfiguration, AuditEvent, AuditLogger, AuditQuery, EventContext,
+        EventDetails, EventOutcome, EventType, ExportFormat, LogLevel, Resource, ResourceType,
+        Severity,
     },
-    backends::{BackendConfig, BackendType},
+    backends::BackendConfig,
     cache::{CacheConfig, ModelCache},
-    models::{ModelInfo, ModelManager},
-    security::{SecurityConfig, SecurityManager},
+    models::ModelManager,
 };
-use std::{
-    collections::HashMap,
-    path::PathBuf,
-    sync::Arc,
-    time::{Duration, SystemTime, UNIX_EPOCH},
-};
+use std::{collections::HashMap, path::PathBuf, sync::Arc};
 use tempfile::TempDir;
-use tokio::{
-    fs,
-    sync::{RwLock, mpsc},
-    time::{sleep, timeout},
-};
-use uuid::Uuid;
+use tokio::fs;
 
-/// Test utilities for audit system integration tests
-mod audit_test_utils {
-    use super::*;
-
-    pub fn create_test_audit_config(temp_dir: &TempDir) -> AuditConfig {
-        let audit_dir = temp_dir.path().join("audit");
-        let alerts_dir = temp_dir.path().join("alerts");
-
-        AuditConfig {
-            enabled: true,
-            log_directory: audit_dir,
-            max_file_size_mb: 10,
-            max_files: 5,
-            compression: CompressionType::Zstd,
-            compression_level: 3,
-            encryption: EncryptionConfig {
-                enabled: true,
-                algorithm: "AES-256-GCM".to_string(),
-                key_derivation: "PBKDF2".to_string(),
-                key_rotation_days: 30,
-                master_key_path: None,
-            },
-            retention: RetentionPolicy {
-                default_retention_days: 365,
-                critical_retention_days: 2555, // 7 years
-                audit_log_retention_days: 2555,
-                compliance_retention_days: 2555,
-                max_storage_gb: 100,
-                auto_archive: true,
-                archive_compression: CompressionType::Zstd,
-            },
-            compliance: ComplianceConfig {
-                enable_sox: true,
-                enable_hipaa: false,
-                enable_gdpr: true,
-                enable_pci: false,
-                custom_requirements: HashMap::new(),
-            },
-            alerting: AlertingConfig {
-                enabled: true,
-                alert_directory: alerts_dir,
-                email_enabled: false,
-                webhook_enabled: false,
-                slack_enabled: false,
-                smtp_config: None,
-                webhook_urls: Vec::new(),
-                slack_config: None,
-                alert_cooldown_minutes: 5,
-                max_alerts_per_hour: 100,
-            },
-            buffer_size: 1000,
-            flush_interval_seconds: 5,
-            async_processing: true,
-            enable_metrics: true,
-            debug_mode: true,
-        }
-    }
-
-    pub fn create_test_event(
-        event_type: EventType,
-        severity: Severity,
-        actor_name: &str,
-        resource_name: &str,
-        action: &str,
-    ) -> AuditEvent {
-        AuditEvent {
-            id: Uuid::new_v4().to_string(),
-            timestamp: SystemTime::now(),
-            event_type,
-            severity,
-            actor: Actor {
-                actor_type: ActorType::User,
-                id: Uuid::new_v4().to_string(),
-                name: actor_name.to_string(),
-                ip_address: Some("127.0.0.1".to_string()),
-                user_agent: Some("test-agent/1.0".to_string()),
-                session_id: Some(Uuid::new_v4().to_string()),
-            },
-            resource: Resource {
-                resource_type: ResourceType::Model,
-                id: Uuid::new_v4().to_string(),
-                name: resource_name.to_string(),
-                path: Some(format!("/models/{}", resource_name)),
-                attributes: HashMap::new(),
-            },
-            action: action.to_string(),
-            details: EventDetails {
-                description: format!("Test event: {} on {}", action, resource_name),
-                request_id: Some(Uuid::new_v4().to_string()),
-                trace_id: Some(Uuid::new_v4().to_string()),
-                span_id: Some(Uuid::new_v4().to_string()),
-                parameters: HashMap::new(),
-                response_data: None,
-                error_details: None,
-            },
-            context: EventContext {
-                source_component: "integration_test".to_string(),
-                environment: "test".to_string(),
-                version: "1.0.0".to_string(),
-                region: Some("us-east-1".to_string()),
-                availability_zone: Some("us-east-1a".to_string()),
-                cluster: Some("test-cluster".to_string()),
-                node: Some("test-node".to_string()),
-                tenant_id: Some("test-tenant".to_string()),
-                correlation_id: Some(Uuid::new_v4().to_string()),
-            },
-            outcome: EventOutcome {
-                success: true,
-                status_code: Some(200),
-                duration_ms: Some(150),
-                bytes_processed: Some(1024),
-                records_affected: Some(1),
-                resource_usage: HashMap::new(),
-            },
-            metadata: HashMap::from([
-                ("test_run".to_string(), serde_json::Value::Bool(true)),
-                (
-                    "test_id".to_string(),
-                    serde_json::Value::String(Uuid::new_v4().to_string()),
-                ),
-            ]),
-        }
-    }
-
-    pub fn create_test_alert_rule(
-        name: &str,
-        event_type: EventType,
-        severity: Severity,
-    ) -> AlertRule {
-        AlertRule {
-            id: Uuid::new_v4().to_string(),
-            name: name.to_string(),
-            description: format!("Test alert rule for {}", name),
-            enabled: true,
-            conditions: vec![
-                AlertCondition::EventType(event_type),
-                AlertCondition::Severity(severity),
-                AlertCondition::EventCount {
-                    count: 3,
-                    time_window_minutes: 5,
-                },
-            ],
-            actions: vec![
-                AlertAction::Log {
-                    level: "ERROR".to_string(),
-                    message: format!("Alert triggered: {}", name),
-                },
-                AlertAction::File {
-                    path: format!("/tmp/alert_{}.log", name),
-                    format: "json".to_string(),
-                },
-            ],
-            cooldown_minutes: 5,
-            max_alerts_per_hour: 10,
-            severity: severity,
-            tags: HashMap::from([
-                ("category".to_string(), "test".to_string()),
-                ("automated".to_string(), "true".to_string()),
-            ]),
-            created_at: SystemTime::now(),
-            updated_at: SystemTime::now(),
-            last_triggered: None,
-            trigger_count: 0,
-        }
-    }
-
-    pub async fn wait_for_audit_file(
-        audit_dir: &PathBuf,
-        timeout_duration: Duration,
-    ) -> Result<bool> {
-        let start = std::time::Instant::now();
-        while start.elapsed() < timeout_duration {
-            if let Ok(mut entries) = fs::read_dir(audit_dir).await {
-                while let Some(entry) = entries.next_entry().await? {
-                    if entry.file_name().to_string_lossy().ends_with(".audit")
-                        || entry.file_name().to_string_lossy().ends_with(".audit.zst")
-                    {
-                        return Ok(true);
-                    }
-                }
-            }
-            sleep(Duration::from_millis(100)).await;
-        }
-        Ok(false)
-    }
-
-    pub async fn count_audit_files(audit_dir: &PathBuf) -> Result<usize> {
-        let mut count = 0;
-        if let Ok(mut entries) = fs::read_dir(audit_dir).await {
-            while let Some(entry) = entries.next_entry().await? {
-                let filename = entry.file_name().to_string_lossy().to_string();
-                if filename.ends_with(".audit") || filename.ends_with(".audit.zst") {
-                    count += 1;
-                }
-            }
-        }
-        Ok(count)
+/// Build an `AuditConfiguration` rooted at a temp dir with the given log level.
+/// Everything else stays at defaults (alerting channels are all disabled by
+/// default, so nothing reaches the network).
+fn make_config(temp_dir: &TempDir, log_level: LogLevel) -> AuditConfiguration {
+    AuditConfiguration {
+        storage_path: temp_dir.path().join("audit"),
+        log_level,
+        // Never attempt an out-of-band alert during tests.
+        alert_on_critical: false,
+        ..Default::default()
     }
 }
 
-/// Test basic audit event logging and storage
+/// Construct a fully-populated `AuditEvent`. `AuditLogger::log_event` overwrites
+/// `context` and `timestamp` and fills an empty `id`, but preserves `actor`,
+/// `resource`, `action`, `details`, `outcome`, and `metadata`, which is what
+/// these tests assert on.
+fn make_event(
+    event_type: EventType,
+    severity: Severity,
+    actor_name: &str,
+    resource_name: &str,
+    action: &str,
+) -> AuditEvent {
+    let success = !matches!(severity, Severity::Critical);
+    AuditEvent {
+        id: String::new(),
+        timestamp: std::time::SystemTime::now(),
+        event_type,
+        severity,
+        actor: Actor {
+            actor_type: ActorType::User,
+            id: format!("id-{actor_name}"),
+            name: actor_name.to_string(),
+            ip_address: Some("127.0.0.1".to_string()),
+            user_agent: Some("integration-test/1.0".to_string()),
+            session_id: None,
+        },
+        resource: Resource {
+            resource_type: ResourceType::Model,
+            id: format!("id-{resource_name}"),
+            name: resource_name.to_string(),
+            path: Some(format!("/models/{resource_name}")),
+            owner: None,
+            tags: vec![],
+        },
+        action: action.to_string(),
+        details: EventDetails {
+            description: format!("{action} on {resource_name}"),
+            parameters: HashMap::new(),
+            request_id: None,
+            correlation_id: None,
+            trace_id: None,
+            parent_event_id: None,
+        },
+        context: EventContext {
+            environment: "test".to_string(),
+            application: "inferno".to_string(),
+            version: "1.0.0".to_string(),
+            hostname: "localhost".to_string(),
+            process_id: std::process::id(),
+            thread_id: None,
+            request_path: None,
+            request_method: None,
+            client_info: None,
+        },
+        outcome: EventOutcome {
+            success,
+            status_code: Some(if success { 200 } else { 500 }),
+            error_code: None,
+            error_message: None,
+            duration_ms: Some(150),
+            bytes_processed: Some(1024),
+            records_affected: Some(1),
+        },
+        metadata: HashMap::new(),
+    }
+}
+
+/// A query with a generous limit and no filters. Callers set the specific
+/// filter fields they want to test.
+fn query_all() -> AuditQuery {
+    AuditQuery {
+        limit: Some(500),
+        ..Default::default()
+    }
+}
+
+/// Log a handful of events, then read them all back.
 #[tokio::test]
-async fn test_audit_event_logging() -> Result<()> {
+async fn test_log_and_query_all() -> Result<()> {
     let temp_dir = TempDir::new()?;
-    let config = audit_test_utils::create_test_audit_config(&temp_dir);
+    let logger = AuditLogger::new(make_config(&temp_dir, LogLevel::All)).await?;
 
-    let audit_system = AuditSystem::new(config.clone()).await?;
-    audit_system.start().await?;
-
-    // Create and log various types of audit events
     let events = vec![
-        audit_test_utils::create_test_event(
-            EventType::Authentication,
-            Severity::Info,
-            "test_user",
-            "auth_service",
-            "login",
-        ),
-        audit_test_utils::create_test_event(
-            EventType::ModelManagement,
-            Severity::Medium,
-            "admin_user",
-            "llama_7b",
-            "model_load",
-        ),
-        audit_test_utils::create_test_event(
-            EventType::SecurityEvent,
-            Severity::High,
-            "security_system",
-            "firewall",
-            "unauthorized_access_attempt",
-        ),
-        audit_test_utils::create_test_event(
-            EventType::ApiCall,
-            Severity::Info,
-            "api_client",
-            "inference_endpoint",
-            "inference_request",
-        ),
-    ];
-
-    for event in events {
-        audit_system.log_event(event).await?;
-    }
-
-    // Wait for events to be flushed to disk
-    sleep(Duration::from_secs(6)).await; // Wait longer than flush_interval_seconds
-
-    // Verify audit files were created
-    let audit_files_exist =
-        audit_test_utils::wait_for_audit_file(&config.log_directory, Duration::from_secs(10))
-            .await?;
-
-    assert!(audit_files_exist, "Audit files should be created");
-
-    // Verify file count
-    let file_count = audit_test_utils::count_audit_files(&config.log_directory).await?;
-    assert!(file_count > 0, "Should have at least one audit file");
-
-    // Test audit system shutdown
-    audit_system.shutdown().await?;
-
-    Ok(())
-}
-
-/// Test audit event compression and encryption
-#[tokio::test]
-async fn test_audit_compression_encryption() -> Result<()> {
-    let temp_dir = TempDir::new()?;
-    let mut config = audit_test_utils::create_test_audit_config(&temp_dir);
-    config.compression = CompressionType::Zstd;
-    config.compression_level = 5;
-    config.encryption.enabled = true;
-
-    let audit_system = AuditSystem::new(config.clone()).await?;
-    audit_system.start().await?;
-
-    // Create several events to test compression efficiency
-    for i in 0..20 {
-        let mut event = audit_test_utils::create_test_event(
-            EventType::ApiCall,
-            Severity::Info,
-            "test_user",
-            &format!("test_resource_{}", i),
-            "test_action",
-        );
-
-        // Add large metadata to test compression
-        event.metadata.insert(
-            "large_data".to_string(),
-            serde_json::Value::String("x".repeat(1000)),
-        );
-
-        audit_system.log_event(event).await?;
-    }
-
-    // Force flush
-    audit_system.flush().await?;
-    sleep(Duration::from_secs(2)).await;
-
-    // Verify compressed files exist
-    let audit_files_exist =
-        audit_test_utils::wait_for_audit_file(&config.log_directory, Duration::from_secs(10))
-            .await?;
-
-    assert!(
-        audit_files_exist,
-        "Compressed audit files should be created"
-    );
-
-    // Check that compressed files are smaller than expected uncompressed size
-    if let Ok(mut entries) = fs::read_dir(&config.log_directory).await {
-        while let Some(entry) = entries.next_entry().await? {
-            let filename = entry.file_name().to_string_lossy().to_string();
-            if filename.ends_with(".zst") {
-                let file_size = entry.metadata().await?.len();
-                // Compressed file should be smaller than 20KB (20 * 1000 bytes per event)
-                assert!(
-                    file_size < 20000,
-                    "Compressed file should be smaller: {} bytes",
-                    file_size
-                );
-            }
-        }
-    }
-
-    audit_system.shutdown().await?;
-
-    Ok(())
-}
-
-/// Test audit alerting system
-#[tokio::test]
-async fn test_audit_alerting() -> Result<()> {
-    let temp_dir = TempDir::new()?;
-    let mut config = audit_test_utils::create_test_audit_config(&temp_dir);
-    config.alerting.enabled = true;
-    config.alerting.alert_cooldown_minutes = 1; // Short cooldown for testing
-
-    let audit_system = AuditSystem::new(config.clone()).await?;
-    audit_system.start().await?;
-
-    // Create alert rules
-    let security_alert_rule = audit_test_utils::create_test_alert_rule(
-        "security_events",
-        EventType::SecurityEvent,
-        Severity::High,
-    );
-
-    let error_alert_rule = audit_test_utils::create_test_alert_rule(
-        "error_events",
-        EventType::ErrorEvent,
-        Severity::Critical,
-    );
-
-    audit_system.add_alert_rule(security_alert_rule).await?;
-    audit_system.add_alert_rule(error_alert_rule).await?;
-
-    // Generate events that should trigger alerts
-    for i in 0..5 {
-        // Generate enough events to trigger the count-based condition
-        let security_event = audit_test_utils::create_test_event(
-            EventType::SecurityEvent,
-            Severity::High,
-            "attacker",
-            "security_system",
-            "intrusion_attempt",
-        );
-
-        audit_system.log_event(security_event).await?;
-        sleep(Duration::from_millis(200)).await; // Small delay between events
-    }
-
-    // Generate a critical error
-    let error_event = audit_test_utils::create_test_event(
-        EventType::ErrorEvent,
-        Severity::Critical,
-        "system",
-        "database",
-        "connection_failed",
-    );
-
-    audit_system.log_event(error_event).await?;
-
-    // Wait for alerts to be processed
-    sleep(Duration::from_secs(10)).await;
-
-    // Check alert metrics
-    let alert_metrics = audit_system.get_alert_metrics().await?;
-    assert!(
-        alert_metrics.alerts_triggered > 0,
-        "Should have triggered alerts"
-    );
-    assert!(
-        alert_metrics.active_rules >= 2,
-        "Should have active alert rules"
-    );
-
-    // Check alert history
-    let alert_history = audit_system
-        .get_alert_history(
-            SystemTime::now() - Duration::from_secs(600),
-            SystemTime::now(),
-        )
-        .await?;
-
-    assert!(!alert_history.is_empty(), "Should have alert history");
-
-    audit_system.shutdown().await?;
-
-    Ok(())
-}
-
-/// Test audit querying and search functionality
-#[tokio::test]
-async fn test_audit_querying() -> Result<()> {
-    let temp_dir = TempDir::new()?;
-    let config = audit_test_utils::create_test_audit_config(&temp_dir);
-
-    let audit_system = AuditSystem::new(config.clone()).await?;
-    audit_system.start().await?;
-
-    // Create events with different characteristics for querying
-    let events = vec![
-        // Authentication events
-        audit_test_utils::create_test_event(
+        make_event(
             EventType::Authentication,
             Severity::Info,
             "alice",
             "auth_service",
             "login",
         ),
-        audit_test_utils::create_test_event(
-            EventType::Authentication,
-            Severity::High,
-            "bob",
-            "auth_service",
-            "failed_login",
-        ),
-        // Model management events
-        audit_test_utils::create_test_event(
+        make_event(
             EventType::ModelManagement,
             Severity::Medium,
             "admin",
             "llama_7b",
             "model_load",
         ),
-        audit_test_utils::create_test_event(
-            EventType::ModelManagement,
-            Severity::Info,
-            "user1",
-            "gpt_3_5",
-            "inference",
+        make_event(
+            EventType::SecurityEvent,
+            Severity::High,
+            "watchdog",
+            "firewall",
+            "unauthorized_access",
         ),
-        // Security events
-        audit_test_utils::create_test_event(
+    ];
+    for event in events {
+        logger.log_event(event).await?;
+    }
+
+    let results = logger.query_events(query_all()).await?;
+    assert_eq!(
+        results.len(),
+        3,
+        "all three logged events should be queryable"
+    );
+
+    // A logged event's payload survives round-trip.
+    let login = results
+        .iter()
+        .find(|e| e.action == "login")
+        .expect("login event should be present");
+    assert_eq!(login.actor.name, "alice");
+    assert_eq!(login.resource.name, "auth_service");
+    // log_event fills an empty id with a UUID.
+    assert!(!login.id.is_empty(), "logger should assign an id");
+
+    logger.shutdown().await;
+    Ok(())
+}
+
+/// Query filters (by event type, severity, and actor) select the right subset.
+#[tokio::test]
+async fn test_query_filters() -> Result<()> {
+    let temp_dir = TempDir::new()?;
+    let logger = AuditLogger::new(make_config(&temp_dir, LogLevel::All)).await?;
+
+    for event in [
+        make_event(
+            EventType::Authentication,
+            Severity::Info,
+            "alice",
+            "auth",
+            "login",
+        ),
+        make_event(
+            EventType::Authentication,
+            Severity::High,
+            "bob",
+            "auth",
+            "failed_login",
+        ),
+        make_event(
+            EventType::ModelManagement,
+            Severity::Medium,
+            "admin",
+            "llama_7b",
+            "load",
+        ),
+        make_event(
             EventType::SecurityEvent,
             Severity::Critical,
             "unknown",
             "firewall",
-            "intrusion_detected",
+            "intrusion",
         ),
-    ];
-
-    for event in events {
-        audit_system.log_event(event).await?;
+    ] {
+        logger.log_event(event).await?;
     }
 
-    // Force flush to ensure events are written
-    audit_system.flush().await?;
-    sleep(Duration::from_secs(2)).await;
+    // By event type.
+    let auth = logger
+        .query_events(AuditQuery {
+            event_types: Some(vec![EventType::Authentication]),
+            ..query_all()
+        })
+        .await?;
+    assert_eq!(auth.len(), 2, "two authentication events");
 
-    // Test various queries
+    // By severity.
+    let critical = logger
+        .query_events(AuditQuery {
+            severities: Some(vec![Severity::Critical]),
+            ..query_all()
+        })
+        .await?;
+    assert_eq!(critical.len(), 1, "one critical event");
+    assert_eq!(critical[0].action, "intrusion");
 
-    // 1. Query by event type
-    let auth_query = AuditQuery {
-        filters: vec![QueryFilter::EventType(EventType::Authentication)],
-        start_time: Some(SystemTime::now() - Duration::from_secs(300)),
-        end_time: Some(SystemTime::now()),
-        limit: Some(100),
-        offset: None,
-        sort_by: Some("timestamp".to_string()),
-        sort_order: Some("desc".to_string()),
-    };
+    // By actor (matches actor id or name).
+    let by_alice = logger
+        .query_events(AuditQuery {
+            actors: Some(vec!["alice".to_string()]),
+            ..query_all()
+        })
+        .await?;
+    assert_eq!(by_alice.len(), 1, "one event by alice");
+    assert_eq!(by_alice[0].action, "login");
 
-    let auth_results = audit_system.query_events(auth_query).await?;
-    assert_eq!(auth_results.len(), 2, "Should find 2 authentication events");
-
-    // 2. Query by severity
-    let critical_query = AuditQuery {
-        filters: vec![QueryFilter::Severity(Severity::Critical)],
-        start_time: Some(SystemTime::now() - Duration::from_secs(300)),
-        end_time: Some(SystemTime::now()),
-        limit: Some(100),
-        offset: None,
-        sort_by: None,
-        sort_order: None,
-    };
-
-    let critical_results = audit_system.query_events(critical_query).await?;
-    assert_eq!(critical_results.len(), 1, "Should find 1 critical event");
-
-    // 3. Query by actor
-    let alice_query = AuditQuery {
-        filters: vec![QueryFilter::Actor("alice".to_string())],
-        start_time: Some(SystemTime::now() - Duration::from_secs(300)),
-        end_time: Some(SystemTime::now()),
-        limit: Some(100),
-        offset: None,
-        sort_by: None,
-        sort_order: None,
-    };
-
-    let alice_results = audit_system.query_events(alice_query).await?;
-    assert_eq!(alice_results.len(), 1, "Should find 1 event by alice");
-
-    // 4. Complex query with multiple filters
-    let complex_query = AuditQuery {
-        filters: vec![
-            QueryFilter::EventType(EventType::ModelManagement),
-            QueryFilter::SeverityRange {
-                min: Severity::Info,
-                max: Severity::Medium,
-            },
-        ],
-        start_time: Some(SystemTime::now() - Duration::from_secs(300)),
-        end_time: Some(SystemTime::now()),
-        limit: Some(100),
-        offset: None,
-        sort_by: Some("severity".to_string()),
-        sort_order: Some("asc".to_string()),
-    };
-
-    let complex_results = audit_system.query_events(complex_query).await?;
-    assert_eq!(
-        complex_results.len(),
-        2,
-        "Should find 2 model management events with specified severity"
-    );
-
-    audit_system.shutdown().await?;
-
+    logger.shutdown().await;
     Ok(())
 }
 
-/// Test audit export functionality
+/// `log_level` filtering drops events below the configured threshold at write
+/// time, so they never reach the queryable buffer.
 #[tokio::test]
-async fn test_audit_export() -> Result<()> {
+async fn test_log_level_filtering() -> Result<()> {
     let temp_dir = TempDir::new()?;
-    let config = audit_test_utils::create_test_audit_config(&temp_dir);
+    // HighAndAbove keeps Critical + High, drops Medium/Low/Info.
+    let logger = AuditLogger::new(make_config(&temp_dir, LogLevel::HighAndAbove)).await?;
 
-    let audit_system = AuditSystem::new(config.clone()).await?;
-    audit_system.start().await?;
-
-    // Create events for export
-    for i in 0..10 {
-        let event = audit_test_utils::create_test_event(
+    logger
+        .log_event(make_event(
             EventType::ApiCall,
             Severity::Info,
-            &format!("user_{}", i),
-            &format!("resource_{}", i),
-            "api_call",
-        );
-        audit_system.log_event(event).await?;
-    }
-
-    audit_system.flush().await?;
-    sleep(Duration::from_secs(2)).await;
-
-    let export_dir = temp_dir.path().join("exports");
-    fs::create_dir_all(&export_dir).await?;
-
-    // Test JSON export
-    let json_export_path = export_dir.join("events.json");
-    let export_query = AuditQuery {
-        filters: vec![QueryFilter::EventType(EventType::ApiCall)],
-        start_time: Some(SystemTime::now() - Duration::from_secs(300)),
-        end_time: Some(SystemTime::now()),
-        limit: Some(100),
-        offset: None,
-        sort_by: None,
-        sort_order: None,
-    };
-
-    audit_system
-        .export_events(
-            export_query.clone(),
-            &json_export_path,
-            EventExportFormat::Json,
-        )
+            "u",
+            "r",
+            "low_prio",
+        ))
+        .await?;
+    logger
+        .log_event(make_event(
+            EventType::ApiCall,
+            Severity::Medium,
+            "u",
+            "r",
+            "mid_prio",
+        ))
+        .await?;
+    logger
+        .log_event(make_event(
+            EventType::SecurityEvent,
+            Severity::High,
+            "u",
+            "r",
+            "high_prio",
+        ))
         .await?;
 
-    assert!(json_export_path.exists(), "JSON export file should exist");
+    let results = logger.query_events(query_all()).await?;
+    assert_eq!(results.len(), 1, "only the High-severity event is retained");
+    assert_eq!(results[0].action, "high_prio");
 
-    let json_content = fs::read_to_string(&json_export_path).await?;
-    assert!(!json_content.is_empty(), "JSON export should not be empty");
-
-    // Test CSV export
-    let csv_export_path = export_dir.join("events.csv");
-    audit_system
-        .export_events(
-            export_query.clone(),
-            &csv_export_path,
-            EventExportFormat::Csv,
-        )
-        .await?;
-
-    assert!(csv_export_path.exists(), "CSV export file should exist");
-
-    let csv_content = fs::read_to_string(&csv_export_path).await?;
-    assert!(!csv_content.is_empty(), "CSV export should not be empty");
-    assert!(
-        csv_content.contains("timestamp"),
-        "CSV should contain headers"
-    );
-
-    // Test compressed export
-    let compressed_export_path = export_dir.join("events.json.gz");
-    audit_system
-        .export_events_compressed(
-            export_query,
-            &compressed_export_path,
-            EventExportFormat::Json,
-            CompressionType::Gzip,
-        )
-        .await?;
-
-    assert!(
-        compressed_export_path.exists(),
-        "Compressed export file should exist"
-    );
-
-    let compressed_size = fs::metadata(&compressed_export_path).await?.len();
-    let uncompressed_size = fs::metadata(&json_export_path).await?.len();
-    assert!(
-        compressed_size < uncompressed_size,
-        "Compressed file should be smaller"
-    );
-
-    audit_system.shutdown().await?;
-
+    logger.shutdown().await;
     Ok(())
 }
 
-/// Test audit retention and cleanup
+/// Statistics are computed over the buffered events.
 #[tokio::test]
-async fn test_audit_retention_cleanup() -> Result<()> {
+async fn test_statistics() -> Result<()> {
     let temp_dir = TempDir::new()?;
-    let mut config = audit_test_utils::create_test_audit_config(&temp_dir);
-    config.retention.default_retention_days = 1; // Short retention for testing
-    config.max_file_size_mb = 1; // Small file size to trigger rotation
+    let logger = AuditLogger::new(make_config(&temp_dir, LogLevel::All)).await?;
 
-    let audit_system = AuditSystem::new(config.clone()).await?;
-    audit_system.start().await?;
-
-    // Generate many events to trigger file rotation
-    for i in 0..100 {
-        let mut event = audit_test_utils::create_test_event(
-            EventType::UserAction,
-            Severity::Info,
-            &format!("user_{}", i),
-            &format!("resource_{}", i),
-            "action",
-        );
-
-        // Add large metadata to increase file size
-        event.metadata.insert(
-            "large_data".to_string(),
-            serde_json::Value::String("x".repeat(500)),
-        );
-
-        audit_system.log_event(event).await?;
-
-        if i % 20 == 0 {
-            audit_system.flush().await?;
-            sleep(Duration::from_millis(100)).await;
-        }
-    }
-
-    audit_system.flush().await?;
-    sleep(Duration::from_secs(3)).await;
-
-    // Check that multiple files were created due to rotation
-    let initial_file_count = audit_test_utils::count_audit_files(&config.log_directory).await?;
-    assert!(
-        initial_file_count > 1,
-        "Should have multiple audit files due to rotation"
-    );
-
-    // Simulate old files by creating files with old timestamps
-    let old_file = config.log_directory.join("old_audit.audit");
-    fs::write(&old_file, "old audit data").await?;
-
-    // Set file time to be older than retention period
-    // Note: This would require setting file times in a real implementation
-
-    // Test cleanup operation
-    audit_system.cleanup_old_files().await?;
-
-    // Test retention policy enforcement
-    let retention_stats = audit_system.get_retention_stats().await?;
-    assert!(retention_stats.total_files >= 0);
-    assert!(retention_stats.total_size_mb >= 0.0);
-
-    audit_system.shutdown().await?;
-
-    Ok(())
-}
-
-/// Test audit metrics and monitoring
-#[tokio::test]
-async fn test_audit_metrics() -> Result<()> {
-    let temp_dir = TempDir::new()?;
-    let config = audit_test_utils::create_test_audit_config(&temp_dir);
-
-    let audit_system = AuditSystem::new(config.clone()).await?;
-    audit_system.start().await?;
-
-    // Generate events of different types and severities
-    let event_types = vec![
+    // 3 of each of 5 (type, severity) pairs = 15 events; one pair is Critical.
+    let pairs = [
         (EventType::Authentication, Severity::Info),
         (EventType::SecurityEvent, Severity::High),
         (EventType::ModelManagement, Severity::Medium),
         (EventType::ErrorEvent, Severity::Critical),
         (EventType::ApiCall, Severity::Info),
     ];
-
-    for (event_type, severity) in event_types {
+    for (event_type, severity) in pairs {
         for i in 0..3 {
-            let event = audit_test_utils::create_test_event(
-                event_type.clone(),
-                severity.clone(),
-                &format!("user_{}", i),
-                &format!("resource_{}", i),
-                "test_action",
-            );
-            audit_system.log_event(event).await?;
+            logger
+                .log_event(make_event(
+                    event_type.clone(),
+                    severity.clone(),
+                    &format!("user_{i}"),
+                    &format!("resource_{i}"),
+                    "action",
+                ))
+                .await?;
         }
     }
 
-    audit_system.flush().await?;
-    sleep(Duration::from_secs(2)).await;
+    let stats = logger.get_statistics().await?;
+    assert_eq!(stats.total_events, 15);
+    // Keys are the Debug rendering of the enum variant.
+    assert_eq!(stats.events_by_type.get("Authentication"), Some(&3));
+    assert_eq!(stats.events_by_severity.get("Critical"), Some(&3));
+    assert_eq!(stats.critical_events_count, 3);
+    // Only the Critical events were marked unsuccessful (12 of 15 succeed).
+    assert_eq!(stats.error_events_count, 3);
+    assert!(
+        (stats.success_rate - (12.0 / 15.0 * 100.0)).abs() < 1e-6,
+        "success_rate should be 80%, got {}",
+        stats.success_rate
+    );
 
-    // Test general metrics
-    let metrics = audit_system.get_metrics().await?;
-    assert!(metrics.total_events >= 15, "Should have at least 15 events");
-    assert!(metrics.events_per_minute >= 0.0);
-    assert!(metrics.average_event_size_bytes > 0);
-
-    // Test metrics by event type
-    let type_metrics = audit_system.get_metrics_by_event_type().await?;
-    assert!(type_metrics.contains_key(&EventType::Authentication));
-    assert!(type_metrics.contains_key(&EventType::SecurityEvent));
-    assert_eq!(type_metrics[&EventType::Authentication], 3);
-
-    // Test metrics by severity
-    let severity_metrics = audit_system.get_metrics_by_severity().await?;
-    assert!(severity_metrics.contains_key(&Severity::Critical));
-    assert!(severity_metrics.contains_key(&Severity::Info));
-    assert_eq!(severity_metrics[&Severity::Critical], 3);
-
-    // Test performance metrics
-    let performance_metrics = audit_system.get_performance_metrics().await?;
-    assert!(performance_metrics.average_write_time_ms >= 0.0);
-    assert!(performance_metrics.queue_size >= 0);
-    assert!(performance_metrics.flush_count > 0);
-
-    audit_system.shutdown().await?;
-
+    logger.shutdown().await;
     Ok(())
 }
 
-/// Test audit system integration with other components
+/// Export produces non-empty files in each supported format; unsupported
+/// formats surface an error rather than a silent empty file.
 #[tokio::test]
-async fn test_audit_integration_with_components() -> Result<()> {
+async fn test_export_formats() -> Result<()> {
     let temp_dir = TempDir::new()?;
-    let models_dir = temp_dir.path().join("models");
-    fs::create_dir_all(&models_dir).await?;
+    let logger = AuditLogger::new(make_config(&temp_dir, LogLevel::All)).await?;
 
-    // Create mock model file
-    let model_path = models_dir.join("test_model.gguf");
-    let model_content = b"GGUF\x03\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00";
-    fs::write(&model_path, model_content).await?;
-
-    let audit_config = audit_test_utils::create_test_audit_config(&temp_dir);
-    let audit_system = Arc::new(AuditSystem::new(audit_config).await?);
-    audit_system.start().await?;
-
-    // Initialize other components with audit integration
-    let model_manager = Arc::new(ModelManager::new(models_dir));
-    let backend_config = BackendConfig::default();
-    let cache_config = CacheConfig::default();
-    let cache = Arc::new(
-        ModelCache::new(
-            cache_config,
-            backend_config.clone(),
-            model_manager.clone(),
-            None,
-        )
-        .await?,
-    );
-
-    // Test model management audit events
-    let models = model_manager.discover_models().await?;
-    assert!(!models.is_empty());
-
-    // Simulate model loading event
-    let model_load_event = audit_test_utils::create_test_event(
-        EventType::ModelManagement,
-        Severity::Info,
-        "model_manager",
-        &models[0].name,
-        "model_discovered",
-    );
-    audit_system.log_event(model_load_event).await?;
-
-    // Test cache audit events
-    let cache_event = audit_test_utils::create_test_event(
-        EventType::SystemChange,
-        Severity::Info,
-        "cache_system",
-        "model_cache",
-        "cache_hit",
-    );
-    audit_system.log_event(cache_event).await?;
-
-    // Test security audit events
-    let security_event = audit_test_utils::create_test_event(
-        EventType::SecurityEvent,
-        Severity::Medium,
-        "security_system",
-        "auth_module",
-        "access_granted",
-    );
-    audit_system.log_event(security_event).await?;
-
-    audit_system.flush().await?;
-    sleep(Duration::from_secs(3)).await;
-
-    // Verify events were logged
-    let query = AuditQuery {
-        filters: vec![],
-        start_time: Some(SystemTime::now() - Duration::from_secs(300)),
-        end_time: Some(SystemTime::now()),
-        limit: Some(100),
-        offset: None,
-        sort_by: None,
-        sort_order: None,
-    };
-
-    let events = audit_system.query_events(query).await?;
-    assert!(
-        events.len() >= 3,
-        "Should have audit events from different components"
-    );
-
-    // Check event types are represented
-    let event_types: std::collections::HashSet<_> = events
-        .iter()
-        .map(|e| std::mem::discriminant(&e.event_type))
-        .collect();
-
-    assert!(
-        event_types.len() >= 2,
-        "Should have events of different types"
-    );
-
-    audit_system.shutdown().await?;
-
-    Ok(())
-}
-
-/// Test concurrent audit operations
-#[tokio::test]
-async fn test_concurrent_audit_operations() -> Result<()> {
-    let temp_dir = TempDir::new()?;
-    let config = audit_test_utils::create_test_audit_config(&temp_dir);
-
-    let audit_system = Arc::new(AuditSystem::new(config).await?);
-    audit_system.start().await?;
-
-    // Launch multiple concurrent tasks that generate audit events
-    let mut tasks = Vec::new();
-
-    for task_id in 0..5 {
-        let audit_system_clone = audit_system.clone();
-        let task = tokio::spawn(async move {
-            for i in 0..20 {
-                let event = audit_test_utils::create_test_event(
-                    EventType::ApiCall,
-                    Severity::Info,
-                    &format!("task_{}_user_{}", task_id, i),
-                    &format!("task_{}_resource_{}", task_id, i),
-                    "concurrent_action",
-                );
-
-                if let Err(e) = audit_system_clone.log_event(event).await {
-                    eprintln!("Failed to log event: {}", e);
-                }
-
-                // Small delay to simulate real usage
-                sleep(Duration::from_millis(10)).await;
-            }
-        });
-
-        tasks.push(task);
+    for i in 0..5 {
+        logger
+            .log_event(make_event(
+                EventType::ApiCall,
+                Severity::Info,
+                &format!("user_{i}"),
+                &format!("resource_{i}"),
+                "api_call",
+            ))
+            .await?;
     }
 
-    // Wait for all tasks to complete
-    futures::future::join_all(tasks).await;
+    let export_dir = temp_dir.path().join("exports");
+    fs::create_dir_all(&export_dir).await?;
 
-    audit_system.flush().await?;
-    sleep(Duration::from_secs(5)).await;
+    // JSON
+    let json_path: PathBuf = export_dir.join("events.json");
+    logger
+        .export_events(query_all(), &json_path, ExportFormat::Json)
+        .await?;
+    let json = fs::read_to_string(&json_path).await?;
+    assert!(
+        json.contains("api_call"),
+        "JSON export should contain event data"
+    );
 
-    // Verify all events were logged correctly
-    let query = AuditQuery {
-        filters: vec![QueryFilter::EventType(EventType::ApiCall)],
-        start_time: Some(SystemTime::now() - Duration::from_secs(300)),
-        end_time: Some(SystemTime::now()),
-        limit: Some(200),
-        offset: None,
-        sort_by: None,
-        sort_order: None,
-    };
+    // JSON Lines: one JSON object per line.
+    let jsonl_path = export_dir.join("events.jsonl");
+    logger
+        .export_events(query_all(), &jsonl_path, ExportFormat::JsonLines)
+        .await?;
+    let jsonl = fs::read_to_string(&jsonl_path).await?;
+    assert_eq!(jsonl.lines().count(), 5, "one JSONL line per event");
 
-    let events = audit_system.query_events(query).await?;
+    // CSV
+    let csv_path = export_dir.join("events.csv");
+    logger
+        .export_events(query_all(), &csv_path, ExportFormat::Csv)
+        .await?;
+    let csv = fs::read_to_string(&csv_path).await?;
+    assert!(!csv.is_empty(), "CSV export should not be empty");
+
+    // Parquet is not supported by export_events and must error, not write junk.
+    let parquet_path = export_dir.join("events.parquet");
+    let err = logger
+        .export_events(query_all(), &parquet_path, ExportFormat::Parquet)
+        .await;
+    assert!(err.is_err(), "Parquet export should be rejected");
+    assert!(
+        !parquet_path.exists(),
+        "no file should be written for an unsupported format"
+    );
+
+    logger.shutdown().await;
+    Ok(())
+}
+
+/// Concurrent writers all land in the buffer without loss or corruption.
+#[tokio::test]
+async fn test_concurrent_logging() -> Result<()> {
+    let temp_dir = TempDir::new()?;
+    let logger = Arc::new(AuditLogger::new(make_config(&temp_dir, LogLevel::All)).await?);
+
+    let mut tasks = Vec::new();
+    for task_id in 0..5 {
+        let logger = logger.clone();
+        tasks.push(tokio::spawn(async move {
+            for i in 0..20 {
+                let event = make_event(
+                    EventType::ApiCall,
+                    Severity::Info,
+                    &format!("task_{task_id}_user_{i}"),
+                    &format!("task_{task_id}_resource_{i}"),
+                    "concurrent_action",
+                );
+                logger
+                    .log_event(event)
+                    .await
+                    .expect("log_event should succeed");
+            }
+        }));
+    }
+    for task in tasks {
+        task.await?;
+    }
+
+    // 5 tasks * 20 events = 100, well under batch_size*2, so the count is exact.
+    let events = logger
+        .query_events(AuditQuery {
+            event_types: Some(vec![EventType::ApiCall]),
+            limit: Some(500),
+            ..Default::default()
+        })
+        .await?;
     assert_eq!(
         events.len(),
         100,
-        "Should have 100 concurrent events (5 tasks * 20 events)"
+        "all 100 concurrent events should be present"
     );
 
-    // Verify no data corruption occurred
-    for event in events {
+    for event in &events {
         assert!(event.actor.name.starts_with("task_"));
         assert!(event.resource.name.starts_with("task_"));
         assert_eq!(event.action, "concurrent_action");
     }
 
-    audit_system.shutdown().await?;
+    logger.shutdown().await;
+    Ok(())
+}
 
+/// Encryption key generation yields distinct, non-empty keys, and a logger
+/// configured with encryption + compression still logs and queries.
+#[tokio::test]
+async fn test_encryption_and_compression_config() -> Result<()> {
+    let key_a = AuditLogger::generate_encryption_key().await?;
+    let key_b = AuditLogger::generate_encryption_key().await?;
+    assert!(!key_a.is_empty(), "generated key should be non-empty");
+    assert_ne!(key_a, key_b, "each generated key should be unique");
+
+    let temp_dir = TempDir::new()?;
+    let mut config = make_config(&temp_dir, LogLevel::All);
+    config.encryption_enabled = true;
+    config.encryption_key_env = "INFERNO_TEST_AUDIT_KEY".to_string();
+    config.compression_enabled = true;
+
+    let logger = AuditLogger::new(config).await?;
+    logger
+        .log_event(make_event(
+            EventType::DataAccess,
+            Severity::High,
+            "reader",
+            "secret_dataset",
+            "read",
+        ))
+        .await?;
+
+    let results = logger.query_events(query_all()).await?;
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0].resource.name, "secret_dataset");
+
+    logger.shutdown().await;
+    Ok(())
+}
+
+/// The audit logger coexists with other subsystems (model manager + cache) and
+/// records events that reference their resources.
+#[tokio::test]
+async fn test_integration_with_components() -> Result<()> {
+    let temp_dir = TempDir::new()?;
+    let models_dir = temp_dir.path().join("models");
+    fs::create_dir_all(&models_dir).await?;
+
+    let logger = AuditLogger::new(make_config(&temp_dir, LogLevel::All)).await?;
+
+    let model_manager = Arc::new(ModelManager::new(&models_dir));
+    let cache = ModelCache::new(
+        CacheConfig::default(),
+        BackendConfig::default(),
+        model_manager.clone(),
+        None,
+    )
+    .await?;
+    // Discovery over an empty dir simply returns an empty list, not an error.
+    let discovered = model_manager.list_models().await?;
+    assert!(discovered.is_empty(), "no models in an empty dir");
+    drop(cache);
+
+    for event in [
+        make_event(
+            EventType::ModelManagement,
+            Severity::Info,
+            "model_manager",
+            "llama_7b",
+            "discovered",
+        ),
+        make_event(
+            EventType::SystemChange,
+            Severity::Info,
+            "cache_system",
+            "model_cache",
+            "cache_hit",
+        ),
+        make_event(
+            EventType::SecurityEvent,
+            Severity::Medium,
+            "security",
+            "auth_module",
+            "access_granted",
+        ),
+    ] {
+        logger.log_event(event).await?;
+    }
+
+    let events = logger.query_events(query_all()).await?;
+    assert_eq!(
+        events.len(),
+        3,
+        "events from all three components are recorded"
+    );
+
+    let distinct_types: std::collections::HashSet<_> = events
+        .iter()
+        .map(|e| std::mem::discriminant(&e.event_type))
+        .collect();
+    assert!(distinct_types.len() >= 2, "events span multiple types");
+
+    logger.shutdown().await;
     Ok(())
 }
