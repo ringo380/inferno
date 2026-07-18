@@ -228,10 +228,11 @@ impl ResponseCache {
         }
 
         let cache_key = key.to_string();
-        let mut stats = self.stats.lock().await;
-        stats.total_requests += 1;
 
-        // Check deduplication map first
+        // Resolve the deduplication target. Do NOT hold the stats lock here:
+        // put()/update_stats() acquire the cache lock and then the stats lock,
+        // so holding stats while touching the cache below would invert that
+        // ordering and deadlock under concurrent get/put load.
         let actual_key = if self.config.deduplication_enabled {
             let dedup_map = self.deduplication_map.read().await;
             dedup_map.get(&cache_key).unwrap_or(&cache_key).to_owned()
@@ -239,53 +240,91 @@ impl ResponseCache {
             cache_key
         };
 
-        let cache = self.cache.read().await;
-        if let Some(cached_response) = cache.get(&actual_key) {
-            // Check if entry has expired
-            if self.is_expired(cached_response) {
-                drop(cache);
-                drop(stats);
-                self.remove_expired_entry(&actual_key).await;
-                return None;
-            }
-
-            // Update access statistics
-            stats.cache_hits += 1;
-            stats.hit_rate = stats.cache_hits as f32 / stats.total_requests as f32;
-            drop(stats);
-
-            // Update last accessed time and access count
-            self.update_access_stats(&actual_key).await;
-
-            let response_data = if cached_response.compressed {
-                match self.decompress_data(
-                    &cached_response.response_data,
-                    &cached_response.compression_algorithm,
-                ) {
-                    Ok(decompressed) => decompressed,
-                    Err(e) => {
-                        warn!(
-                            "Decompression failed for key {}: {}, removing entry",
-                            actual_key, e
-                        );
-                        drop(cache);
-                        self.remove_expired_entry(&actual_key).await;
-                        return None;
-                    }
-                }
-            } else {
-                cached_response.response_data.clone()
-            };
-
-            debug!("Cache hit for key: {}", actual_key);
-            return Some(response_data);
+        // Inspect the cache and extract everything we need, then release the
+        // read lock before acquiring the stats mutex.
+        enum Lookup {
+            Hit {
+                data: Vec<u8>,
+                compressed: bool,
+                algorithm: Option<CompressionAlgorithm>,
+            },
+            Expired,
+            Miss,
         }
 
-        stats.cache_misses += 1;
-        stats.hit_rate = stats.cache_hits as f32 / stats.total_requests as f32;
-        debug!("Cache miss for key: {:?}", key);
+        let lookup = {
+            let cache = self.cache.read().await;
+            match cache.get(&actual_key) {
+                Some(cached_response) => {
+                    if self.is_expired(cached_response) {
+                        Lookup::Expired
+                    } else {
+                        Lookup::Hit {
+                            data: cached_response.response_data.clone(),
+                            compressed: cached_response.compressed,
+                            algorithm: cached_response.compression_algorithm.clone(),
+                        }
+                    }
+                }
+                None => Lookup::Miss,
+            }
+        };
 
-        None
+        // Update counters under the stats lock only (cache lock already released).
+        {
+            let mut stats = self.stats.lock().await;
+            stats.total_requests += 1;
+            match &lookup {
+                Lookup::Hit { .. } => {
+                    stats.cache_hits += 1;
+                    stats.hit_rate = stats.cache_hits as f32 / stats.total_requests as f32;
+                }
+                Lookup::Miss => {
+                    stats.cache_misses += 1;
+                    stats.hit_rate = stats.cache_hits as f32 / stats.total_requests as f32;
+                }
+                // Expired entries count as a request but as neither hit nor miss.
+                Lookup::Expired => {}
+            }
+        }
+
+        match lookup {
+            Lookup::Hit {
+                data,
+                compressed,
+                algorithm,
+            } => {
+                self.update_access_stats(&actual_key).await;
+
+                if compressed {
+                    match self.decompress_data(&data, &algorithm) {
+                        Ok(decompressed) => {
+                            debug!("Cache hit for key: {}", actual_key);
+                            Some(decompressed)
+                        }
+                        Err(e) => {
+                            warn!(
+                                "Decompression failed for key {}: {}, removing entry",
+                                actual_key, e
+                            );
+                            self.remove_expired_entry(&actual_key).await;
+                            None
+                        }
+                    }
+                } else {
+                    debug!("Cache hit for key: {}", actual_key);
+                    Some(data)
+                }
+            }
+            Lookup::Expired => {
+                self.remove_expired_entry(&actual_key).await;
+                None
+            }
+            Lookup::Miss => {
+                debug!("Cache miss for key: {:?}", key);
+                None
+            }
+        }
     }
 
     pub async fn put(
