@@ -8,7 +8,7 @@ use anyhow::{Result, anyhow};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::{
         Arc,
         atomic::{AtomicU64, Ordering},
@@ -210,6 +210,11 @@ pub struct ModelCache {
     cached_models: Arc<RwLock<HashMap<String, Arc<CachedModel>>>>,
     usage_stats: Arc<RwLock<HashMap<String, ModelUsageStats>>>,
 
+    // Maps a caller-supplied spelling (bare name, name+extension, relative or
+    // `./`-prefixed path, symlink) to the canonical cache key so repeat lookups
+    // of the same spelling skip the resolve/canonicalize disk work.
+    alias_map: Arc<RwLock<HashMap<String, String>>>,
+
     // Statistics
     //
     // These are shared with the background persistence task, which must observe
@@ -228,6 +233,18 @@ pub struct ModelCache {
 
     // Concurrency control
     loading_semaphore: Arc<Semaphore>,
+}
+
+/// Canonicalized absolute path as a stable cache key. Falls back to the given
+/// path if canonicalization fails (e.g. the file was removed), so lookups still
+/// resolve deterministically. Mirrors the keying `ModelManager` uses for its
+/// on-disk metadata cache, which distinguishes same-named models in different
+/// directories rather than collapsing them.
+fn canonical_key(path: &Path) -> String {
+    path.canonicalize()
+        .unwrap_or_else(|_| path.to_path_buf())
+        .to_string_lossy()
+        .to_string()
 }
 
 impl ModelCache {
@@ -253,6 +270,7 @@ impl ModelCache {
             metrics,
             cached_models: cached_models.clone(),
             usage_stats: usage_stats.clone(),
+            alias_map: Arc::new(RwLock::new(HashMap::new())),
             cache_hits: Arc::new(AtomicU64::new(0)),
             cache_misses: Arc::new(AtomicU64::new(0)),
             evictions: Arc::new(AtomicU64::new(0)),
@@ -280,20 +298,36 @@ impl ModelCache {
 
     /// Get a model from cache, loading it if necessary
     pub async fn get_model(&self, model_name: &str) -> Result<Arc<CachedModel>> {
+        // Resolve the caller's spelling to the canonical cache key before
+        // deciding hit vs. miss, so every spelling of the same file collapses
+        // to one entry. Cheap on repeat spellings (served from the alias map);
+        // one resolve on first sight of a new spelling. A spelling that maps to
+        // no file is a miss that then fails to load - count it before returning
+        // so miss statistics stay accurate.
+        let key = match self.resolve_cache_key(model_name).await {
+            Ok(key) => key,
+            Err(e) => {
+                self.cache_misses.fetch_add(1, Ordering::Relaxed);
+                return Err(e);
+            }
+        };
+
         // Try to get from cache first
         {
             let cache_guard = self.cached_models.read().await;
-            if let Some(cached_model) = cache_guard.get(model_name) {
+            if let Some(cached_model) = cache_guard.get(&key) {
                 // Update last used time
                 // Can't modify Arc contents directly, so we'll track usage separately
                 cached_model.usage_count.fetch_add(1, Ordering::Relaxed);
 
                 self.cache_hits.fetch_add(1, Ordering::Relaxed);
-                self.update_usage_stats(model_name, Duration::from_millis(0))
+                let cached_model = cached_model.clone();
+                drop(cache_guard);
+                self.update_usage_stats(&key, Duration::from_millis(0))
                     .await;
 
-                debug!("Cache hit for model: {}", model_name);
-                return Ok(cached_model.clone());
+                debug!("Cache hit for model: {} (key {})", model_name, key);
+                return Ok(cached_model);
             }
         }
 
@@ -313,12 +347,47 @@ impl ModelCache {
         let load_time = start_time.elapsed();
 
         info!("Model {} loaded in {:?}", model_name, load_time);
-        self.update_usage_stats(model_name, load_time).await;
+        self.update_usage_stats(&key, load_time).await;
 
         // Check if we need to evict models
         self.maybe_evict_models().await?;
 
         Ok(cached_model)
+    }
+
+    /// Resolve a caller-supplied model name or path to the canonical cache key:
+    /// the canonicalized absolute path of the model file. All spellings of the
+    /// same file (bare name, name+extension, relative path, `./` prefix,
+    /// symlink) collapse to one key, so a model occupies exactly one cache
+    /// entry - fixing the double-load where e.g. `llama` and `llama.gguf` were
+    /// cached separately. Repeat lookups of a spelling are served from the
+    /// alias map without touching disk.
+    async fn resolve_cache_key(&self, model_name: &str) -> Result<String> {
+        if let Some(key) = self.alias_map.read().await.get(model_name) {
+            return Ok(key.clone());
+        }
+        let model_info = self.model_manager.resolve_model(model_name).await?;
+        let key = canonical_key(&model_info.path);
+        self.alias_map
+            .write()
+            .await
+            .insert(model_name.to_string(), key.clone());
+        Ok(key)
+    }
+
+    /// Canonical cache keys of the configured always-warm models. Resident
+    /// models are keyed by canonical path, but `always_warm` holds caller
+    /// spellings, so the spellings must be resolved to the same keys before
+    /// eviction protection can match them. Unresolvable entries (missing files)
+    /// are simply absent.
+    async fn always_warm_keys(&self) -> std::collections::HashSet<String> {
+        let mut keys = std::collections::HashSet::new();
+        for name in &self.config.always_warm {
+            if let Ok(key) = self.resolve_cache_key(name).await {
+                keys.insert(key);
+            }
+        }
+        keys
     }
 
     /// Warm up models based on the configured strategy
@@ -352,7 +421,13 @@ impl ModelCache {
             miss_rate: 1.0 - hit_rate,
             eviction_count: self.evictions.load(Ordering::Relaxed),
             warmup_count: self.warmups.load(Ordering::Relaxed),
-            active_models: cached_models.keys().cloned().collect(),
+            // Report the resolved model name (filename) rather than the
+            // canonical-path cache key, so callers see a stable, friendly
+            // identity that is the same no matter which spelling loaded it.
+            active_models: cached_models
+                .values()
+                .map(|m| m.model_info.name.clone())
+                .collect(),
             model_stats: usage_stats.clone(),
         }
     }
@@ -367,8 +442,15 @@ impl ModelCache {
 
     /// Evict a specific model from cache
     pub async fn evict_model(&self, model_name: &str) -> Result<()> {
+        // Resolve to the canonical key so callers can evict by any spelling
+        // (e.g. `inferno cache clear <name>`), falling back to the raw string
+        // if the file no longer resolves.
+        let key = self
+            .resolve_cache_key(model_name)
+            .await
+            .unwrap_or_else(|_| model_name.to_string());
         let mut cached_models = self.cached_models.write().await;
-        if let Some(model) = cached_models.remove(model_name) {
+        if let Some(model) = cached_models.remove(&key) {
             self.total_memory
                 .fetch_sub(model.memory_estimate, Ordering::Relaxed);
             self.evictions.fetch_add(1, Ordering::Relaxed);
@@ -381,6 +463,7 @@ impl ModelCache {
     pub async fn clear_cache(&self) -> Result<()> {
         let mut cached_models = self.cached_models.write().await;
         cached_models.clear();
+        self.alias_map.write().await.clear();
         self.total_memory.store(0, Ordering::Relaxed);
         info!("Cleared all cached models");
         Ok(())
@@ -394,6 +477,14 @@ impl ModelCache {
     /// Load a model and cache it
     async fn load_model(&self, model_name: &str) -> Result<Arc<CachedModel>> {
         let model_info = self.model_manager.resolve_model(model_name).await?;
+        // The canonical key is the single identity every spelling maps to, so a
+        // model loads once regardless of how it was named. Record the alias so
+        // this spelling skips the resolve next time.
+        let key = canonical_key(&model_info.path);
+        self.alias_map
+            .write()
+            .await
+            .insert(model_name.to_string(), key.clone());
         let backend_type = BackendType::from_model_path(&model_info.path).ok_or_else(|| {
             anyhow::anyhow!(
                 "No suitable backend found for model: {}",
@@ -419,7 +510,7 @@ impl ModelCache {
         let cached_model_ref = Arc::clone(&cached_model);
         {
             let mut cached_models = self.cached_models.write().await;
-            cached_models.insert(model_name.to_string(), cached_model);
+            cached_models.insert(key.clone(), cached_model);
             self.total_memory
                 .fetch_add(memory_estimate, Ordering::Relaxed);
         }
@@ -428,9 +519,9 @@ impl ModelCache {
         {
             let mut usage_stats = self.usage_stats.write().await;
             usage_stats
-                .entry(model_name.to_string())
+                .entry(key.clone())
                 .or_insert_with(|| ModelUsageStats {
-                    model_name: model_name.to_string(),
+                    model_name: key.clone(),
                     request_count: 0,
                     last_request: SystemTime::now(),
                     average_response_time: Duration::ZERO,
@@ -482,6 +573,9 @@ impl ModelCache {
 
     /// Evict the least recently used model
     async fn evict_least_recently_used(&self) -> Result<()> {
+        // Resolve always-warm spellings to canonical keys up front so resident
+        // (canonically-keyed) models are matched and protected.
+        let protected = self.always_warm_keys().await;
         let cached_models = self.cached_models.read().await;
 
         // Find the model with the oldest last_used time and lowest usage
@@ -491,7 +585,7 @@ impl ModelCache {
 
         for (name, model) in cached_models.iter() {
             // Skip always-warm models
-            if self.config.always_warm.contains(name) {
+            if protected.contains(name) {
                 continue;
             }
 
@@ -522,6 +616,9 @@ impl ModelCache {
         let cleanup_evictions = Arc::new(AtomicU64::new(self.evictions.load(Ordering::Relaxed)));
         let cleanup_total_memory =
             Arc::new(AtomicU64::new(self.total_memory.load(Ordering::Relaxed)));
+        // Canonical keys of always-warm models, resolved once: the TTL sweep
+        // keys on canonical paths but `always_warm` holds caller spellings.
+        let cleanup_always_warm_keys = self.always_warm_keys().await;
 
         self.cleanup_task = Some(tokio::spawn(async move {
             let mut cleanup_interval = interval(Duration::from_secs(300)); // 5 minutes
@@ -536,7 +633,7 @@ impl ModelCache {
                 let mut to_remove = Vec::new();
                 for (name, model) in cached_models.iter() {
                     if now.duration_since(model.last_used) > ttl
-                        && !cleanup_config.always_warm.contains(name)
+                        && !cleanup_always_warm_keys.contains(name)
                     {
                         to_remove.push((name.clone(), model.memory_estimate));
                     }
@@ -1189,5 +1286,70 @@ impl SaveHandles {
         };
 
         save_cache_state_to_file_static(&cache_state, &cache_dir.join(CACHE_FILE_NAME)).await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use tempfile::TempDir;
+
+    async fn cache_over(models_dir: &Path) -> ModelCache {
+        let config = CacheConfig {
+            persist_cache: false,
+            enable_warmup: false,
+            ..CacheConfig::default()
+        };
+        let model_manager = Arc::new(ModelManager::new(models_dir));
+        ModelCache::new(config, BackendConfig::default(), model_manager, None)
+            .await
+            .expect("cache construction")
+    }
+
+    /// `canonical_key` must collapse `./`-prefixed and relative spellings of a
+    /// file to the same absolute string - the class of aliasing CLAUDE.md flags
+    /// for cache keys. If canonicalization were dropped, the raw strings differ
+    /// and this fails.
+    #[test]
+    fn canonical_key_collapses_relative_and_dotslash() {
+        let dir = TempDir::new().unwrap();
+        let file = dir.path().join("m.gguf");
+        fs::write(&file, b"gguf-stub").unwrap();
+        // `canonicalize` requires every path component to exist, so the `..`
+        // spelling needs a real intermediate directory to traverse.
+        fs::create_dir(dir.path().join("sub")).unwrap();
+
+        let abs = canonical_key(&file);
+        let dotslash = canonical_key(&dir.path().join("./m.gguf"));
+        let indirect = canonical_key(&dir.path().join("sub").join("..").join("m.gguf"));
+
+        assert_eq!(abs, dotslash, "`./` prefix must resolve to the same key");
+        assert_eq!(abs, indirect, "`..` segment must resolve to the same key");
+    }
+
+    /// The headline bug: `model` and `model.gguf` (and a path spelling) all name
+    /// one file but were cached under separate keys, loading it twice. Every
+    /// spelling must now resolve to a single canonical cache key.
+    #[tokio::test]
+    async fn spellings_of_one_model_share_a_cache_key() {
+        let dir = TempDir::new().unwrap();
+        let models_dir = dir.path().join("models");
+        fs::create_dir_all(&models_dir).unwrap();
+        let file = models_dir.join("dedup_model.gguf");
+        fs::write(&file, b"gguf-stub").unwrap();
+
+        let cache = cache_over(&models_dir).await;
+
+        let by_name = cache.resolve_cache_key("dedup_model").await.unwrap();
+        let by_ext = cache.resolve_cache_key("dedup_model.gguf").await.unwrap();
+        let by_abs = cache
+            .resolve_cache_key(&file.to_string_lossy())
+            .await
+            .unwrap();
+
+        assert_eq!(by_name, by_ext, "bare name and name+ext must share a key");
+        assert_eq!(by_name, by_abs, "name and absolute path must share a key");
+        assert_eq!(by_abs, canonical_key(&file), "key is the canonical path");
     }
 }

@@ -735,8 +735,11 @@ async fn test_cache_warmup_with_persistence() -> Result<()> {
 
     // The always-warm model must actually be resident - the original test only
     // printed when it was, so it passed whether warmup worked or not.
+    // `active_models` now reports the resolved model name (the filename), which
+    // is the same regardless of the spelling that loaded it, so the bare
+    // `always_warm` string "test_model_1" surfaces as "test_model_1.gguf".
     assert!(
-        stats.active_models.iter().any(|m| m == "test_model_1"),
+        stats.active_models.iter().any(|m| m == "test_model_1.gguf"),
         "always_warm model should be cached after startup, got {:?}",
         stats.active_models
     );
