@@ -192,6 +192,65 @@ pub struct GgufFile {
     pub tensor_data_offset: u64,
 }
 
+/// Render a GGUF metadata value as a display string, decoding its raw little-endian
+/// bytes according to the recorded value type. Mirrors how `read_gguf_value` stores
+/// each type: strings are UTF-8 bytes, scalars are LE bytes, arrays keep their raw form.
+fn gguf_metadata_value_to_string(value: &GgufMetadataValue) -> String {
+    let d = &value.data;
+    match value.value_type {
+        GgufType::String => String::from_utf8_lossy(d).to_string(),
+        GgufType::Uint8 => d.first().map(|b| b.to_string()).unwrap_or_default(),
+        GgufType::Int8 => d
+            .first()
+            .map(|b| (*b as i8).to_string())
+            .unwrap_or_default(),
+        GgufType::Bool => match d.first() {
+            Some(0) => "false".to_string(),
+            Some(_) => "true".to_string(),
+            None => String::new(),
+        },
+        GgufType::Uint16 => d
+            .get(..2)
+            .map(|b| u16::from_le_bytes([b[0], b[1]]).to_string())
+            .unwrap_or_default(),
+        GgufType::Int16 => d
+            .get(..2)
+            .map(|b| i16::from_le_bytes([b[0], b[1]]).to_string())
+            .unwrap_or_default(),
+        GgufType::Uint32 => d
+            .get(..4)
+            .map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]).to_string())
+            .unwrap_or_default(),
+        GgufType::Int32 => d
+            .get(..4)
+            .map(|b| i32::from_le_bytes([b[0], b[1], b[2], b[3]]).to_string())
+            .unwrap_or_default(),
+        GgufType::Float32 => d
+            .get(..4)
+            .map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]]).to_string())
+            .unwrap_or_default(),
+        GgufType::Uint64 => d
+            .get(..8)
+            .map(|b| {
+                u64::from_le_bytes([b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7]]).to_string()
+            })
+            .unwrap_or_default(),
+        GgufType::Int64 => d
+            .get(..8)
+            .map(|b| {
+                i64::from_le_bytes([b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7]]).to_string()
+            })
+            .unwrap_or_default(),
+        GgufType::Float64 => d
+            .get(..8)
+            .map(|b| {
+                f64::from_le_bytes([b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7]]).to_string()
+            })
+            .unwrap_or_default(),
+        GgufType::Array => format!("<array:{} bytes>", d.len()),
+    }
+}
+
 // ONNX conversion utilities
 #[cfg(feature = "onnx")]
 #[derive(Debug, Clone)]
@@ -279,7 +338,7 @@ impl Default for ConversionConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ModelFormat {
     Gguf,
     Onnx,
@@ -397,9 +456,24 @@ impl Default for OptimizationOptions {
     }
 }
 
+/// Result of inspecting a model file without loading it for inference.
+#[derive(Debug, Clone)]
+pub struct ModelAnalysis {
+    pub format: ModelFormat,
+    pub file_size: u64,
+    /// Metadata key/value pairs, stringified. Populated for GGUF; other formats
+    /// carry whatever their container exposes (SafeTensors: tensor names).
+    pub metadata: HashMap<String, String>,
+    pub tensor_count: usize,
+}
+
+#[derive(Clone)]
 pub struct ModelConverter {
     model_manager: Arc<ModelManager>,
     config: Config,
+    /// Live per-input conversion progress, shared across clones so a converter
+    /// handed to a spawned task observes progress written by convert_model.
+    progress: Arc<std::sync::Mutex<HashMap<PathBuf, ConversionProgress>>>,
 }
 
 impl ModelConverter {
@@ -407,6 +481,89 @@ impl ModelConverter {
         Self {
             model_manager,
             config,
+            progress: Arc::new(std::sync::Mutex::new(HashMap::new())),
+        }
+    }
+
+    /// Detect a model's format from its path. Public async wrapper over the
+    /// internal synchronous detector so callers can probe a file uniformly.
+    pub async fn detect_format(&self, path: &Path) -> Result<ModelFormat> {
+        self.detect_model_format(path)
+    }
+
+    /// Inspect a model file and return its format, size, and available metadata
+    /// without loading it for inference. GGUF metadata is read from the file's
+    /// KV section; SafeTensors exposes tensor names.
+    pub async fn analyze_model(&self, path: &Path) -> Result<ModelAnalysis> {
+        let file_size = async_fs::metadata(path).await?.len();
+        let format = self.detect_model_format(path)?;
+        let mut metadata = HashMap::new();
+        let mut tensor_count = 0;
+
+        match format {
+            ModelFormat::Gguf => {
+                let gguf = self.read_gguf_file(path).await?;
+                tensor_count = gguf.tensors.len();
+                for (key, value) in &gguf.metadata {
+                    metadata.insert(key.clone(), gguf_metadata_value_to_string(value));
+                }
+            }
+            ModelFormat::SafeTensors => {
+                let file_content = async_fs::read(path).await?;
+                let safetensors = SafeTensors::deserialize(&file_content)?;
+                let names = safetensors.names();
+                tensor_count = names.len();
+                for name in names {
+                    metadata.insert(name.to_string(), "tensor".to_string());
+                }
+            }
+            _ => {
+                // ONNX/PyTorch/TensorFlow readers are not available; report the
+                // format and size only rather than fabricating metadata.
+            }
+        }
+
+        Ok(ModelAnalysis {
+            format,
+            file_size,
+            metadata,
+            tensor_count,
+        })
+    }
+
+    /// Return the most recent conversion progress recorded for `input_path`,
+    /// or `None` if no conversion has been started for it. Progress is updated
+    /// in place as convert_model advances through its stages.
+    pub async fn get_conversion_progress(
+        &self,
+        input_path: &Path,
+    ) -> Result<Option<ConversionProgress>> {
+        let map = self
+            .progress
+            .lock()
+            .map_err(|_| anyhow!("conversion progress lock poisoned"))?;
+        Ok(map.get(input_path).cloned())
+    }
+
+    /// Record a progress checkpoint for an in-flight conversion.
+    fn set_progress(
+        &self,
+        input_path: &Path,
+        stage: ConversionStage,
+        progress_percent: f32,
+        current_operation: &str,
+    ) {
+        if let Ok(mut map) = self.progress.lock() {
+            map.insert(
+                input_path.to_path_buf(),
+                ConversionProgress {
+                    stage,
+                    progress_percent,
+                    estimated_time_remaining: None,
+                    current_operation: current_operation.to_string(),
+                    warnings: Vec::new(),
+                },
+            );
         }
     }
 
@@ -516,6 +673,15 @@ impl ModelConverter {
         for (key, value) in &gguf_file.metadata {
             self.write_gguf_string(&mut writer, key)?;
             writer.write_u32::<LittleEndian>(value.value_type as u32)?;
+            // String values are framed on disk as {u64 length, utf8 bytes} (see
+            // read_gguf_value). `data` holds only the raw bytes, so the length
+            // prefix must be re-added here; writing the bytes alone produces a
+            // file whose reader mistakes the first 8 string bytes for a length.
+            // Scalar and array values already carry their exact on-disk framing
+            // in `data`, so they are written verbatim.
+            if matches!(value.value_type, GgufType::String) {
+                writer.write_u64::<LittleEndian>(value.data.len() as u64)?;
+            }
             writer.write_all(&value.data)?;
         }
 
@@ -696,10 +862,32 @@ impl ModelConverter {
             output_path.display()
         );
 
-        // Validate input model
-        if !self.model_manager.validate_model(input_path).await? {
+        self.set_progress(
+            input_path,
+            ConversionStage::Validation,
+            0.0,
+            "Validating input",
+        );
+
+        // Validate input model. Conversion accepts more input formats than the
+        // runtime loader: gguf/onnx go through the full model validator (security
+        // + format checks), while other convertible formats (safetensors, etc.)
+        // get a basic file check and let the format-specific converter surface
+        // any content errors.
+        let input_valid = match self.detect_model_format(input_path) {
+            Ok(ModelFormat::Gguf) | Ok(ModelFormat::Onnx) => {
+                self.model_manager.validate_model(input_path).await?
+            }
+            Ok(_) => match async_fs::metadata(input_path).await {
+                Ok(meta) => meta.is_file() && meta.len() > 0,
+                Err(_) => false,
+            },
+            Err(_) => false,
+        };
+        if !input_valid {
             let error = "Input model validation failed".to_string();
             errors.push(error.clone());
+            self.set_progress(input_path, ConversionStage::Validation, 0.0, &error);
             return Ok(ConversionResult {
                 success: false,
                 input_path: input_path.to_path_buf(),
@@ -716,6 +904,7 @@ impl ModelConverter {
 
         let input_size = async_fs::metadata(input_path).await?.len();
         let input_format = self.detect_model_format(input_path)?;
+        self.set_progress(input_path, ConversionStage::Loading, 10.0, "Loading model");
 
         // Check if conversion is needed
         if self.formats_compatible(&input_format, &conversion_config.output_format)
@@ -725,6 +914,12 @@ impl ModelConverter {
             warnings.push("No conversion needed - copying file".to_string());
             async_fs::copy(input_path, output_path).await?;
             let output_size = async_fs::metadata(output_path).await?.len();
+            self.set_progress(
+                input_path,
+                ConversionStage::Complete,
+                100.0,
+                "Copied (no conversion needed)",
+            );
 
             return Ok(ConversionResult {
                 success: true,
@@ -741,6 +936,12 @@ impl ModelConverter {
         }
 
         // Perform actual conversion
+        self.set_progress(
+            input_path,
+            ConversionStage::Converting,
+            30.0,
+            "Converting model",
+        );
         match self
             .perform_conversion(input_path, output_path, &input_format, conversion_config)
             .await
@@ -750,6 +951,12 @@ impl ModelConverter {
             }
             Err(e) => {
                 errors.push(format!("Conversion failed: {}", e));
+                self.set_progress(
+                    input_path,
+                    ConversionStage::Converting,
+                    30.0,
+                    &format!("Conversion failed: {}", e),
+                );
                 return Ok(ConversionResult {
                     success: false,
                     input_path: input_path.to_path_buf(),
@@ -768,6 +975,12 @@ impl ModelConverter {
         // Verify output if requested
         let mut metadata_preserved = false;
         if conversion_config.verify_output {
+            self.set_progress(
+                input_path,
+                ConversionStage::Verification,
+                90.0,
+                "Verifying output",
+            );
             match self
                 .verify_converted_model(output_path, conversion_config)
                 .await
@@ -789,6 +1002,13 @@ impl ModelConverter {
         } else {
             0
         };
+
+        self.set_progress(
+            input_path,
+            ConversionStage::Complete,
+            100.0,
+            "Conversion complete",
+        );
 
         Ok(ConversionResult {
             success: errors.is_empty(),

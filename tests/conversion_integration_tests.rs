@@ -1,682 +1,580 @@
+//! Integration tests for the model conversion subsystem.
+//!
+//! These tests exercise the REAL conversion API in `src/conversion.rs`. They are
+//! deliberately honest about what the module actually does today:
+//!
+//!   * Real end-to-end: GGUF read/analyze, SafeTensors -> GGUF, GGUF quantization,
+//!     GGUF passthrough, progress tracking.
+//!   * Stub-but-runs: GGUF -> ONNX writes a placeholder ONNX header (the graph
+//!     builder is not a full implementation); the test asserts only that the
+//!     pipeline runs and produces a file, not that the ONNX is a real model.
+//!   * Unsupported boundaries: ONNX input (reader disabled during the ort 2.0
+//!     transition) and PyTorch input (the `tch` dependency was removed) both
+//!     surface as a failed conversion. The tests assert that honest behavior.
+//!
+//! Fixtures are self-contained (a tiny valid synthetic GGUF and a real SafeTensors
+//! file built with the `safetensors` crate) so the suite runs anywhere. One extra
+//! test uses a real model when `INFERNO_TEST_MODEL` points at a GGUF file.
+//!
+//! Run with: `cargo test --test conversion_integration_tests --features gguf,onnx`
+
 use anyhow::Result;
 use inferno::{
-    InfernoError,
     config::Config,
     conversion::{
-        ConversionConfig, GgmlType, GgufType, ModelConverter, ModelFormat, OptimizationLevel,
-        OptimizationOptions, Precision, QuantizationType,
+        ConversionConfig, ModelConverter, ModelFormat, OptimizationLevel, QuantizationType,
     },
-    models::{ModelInfo, ModelManager, ModelMetadata},
+    models::ModelManager,
 };
-use std::{collections::HashMap, fs, path::PathBuf, sync::Arc};
+use std::{
+    collections::HashMap,
+    fs,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 use tempfile::TempDir;
-use tokio::fs as async_fs;
 
-/// Test utilities for conversion integration tests
-mod conversion_test_utils {
-    use super::*;
-    use byteorder::{LittleEndian, WriteBytesExt};
-    use std::io::Write;
+// ── Fixture builders ─────────────────────────────────────────────────────────
 
-    pub fn create_mock_gguf_file(path: &PathBuf) -> Result<()> {
-        let mut file = fs::File::create(path)?;
+fn write_gguf_string(buf: &mut Vec<u8>, s: &str) {
+    buf.extend_from_slice(&(s.len() as u64).to_le_bytes());
+    buf.extend_from_slice(s.as_bytes());
+}
 
-        // Write GGUF header
-        file.write_all(b"GGUF")?; // Magic
-        file.write_u32::<LittleEndian>(3)?; // Version
-        file.write_u64::<LittleEndian>(2)?; // Tensor count
-        file.write_u64::<LittleEndian>(3)?; // Metadata count
+/// Build a minimal but structurally valid GGUF file with real (small) F32 tensor
+/// data, matching the parser in `src/conversion.rs`. Sufficient for format
+/// detection, metadata analysis, quantization, and GGUF->ONNX to run.
+fn build_synthetic_gguf(path: &Path) -> Result<()> {
+    const GGUF_VERSION: u32 = 3;
+    const GGUF_TYPE_STRING: u32 = 8;
+    const GGUF_TYPE_UINT32: u32 = 4;
+    const GGML_F32: u32 = 0;
 
-        // Write metadata entries
-        write_metadata_entry(&mut file, "general.name", "test_model")?;
-        write_metadata_entry(&mut file, "general.architecture", "llama")?;
-        write_metadata_entry(&mut file, "llama.context_length", &2048u32)?;
+    let dims: [u64; 2] = [8, 8]; // 64 F32 elements = 256 bytes per tensor (2 Q4_0 blocks)
+    let elems: usize = 64;
+    let tensor_names = ["token_embd.weight", "output.weight"];
+    let tensor_bytes = elems * 4;
 
-        // Write tensor info
-        write_tensor_info(
-            &mut file,
-            "token_embd.weight",
-            &[32000, 4096],
-            GgmlType::F16,
-        )?;
-        write_tensor_info(&mut file, "output.weight", &[32000, 4096], GgmlType::F16)?;
+    let mut out = Vec::new();
+    out.extend_from_slice(b"GGUF");
+    out.extend_from_slice(&GGUF_VERSION.to_le_bytes());
+    out.extend_from_slice(&(tensor_names.len() as u64).to_le_bytes());
+    out.extend_from_slice(&(3u64).to_le_bytes()); // metadata entry count
 
-        // Write tensor data (dummy data)
-        let tensor_data = vec![0u8; 32000 * 4096 * 2 * 2]; // 2 tensors, f16 = 2 bytes
-        file.write_all(&tensor_data)?;
+    // Metadata: two strings + one u32
+    write_gguf_string(&mut out, "general.name");
+    out.extend_from_slice(&GGUF_TYPE_STRING.to_le_bytes());
+    write_gguf_string(&mut out, "synthetic_test_model");
 
-        Ok(())
-    }
+    write_gguf_string(&mut out, "general.architecture");
+    out.extend_from_slice(&GGUF_TYPE_STRING.to_le_bytes());
+    write_gguf_string(&mut out, "llama");
 
-    pub fn create_mock_onnx_file(path: &PathBuf) -> Result<()> {
-        let mut file = fs::File::create(path)?;
+    write_gguf_string(&mut out, "llama.context_length");
+    out.extend_from_slice(&GGUF_TYPE_UINT32.to_le_bytes());
+    out.extend_from_slice(&2048u32.to_le_bytes());
 
-        // Create minimal ONNX protobuf structure
-        let onnx_content = create_minimal_onnx_protobuf();
-        file.write_all(&onnx_content)?;
-
-        Ok(())
-    }
-
-    pub fn create_mock_pytorch_file(path: &PathBuf) -> Result<()> {
-        let mut file = fs::File::create(path)?;
-
-        // Create minimal PyTorch pickle structure
-        let pytorch_content = create_minimal_pytorch_pickle();
-        file.write_all(&pytorch_content)?;
-
-        Ok(())
-    }
-
-    pub fn create_mock_safetensors_file(path: &PathBuf) -> Result<()> {
-        use safetensors::{Dtype, serialize};
-        use std::collections::HashMap;
-
-        let mut tensors = HashMap::new();
-
-        // Create some dummy tensor data
-        let embedding_data: Vec<f32> = (0..32000 * 512).map(|i| (i as f32) * 0.001).collect();
-        let output_data: Vec<f32> = (0..32000 * 512).map(|i| (i as f32) * 0.001).collect();
-
-        tensors.insert(
-            "token_embd.weight".to_string(),
-            (Dtype::F32, vec![32000, 512], embedding_data.as_slice()),
-        );
-        tensors.insert(
-            "output.weight".to_string(),
-            (Dtype::F32, vec![32000, 512], output_data.as_slice()),
-        );
-
-        let serialized = serialize(&tensors, &None)?;
-        fs::write(path, serialized)?;
-
-        Ok(())
-    }
-
-    fn write_metadata_entry<W: Write>(
-        writer: &mut W,
-        key: &str,
-        value: &dyn MetadataValue,
-    ) -> Result<()> {
-        // Write key
-        writer.write_u64::<LittleEndian>(key.len() as u64)?;
-        writer.write_all(key.as_bytes())?;
-
-        // Write value based on type
-        value.write_to(writer)?;
-
-        Ok(())
-    }
-
-    fn write_tensor_info<W: Write>(
-        writer: &mut W,
-        name: &str,
-        dims: &[u64],
-        ggml_type: GgmlType,
-    ) -> Result<()> {
-        // Write tensor name
-        writer.write_u64::<LittleEndian>(name.len() as u64)?;
-        writer.write_all(name.as_bytes())?;
-
-        // Write dimensions
-        writer.write_u32::<LittleEndian>(dims.len() as u32)?;
-        for &dim in dims {
-            writer.write_u64::<LittleEndian>(dim)?;
+    // Tensor info records
+    for (i, name) in tensor_names.iter().enumerate() {
+        write_gguf_string(&mut out, name);
+        out.extend_from_slice(&(dims.len() as u32).to_le_bytes());
+        for d in dims {
+            out.extend_from_slice(&d.to_le_bytes());
         }
-
-        // Write type
-        writer.write_u32::<LittleEndian>(ggml_type as u32)?;
-
-        // Write offset (dummy)
-        writer.write_u64::<LittleEndian>(0)?;
-
-        Ok(())
+        out.extend_from_slice(&GGML_F32.to_le_bytes());
+        out.extend_from_slice(&((i * tensor_bytes) as u64).to_le_bytes());
     }
 
-    fn create_minimal_onnx_protobuf() -> Vec<u8> {
-        // This is a minimal ONNX file structure
-        // In a real implementation, we'd use the ONNX protobuf definitions
-        let mut content = Vec::new();
+    // Align tensor data to a 32-byte boundary (as the reader expects)
+    let aligned = (out.len() + 31) & !31;
+    out.resize(aligned, 0);
 
-        // ONNX magic header
-        content.extend_from_slice(&[0x08, 0x01]); // ir_version = 1
-        content.extend_from_slice(&[0x12, 0x0A]); // producer_name field
-        content.extend_from_slice(b"test_model");
-        content.extend_from_slice(&[0x1A, 0x01]); // model_version field
-        content.extend_from_slice(&[0x01]); // version = 1
-
-        // Pad to reasonable size
-        content.resize(4096, 0);
-        content
+    // Tensor data: contiguous F32 values for both tensors
+    for i in 0..(tensor_names.len() * elems) {
+        out.extend_from_slice(&((i as f32) * 0.01).to_le_bytes());
     }
 
-    fn create_minimal_pytorch_pickle() -> Vec<u8> {
-        // Minimal PyTorch pickle file structure
-        let mut content = Vec::new();
+    fs::write(path, &out)?;
+    Ok(())
+}
 
-        // Python pickle protocol 2 header
-        content.extend_from_slice(&[0x80, 0x02]); // PROTO 2
-        content.extend_from_slice(&[0x63]); // GLOBAL
-        content.extend_from_slice(b"collections\n");
-        content.extend_from_slice(b"OrderedDict\n");
-        content.extend_from_slice(&[0x71, 0x00]); // BINPUT 0
-        content.extend_from_slice(&[0x29]); // EMPTY_TUPLE
-        content.extend_from_slice(&[0x81]); // NEWOBJ
-        content.extend_from_slice(&[0x71, 0x01]); // BINPUT 1
-        content.extend_from_slice(&[0x2E]); // STOP
+/// Build a real SafeTensors file with two small F32 tensors via the `safetensors`
+/// crate. This is a genuine, parseable SafeTensors container.
+fn build_safetensors(path: &Path) -> Result<()> {
+    use safetensors::Dtype;
+    use safetensors::tensor::TensorView;
 
-        // Pad to reasonable size
-        content.resize(2048, 0);
-        content
-    }
+    let rows = 8usize;
+    let cols = 4usize;
+    let bytes_for = |scale: f32| -> Vec<u8> {
+        (0..rows * cols)
+            .flat_map(|i| ((i as f32) * scale).to_le_bytes())
+            .collect()
+    };
 
-    trait MetadataValue {
-        fn write_to<W: Write>(&self, writer: &mut W) -> Result<()>;
-    }
+    let d1 = bytes_for(0.01);
+    let d2 = bytes_for(0.02);
+    let v1 = TensorView::new(Dtype::F32, vec![rows, cols], &d1)?;
+    let v2 = TensorView::new(Dtype::F32, vec![rows, cols], &d2)?;
 
-    impl MetadataValue for &str {
-        fn write_to<W: Write>(&self, writer: &mut W) -> Result<()> {
-            writer.write_u32::<LittleEndian>(GgufType::String as u32)?;
-            writer.write_u64::<LittleEndian>(self.len() as u64)?;
-            writer.write_all(self.as_bytes())?;
-            Ok(())
-        }
-    }
+    let mut tensors: HashMap<String, TensorView> = HashMap::new();
+    tensors.insert("token_embd.weight".to_string(), v1);
+    tensors.insert("output.weight".to_string(), v2);
 
-    impl MetadataValue for u32 {
-        fn write_to<W: Write>(&self, writer: &mut W) -> Result<()> {
-            writer.write_u32::<LittleEndian>(GgufType::Uint32 as u32)?;
-            writer.write_u32::<LittleEndian>(*self)?;
-            Ok(())
-        }
-    }
+    let serialized = safetensors::serialize(tensors, &None)?;
+    fs::write(path, serialized)?;
+    Ok(())
+}
 
-    pub fn create_conversion_config() -> ConversionConfig {
-        ConversionConfig {
-            optimization: OptimizationOptions {
-                level: OptimizationLevel::Balanced,
-                quantization: Some(QuantizationType::Q4_0),
-                precision: Some(Precision::F16),
-                context_length: Some(2048),
-                batch_size: Some(32),
-                preserve_metadata: true,
-            },
-            input_format: None, // Auto-detect
-            output_format: ModelFormat::Gguf,
-            validate_conversion: true,
-            backup_original: false,
-        }
+/// Write bytes that pass the ONNX validation gate (contain the "onnx" marker and a
+/// protobuf-ish header) so a conversion attempt reaches the reader, which is
+/// currently disabled.
+fn write_onnxish_file(path: &Path) -> Result<()> {
+    let mut content = Vec::new();
+    content.extend_from_slice(&[0x08, 0x07]); // ir_version protobuf field
+    content.extend_from_slice(b"onnx"); // marker the validator looks for
+    content.extend_from_slice(&[0x12, 0x0e]);
+    content.extend_from_slice(b"inferno_convert");
+    content.resize(256, 0);
+    fs::write(path, content)?;
+    Ok(())
+}
+
+// ── Test harness helpers ─────────────────────────────────────────────────────
+
+fn make_converter(models_dir: &Path) -> ModelConverter {
+    let config = Config::default();
+    let model_manager = Arc::new(ModelManager::new(models_dir));
+    ModelConverter::new(model_manager, config)
+}
+
+fn base_config(output_format: ModelFormat) -> ConversionConfig {
+    ConversionConfig {
+        output_format,
+        optimization_level: OptimizationLevel::Basic,
+        quantization: None,
+        target_precision: None,
+        context_length: None,
+        batch_size: None,
+        preserve_metadata: true,
+        verify_output: true,
     }
 }
 
-/// Test basic model format detection
+// ── Format detection & analysis ──────────────────────────────────────────────
+
 #[tokio::test]
 async fn test_format_detection() -> Result<()> {
-    let temp_dir = TempDir::new()?;
+    let dir = TempDir::new()?;
+    let converter = make_converter(dir.path());
 
-    // Create test files
-    let gguf_path = temp_dir.path().join("model.gguf");
-    let onnx_path = temp_dir.path().join("model.onnx");
-    let pytorch_path = temp_dir.path().join("model.pt");
-    let safetensors_path = temp_dir.path().join("model.safetensors");
-
-    conversion_test_utils::create_mock_gguf_file(&gguf_path)?;
-    conversion_test_utils::create_mock_onnx_file(&onnx_path)?;
-    conversion_test_utils::create_mock_pytorch_file(&pytorch_path)?;
-    conversion_test_utils::create_mock_safetensors_file(&safetensors_path)?;
-
-    let converter = ModelConverter::new();
-
-    // Test format detection
-    assert_eq!(
-        converter.detect_format(&gguf_path).await?,
-        ModelFormat::Gguf
-    );
-    assert_eq!(
-        converter.detect_format(&onnx_path).await?,
-        ModelFormat::Onnx
-    );
-    assert_eq!(
-        converter.detect_format(&pytorch_path).await?,
-        ModelFormat::PyTorch
-    );
-    assert_eq!(
-        converter.detect_format(&safetensors_path).await?,
-        ModelFormat::SafeTensors
-    );
-
-    Ok(())
-}
-
-/// Test GGUF to ONNX conversion
-#[tokio::test]
-async fn test_gguf_to_onnx_conversion() -> Result<()> {
-    let temp_dir = TempDir::new()?;
-
-    let input_path = temp_dir.path().join("input.gguf");
-    let output_path = temp_dir.path().join("output.onnx");
-
-    conversion_test_utils::create_mock_gguf_file(&input_path)?;
-
-    let mut config = conversion_test_utils::create_conversion_config();
-    config.output_format = ModelFormat::Onnx;
-
-    let converter = ModelConverter::new();
-
-    let result = converter
-        .convert_model(&input_path, &output_path, &config)
-        .await;
-    assert!(result.is_ok(), "Conversion should succeed: {:?}", result);
-
-    // Verify output file exists and has correct format
-    assert!(output_path.exists());
-    assert_eq!(
-        converter.detect_format(&output_path).await?,
-        ModelFormat::Onnx
-    );
-
-    // Verify metadata preservation if requested
-    if config.optimization.preserve_metadata {
-        let output_info = converter.analyze_model(&output_path).await?;
-        assert!(output_info.metadata.contains_key("general.name"));
-    }
-
-    Ok(())
-}
-
-/// Test ONNX to GGUF conversion
-#[tokio::test]
-async fn test_onnx_to_gguf_conversion() -> Result<()> {
-    let temp_dir = TempDir::new()?;
-
-    let input_path = temp_dir.path().join("input.onnx");
-    let output_path = temp_dir.path().join("output.gguf");
-
-    conversion_test_utils::create_mock_onnx_file(&input_path)?;
-
-    let mut config = conversion_test_utils::create_conversion_config();
-    config.output_format = ModelFormat::Gguf;
-
-    let converter = ModelConverter::new();
-
-    let result = converter
-        .convert_model(&input_path, &output_path, &config)
-        .await;
-    assert!(result.is_ok(), "Conversion should succeed: {:?}", result);
-
-    // Verify output file exists and has correct format
-    assert!(output_path.exists());
-    assert_eq!(
-        converter.detect_format(&output_path).await?,
-        ModelFormat::Gguf
-    );
-
-    Ok(())
-}
-
-/// Test PyTorch to SafeTensors conversion
-#[tokio::test]
-async fn test_pytorch_to_safetensors_conversion() -> Result<()> {
-    let temp_dir = TempDir::new()?;
-
-    let input_path = temp_dir.path().join("input.pt");
-    let output_path = temp_dir.path().join("output.safetensors");
-
-    conversion_test_utils::create_mock_pytorch_file(&input_path)?;
-
-    let mut config = conversion_test_utils::create_conversion_config();
-    config.output_format = ModelFormat::SafeTensors;
-
-    let converter = ModelConverter::new();
-
-    let result = converter
-        .convert_model(&input_path, &output_path, &config)
-        .await;
-    assert!(result.is_ok(), "Conversion should succeed: {:?}", result);
-
-    // Verify output file exists and has correct format
-    assert!(output_path.exists());
-    assert_eq!(
-        converter.detect_format(&output_path).await?,
-        ModelFormat::SafeTensors
-    );
-
-    Ok(())
-}
-
-/// Test quantization during conversion
-#[tokio::test]
-async fn test_quantization_conversion() -> Result<()> {
-    let temp_dir = TempDir::new()?;
-
-    let input_path = temp_dir.path().join("input.gguf");
-    let output_path = temp_dir.path().join("output_q4.gguf");
-
-    conversion_test_utils::create_mock_gguf_file(&input_path)?;
-
-    let mut config = conversion_test_utils::create_conversion_config();
-    config.optimization.quantization = Some(QuantizationType::Q4_0);
-    config.output_format = ModelFormat::Gguf;
-
-    let converter = ModelConverter::new();
-
-    let result = converter
-        .convert_model(&input_path, &output_path, &config)
-        .await;
-    assert!(
-        result.is_ok(),
-        "Quantization conversion should succeed: {:?}",
-        result
-    );
-
-    // Verify output file is smaller (quantized)
-    let input_size = fs::metadata(&input_path)?.len();
-    let output_size = fs::metadata(&output_path)?.len();
-
-    // Quantized file should be smaller or similar size
-    // (Might not always be smaller due to overhead in small test files)
-    assert!(output_size > 0);
-
-    Ok(())
-}
-
-/// Test precision conversion
-#[tokio::test]
-async fn test_precision_conversion() -> Result<()> {
-    let temp_dir = TempDir::new()?;
-
-    let input_path = temp_dir.path().join("input.gguf");
-    let output_path = temp_dir.path().join("output_f16.gguf");
-
-    conversion_test_utils::create_mock_gguf_file(&input_path)?;
-
-    let mut config = conversion_test_utils::create_conversion_config();
-    config.optimization.precision = Some(Precision::F16);
-    config.optimization.quantization = None; // No quantization, just precision change
-    config.output_format = ModelFormat::Gguf;
-
-    let converter = ModelConverter::new();
-
-    let result = converter
-        .convert_model(&input_path, &output_path, &config)
-        .await;
-    assert!(
-        result.is_ok(),
-        "Precision conversion should succeed: {:?}",
-        result
-    );
-
-    assert!(output_path.exists());
-
-    Ok(())
-}
-
-/// Test batch conversion of multiple models
-#[tokio::test]
-async fn test_batch_conversion() -> Result<()> {
-    let temp_dir = TempDir::new()?;
-
-    // Create multiple input files
-    let input_paths = vec![
-        temp_dir.path().join("model1.gguf"),
-        temp_dir.path().join("model2.gguf"),
-        temp_dir.path().join("model3.gguf"),
+    let cases = [
+        ("model.gguf", ModelFormat::Gguf),
+        ("model.onnx", ModelFormat::Onnx),
+        ("model.safetensors", ModelFormat::SafeTensors),
+        ("model.pt", ModelFormat::Pytorch),
+        ("model.pth", ModelFormat::Pytorch),
+        ("model.pb", ModelFormat::TensorFlow),
     ];
 
-    for path in &input_paths {
-        conversion_test_utils::create_mock_gguf_file(path)?;
-    }
-
-    let output_dir = temp_dir.path().join("converted");
-    fs::create_dir_all(&output_dir)?;
-
-    let mut config = conversion_test_utils::create_conversion_config();
-    config.output_format = ModelFormat::Onnx;
-
-    let converter = ModelConverter::new();
-
-    // Convert all models
-    let mut conversion_tasks = Vec::new();
-    for (i, input_path) in input_paths.iter().enumerate() {
-        let output_path = output_dir.join(format!("model{}.onnx", i + 1));
-        let task = converter.convert_model(input_path, &output_path, &config);
-        conversion_tasks.push(task);
-    }
-
-    // Wait for all conversions to complete
-    let results = futures::future::join_all(conversion_tasks).await;
-
-    for (i, result) in results.into_iter().enumerate() {
-        assert!(
-            result.is_ok(),
-            "Conversion {} should succeed: {:?}",
-            i,
-            result
+    for (name, expected) in cases {
+        let path = dir.path().join(name);
+        fs::write(&path, b"placeholder")?;
+        assert_eq!(
+            converter.detect_format(&path).await?,
+            expected,
+            "format detection for {name}"
         );
     }
 
-    // Verify all output files exist
-    for i in 1..=3 {
-        let output_path = output_dir.join(format!("model{}.onnx", i));
-        assert!(output_path.exists());
-    }
+    // Unknown extension is an error, not a silent default.
+    let unknown = dir.path().join("model.bin");
+    fs::write(&unknown, b"x")?;
+    assert!(converter.detect_format(&unknown).await.is_err());
 
     Ok(())
 }
 
-/// Test conversion validation
 #[tokio::test]
-async fn test_conversion_validation() -> Result<()> {
-    let temp_dir = TempDir::new()?;
+async fn test_analyze_gguf_metadata() -> Result<()> {
+    let dir = TempDir::new()?;
+    let converter = make_converter(dir.path());
 
-    let input_path = temp_dir.path().join("input.gguf");
-    let output_path = temp_dir.path().join("output.onnx");
+    let gguf = dir.path().join("model.gguf");
+    build_synthetic_gguf(&gguf)?;
 
-    conversion_test_utils::create_mock_gguf_file(&input_path)?;
-
-    let mut config = conversion_test_utils::create_conversion_config();
-    config.validate_conversion = true;
-    config.output_format = ModelFormat::Onnx;
-
-    let converter = ModelConverter::new();
-
-    let result = converter
-        .convert_model(&input_path, &output_path, &config)
-        .await;
-    assert!(
-        result.is_ok(),
-        "Validated conversion should succeed: {:?}",
-        result
+    let analysis = converter.analyze_model(&gguf).await?;
+    assert_eq!(analysis.format, ModelFormat::Gguf);
+    assert!(analysis.file_size > 0);
+    assert_eq!(analysis.tensor_count, 2, "two tensor infos were written");
+    assert_eq!(
+        analysis.metadata.get("general.name").map(String::as_str),
+        Some("synthetic_test_model")
+    );
+    assert_eq!(
+        analysis
+            .metadata
+            .get("general.architecture")
+            .map(String::as_str),
+        Some("llama")
+    );
+    assert_eq!(
+        analysis
+            .metadata
+            .get("llama.context_length")
+            .map(String::as_str),
+        Some("2048"),
+        "u32 metadata is decoded from little-endian bytes"
     );
 
-    // Verify validation occurred by checking the validation report
-    let validation_report = converter
-        .validate_conversion(&input_path, &output_path)
-        .await;
-    assert!(validation_report.is_ok(), "Validation should succeed");
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_analyze_safetensors() -> Result<()> {
+    let dir = TempDir::new()?;
+    let converter = make_converter(dir.path());
+
+    let st = dir.path().join("model.safetensors");
+    build_safetensors(&st)?;
+
+    let analysis = converter.analyze_model(&st).await?;
+    assert_eq!(analysis.format, ModelFormat::SafeTensors);
+    assert_eq!(analysis.tensor_count, 2);
+    assert!(analysis.metadata.contains_key("token_embd.weight"));
+    assert!(analysis.metadata.contains_key("output.weight"));
 
     Ok(())
 }
 
-/// Test error handling for invalid input files
+// ── Real end-to-end conversions ──────────────────────────────────────────────
+
 #[tokio::test]
-async fn test_invalid_input_handling() -> Result<()> {
-    let temp_dir = TempDir::new()?;
+async fn test_safetensors_to_gguf_conversion() -> Result<()> {
+    let dir = TempDir::new()?;
+    let converter = make_converter(dir.path());
 
-    let invalid_path = temp_dir.path().join("invalid.gguf");
-    let output_path = temp_dir.path().join("output.onnx");
+    let input = dir.path().join("input.safetensors");
+    let output = dir.path().join("output.gguf");
+    build_safetensors(&input)?;
 
-    // Create an invalid GGUF file (wrong magic number)
-    fs::write(&invalid_path, b"INVALID_HEADER")?;
+    let config = base_config(ModelFormat::Gguf);
+    let result = converter.convert_model(&input, &output, &config).await?;
 
-    let config = conversion_test_utils::create_conversion_config();
-    let converter = ModelConverter::new();
+    assert!(
+        result.success,
+        "SafeTensors -> GGUF should succeed: {:?}",
+        result.errors
+    );
+    assert!(output.exists());
+    assert_eq!(converter.detect_format(&output).await?, ModelFormat::Gguf);
+
+    // The written GGUF is real: re-read it and confirm structure survived.
+    let analysis = converter.analyze_model(&output).await?;
+    assert_eq!(analysis.format, ModelFormat::Gguf);
+    assert_eq!(analysis.tensor_count, 2, "both tensors carried through");
+    assert_eq!(
+        analysis
+            .metadata
+            .get("general.architecture")
+            .map(String::as_str),
+        Some("transformer"),
+        "converter stamps a transformer architecture"
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_gguf_quantization() -> Result<()> {
+    let dir = TempDir::new()?;
+    let converter = make_converter(dir.path());
+
+    let input = dir.path().join("input.gguf");
+    let output = dir.path().join("output_q4.gguf");
+    build_synthetic_gguf(&input)?;
+
+    // quantize_model's success is gated on quantization errors (unlike the
+    // quantization step inside convert_model, which only warns), so this
+    // directly verifies the GGUF quantizer ran.
+    let result = converter
+        .quantize_model(&input, &output, QuantizationType::Q4_0)
+        .await?;
+    assert!(
+        result.success,
+        "GGUF quantization should succeed: {:?}",
+        result.errors
+    );
+    assert!(output.exists());
+    assert!(fs::metadata(&output)?.len() > 0);
+
+    // The quantized GGUF is well-formed: re-read it and confirm the tensors and
+    // metadata survived (this fails if the writer corrupts string metadata).
+    let analysis = converter.analyze_model(&output).await?;
+    assert_eq!(analysis.tensor_count, 2);
+    assert_eq!(
+        analysis
+            .metadata
+            .get("general.architecture")
+            .map(String::as_str),
+        Some("llama")
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_gguf_passthrough_no_conversion() -> Result<()> {
+    let dir = TempDir::new()?;
+    let converter = make_converter(dir.path());
+
+    let input = dir.path().join("input.gguf");
+    let output = dir.path().join("copy.gguf");
+    build_synthetic_gguf(&input)?;
+
+    // Same format, no quantization, no optimization => copy fast-path.
+    let mut config = base_config(ModelFormat::Gguf);
+    config.optimization_level = OptimizationLevel::None;
+
+    let result = converter.convert_model(&input, &output, &config).await?;
+    assert!(result.success);
+    assert!(output.exists());
+    assert!(
+        result
+            .warnings
+            .iter()
+            .any(|w| w.contains("No conversion needed")),
+        "passthrough should note it copied: {:?}",
+        result.warnings
+    );
+    assert_eq!(
+        fs::read(&input)?,
+        fs::read(&output)?,
+        "passthrough is a byte-for-byte copy"
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_gguf_to_onnx_runs() -> Result<()> {
+    // NOTE: the ONNX graph builder currently emits a placeholder header rather
+    // than a full ONNX model. This test asserts the pipeline RUNS and produces a
+    // file with the right extension, not that the output is a loadable ONNX model.
+    let dir = TempDir::new()?;
+    let converter = make_converter(dir.path());
+
+    let input = dir.path().join("input.gguf");
+    let output = dir.path().join("output.onnx");
+    build_synthetic_gguf(&input)?;
+
+    let config = base_config(ModelFormat::Onnx);
+    let result = converter.convert_model(&input, &output, &config).await?;
+
+    assert!(
+        result.success,
+        "GGUF -> ONNX pipeline should run: {:?}",
+        result.errors
+    );
+    assert!(output.exists());
+    assert_eq!(converter.detect_format(&output).await?, ModelFormat::Onnx);
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_conversion_result_fields() -> Result<()> {
+    let dir = TempDir::new()?;
+    let converter = make_converter(dir.path());
+
+    let input = dir.path().join("input.safetensors");
+    let output = dir.path().join("output.gguf");
+    build_safetensors(&input)?;
 
     let result = converter
-        .convert_model(&invalid_path, &output_path, &config)
-        .await;
-    assert!(result.is_err(), "Should fail with invalid input file");
+        .convert_model(&input, &output, &base_config(ModelFormat::Gguf))
+        .await?;
+
+    assert!(result.success);
+    assert_eq!(result.input_path, input);
+    assert_eq!(result.output_path, output);
+    assert!(result.input_size > 0, "input size recorded");
+    assert!(result.output_size > 0, "output size recorded");
+    assert!(result.compression_ratio > 0.0, "compression ratio computed");
 
     Ok(())
 }
 
-/// Test metadata preservation during conversion
+// ── Progress tracking ────────────────────────────────────────────────────────
+
 #[tokio::test]
-async fn test_metadata_preservation() -> Result<()> {
-    let temp_dir = TempDir::new()?;
+async fn test_conversion_progress_tracking() -> Result<()> {
+    let dir = TempDir::new()?;
+    let converter = make_converter(dir.path());
 
-    let input_path = temp_dir.path().join("input.gguf");
-    let output_path = temp_dir.path().join("output.onnx");
+    let input = dir.path().join("input.safetensors");
+    let output = dir.path().join("output.gguf");
+    build_safetensors(&input)?;
 
-    conversion_test_utils::create_mock_gguf_file(&input_path)?;
+    // No conversion started yet for this path.
+    assert!(
+        converter.get_conversion_progress(&input).await?.is_none(),
+        "progress is None before any conversion"
+    );
 
-    let mut config = conversion_test_utils::create_conversion_config();
-    config.optimization.preserve_metadata = true;
-    config.output_format = ModelFormat::Onnx;
-
-    let converter = ModelConverter::new();
-
-    // Get original metadata
-    let original_info = converter.analyze_model(&input_path).await?;
+    // A clone shares the same progress map (Arc), matching how a spawned task
+    // would observe progress written by convert_model.
+    let observer = converter.clone();
 
     let result = converter
-        .convert_model(&input_path, &output_path, &config)
-        .await;
-    assert!(result.is_ok(), "Conversion should succeed: {:?}", result);
+        .convert_model(&input, &output, &base_config(ModelFormat::Gguf))
+        .await?;
+    assert!(result.success);
 
-    // Get converted metadata
-    let converted_info = converter.analyze_model(&output_path).await?;
-
-    // Check that key metadata was preserved
-    if let Some(original_name) = original_info.metadata.get("general.name") {
-        if let Some(converted_name) = converted_info.metadata.get("general.name") {
-            assert_eq!(
-                original_name, converted_name,
-                "Model name should be preserved"
-            );
-        }
-    }
-
-    Ok(())
-}
-
-/// Test optimization level effects
-#[tokio::test]
-async fn test_optimization_levels() -> Result<()> {
-    let temp_dir = TempDir::new()?;
-
-    let input_path = temp_dir.path().join("input.gguf");
-    conversion_test_utils::create_mock_gguf_file(&input_path)?;
-
-    let converter = ModelConverter::new();
-
-    // Test different optimization levels
-    let optimization_levels = vec![
-        OptimizationLevel::None,
-        OptimizationLevel::Speed,
-        OptimizationLevel::Balanced,
-        OptimizationLevel::Size,
-        OptimizationLevel::Quality,
-    ];
-
-    for (i, level) in optimization_levels.iter().enumerate() {
-        let output_path = temp_dir.path().join(format!("output_{}.gguf", i));
-
-        let mut config = conversion_test_utils::create_conversion_config();
-        config.optimization.level = *level;
-        config.output_format = ModelFormat::Gguf;
-
-        let result = converter
-            .convert_model(&input_path, &output_path, &config)
-            .await;
-        assert!(
-            result.is_ok(),
-            "Conversion with {:?} optimization should succeed: {:?}",
-            level,
-            result
-        );
-
-        assert!(output_path.exists());
-    }
+    let progress = observer
+        .get_conversion_progress(&input)
+        .await?
+        .expect("progress recorded after conversion");
+    assert!(
+        matches!(
+            progress.stage,
+            inferno::conversion::ConversionStage::Complete
+        ),
+        "final stage is Complete, got {:?}",
+        progress.stage
+    );
+    assert_eq!(progress.progress_percent, 100.0);
 
     Ok(())
 }
 
-/// Test concurrent conversions
 #[tokio::test]
 async fn test_concurrent_conversions() -> Result<()> {
-    let temp_dir = TempDir::new()?;
+    let dir = TempDir::new()?;
+    let converter = make_converter(dir.path());
 
-    // Create multiple input files
-    let num_conversions = 5;
     let mut tasks = Vec::new();
+    for i in 0..5 {
+        let input = dir.path().join(format!("input_{i}.safetensors"));
+        let output = dir.path().join(format!("output_{i}.gguf"));
+        build_safetensors(&input)?;
 
-    for i in 0..num_conversions {
-        let input_path = temp_dir.path().join(format!("input_{}.gguf", i));
-        let output_path = temp_dir.path().join(format!("output_{}.onnx", i));
-
-        conversion_test_utils::create_mock_gguf_file(&input_path)?;
-
-        let mut config = conversion_test_utils::create_conversion_config();
-        config.output_format = ModelFormat::Onnx;
-
-        let converter = ModelConverter::new();
-        let task = tokio::spawn(async move {
+        let converter = converter.clone();
+        tasks.push(tokio::spawn(async move {
             converter
-                .convert_model(&input_path, &output_path, &config)
+                .convert_model(&input, &output, &base_config(ModelFormat::Gguf))
                 .await
-        });
-
-        tasks.push(task);
+        }));
     }
 
-    // Wait for all conversions
-    let results = futures::future::join_all(tasks).await;
-
-    for (i, task_result) in results.into_iter().enumerate() {
-        let conversion_result = task_result?;
+    for (i, task) in tasks.into_iter().enumerate() {
+        let result = task.await??;
         assert!(
-            conversion_result.is_ok(),
-            "Concurrent conversion {} should succeed: {:?}",
-            i,
-            conversion_result
+            result.success,
+            "concurrent conversion {i} should succeed: {:?}",
+            result.errors
         );
     }
 
     Ok(())
 }
 
-/// Test conversion progress tracking
+// ── Unsupported-input boundaries (honest current behavior) ───────────────────
+
 #[tokio::test]
-async fn test_conversion_progress() -> Result<()> {
-    let temp_dir = TempDir::new()?;
+async fn test_onnx_input_unsupported() -> Result<()> {
+    // ONNX reading is disabled during the ort 2.0 transition, so ONNX-input
+    // conversions cannot succeed. Assert that failure explicitly.
+    let dir = TempDir::new()?;
+    let converter = make_converter(dir.path());
 
-    let input_path = temp_dir.path().join("input.gguf");
-    let output_path = temp_dir.path().join("output.onnx");
+    let input = dir.path().join("input.onnx");
+    let output = dir.path().join("output.gguf");
+    write_onnxish_file(&input)?;
 
-    conversion_test_utils::create_mock_gguf_file(&input_path)?;
+    let result = converter
+        .convert_model(&input, &output, &base_config(ModelFormat::Gguf))
+        .await?;
 
-    let config = conversion_test_utils::create_conversion_config();
-    let converter = ModelConverter::new();
+    assert!(!result.success, "ONNX input must not convert");
+    assert!(
+        result
+            .errors
+            .iter()
+            .any(|e| e.contains("ONNX") || e.contains("validation")),
+        "error should name the ONNX limitation: {:?}",
+        result.errors
+    );
 
-    // Start conversion and track progress
-    let progress_handle = tokio::spawn({
-        let converter = converter.clone();
-        let input_path = input_path.clone();
-        async move {
-            // Simulate checking progress during conversion
-            tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-            converter.get_conversion_progress(&input_path).await
-        }
-    });
+    Ok(())
+}
 
-    let conversion_result = converter
-        .convert_model(&input_path, &output_path, &config)
-        .await;
-    assert!(conversion_result.is_ok(), "Conversion should succeed");
+#[tokio::test]
+async fn test_pytorch_input_unsupported() -> Result<()> {
+    // PyTorch support was removed at the dependency level (tch), so .pt input
+    // conversions fail. Assert that boundary.
+    let dir = TempDir::new()?;
+    let converter = make_converter(dir.path());
 
-    let progress_result = progress_handle.await?;
-    // Progress tracking might not be implemented yet, so we just check it doesn't crash
+    let input = dir.path().join("input.pt");
+    let output = dir.path().join("output.gguf");
+    fs::write(&input, vec![0x80u8, 0x02, 0x00, 0x01])?; // non-empty pickle-ish bytes
+
+    let result = converter
+        .convert_model(&input, &output, &base_config(ModelFormat::Gguf))
+        .await?;
+
+    assert!(!result.success, "PyTorch input must not convert");
+    assert!(
+        result.errors.iter().any(|e| e.contains("PyTorch")),
+        "error should name PyTorch: {:?}",
+        result.errors
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_invalid_gguf_input() -> Result<()> {
+    let dir = TempDir::new()?;
+    let converter = make_converter(dir.path());
+
+    let input = dir.path().join("invalid.gguf");
+    let output = dir.path().join("output.onnx");
+    fs::write(&input, b"NOTAGGUFHEADER____________")?; // wrong magic
+
+    let result = converter
+        .convert_model(&input, &output, &base_config(ModelFormat::Onnx))
+        .await?;
+
+    assert!(!result.success, "invalid GGUF must not convert");
+    assert!(!result.errors.is_empty());
+
+    Ok(())
+}
+
+// ── Optional real-model coverage ─────────────────────────────────────────────
+
+/// Analyze a real model when `INFERNO_TEST_MODEL` points at a GGUF file. Skipped
+/// (not failed) when the env var is unset, matching the backend/cache suites.
+#[tokio::test]
+async fn test_analyze_real_model() -> Result<()> {
+    let Some(model) = std::env::var_os("INFERNO_TEST_MODEL").map(PathBuf::from) else {
+        eprintln!("SKIP test_analyze_real_model: set INFERNO_TEST_MODEL to a GGUF file to run");
+        return Ok(());
+    };
+    if !model.is_file() {
+        eprintln!("SKIP test_analyze_real_model: INFERNO_TEST_MODEL is not a file: {model:?}");
+        return Ok(());
+    }
+
+    let dir = TempDir::new()?;
+    let converter = make_converter(dir.path());
+
+    let analysis = converter.analyze_model(&model).await?;
+    assert_eq!(analysis.format, ModelFormat::Gguf);
+    assert!(analysis.tensor_count > 0, "real model has tensors");
+    assert!(!analysis.metadata.is_empty(), "real model exposes metadata");
 
     Ok(())
 }
