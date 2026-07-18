@@ -119,7 +119,7 @@ pub enum Commands {
     #[command(about = "Multi-modal inference with vision, audio, and mixed media")]
     MultiModal(multimodal::MultiModalArgs),
 
-    #[command(about = "Advanced deployment automation with Kubernetes and Helm")]
+    #[command(about = "Generate Kubernetes manifests and Helm charts")]
     Deployment(deployment::DeploymentCliArgs),
 
     #[command(about = "Model versioning and A/B testing framework")]
