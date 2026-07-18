@@ -87,9 +87,6 @@ async fn main() -> Result<()> {
         Commands::Optimization(args) => {
             inferno::cli::optimization::execute_optimization_command(args).await
         }
-        Commands::MultiModal(args) => inferno::cli::multimodal::handle_multimodal_command(args)
-            .await
-            .map_err(|e| anyhow::anyhow!(e)),
         Commands::Deployment(args) => {
             inferno::cli::deployment::handle_deployment_command(args).await
         }

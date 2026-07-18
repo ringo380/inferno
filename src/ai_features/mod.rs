@@ -3,7 +3,6 @@
 //! This module contains AI/ML-specific features:
 //! - Model format conversion
 //! - Performance optimization
-//! - Multimodal support (vision, audio)
 //! - Real-time streaming
 //! - GPU management
 //!
@@ -12,7 +11,6 @@
 // Re-export from existing locations for now
 pub use crate::conversion;
 pub use crate::gpu;
-pub use crate::multimodal;
 
 // Optimization consolidation
 pub mod optimization;

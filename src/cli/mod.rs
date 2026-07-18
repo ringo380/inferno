@@ -16,7 +16,6 @@ pub mod metrics;
 pub mod model_versioning;
 pub mod models;
 pub mod monitoring;
-pub mod multimodal;
 pub mod observability;
 pub mod optimization;
 pub mod performance_benchmark;
@@ -115,9 +114,6 @@ pub enum Commands {
 
     #[command(about = "Model optimization with quantization, pruning, and distillation")]
     Optimization(optimization::OptimizationArgs),
-
-    #[command(about = "Multi-modal inference with vision, audio, and mixed media")]
-    MultiModal(multimodal::MultiModalArgs),
 
     #[command(about = "Generate Kubernetes manifests and Helm charts")]
     Deployment(deployment::DeploymentCliArgs),
