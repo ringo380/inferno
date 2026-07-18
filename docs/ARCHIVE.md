@@ -213,3 +213,42 @@ backup/DR feature. Model files live in the models directory
 **What would have to be true to want it back:** a real implementation - actual
 storage-destination I/O (local/S3/etc.), real encryption via a vetted crate, and a
 restore path verified end-to-end - not a revival of the mock scaffold.
+
+---
+
+## `multimodal` (removed 2026-07-18, issue #44)
+
+**What it was:** a "multi-modal inference" subsystem (`src/multimodal.rs`, 1,244 lines)
+and its CLI (`src/cli/multimodal.rs`, 1,572 lines) exposing an `inferno multimodal`
+command with `process`/`batch`/`analyze`/`convert`/`capabilities` subcommands for
+vision, audio, video, and mixed-media input.
+
+**Why archived:**
+- Every result was fabricated. `perform_multimodal_inference` returned hardcoded
+  strings independent of the input - an image "analysis" always reported
+  `"Detected objects ... cars, buildings, people"` and an audio "transcription" always
+  returned `"Hello, this is a test recording"`. It never loaded a model or called an
+  `InferenceBackend`. Image, audio, video, and metadata handling were all marked
+  `// Mock`, and the CLI `convert` read the input file and wrote the same bytes back
+  after a fake 500ms sleep.
+- The feature is aspirational for a text-only GGUF/ONNX runner: there is no
+  vision/audio-capable backend anywhere in the project to power it.
+- It was self-contained. Its only references were its own CLI (dispatched from
+  `main.rs`) and a `pub use crate::multimodal` re-export in `ai_features::mod`. There
+  was no `config.multimodal` field, and nothing outside the module consumed its types
+  (the `AudioFeatures` in `src/io/mod.rs` is a separate, real struct - a name
+  collision, not `crate::multimodal::AudioFeatures`).
+- Per the #44 rule, fabricated output is a delete signal.
+
+**What was kept:** nothing from the module. The genuine media code it pretended to use
+already lives elsewhere and is untouched: the `image` crate in `src/io/mod.rs` and
+`src/icon_generator.rs`, and the `hound` crate (real audio feature extraction) in
+`src/io/mod.rs`.
+
+**Where functionality lives now:** nothing in-tree replaces it; Inferno remains a
+text-only model runner.
+
+**What would have to be true to want it back:** a real vision/audio-capable backend
+(for example a llava or whisper GGUF path wired to `InferenceBackend`), at which point
+the pipeline would be built fresh against that backend rather than revived from this
+mock scaffold.

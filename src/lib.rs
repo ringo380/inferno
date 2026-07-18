@@ -81,7 +81,7 @@ pub mod infrastructure;
 /// Operations & DevOps (batch, deployment, backup, resilience)
 pub mod operations;
 
-/// AI/ML specialized features (conversion, optimization, multimodal, GPU)
+/// AI/ML specialized features (conversion, optimization, GPU)
 pub mod ai_features;
 
 /// Enterprise features (distributed, multi-tenancy, data pipeline)
@@ -129,7 +129,6 @@ pub mod versioning;
 // === AI/ML Specialized Features (kept at root for now) ===
 pub mod conversion;
 pub mod gpu;
-pub mod multimodal;
 pub mod optimization;
 pub mod performance_baseline;
 pub mod performance_optimization;
