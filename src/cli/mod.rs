@@ -1,6 +1,5 @@
 pub mod ab_testing;
 pub mod audit;
-pub mod backup_recovery;
 pub mod batch;
 pub mod batch_queue;
 pub mod bench;
@@ -125,9 +124,6 @@ pub enum Commands {
 
     #[command(about = "Model versioning and A/B testing framework")]
     ModelVersioning(model_versioning::ModelVersioningArgs),
-
-    #[command(about = "Enterprise-grade backup and disaster recovery")]
-    BackupRecovery(backup_recovery::BackupRecoveryArgs),
 
     #[command(about = "Enterprise performance optimization and auto-tuning")]
     PerformanceOptimization(performance_optimization::PerformanceOptimizationArgs),

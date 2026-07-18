@@ -182,3 +182,34 @@ and is tracked separately; it does not affect compilation.
 (first-party or a concrete third-party API) plus a real download/verify/install
 implementation wired into the models directory - not a revival of the placeholder
 fetch.
+
+## `backup-recovery` module and CLI (`inferno backup-recovery`)
+
+**Removed:** 2026-07 (issue #44)
+
+**What it was:** A ~5,970-line module (`src/backup_recovery.rs`) plus CLI
+(`src/cli/backup_recovery.rs`) modelling enterprise backup and disaster recovery -
+scheduled backups, multi-destination storage, encryption, and verification, with an
+`inferno backup-recovery` command.
+
+**Why it was archived:**
+
+- Every backend was a mock, under a section literally headed "Implementation structs
+  (mock implementations for compilation)". `upload_backup` returned a random UUID and
+  stored nothing; `download_backup` was a no-op that restored nothing;
+  `verify_backup` always returned `true`; `encrypt_data`/`decrypt_data` returned the
+  data unchanged (no encryption); the scheduler's `schedule_backup` was a no-op.
+- A backup/DR feature that silently backs up nothing, restores nothing, and encrypts
+  nothing is worse than absent - it invites false confidence. Per the #44 rule,
+  fabricated output is a delete signal.
+- Its only references were its own CLI and a `pub use` re-export in
+  `operations::mod`. Nothing in the library, desktop app, or HTTP server used it, and
+  the `config.backup_recovery` field was never read.
+
+**Where functionality lives now:** nothing in-tree replaces it; there is no supported
+backup/DR feature. Model files live in the models directory
+(`INFERNO_MODELS_DIR`) and can be backed up with standard filesystem tooling.
+
+**What would have to be true to want it back:** a real implementation - actual
+storage-destination I/O (local/S3/etc.), real encryption via a vetted crate, and a
+restore path verified end-to-end - not a revival of the mock scaffold.

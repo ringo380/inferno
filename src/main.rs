@@ -96,9 +96,6 @@ async fn main() -> Result<()> {
         Commands::ModelVersioning(args) => {
             inferno::cli::model_versioning::execute(args, &config).await
         }
-        Commands::BackupRecovery(args) => {
-            inferno::cli::backup_recovery::execute(args, &config).await
-        }
         Commands::PerformanceOptimization(args) => {
             inferno::cli::performance_optimization::execute(args, &config).await
         }
