@@ -16,6 +16,13 @@ NC='\033[0m' # No Color
 # Track overall status
 FAILED_CHECKS=0
 
+# verify.sh rebuilds the whole graph across several feature sets and every
+# integration-test binary. Incremental compilation caches almost nothing reusable
+# across such a full sweep but its on-disk cache can grow to tens of GB. Disable it
+# here so a full verification run does not balloon target/. Iterative `cargo check`
+# during development is unaffected (it does not source this script).
+export CARGO_INCREMENTAL=0
+
 echo -e "${BLUE}🔥 Inferno Verification Script${NC}"
 echo -e "${BLUE}================================${NC}\n"
 
