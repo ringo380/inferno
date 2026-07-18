@@ -1,17 +1,14 @@
-// Logging audit functionality - re-export from main audit module
-// This module provides additional types for CLI compatibility
+// Shared audit configuration and compliance/integrity report types.
+//
+// These types are consumed by the audit system (`crate::audit`) and the main
+// configuration (`crate::config`). The `inferno logging-audit` CLI that
+// originally defined the rest of this module's types was removed as a redundant
+// duplicate of `inferno audit` - see docs/ARCHIVE.md.
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::SystemTime;
-
-// Re-export main audit types
-pub use crate::audit::{
-    ActorType, AuditEvent, AuditLogger as LoggingAuditSystem, AuditQuery as AuditSearchQuery,
-    AuditStatistics, EventType as AuditEventType, ExportFormat, Severity as EventSeverity,
-    SortOrder,
-};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct LoggingAuditConfig {
@@ -42,62 +39,12 @@ impl Default for AuditConfig {
     }
 }
 
-// Additional types needed for CLI compatibility
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LogEntry {
-    pub timestamp: SystemTime,
-    pub level: String,
-    pub message: String,
-    pub module: String,
-    pub metadata: HashMap<String, serde_json::Value>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ExportRequest {
-    pub format: ExportFormat,
-    pub start_time: Option<SystemTime>,
-    pub end_time: Option<SystemTime>,
-    pub filters: HashMap<String, String>,
-    pub destination: String,
-    pub query: Option<String>,
-    pub compression: Option<bool>,
-    pub encryption: Option<bool>,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ComplianceStandard {
     pub name: String,
     pub description: String,
     pub requirements: Vec<String>,
     pub version: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DateRange {
-    pub start: SystemTime,
-    pub end: SystemTime,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum ActionOutcome {
-    Success,
-    Failure,
-    Partial,
-    Unknown,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ActorFilter {
-    pub actor_type: Option<ActorType>,
-    pub actor_ids: Vec<String>,
-    pub exclude_system: bool,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ResourceFilter {
-    pub resource_types: Vec<String>,
-    pub resource_ids: Vec<String>,
-    pub include_deleted: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -140,24 +87,4 @@ pub enum IntegrityStatus {
     Compromised,
     Unknown,
     ErrorsDetected,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AnomalyAlert {
-    pub id: String,
-    pub alert_type: String,
-    pub severity: String,
-    pub description: String,
-    pub detected_at: DateTime<Utc>,
-    pub metadata: HashMap<String, serde_json::Value>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ExportStatus {
-    pub id: String,
-    pub status: String,
-    pub progress: f64,
-    pub started_at: DateTime<Utc>,
-    pub completed_at: Option<DateTime<Utc>>,
-    pub error_message: Option<String>,
 }
