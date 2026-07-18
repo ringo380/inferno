@@ -99,3 +99,37 @@ deduplication), both re-exported from `infrastructure::cache`.
 **What would have to be true to want it back:** a concrete need for a real
 multi-tier cache, at which point it should be built against real backends and
 wired into the inference path - not restored as mock scaffolding.
+
+## `advanced-monitoring` module and CLI (`inferno advanced-monitoring`)
+
+**Removed:** 2026-07 (issue #44)
+
+**What it was:** A ~6,000-line module (`src/advanced_monitoring.rs`) plus CLI
+(`src/cli/advanced_monitoring.rs`) modelling advanced monitoring and alerting with
+"Prometheus integration" - metric collection, alert rules, notification channels,
+metric exporters, and an `inferno advanced-monitoring` command.
+
+**Why it was archived:**
+
+- The entire system fabricated its output: `collect_system_metrics` returned a
+  hardcoded 45.2% CPU / 2 GB memory, `collect_application_metrics` returned a
+  hardcoded 1250 requests for "llama-7b", `evaluate_alert_rule` always returned
+  `false`, Prometheus queries were mocked, and the `FileExporter`/`HttpExporter`
+  `export()` methods were no-ops. Per the #44 rule, fabricated output is a delete
+  signal, not a keep signal.
+- Its only references were its own `inferno advanced-monitoring` command and a
+  `pub use` re-export. Nothing in the library, desktop app, or HTTP server used it.
+- The `config` `advanced_monitoring` field was never read by anything, so it was
+  removed too.
+- It overlapped the real `crate::monitoring` module (alerting, thresholds,
+  `PrometheusConfig`), which is smaller but actually wired into live callers
+  (`response_cache`, `distributed`, `cli/context`).
+
+**Where functionality lives now:** the used monitoring/metrics surface is
+`crate::monitoring` (re-exported from `infrastructure::monitoring`), `inferno
+metrics`, `inferno observability`, and the HTTP API (`inferno serve`).
+
+**What would have to be true to want it back:** a real Prometheus/OpenTelemetry
+integration that scrapes live system state (`sysinfo`) and wires exporters to real
+data - a from-scratch build against the real monitoring path, not a revival of this
+mock scaffold.
