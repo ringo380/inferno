@@ -22,7 +22,6 @@ pub use crate::cli as legacy_cli;
 
 // Re-export from existing locations for now
 pub use crate::api;
-pub use crate::dashboard;
 pub use crate::tui;
 
 // REMOVED: Tauri v1 implementation has been removed
