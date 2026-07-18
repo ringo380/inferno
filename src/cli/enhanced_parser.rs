@@ -130,23 +130,13 @@ impl EnhancedCliParser {
 
         // Provide general help
         eprintln!("🔧 Common commands:");
-        eprintln!("   • inferno install <model>     # Install a model");
-        eprintln!("   • inferno search <query>      # Search for models");
-        eprintln!("   • inferno list                # List installed models");
         eprintln!("   • inferno run <model>         # Run inference");
+        eprintln!("   • inferno models list         # List available models");
+        eprintln!("   • inferno serve               # Start the HTTP API server");
         eprintln!("   • inferno --help              # Show all commands");
         eprintln!();
 
-        // Provide examples based on what they might have meant
-        if input.contains("instal") || input.contains("add") || input.contains("get") {
-            eprintln!("{}", HelpSystem::get_usage_examples("install"));
-        } else if input.contains("search") || input.contains("find") {
-            eprintln!("{}", HelpSystem::get_usage_examples("search"));
-        } else if input.contains("list") || input.contains("show") {
-            eprintln!("{}", HelpSystem::get_usage_examples("list"));
-        } else {
-            eprintln!("{}", HelpSystem::get_usage_examples("general"));
-        }
+        eprintln!("{}", HelpSystem::get_usage_examples("general"));
     }
 }
 

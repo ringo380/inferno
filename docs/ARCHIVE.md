@@ -133,3 +133,52 @@ metrics`, `inferno observability`, and the HTTP API (`inferno serve`).
 integration that scrapes live system state (`sysinfo`) and wires exporters to real
 data - a from-scratch build against the real monitoring path, not a revival of this
 mock scaffold.
+
+## Model marketplace and package manager (`inferno marketplace` / `package` / `install` / `remove` / `search` / `list` / `repo`)
+
+**Removed:** 2026-07 (issue #44)
+
+**What it was:** A ~6,600-line cluster implementing a model marketplace and an
+apt-style package manager:
+
+- `src/marketplace.rs` + `src/cli/marketplace.rs` - the `ModelMarketplace` engine
+  and the `inferno marketplace` command.
+- `src/cli/package.rs` - the `inferno package` command plus the simplified
+  aliases `inferno install` / `remove` / `search` / `list`.
+- `src/cli/repo.rs` - the `inferno repo` command for managing model repositories.
+
+`package.rs` and `repo.rs` were built entirely on `ModelMarketplace`, so the three
+were a single unit and were removed together.
+
+**Why it was archived:**
+
+- The feature was aspirational. Although the config pointed at real registries
+  (HuggingFace, Ollama, ONNX, PyTorch, TF Hub) and some paths used real HTTP, the
+  core repository fetch was an explicit placeholder (`fetch_repository_models`:
+  "TODO: Implement actual HTTP client to fetch models from repository ... This is a
+  placeholder implementation"), so end-to-end install/search never worked against a
+  real registry.
+- The `config.marketplace` field was never read by anything.
+- There is no operating Inferno model registry to back it, so the whole
+  package-manager UX advertised a workflow that could not complete.
+
+**Where functionality lives now:** model discovery and use go through the real
+paths - `inferno models` (list/inspect local models), `inferno run --model <path>`,
+and the models directory (`INFERNO_MODELS_DIR`). There is no supported
+install-from-registry flow.
+
+**Related cleanup:** the `fuzzy` command matcher (`src/cli/fuzzy.rs`) had its
+vocabulary and aliases pruned so it no longer suggests the removed commands, and the
+"Common commands" hint in the enhanced parser was updated to point at surviving
+commands.
+
+**Known follow-up:** the help/onboarding subsystem (`src/cli/help.rs` and the
+example/prerequisite helpers) still contains guidance and examples written around the
+package-manager workflow (e.g. suggesting `inferno install ...` as a remedy for a
+missing model). Scrubbing it requires deciding the replacement onboarding narrative
+and is tracked separately; it does not affect compilation.
+
+**What would have to be true to want it back:** a real, operating model registry
+(first-party or a concrete third-party API) plus a real download/verify/install
+implementation wired into the models directory - not a revival of the placeholder
+fetch.

@@ -84,7 +84,7 @@ pub mod operations;
 /// AI/ML specialized features (conversion, optimization, multimodal, GPU)
 pub mod ai_features;
 
-/// Enterprise features (distributed, multi-tenancy, marketplace, data pipeline)
+/// Enterprise features (distributed, multi-tenancy, data pipeline)
 pub mod enterprise;
 
 /// User interfaces (CLI, API, TUI)
@@ -135,9 +135,6 @@ pub mod optimization;
 pub mod performance_baseline;
 pub mod performance_optimization;
 pub mod streaming;
-
-// === External Integrations (kept at root for now) ===
-pub mod marketplace;
 
 // REMOVED: Deprecated Tauri v1 module
 // Desktop app now lives in dashboard/src-tauri/

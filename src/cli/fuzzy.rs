@@ -44,113 +44,12 @@ impl FuzzyMatcher {
             "config".to_string(),
             "cache".to_string(),
             "convert".to_string(),
-            "marketplace".to_string(),
-            "package".to_string(),
-            "install".to_string(),
-            "remove".to_string(),
-            "search".to_string(),
-            "list".to_string(),
-            "repo".to_string(),
             "tui".to_string(),
-        ]);
-
-        // Package subcommands
-        self.commands.extend(vec![
-            "package install".to_string(),
-            "package remove".to_string(),
-            "package search".to_string(),
-            "package list".to_string(),
-            "package update".to_string(),
-            "package upgrade".to_string(),
-            "package autoremove".to_string(),
-            "package clean".to_string(),
-            "package info".to_string(),
-            "package depends".to_string(),
-            "package check".to_string(),
-        ]);
-
-        // Repository subcommands
-        self.commands.extend(vec![
-            "repo add".to_string(),
-            "repo remove".to_string(),
-            "repo list".to_string(),
-            "repo update".to_string(),
-            "repo info".to_string(),
-            "repo test".to_string(),
-            "repo toggle".to_string(),
-            "repo priority".to_string(),
-            "repo clean".to_string(),
-        ]);
-
-        // Marketplace subcommands
-        self.commands.extend(vec![
-            "marketplace search".to_string(),
-            "marketplace download".to_string(),
-            "marketplace install".to_string(),
-            "marketplace list".to_string(),
-            "marketplace updates".to_string(),
         ]);
     }
 
     fn initialize_aliases(&mut self) {
         // Common typos and alternatives
-        self.aliases
-            .insert("instal".to_string(), "install".to_string());
-        self.aliases
-            .insert("instll".to_string(), "install".to_string());
-        self.aliases
-            .insert("isntall".to_string(), "install".to_string());
-        self.aliases
-            .insert("add".to_string(), "install".to_string());
-        self.aliases
-            .insert("get".to_string(), "install".to_string());
-
-        self.aliases.insert("rm".to_string(), "remove".to_string());
-        self.aliases.insert("del".to_string(), "remove".to_string());
-        self.aliases
-            .insert("delete".to_string(), "remove".to_string());
-        self.aliases
-            .insert("uninstall".to_string(), "remove".to_string());
-
-        self.aliases
-            .insert("find".to_string(), "search".to_string());
-        self.aliases
-            .insert("query".to_string(), "search".to_string());
-        self.aliases
-            .insert("lookup".to_string(), "search".to_string());
-
-        self.aliases.insert("ls".to_string(), "list".to_string());
-        self.aliases.insert("show".to_string(), "list".to_string());
-        self.aliases
-            .insert("display".to_string(), "list".to_string());
-
-        self.aliases
-            .insert("update".to_string(), "package update".to_string());
-        self.aliases
-            .insert("upgrade".to_string(), "package upgrade".to_string());
-        self.aliases
-            .insert("autoremove".to_string(), "package autoremove".to_string());
-        self.aliases
-            .insert("autoclean".to_string(), "package clean".to_string());
-
-        self.aliases
-            .insert("repository".to_string(), "repo".to_string());
-        self.aliases
-            .insert("repositories".to_string(), "repo".to_string());
-        self.aliases.insert("repos".to_string(), "repo".to_string());
-
-        self.aliases
-            .insert("market".to_string(), "marketplace".to_string());
-        self.aliases
-            .insert("store".to_string(), "marketplace".to_string());
-        self.aliases
-            .insert("registry".to_string(), "marketplace".to_string());
-
-        self.aliases
-            .insert("pkg".to_string(), "package".to_string());
-        self.aliases
-            .insert("packages".to_string(), "package".to_string());
-
         self.aliases.insert("cfg".to_string(), "config".to_string());
         self.aliases
             .insert("configuration".to_string(), "config".to_string());
@@ -490,30 +389,26 @@ mod tests {
         let matcher = FuzzyMatcher::new();
 
         assert_eq!(
-            matcher.suggest_command("instal"),
-            Some("install".to_string())
+            matcher.suggest_command("modles"),
+            Some("models".to_string())
         );
-        assert_eq!(matcher.suggest_command("serch"), Some("search".to_string()));
-        assert_eq!(matcher.suggest_command("rm"), Some("remove".to_string()));
-        assert_eq!(matcher.suggest_command("ls"), Some("list".to_string()));
+        assert_eq!(matcher.suggest_command("serv"), Some("serve".to_string()));
+        assert_eq!(matcher.suggest_command("cfg"), Some("config".to_string()));
+        assert_eq!(matcher.suggest_command("ui"), Some("tui".to_string()));
     }
 
     #[test]
     fn test_command_validation() {
         let matcher = FuzzyMatcher::new();
 
+        assert_eq!(matcher.validate_command("config"), CommandValidation::Valid);
         assert_eq!(
-            matcher.validate_command("install"),
-            CommandValidation::Valid
+            matcher.validate_command("cfg"),
+            CommandValidation::Alias("config".to_string())
         );
         assert_eq!(
-            matcher.validate_command("rm"),
-            CommandValidation::Alias("remove".to_string())
-        );
-        // "instal" is an alias to "install", not a suggestion
-        assert_eq!(
-            matcher.validate_command("instal"),
-            CommandValidation::Alias("install".to_string())
+            matcher.validate_command("ui"),
+            CommandValidation::Alias("tui".to_string())
         );
         assert_eq!(
             matcher.validate_command("xyz123"),
@@ -525,11 +420,11 @@ mod tests {
     fn test_multiple_suggestions() {
         let matcher = FuzzyMatcher::new();
 
-        let suggestions = matcher.suggest_multiple("pac", 3);
-        assert!(suggestions.contains(&"package".to_string()));
+        let suggestions = matcher.suggest_multiple("mod", 3);
+        assert!(suggestions.contains(&"models".to_string()));
 
-        let suggestions = matcher.suggest_multiple("rep", 3);
-        assert!(suggestions.contains(&"repo".to_string()));
+        let suggestions = matcher.suggest_multiple("conf", 3);
+        assert!(suggestions.contains(&"config".to_string()));
     }
 
     #[tokio::test]

@@ -93,17 +93,6 @@ async fn main() -> Result<()> {
         Commands::Deployment(args) => {
             inferno::cli::deployment::handle_deployment_command(args).await
         }
-        Commands::Marketplace(args) => {
-            inferno::cli::marketplace::handle_marketplace_command(args).await
-        }
-        Commands::Package(args) => inferno::cli::package::handle_package_command(args).await,
-
-        // Simplified package manager aliases
-        Commands::Install(args) => inferno::cli::package::handle_install_simple(args).await,
-        Commands::Remove(args) => inferno::cli::package::handle_remove_simple(args).await,
-        Commands::Search(args) => inferno::cli::package::handle_search_simple(args).await,
-        Commands::List(args) => inferno::cli::package::handle_list_simple(args).await,
-        Commands::Repo(args) => inferno::cli::repo::handle_repo_command(args).await,
         Commands::ModelVersioning(args) => {
             inferno::cli::model_versioning::execute(args, &config).await
         }
