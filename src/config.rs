@@ -1,5 +1,5 @@
 use crate::{
-    advanced_cache::AdvancedCacheConfig, advanced_monitoring::AdvancedMonitoringConfig,
+    advanced_monitoring::AdvancedMonitoringConfig,
     backends::BackendConfig, backup_recovery::BackupRecoveryConfig, cache::CacheConfig,
     deployment::DeploymentConfig, distributed::DistributedConfig,
     logging_audit::LoggingAuditConfig, marketplace::MarketplaceConfig,
@@ -40,7 +40,6 @@ pub struct Config {
     pub backup_recovery: BackupRecoveryConfig,
     pub logging_audit: LoggingAuditConfig,
     pub performance_optimization: PerformanceOptimizationConfig,
-    pub advanced_cache: AdvancedCacheConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -100,7 +99,6 @@ impl Default for Config {
             backup_recovery: BackupRecoveryConfig::default(),
             logging_audit: LoggingAuditConfig::default(),
             performance_optimization: PerformanceOptimizationConfig::default(),
-            advanced_cache: AdvancedCacheConfig::default(),
         }
     }
 }

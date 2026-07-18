@@ -69,3 +69,33 @@ compliance, export).
 **What would have to be true to want it back:** a concrete need for an audit CLI
 surface distinct from `inferno audit` - at which point it should extend that
 command rather than reintroduce a parallel one.
+
+## `advanced-cache` module and CLI (`inferno advanced-cache`)
+
+**Removed:** 2026-07 (issue #44)
+
+**What it was:** A ~5,100-line module (`src/advanced_cache.rs`) plus CLI
+(`src/cli/advanced_cache.rs`) modelling a multi-tier cache (L1/L2/L3 hierarchy,
+memory management, prefetching, compression, persistence, distributed topology,
+tiering) with an `AdvancedCacheSystem` and an `inferno advanced-cache` command.
+
+**Why it was archived:**
+
+- The entire system ran on mock backends: `AdvancedCacheSystem` was constructed
+  with `MockCacheBackend`, `MockCacheMonitor`, `MockCacheOptimizer`, and
+  `MockCompressionEngine`, and the CLI emitted demo output ("Mock listing", "For
+  CLI demo purposes, show mock optimization results", "Mock restore"). Per the
+  #44 rule, fabricated output is a delete signal, not a keep signal.
+- Its only consumer was its own `inferno advanced-cache` command. Nothing in the
+  runtime/inference path used it.
+- The vast majority of the module was configuration types; the `config`
+  `advanced_cache` field was never read by anything (even the CLI built its own
+  `AdvancedCacheConfig::default()`), so it was removed too.
+
+**Where functionality lives now:** the real, used cache is `crate::cache`
+(`ModelCache`, model loading + warm-up) and `crate::response_cache` (response
+deduplication), both re-exported from `infrastructure::cache`.
+
+**What would have to be true to want it back:** a concrete need for a real
+multi-tier cache, at which point it should be built against real backends and
+wired into the inference path - not restored as mock scaffolding.

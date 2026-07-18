@@ -116,7 +116,6 @@ async fn main() -> Result<()> {
         Commands::PerformanceOptimization(args) => {
             inferno::cli::performance_optimization::execute(args, &config).await
         }
-        Commands::AdvancedCache(args) => inferno::cli::advanced_cache::execute(args, &config).await,
         Commands::PerformanceBenchmark(args) => {
             inferno::cli::performance_benchmark::execute_performance_benchmark(args).await
         }

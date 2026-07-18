@@ -1,5 +1,4 @@
 pub mod ab_testing;
-pub mod advanced_cache;
 pub mod advanced_monitoring;
 pub mod audit;
 pub mod backup_recovery;
@@ -161,9 +160,6 @@ pub enum Commands {
 
     #[command(about = "Enterprise performance optimization and auto-tuning")]
     PerformanceOptimization(performance_optimization::PerformanceOptimizationArgs),
-
-    #[command(about = "Advanced caching and memory management")]
-    AdvancedCache(advanced_cache::AdvancedCacheArgs),
 
     #[command(about = "Performance benchmarking and baseline establishment")]
     PerformanceBenchmark(performance_benchmark::PerformanceBenchmarkArgs),
