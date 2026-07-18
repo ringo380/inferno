@@ -34,3 +34,38 @@ area with no user-facing benefit, so it was removed in favor of the desktop app.
 **Related cleanup:** the dashboard integration-test suites (`dashboard_api_tests`,
 `dashboard_api_workflow_tests`) were removed in #54; the module itself, its CLI
 command, and its configuration field were removed in the follow-up.
+
+## `logging-audit` CLI (`inferno logging-audit`)
+
+**Removed:** 2026-07 (issue #44)
+
+**What it was:** A ~3,700-line CLI command surface (`src/cli/logging_audit.rs`)
+plus a `logging_audit` module of supporting types, providing log/audit export,
+compliance reporting, and integrity checks.
+
+**Why it was archived:**
+
+- The command duplicated `inferno audit`, which is the maintained audit
+  interface. The two overlapped heavily in purpose (audit trail, compliance,
+  export) with no clear division of responsibility.
+- Parts of it were unfinished - e.g. CSV export returned the literal string
+  `"CSV export not implemented"` rather than producing output.
+
+**What was kept:** the small set of types the rest of the codebase actually
+depends on stays in `src/logging_audit.rs`:
+
+- `LoggingAuditConfig` / `AuditConfig` - referenced by the main `Config`.
+- `ComplianceReport`, `ComplianceStandard`, `ComplianceFinding`,
+  `IntegrityReport`, `IntegrityStatus` - constructed by `crate::audit`
+  (`validate_audit_integrity` and compliance reporting).
+
+The CLI-only types (`LogEntry`, `ExportRequest`, `DateRange`, `ActionOutcome`,
+`ActorFilter`, `ResourceFilter`, `AnomalyAlert`, `ExportStatus`, and the audit
+type re-exports) were removed with the command.
+
+**Where functionality lives now:** `inferno audit` (audit trail, querying,
+compliance, export).
+
+**What would have to be true to want it back:** a concrete need for an audit CLI
+surface distinct from `inferno audit` - at which point it should extend that
+command rather than reintroduce a parallel one.

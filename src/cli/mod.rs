@@ -15,7 +15,6 @@ pub mod enhanced_parser;
 pub mod fuzzy;
 pub mod gpu;
 pub mod help;
-pub mod logging_audit;
 pub mod marketplace;
 pub mod metrics;
 pub mod model_versioning;
@@ -159,9 +158,6 @@ pub enum Commands {
 
     #[command(about = "Enterprise-grade backup and disaster recovery")]
     BackupRecovery(backup_recovery::BackupRecoveryArgs),
-
-    #[command(about = "Comprehensive logging and audit trail system")]
-    LoggingAudit(logging_audit::LoggingAuditArgs),
 
     #[command(about = "Enterprise performance optimization and auto-tuning")]
     PerformanceOptimization(performance_optimization::PerformanceOptimizationArgs),
