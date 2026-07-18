@@ -13,7 +13,6 @@ pub mod enhanced_parser;
 pub mod fuzzy;
 pub mod gpu;
 pub mod help;
-pub mod marketplace;
 pub mod metrics;
 pub mod model_versioning;
 pub mod models;
@@ -21,10 +20,8 @@ pub mod monitoring;
 pub mod multimodal;
 pub mod observability;
 pub mod optimization;
-pub mod package;
 pub mod performance_benchmark;
 pub mod performance_optimization;
-pub mod repo;
 pub mod resilience;
 pub mod response_cache;
 pub mod run;
@@ -125,28 +122,6 @@ pub enum Commands {
 
     #[command(about = "Advanced deployment automation with Kubernetes and Helm")]
     Deployment(deployment::DeploymentCliArgs),
-
-    #[command(about = "Model marketplace and registry management")]
-    Marketplace(marketplace::MarketplaceArgs),
-
-    #[command(about = "Package manager for models (install, remove, search, etc.)")]
-    Package(package::PackageArgs),
-
-    // Simplified package manager aliases
-    #[command(about = "Install a model package")]
-    Install(package::InstallArgs),
-
-    #[command(about = "Remove a model package")]
-    Remove(package::RemoveArgs),
-
-    #[command(about = "Search for model packages")]
-    Search(package::SearchArgs),
-
-    #[command(about = "List installed model packages")]
-    List(package::ListArgs),
-
-    #[command(about = "Manage model repositories")]
-    Repo(repo::RepoArgs),
 
     #[command(about = "Model versioning and A/B testing framework")]
     ModelVersioning(model_versioning::ModelVersioningArgs),
