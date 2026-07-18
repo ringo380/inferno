@@ -237,6 +237,10 @@ strip = true
 
 [profile.dev]
 opt-level = 1
+# Line tables keep backtraces and file:line info for debugging while dropping the
+# bulky type/variable debuginfo that full `debug = 2` emits for large C/C++ deps
+# (llama-cpp, onnxruntime, tauri). Substantially smaller target/debug artifacts.
+debug = "line-tables-only"
 
 [[bench]]
 name = "inference_benchmark"
