@@ -119,7 +119,6 @@ pub mod observability;
 pub mod response_cache;
 
 // === Enterprise & Management (kept at root for now) ===
-pub mod backup_recovery;
 pub mod deployment;
 pub mod distributed;
 pub mod model_versioning;

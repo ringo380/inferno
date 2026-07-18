@@ -1,5 +1,5 @@
 use crate::{
-    backends::BackendConfig, backup_recovery::BackupRecoveryConfig, cache::CacheConfig,
+    backends::BackendConfig, cache::CacheConfig,
     deployment::DeploymentConfig, distributed::DistributedConfig,
     logging_audit::LoggingAuditConfig,
     model_versioning::ModelVersioningConfig, monitoring::MonitoringConfig,
@@ -34,7 +34,6 @@ pub struct Config {
     pub observability: ObservabilityConfig,
     pub deployment: DeploymentConfig,
     pub model_versioning: ModelVersioningConfig,
-    pub backup_recovery: BackupRecoveryConfig,
     pub logging_audit: LoggingAuditConfig,
     pub performance_optimization: PerformanceOptimizationConfig,
 }
@@ -91,7 +90,6 @@ impl Default for Config {
             observability: ObservabilityConfig::default(),
             deployment: DeploymentConfig::default(),
             model_versioning: ModelVersioningConfig::default(),
-            backup_recovery: BackupRecoveryConfig::default(),
             logging_audit: LoggingAuditConfig::default(),
             performance_optimization: PerformanceOptimizationConfig::default(),
         }
