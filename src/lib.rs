@@ -131,7 +131,6 @@ pub mod conversion;
 pub mod gpu;
 pub mod optimization;
 pub mod performance_baseline;
-pub mod performance_optimization;
 pub mod streaming;
 
 // REMOVED: Deprecated Tauri v1 module

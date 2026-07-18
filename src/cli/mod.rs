@@ -19,7 +19,6 @@ pub mod monitoring;
 pub mod observability;
 pub mod optimization;
 pub mod performance_benchmark;
-pub mod performance_optimization;
 pub mod resilience;
 pub mod response_cache;
 pub mod run;
@@ -120,9 +119,6 @@ pub enum Commands {
 
     #[command(about = "Model versioning and A/B testing framework")]
     ModelVersioning(model_versioning::ModelVersioningArgs),
-
-    #[command(about = "Enterprise performance optimization and auto-tuning")]
-    PerformanceOptimization(performance_optimization::PerformanceOptimizationArgs),
 
     #[command(about = "Performance benchmarking and baseline establishment")]
     PerformanceBenchmark(performance_benchmark::PerformanceBenchmarkArgs),

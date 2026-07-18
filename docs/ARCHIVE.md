@@ -252,3 +252,50 @@ text-only model runner.
 (for example a llava or whisper GGUF path wired to `InferenceBackend`), at which point
 the pipeline would be built fresh against that backend rather than revived from this
 mock scaffold.
+
+---
+
+## `performance_optimization` (removed 2026-07-18, issue #44)
+
+**What it was:** an "enterprise performance optimization and auto-tuning" subsystem
+(`src/performance_optimization.rs`, 3,226 lines) and its CLI
+(`src/cli/performance_optimization.rs`, 3,048 lines) exposing an
+`inferno performance-optimization` command for profiling, optimization, auto-tuning,
+resource management, and ML-driven tuning. At 6,274 lines it was the largest module
+removed under #44.
+
+**Why archived:**
+- Every result was fabricated. All seven trait implementations (`Profiler`,
+  `Optimizer`, `AutoTuner`, `ResourceManager`, `CacheManager`, `PerformanceMonitoring`,
+  `MlEngine`) lived under a section literally headed `// Mock implementations`.
+  `SystemProfiler` returned a hardcoded 45% CPU profile with fixed memory/IO/network
+  numbers; `SystemOptimizer.optimize` reported a fixed 20% latency / 30% throughput
+  gain and `$500` cost savings while applying nothing; `apply_optimization`,
+  `rollback_optimization`, `scale_resources`, and `apply_tuning` were no-ops;
+  `MlEngine.predict` and `AutoTuner.evaluate_tuning` both returned a constant `0.85`;
+  `CacheManager.get` always returned `None`. Nothing read a real system counter or ran
+  a real optimization.
+- It was self-contained. Its only references were its own CLI (dispatched from
+  `main.rs`) and a `pub use crate::performance_optimization` re-export in
+  `ai_features::optimization::mod`. The `config.performance_optimization` field was
+  declared and defaulted but never read - the CLI built its own
+  `PerformanceOptimizationConfig::default()` and ignored it. Nothing outside the module
+  consumed its types (the `PerformanceProfile` in
+  `src/infrastructure/sys_monitor.rs` is a separate, real enum - a name collision, not
+  this module's `PerformanceProfile` struct).
+- Per the #44 rule, fabricated output is a delete signal.
+
+**What was kept:** nothing from the module. The real optimization surface is untouched:
+`inferno optimization` (quantization/pruning/distillation) in `optimization.rs` +
+`cli/optimization.rs`, and genuine system metrics in
+`src/infrastructure/sys_monitor.rs` and the `monitoring` module. The dead
+`config.performance_optimization` field was also removed; because serde ignores
+unknown fields on deserialize, existing `.inferno.toml` files that still carry a
+`[performance_optimization]` section continue to load unchanged.
+
+**Where functionality lives now:** nothing in-tree replaces the auto-tuning feature;
+real model optimization is available through `inferno optimization`.
+
+**What would have to be true to want it back:** real profiling and tuning wired to
+actual system counters and a genuine optimizer/ML engine - built fresh against those,
+not revived from this mock scaffold.

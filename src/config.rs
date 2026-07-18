@@ -3,8 +3,7 @@ use crate::{
     deployment::DeploymentConfig, distributed::DistributedConfig,
     logging_audit::LoggingAuditConfig,
     model_versioning::ModelVersioningConfig, monitoring::MonitoringConfig,
-    observability::ObservabilityConfig, performance_optimization::PerformanceOptimizationConfig,
-    response_cache::ResponseCacheConfig,
+    observability::ObservabilityConfig, response_cache::ResponseCacheConfig,
 };
 use anyhow::Result;
 use figment::{
@@ -35,7 +34,6 @@ pub struct Config {
     pub deployment: DeploymentConfig,
     pub model_versioning: ModelVersioningConfig,
     pub logging_audit: LoggingAuditConfig,
-    pub performance_optimization: PerformanceOptimizationConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -91,7 +89,6 @@ impl Default for Config {
             deployment: DeploymentConfig::default(),
             model_versioning: ModelVersioningConfig::default(),
             logging_audit: LoggingAuditConfig::default(),
-            performance_optimization: PerformanceOptimizationConfig::default(),
         }
     }
 }
