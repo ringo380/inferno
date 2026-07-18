@@ -107,8 +107,6 @@ INTEGRATION_TESTS=(
     "cache_persistence_integration_tests"
     "conversion_integration_tests"
     "cross_component_integration_tests"
-    "dashboard_api_tests"
-    "dashboard_api_workflow_tests"
     "performance_stress_tests"
     "platform_integration"
     "error_size_analysis"

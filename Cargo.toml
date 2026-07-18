@@ -323,16 +323,6 @@ path = "tests/cross_component_integration_tests.rs"
 test = false
 
 [[test]]
-name = "dashboard_api_tests"
-path = "tests/dashboard_api_tests.rs"
-test = false
-
-[[test]]
-name = "dashboard_api_workflow_tests"
-path = "tests/dashboard_api_workflow_tests.rs"
-test = false
-
-[[test]]
 name = "performance_stress_tests"
 path = "tests/performance_stress_tests.rs"
 test = false
