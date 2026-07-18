@@ -87,7 +87,7 @@ pub mod ai_features;
 /// Enterprise features (distributed, multi-tenancy, marketplace, data pipeline)
 pub mod enterprise;
 
-/// User interfaces (CLI, API, TUI, dashboard)
+/// User interfaces (CLI, API, TUI)
 pub mod interfaces;
 
 // ============================================================================
@@ -106,7 +106,6 @@ pub mod security;
 // === User Interface Modules (kept at root for now) ===
 pub mod api;
 pub mod cli;
-pub mod dashboard;
 pub mod tui;
 
 // === Infrastructure & Operations (kept at root for now) ===

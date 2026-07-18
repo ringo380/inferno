@@ -284,29 +284,6 @@ impl ConfigFixtures {
         }
     }
 
-    /// Create a test dashboard configuration
-    pub fn dashboard_config(data_dir: PathBuf, models_dir: PathBuf) -> inferno::dashboard::DashboardConfig {
-        inferno::dashboard::DashboardConfig {
-            bind_address: "127.0.0.1".to_string(),
-            port: 0, // Random port for testing
-            data_dir: Some(data_dir),
-            models_dir: Some(models_dir),
-            cache_dir: None,
-            enable_auth: false,
-            cors_enabled: true,
-            max_connections: 100,
-            request_timeout_seconds: 30,
-            static_files_dir: None,
-            ssl_cert_path: None,
-            ssl_key_path: None,
-            api_keys: Vec::new(),
-            rate_limit_requests_per_minute: 1000,
-            backup_enabled: false,
-            backup_interval_hours: 24,
-            backup_retention_days: 7,
-        }
-    }
-
     /// Create a test conversion configuration
     pub fn conversion_config() -> inferno::conversion::ConversionConfig {
         inferno::conversion::ConversionConfig {

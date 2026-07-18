@@ -104,7 +104,6 @@ async fn main() -> Result<()> {
         Commands::Search(args) => inferno::cli::package::handle_search_simple(args).await,
         Commands::List(args) => inferno::cli::package::handle_list_simple(args).await,
         Commands::Repo(args) => inferno::cli::repo::handle_repo_command(args).await,
-        Commands::Dashboard(args) => inferno::cli::dashboard::handle_dashboard_command(args).await,
         Commands::AdvancedMonitoring(args) => {
             inferno::cli::advanced_monitoring::execute(args, &config).await
         }
@@ -155,8 +154,7 @@ fn should_start_background_service(command: &Commands) -> bool {
     matches!(
         command,
         Commands::Serve(_) |     // API server runs continuously
-        Commands::Tui |          // TUI runs continuously
-        Commands::Dashboard(_) // Dashboard runs continuously
+        Commands::Tui // TUI runs continuously
     )
 }
 

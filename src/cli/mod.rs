@@ -9,7 +9,6 @@ pub mod bench;
 pub mod cache;
 pub mod config;
 pub mod convert;
-pub mod dashboard;
 pub mod deployment;
 pub mod distributed;
 pub mod enhanced_parser;
@@ -151,9 +150,6 @@ pub enum Commands {
 
     #[command(about = "Manage model repositories")]
     Repo(repo::RepoArgs),
-
-    #[command(about = "Web-based admin dashboard")]
-    Dashboard(dashboard::DashboardArgs),
 
     #[command(about = "Advanced monitoring and alerting with Prometheus integration")]
     AdvancedMonitoring(advanced_monitoring::AdvancedMonitoringArgs),
