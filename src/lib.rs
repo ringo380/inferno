@@ -109,7 +109,6 @@ pub mod cli;
 pub mod tui;
 
 // === Infrastructure & Operations (kept at root for now) ===
-pub mod advanced_monitoring;
 pub mod audit;
 pub mod batch;
 pub mod cache;

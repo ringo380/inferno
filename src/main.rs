@@ -104,9 +104,6 @@ async fn main() -> Result<()> {
         Commands::Search(args) => inferno::cli::package::handle_search_simple(args).await,
         Commands::List(args) => inferno::cli::package::handle_list_simple(args).await,
         Commands::Repo(args) => inferno::cli::repo::handle_repo_command(args).await,
-        Commands::AdvancedMonitoring(args) => {
-            inferno::cli::advanced_monitoring::execute(args, &config).await
-        }
         Commands::ModelVersioning(args) => {
             inferno::cli::model_versioning::execute(args, &config).await
         }

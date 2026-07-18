@@ -1,5 +1,4 @@
 pub mod ab_testing;
-pub mod advanced_monitoring;
 pub mod audit;
 pub mod backup_recovery;
 pub mod batch;
@@ -148,9 +147,6 @@ pub enum Commands {
 
     #[command(about = "Manage model repositories")]
     Repo(repo::RepoArgs),
-
-    #[command(about = "Advanced monitoring and alerting with Prometheus integration")]
-    AdvancedMonitoring(advanced_monitoring::AdvancedMonitoringArgs),
 
     #[command(about = "Model versioning and A/B testing framework")]
     ModelVersioning(model_versioning::ModelVersioningArgs),
