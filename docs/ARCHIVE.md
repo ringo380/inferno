@@ -5,6 +5,69 @@ removed, and where equivalent functionality now lives. It exists so that anyone
 searching the history for a removed capability can understand the decision without
 digging through commits.
 
+Archiving (as opposed to deleting) means the code is taken off the maintenance path
+but kept **recoverable**. "It's in git history somewhere" is not a salvage path; a
+tag plus this index is. See #40 (the reduction epic) and #41 (this mechanism).
+
+## Recovering archived code
+
+Every file listed below is preserved at a single immutable tag pointing at the last
+commit before the reduction began:
+
+```
+archive/enterprise-surface-v0.10.7   ->   f2eaf12   (parent of the first removal, #54)
+```
+
+The tree at that tag still contains every archived module in full. To restore a file,
+use the runnable command in its entry, which is always of the form:
+
+```
+git show archive/enterprise-surface-v0.10.7:<path> > <path>
+```
+
+For a module that was only **partially** removed (a salvage - e.g. `deployment`), the
+file still exists on `main`; recover the removed portion by diffing against the tag
+rather than overwriting:
+
+```
+git diff archive/enterprise-surface-v0.10.7 -- <path>
+```
+
+**The tag is immutable - never move or delete it.** On a public repo GitHub keeps
+tagged commits reachable indefinitely, which is exactly the durability wanted here.
+
+## Entry format
+
+Each entry is written **at removal time, in the same PR as the removal**, and states:
+
+- what was removed, and its size
+- **Recover:** the runnable `git show ...` command(s) for the removed path(s)
+- why it was removed (no consumer / duplicated by X / fabricated output)
+- what was kept or promoted out of it before removal, and where that landed
+- what would have to be true to want it back
+
+## Salvage rules (from #40)
+
+Order of preference for any candidate, in the same PR:
+
+1. **Promote** - if a piece is genuinely useful to the core product, move it into core
+   in its own commit *before* the removal commit, so the removal stays a pure subtraction.
+2. **Archive** - coherent work with no current consumer: remove it from the build and add
+   an entry here (tag + recovery command).
+3. **Delete** - only for code that is dead, duplicated, or fabricated output.
+
+**No archival PR merges without an entry in this file.** A removal that isn't indexed
+here is functionally a deletion, which defeats the purpose.
+
+### Promotions (kept in core, not archived)
+
+- **`resilience` -> `RetryPolicy`** was promoted into core and wired into the
+  `inferno models search` HuggingFace fetch (#59), with the module's first real unit
+  tests. The rest of the module was unused; only the promoted piece survives, so there
+  is no archive entry for it.
+- **`distributed`** was evaluated and **kept** (not archived): it is wired into
+  `serve --distributed` and the `src/api/openai.rs` worker-pool path.
+
 ## Web admin dashboard (`inferno dashboard`)
 
 **Removed:** 2026-07 (issue #44)
@@ -12,6 +75,13 @@ digging through commits.
 **What it was:** An axum-based web server (`src/dashboard.rs`) exposing an admin
 dashboard, driven by the `inferno dashboard` CLI subcommand (`src/cli/dashboard.rs`)
 and a `dashboard` section in the main configuration.
+
+**Recover:**
+
+```
+git show archive/enterprise-surface-v0.10.7:src/dashboard.rs > src/dashboard.rs
+git show archive/enterprise-surface-v0.10.7:src/cli/dashboard.rs > src/cli/dashboard.rs
+```
 
 **Why it was archived:**
 
@@ -42,6 +112,12 @@ command, and its configuration field were removed in the follow-up.
 **What it was:** A ~3,700-line CLI command surface (`src/cli/logging_audit.rs`)
 plus a `logging_audit` module of supporting types, providing log/audit export,
 compliance reporting, and integrity checks.
+
+**Recover:** (the shared types in `src/logging_audit.rs` were kept; only the CLI was removed)
+
+```
+git show archive/enterprise-surface-v0.10.7:src/cli/logging_audit.rs > src/cli/logging_audit.rs
+```
 
 **Why it was archived:**
 
@@ -79,6 +155,13 @@ command rather than reintroduce a parallel one.
 memory management, prefetching, compression, persistence, distributed topology,
 tiering) with an `AdvancedCacheSystem` and an `inferno advanced-cache` command.
 
+**Recover:**
+
+```
+git show archive/enterprise-surface-v0.10.7:src/advanced_cache.rs > src/advanced_cache.rs
+git show archive/enterprise-surface-v0.10.7:src/cli/advanced_cache.rs > src/cli/advanced_cache.rs
+```
+
 **Why it was archived:**
 
 - The entire system ran on mock backends: `AdvancedCacheSystem` was constructed
@@ -108,6 +191,13 @@ wired into the inference path - not restored as mock scaffolding.
 (`src/cli/advanced_monitoring.rs`) modelling advanced monitoring and alerting with
 "Prometheus integration" - metric collection, alert rules, notification channels,
 metric exporters, and an `inferno advanced-monitoring` command.
+
+**Recover:**
+
+```
+git show archive/enterprise-surface-v0.10.7:src/advanced_monitoring.rs > src/advanced_monitoring.rs
+git show archive/enterprise-surface-v0.10.7:src/cli/advanced_monitoring.rs > src/cli/advanced_monitoring.rs
+```
 
 **Why it was archived:**
 
@@ -149,6 +239,15 @@ apt-style package manager:
 
 `package.rs` and `repo.rs` were built entirely on `ModelMarketplace`, so the three
 were a single unit and were removed together.
+
+**Recover:**
+
+```
+git show archive/enterprise-surface-v0.10.7:src/marketplace.rs > src/marketplace.rs
+git show archive/enterprise-surface-v0.10.7:src/cli/marketplace.rs > src/cli/marketplace.rs
+git show archive/enterprise-surface-v0.10.7:src/cli/package.rs > src/cli/package.rs
+git show archive/enterprise-surface-v0.10.7:src/cli/repo.rs > src/cli/repo.rs
+```
 
 **Why it was archived:**
 
@@ -192,6 +291,13 @@ fetch.
 scheduled backups, multi-destination storage, encryption, and verification, with an
 `inferno backup-recovery` command.
 
+**Recover:**
+
+```
+git show archive/enterprise-surface-v0.10.7:src/backup_recovery.rs > src/backup_recovery.rs
+git show archive/enterprise-surface-v0.10.7:src/cli/backup_recovery.rs > src/cli/backup_recovery.rs
+```
+
 **Why it was archived:**
 
 - Every backend was a mock, under a section literally headed "Implementation structs
@@ -222,6 +328,13 @@ restore path verified end-to-end - not a revival of the mock scaffold.
 and its CLI (`src/cli/multimodal.rs`, 1,572 lines) exposing an `inferno multimodal`
 command with `process`/`batch`/`analyze`/`convert`/`capabilities` subcommands for
 vision, audio, video, and mixed-media input.
+
+**Recover:**
+
+```
+git show archive/enterprise-surface-v0.10.7:src/multimodal.rs > src/multimodal.rs
+git show archive/enterprise-surface-v0.10.7:src/cli/multimodal.rs > src/cli/multimodal.rs
+```
 
 **Why archived:**
 - Every result was fabricated. `perform_multimodal_inference` returned hardcoded
@@ -264,6 +377,13 @@ mock scaffold.
 resource management, and ML-driven tuning. At 6,274 lines it was the largest module
 removed under #44.
 
+**Recover:**
+
+```
+git show archive/enterprise-surface-v0.10.7:src/performance_optimization.rs > src/performance_optimization.rs
+git show archive/enterprise-surface-v0.10.7:src/cli/performance_optimization.rs > src/cli/performance_optimization.rs
+```
+
 **Why archived:**
 - Every result was fabricated. All seven trait implementations (`Profiler`,
   `Optimizer`, `AutoTuner`, `ResourceManager`, `CacheManager`, `PerformanceMonitoring`,
@@ -299,3 +419,36 @@ real model optimization is available through `inferno optimization`.
 **What would have to be true to want it back:** real profiling and tuning wired to
 actual system counters and a genuine optimizer/ML engine - built fresh against those,
 not revived from this mock scaffold.
+
+---
+
+## `deployment` mock cluster operations (partial salvage, issue #44)
+
+**Removed:** 2026-07-18 (#64). This is a **salvage, not a full archive**: the module
+(`src/deployment.rs`) and its CLI (`src/cli/deployment.rs`) still exist on `main` -
+only the fabricated cluster-apply half was removed.
+
+**What was kept (real):** manifest and Helm-chart **generation**. `create_deployment_manifest`
+/ `_service` / `_configmap` / `_hpa` emit valid Kubernetes YAML, and `generate_helm_chart`
+writes a real `Chart.yaml`, `values.yaml`, and templates. The surviving command is
+`inferno deployment generate`. The `DeploymentConfig` type is read from config, and
+`DeploymentStatus` / `DeploymentState` are consumed by `model_versioning`, so those
+type definitions were retained.
+
+**What was removed (mock):** the cluster-**apply** path. `execute_deployment` only slept
+and logged; the Kubernetes/Helm connection code was a stub that connected to nothing; and
+`deploy` / `rollback` / `scale` / `status` all reported success while touching no cluster.
+The module + CLI dropped from 4,414 to 1,945 lines (module 2,695 -> 1,807, CLI 1,719 -> 138).
+
+**Recover:** the files still exist on `main`, so recover the removed mock apply path by
+diffing the current file against the pre-salvage tag rather than overwriting:
+
+```
+git diff archive/enterprise-surface-v0.10.7 -- src/deployment.rs src/cli/deployment.rs
+git show archive/enterprise-surface-v0.10.7:src/deployment.rs   # full pre-salvage module
+```
+
+**What would have to be true to want it back:** a real cluster client (a vetted
+`kube`/Helm integration) that actually applies manifests and reports true status - at
+which point the apply path is built fresh against that client, not revived from the
+sleep-and-log stub. The generation half stands on its own and needs nothing.
