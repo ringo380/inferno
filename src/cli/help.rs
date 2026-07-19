@@ -143,7 +143,9 @@ impl HelpSystem {
         message.push_str("      inferno models list\n\n");
         message.push_str("   2. Search HuggingFace for a model:\n");
         message.push_str("      inferno models search llama\n");
-        message.push_str("      inferno models search \"mistral instruct\" --task text-generation\n\n");
+        message.push_str(
+            "      inferno models search \"mistral instruct\" --task text-generation\n\n",
+        );
         message.push_str("   3. Install a model by HuggingFace repo ID or direct URL:\n");
         message.push_str("      inferno models install TheBloke/Llama-2-7B-GGUF\n");
         message.push_str("      inferno models install TheBloke/Mistral-7B-Instruct-v0.2-GGUF\n\n");
