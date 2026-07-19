@@ -8,4 +8,16 @@ ignore = [
     # algorithms, so the vulnerable code path is not exercised. Revisit if a
     # fixed rsa release ships or if RSA JWT support is ever added.
     "RUSTSEC-2023-0071",
+
+    # quick-xml DoS advisories (quadratic duplicate-attribute scan / unbounded
+    # namespace-declaration allocation). No fix path is available: the only
+    # consumer of the vulnerable quick-xml 0.39 is wayland-scanner, whose newest
+    # release (0.31.10) still requires quick-xml "^0.39" and will not accept
+    # 0.41. That chain (wayland-scanner -> wayland-protocols -> ashpd -> rfd ->
+    # tauri-plugin-dialog) is an optional, cfg(linux/BSD)-gated build-time code
+    # generator that parses trusted local Wayland protocol XML; it never compiles
+    # on the primary macOS target and processes no attacker-controlled input.
+    # Revisit when wayland-scanner bumps to quick-xml >=0.41.
+    "RUSTSEC-2026-0194",
+    "RUSTSEC-2026-0195",
 ]
