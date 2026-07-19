@@ -457,8 +457,14 @@ mod tests {
     #[test]
     fn test_enhanced_parser_creation() {
         let parser = EnhancedCliParser::new();
-        // Just test that it can be created without panicking
-        assert!(!parser.fuzzy_matcher.suggest_command("test").is_none());
+        // A freshly built parser carries a working fuzzy matcher: an obvious
+        // typo of a real command resolves to it. (The previous assertion keyed
+        // on "test" matching the top-level "list" command, which #62 removed
+        // with the marketplace surface, so it silently began returning None.)
+        assert_eq!(
+            parser.fuzzy_matcher.suggest_command("modelz"),
+            Some("models".to_string())
+        );
     }
 
     #[tokio::test]
