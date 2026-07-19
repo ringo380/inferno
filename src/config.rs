@@ -1,7 +1,6 @@
 use crate::{
-    backends::BackendConfig, cache::CacheConfig,
-    deployment::DeploymentConfig, distributed::DistributedConfig,
-    logging_audit::LoggingAuditConfig,
+    backends::BackendConfig, cache::CacheConfig, deployment::DeploymentConfig,
+    distributed::DistributedConfig, logging_audit::LoggingAuditConfig,
     model_versioning::ModelVersioningConfig, monitoring::MonitoringConfig,
     observability::ObservabilityConfig, response_cache::ResponseCacheConfig,
 };
