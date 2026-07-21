@@ -4,138 +4,75 @@ This guide covers Inferno's enterprise-grade audit logging system and comprehens
 
 ## Audit System Overview
 
-The audit system provides comprehensive logging of all operations, security events, and system changes with encryption, compression, and multi-channel alerting capabilities.
+The audit system provides comprehensive logging of all operations, security events, and system changes with compression and configurable retention.
 
 ### Key Features
 
 - **Comprehensive Logging**: All operations, access attempts, and configuration changes
-- **Encryption**: AES-256 encryption for sensitive audit data
-- **Compression**: Efficient storage with configurable algorithms
-- **Multi-channel Alerting**: Real-time notifications via email, Slack, webhooks
-- **Compliance Reports**: Automated generation of audit reports
-- **Tamper Detection**: Cryptographic integrity validation
+- **Compression**: Efficient storage with configurable compression
+- **Reports**: Generate summary, security, and performance reports
+- **Integrity Validation**: Detect gaps and verify timestamps
 - **Retention Policies**: Configurable data retention and archival
 
 ## Audit System Configuration
 
-### Enable Audit Logging
+Audit settings are applied with `inferno audit configure`. Run `inferno audit configure --show` to print the current configuration.
 
 ```bash
-# Enable audit system with encryption
-inferno audit enable --encryption
-
-# Enable with specific channels
-inferno audit enable --channels email,slack,webhook
-
-# Configure audit settings
+# Enable audit logging with compression and a retention policy
 inferno audit configure \
-  --encryption-key-file /secure/audit.key \
-  --compression gzip \
+  --enable true \
+  --compression true \
   --retention-days 365 \
-  --max-size-gb 50
+  --max-file-size 50 \
+  --max-files 100 \
+  --log-level medium-and-above \
+  --storage-path /var/log/inferno/audit
+
+# Show the current configuration
+inferno audit configure --show
 ```
 
-### Configuration File
-
-```toml
-# .inferno.toml
-[audit]
-enabled = true
-log_level = "info"  # trace, debug, info, warn, error
-storage_path = "/var/log/inferno/audit"
-
-[audit.encryption]
-enabled = true
-algorithm = "aes256"
-key_file = "/secure/audit.key"
-rotate_keys_days = 90
-
-[audit.compression]
-enabled = true
-algorithm = "gzip"  # gzip, zstd, lz4
-level = 6
-threshold_kb = 64
-
-[audit.retention]
-max_age_days = 365
-max_size_gb = 100
-archive_to_s3 = true
-cleanup_interval_hours = 24
-
-[audit.alerts]
-enabled = true
-channels = ["email", "slack", "webhook"]
-severity_threshold = "warn"
-
-[audit.alerts.email]
-smtp_server = "smtp.company.com"
-recipients = ["security@company.com"]
-template = "security_alert"
-
-[audit.alerts.slack]
-webhook_url = "https://hooks.slack.com/services/..."
-channel = "#security-alerts"
-
-[audit.alerts.webhook]
-url = "https://api.company.com/security/alerts"
-headers = { "Authorization" = "Bearer token" }
-```
+Available `configure` flags: `--enable`, `--log-level` (`all`, `critical-only`, `high-and-above`, `medium-and-above`, `low-and-above`, `info-only`), `--storage-path`, `--max-file-size` (MB), `--max-files`, `--retention-days`, `--compression`, `--show`.
 
 ## Audit Operations
 
-### View Audit Logs
+### Query and View Audit Events
 
 ```bash
-# View recent audit entries
-inferno audit logs
+# Query events with filters
+inferno audit query --severities critical --actors admin --limit 50
 
-# Filter by user and time
-inferno audit logs --user admin --since 24h
+# Filter by event type and time window
+inferno audit query --event-types model-management,api-call --start-time 2024-03-15T00:00:00Z
 
-# Filter by action type
-inferno audit logs --action model_load,inference_request
+# Full-text search across logs
+inferno audit search "failed login" --limit 50
 
-# Export to file
-inferno audit export --format json --output audit_report.json
+# Tail recent events (optionally follow)
+inferno audit tail --lines 20 --follow
 
-# Search logs
-inferno audit search --query "failed login" --since 7d
+# Export events to a file (OUTPUT is positional)
+inferno audit export audit_report.json --format json
 ```
 
 ### Audit Log Management
 
 ```bash
-# Check audit system status
-inferno audit status
+# Show audit statistics
+inferno audit stats --range-hours 24 --group-by severity
 
-# Rotate audit logs
-inferno audit rotate
+# Validate log integrity
+inferno audit validate --check-gaps --verify-timestamps
 
-# Verify log integrity
-inferno audit verify --check-encryption
+# Archive old logs to a destination
+inferno audit archive --destination /archive/inferno --older-than-days 90 --compression gzip
 
-# Generate compliance report
-inferno audit report --period monthly --format pdf
-```
+# Clean up old logs
+inferno audit cleanup --older-than-days 30
 
-### Alert Configuration
-
-```bash
-# Test alert channels
-inferno audit test-alerts
-
-# Configure alert rules
-inferno audit alert-rule create \
-  --name "multiple_failed_logins" \
-  --condition "failed_logins > 5 in 10m" \
-  --severity high \
-  --channels email,slack
-
-# List alert rules
-inferno audit alert-rules list
-
-# Disable specific alerts
-inferno audit alert-rule disable multiple_failed_logins
+# Generate a report (types: summary, security, performance, user-activity, system-events, detailed)
+inferno audit report security --period-days 30 --format pdf
 ```
 
 ## Audit Event Types
@@ -230,17 +167,17 @@ The batch processing system provides production-ready job management with cron s
 
 ## Batch Queue Configuration
 
-### Enable Batch Processing
+### Create a Queue
+
+Jobs run inside a named queue. Create one, giving it a queue ID and optional limits:
 
 ```bash
-# Enable batch queue system
-inferno batch-queue enable
-
-# Configure queue settings
-inferno batch-queue configure \
+# Create a queue with concurrency and size limits
+inferno queue create \
+  --name "Batch Processing" \
   --max-concurrent 5 \
-  --retry-attempts 3 \
-  --default-timeout 3600
+  --max-size 1000 \
+  my-queue
 ```
 
 ### Configuration File
@@ -276,74 +213,60 @@ notify_on = ["job_failed", "job_completed"]
 
 ## Batch Job Operations
 
-### Create and Manage Jobs
+### Submit and Schedule Jobs
 
 ```bash
-# Create a simple batch job
-inferno batch-queue create \
+# Submit a one-off job into the queue
+inferno queue submit \
   --name "model_validation" \
-  --command "validate /models/*.gguf" \
-  --timeout 1800
+  --input-file prompts.txt \
+  --model llama-7b-q4 \
+  my-queue
 
-# Create scheduled job with cron expression
-inferno batch-queue create \
-  --name "nightly_conversion" \
-  --command "convert model /staging/model.pt /production/model.gguf" \
-  --schedule "0 2 * * *" \
-  --enabled
-
-# Create job with dependencies
-inferno batch-queue create \
-  --name "post_processing" \
-  --command "optimize /production/model.gguf" \
-  --depends-on "nightly_conversion"
-
-# Create job with resource limits
-inferno batch-queue create \
-  --name "heavy_processing" \
-  --command "benchmark --model large-model.gguf" \
-  --cpu-limit 4.0 \
-  --memory-limit 8GB \
-  --priority high
+# Schedule a recurring job with a cron expression (nightly at 2 AM)
+inferno queue schedule \
+  --name "nightly_batch" \
+  --schedule-type cron \
+  --expression "0 2 * * *" \
+  --input-file prompts.txt \
+  --model llama-7b-q4 \
+  my-queue
 ```
 
 ### Job Management
 
 ```bash
-# List all jobs
-inferno batch-queue list
+# List all queues
+inferno queue list-queues
 
-# List running jobs
-inferno batch-queue list --status running
+# List jobs in a queue
+inferno queue list-jobs my-queue
 
-# View job details
-inferno batch-queue show job_123456
+# View job status
+inferno queue job-status my-queue job-123
 
 # Cancel a job
-inferno batch-queue cancel job_123456
+inferno queue cancel my-queue job-123
 
 # Retry a failed job
-inferno batch-queue retry job_123456
+inferno queue retry my-queue job-123
 
-# Pause/resume queue
-inferno batch-queue pause
-inferno batch-queue resume
+# Pause/resume a queue
+inferno queue pause my-queue
+inferno queue resume my-queue
 ```
 
 ### Job Monitoring
 
 ```bash
-# Monitor job progress
-inferno batch-queue monitor job_123456
+# Monitor a queue in real time
+inferno queue monitor my-queue
 
-# View job logs
-inferno batch-queue logs job_123456
+# Get queue metrics
+inferno queue metrics my-queue
 
-# Get queue statistics
-inferno batch-queue stats
-
-# Export job history
-inferno batch-queue export --format csv --output jobs.csv
+# Export queue data to a file
+inferno queue export --output jobs.json my-queue
 ```
 
 ## Cron Scheduling
@@ -362,198 +285,41 @@ inferno batch-queue export --format csv --output jobs.csv
 
 ### Common Cron Examples
 
+Schedule a recurring job by passing the cron string to `inferno queue schedule
+--schedule-type cron --expression "<cron>"`. A full invocation looks like:
+
+```bash
+# Daily at 2 AM
+inferno queue schedule --schedule-type cron --expression "0 2 * * *" \
+  --name daily-batch --input-file prompts.txt --model llama-7b-q4 my-queue
+```
+
+Common `--expression` values and what they mean:
+
 ```bash
 # Every minute
-inferno batch-queue create --schedule "* * * * *"
+--expression "* * * * *"
 
 # Every hour at minute 0
-inferno batch-queue create --schedule "0 * * * *"
+--expression "0 * * * *"
 
 # Daily at 2 AM
-inferno batch-queue create --schedule "0 2 * * *"
+--expression "0 2 * * *"
 
 # Weekly on Sunday at 3 AM
-inferno batch-queue create --schedule "0 3 * * 0"
+--expression "0 3 * * 0"
 
 # Monthly on the 1st at midnight
-inferno batch-queue create --schedule "0 0 1 * *"
+--expression "0 0 1 * *"
 
 # Every 15 minutes
-inferno batch-queue create --schedule "*/15 * * * *"
+--expression "*/15 * * * *"
 
 # Weekdays at 9 AM
-inferno batch-queue create --schedule "0 9 * * 1-5"
+--expression "0 9 * * 1-5"
 
 # Custom: Every 2 hours between 9 AM and 5 PM on weekdays
-inferno batch-queue create --schedule "0 9-17/2 * * 1-5"
-```
-
-### Advanced Scheduling
-
-```bash
-# Multiple schedules for the same job
-inferno batch-queue create \
-  --name "multi_schedule_job" \
-  --command "maintenance" \
-  --schedule "0 2 * * *" \
-  --additional-schedule "0 14 * * 6,0"
-
-# Conditional scheduling
-inferno batch-queue create \
-  --name "conditional_job" \
-  --command "cleanup if disk_usage > 80%" \
-  --schedule "0 */4 * * *" \
-  --condition "disk_usage_percent > 80"
-```
-
-## Job Types and Templates
-
-### Model Processing Jobs
-
-```bash
-# Model conversion job
-inferno batch-queue create \
-  --name "convert_models" \
-  --template model_conversion \
-  --input-dir /staging/models \
-  --output-dir /production/models \
-  --format gguf \
-  --schedule "0 1 * * *"
-
-# Model validation job
-inferno batch-queue create \
-  --name "validate_models" \
-  --template model_validation \
-  --model-dir /production/models \
-  --schedule "0 3 * * *"
-```
-
-### Inference Batch Jobs
-
-```bash
-# Batch inference job
-inferno batch-queue create \
-  --name "batch_inference" \
-  --template batch_inference \
-  --model "llama-7b-q4" \
-  --input-file prompts.txt \
-  --output-file results.json \
-  --batch-size 10
-```
-
-### Maintenance Jobs
-
-```bash
-# Cache cleanup job
-inferno batch-queue create \
-  --name "cache_cleanup" \
-  --template cache_maintenance \
-  --max-age 7d \
-  --max-size 10GB \
-  --schedule "0 4 * * *"
-
-# Log rotation job
-inferno batch-queue create \
-  --name "log_rotation" \
-  --template log_maintenance \
-  --max-files 10 \
-  --compress true \
-  --schedule "0 5 * * 0"
-```
-
-## Job Configuration Templates
-
-### Model Conversion Template
-
-```yaml
-# templates/model_conversion.yaml
-name: "model_conversion"
-description: "Convert models between formats"
-parameters:
-  - name: "input_dir"
-    type: "string"
-    required: true
-  - name: "output_dir"
-    type: "string"
-    required: true
-  - name: "format"
-    type: "enum"
-    values: ["gguf", "onnx", "pytorch"]
-    default: "gguf"
-command: |
-  for model in ${input_dir}/*; do
-    inferno convert model "$model" "${output_dir}/$(basename "$model")" --format ${format}
-  done
-resources:
-  cpu_limit: 2.0
-  memory_limit_gb: 4.0
-timeout_seconds: 7200
-retry:
-  max_attempts: 2
-  backoff_multiplier: 1.5
-```
-
-### Batch Inference Template
-
-```yaml
-# templates/batch_inference.yaml
-name: "batch_inference"
-description: "Process multiple inference requests"
-parameters:
-  - name: "model"
-    type: "string"
-    required: true
-  - name: "input_file"
-    type: "string"
-    required: true
-  - name: "output_file"
-    type: "string"
-    required: true
-  - name: "batch_size"
-    type: "integer"
-    default: 10
-command: |
-  inferno batch \
-    --model ${model} \
-    --input ${input_file} \
-    --output ${output_file} \
-    --batch-size ${batch_size}
-resources:
-  cpu_limit: 4.0
-  memory_limit_gb: 8.0
-  gpu_required: true
-timeout_seconds: 3600
-```
-
-## Monitoring and Alerting
-
-### Job Monitoring
-
-```bash
-# Real-time job monitoring
-inferno batch-queue monitor --real-time
-
-# Performance dashboard
-inferno batch-queue dashboard
-
-# Resource usage monitoring
-inferno batch-queue resources --job job_123456
-```
-
-### Alert Configuration
-
-```bash
-# Configure job alerts
-inferno batch-queue alert-rule create \
-  --name "job_failure_rate" \
-  --condition "failure_rate > 0.10 in 1h" \
-  --action "notify_admin"
-
-# Configure resource alerts
-inferno batch-queue alert-rule create \
-  --name "high_resource_usage" \
-  --condition "cpu_usage > 90% for 5m" \
-  --action "scale_down"
+--expression "0 9-17/2 * * 1-5"
 ```
 
 ## Integration Examples
@@ -618,12 +384,15 @@ spec:
             image: inferno:latest
             command:
             - inferno
-            - batch-queue
-            - create
+            - queue
+            - submit
             - --name
             - k8s-model-sync
-            - --command
-            - sync_models --source s3://models --dest /models
+            - --input-file
+            - /data/prompts.txt
+            - --model
+            - llama-7b-q4
+            - my-queue
             resources:
               requests:
                 cpu: 1
@@ -637,11 +406,10 @@ spec:
 ## Best Practices
 
 ### Audit System
-- Enable encryption for sensitive audit data
 - Configure appropriate retention policies
-- Set up multiple alert channels for redundancy
-- Regularly verify audit log integrity
-- Archive old logs to long-term storage
+- Regularly validate audit log integrity (`inferno audit validate`)
+- Archive old logs to long-term storage (`inferno audit archive`)
+- Enable compression to reduce storage footprint
 
 ### Batch Processing
 - Use appropriate resource limits for jobs
@@ -651,10 +419,8 @@ spec:
 - Use job dependencies for complex workflows
 
 ### Security
-- Encrypt audit logs containing sensitive data
-- Use secure channels for alert notifications
+- Restrict access to the audit log storage directory
 - Implement proper access controls for job management
-- Regularly rotate encryption keys
 - Monitor for unusual job patterns or failures
 
 ### Performance

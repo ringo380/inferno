@@ -99,8 +99,7 @@ mkdir -p ~/inferno/models
 # Set models directory
 export INFERNO_MODELS_DIR=~/inferno/models
 
-# Or set in config
-inferno config set models_dir ~/inferno/models
+# Or set models_dir in your config file (~/.inferno.toml)
 ```
 
 ### 4. Download a Sample Model
@@ -121,8 +120,8 @@ inferno models list
 # Start with default settings
 inferno serve
 
-# Or with custom settings
-inferno serve --bind 0.0.0.0:8080 --models-dir ~/inferno/models
+# Or with a custom bind address
+inferno serve --bind 0.0.0.0:8080
 ```
 
 ### 6. Test the API
@@ -220,14 +219,14 @@ export INFERNO_BACKEND_CONFIG__GPU_LAYERS=40
 
 ### Loading Models
 
-```bash
-# Load a model into memory
-inferno models load llama-2-7b --gpu-layers 32
+Models are loaded on demand at inference time - there is no separate load step. GPU acceleration (Metal on Apple Silicon) is auto-detected and enabled by default; the number of GPU layers is controlled via the `[backend_config]` `gpu_layers` setting in your config file.
 
-# Or via API
-curl -X POST http://localhost:8080/models/llama-2-7b/load \
-  -H "Content-Type: application/json" \
-  -d '{"gpu_layers": 32, "context_size": 4096}'
+```bash
+# Install a model from HuggingFace (repo ID or direct HTTPS URL)
+inferno models install TheBloke/Llama-2-7B-GGUF
+
+# Run inference - the model loads automatically
+inferno run --model llama-2-7b --prompt "Hello, world!"
 ```
 
 ### Model Information
@@ -241,16 +240,6 @@ inferno models info llama-2-7b
 
 # Validate model file
 inferno validate ~/inferno/models/llama-2-7b.gguf
-```
-
-### Unloading Models
-
-```bash
-# Unload from memory
-inferno models unload llama-2-7b
-
-# Or via API
-curl -X POST http://localhost:8080/models/llama-2-7b/unload
 ```
 
 ## 🔌 API Usage
@@ -348,8 +337,8 @@ curl http://localhost:8080/batch/BATCH_ID/results
 ### Enable Metrics
 
 ```bash
-# Start server with metrics enabled
-inferno serve --metrics-enabled
+# Metrics are exposed by default while the server runs
+inferno serve
 
 # View Prometheus metrics
 curl http://localhost:8080/metrics
@@ -453,7 +442,7 @@ fi
 
 2. **Distributed Inference**
    ```bash
-   inferno distributed worker start
+   inferno distributed start
    ```
 
 3. **GPU Acceleration**
@@ -464,7 +453,7 @@ fi
 
 4. **A/B Testing**
    ```bash
-   inferno ab-test create --name model-comparison
+   inferno ab-test start --name model-comparison --control-model llama-2-7b --treatment-model llama-2-13b
    ```
 
 ### Integration Examples
@@ -498,18 +487,17 @@ fi
 ### Getting Help
 
 ```bash
-# Check logs
-inferno logs
-
 # Validate configuration
 inferno config validate
 
 # Test model file
 inferno validate /path/to/model.gguf
 
-# System information
-inferno system info
+# Show current configuration
+inferno config show
 ```
+
+Logs are written to stdout (or the file configured by your log settings). Set `INFERNO_LOG_LEVEL=debug` for more detail.
 
 ### Debug Mode
 

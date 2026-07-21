@@ -63,13 +63,13 @@ Inferno's package manager makes installing models as easy as installing software
 
 ```bash
 # Open a new terminal and install a conversational model
-inferno install microsoft/DialoGPT-medium
+inferno models install microsoft/DialoGPT-medium
 
 # Or try a coding assistant
-inferno install microsoft/codebert-base
+inferno models install microsoft/codebert-base
 
 # Or a larger language model (requires more memory)
-inferno install microsoft/DialoGPT-large
+inferno models install microsoft/DialoGPT-large
 ```
 
 **What's happening?**
@@ -103,14 +103,11 @@ inferno run --model codebert-base --prompt "Write a Python function to sort a li
 inferno run --model DialoGPT-medium --prompt "Tell me a short story about a robot learning to paint"
 ```
 
-### Interactive Mode
+### Terminal UI
 
 ```bash
-# Start interactive chat session
-inferno run --model DialoGPT-medium --interactive
-
-# Type your messages and press Enter
-# Type 'exit' to quit
+# Launch the interactive terminal user interface
+inferno tui
 ```
 
 **Example output:**
@@ -214,21 +211,21 @@ You now have a fully functional local AI infrastructure! Here's what you've acco
 ## Quick Reference Commands
 
 ```bash
-# Package Management
-inferno install <model>              # Install a model
-inferno list                         # List installed models
-inferno search "language model"      # Search for models
-inferno remove <model>               # Remove a model
+# Model Management
+inferno models install <model>       # Install a model
+inferno models list                  # List installed models
+inferno models search "language model"  # Search for models
+inferno models info <model>          # Show model details
+# To remove a model, delete its file from your models directory:
+#   rm <models_dir>/<model>.gguf
 
 # Running Inference
 inferno run --model <model> --prompt "text"    # One-off inference
-inferno run --model <model> --interactive      # Interactive chat
 inferno serve                                   # Start API server
+inferno tui                                     # Terminal UI
 
-# Model Management
-inferno models list                  # List available models
-inferno models info <model>          # Show model details
-inferno convert <input> <output>     # Convert model formats
+# Convert Formats
+inferno convert model <input> <output> --format onnx  # Convert model formats
 
 # System
 inferno --help                       # Show all commands
@@ -245,25 +242,22 @@ inferno <command> --help             # Show command-specific help
 lsof -i :8080
 
 # Use a different port
-inferno serve --port 8081
+inferno serve --bind 127.0.0.1:8081
 ```
 
 **Model download fails:**
 ```bash
-# Check internet connection and retry
-inferno install microsoft/DialoGPT-medium --retry
-
-# Use manual download if needed
-inferno models download microsoft/DialoGPT-medium
+# Check your internet connection and re-run the install
+inferno models install microsoft/DialoGPT-medium
 ```
 
 **Out of memory:**
 ```bash
 # Use a smaller model
-inferno install distilgpt2
+inferno models install distilgpt2
 
-# Or adjust memory settings
-inferno serve --context-size 1024 --batch-size 32
+# Or reduce context_size / batch_size in your config file
+# (see [backend_config] in ~/.inferno.toml)
 ```
 
 **Need help?**

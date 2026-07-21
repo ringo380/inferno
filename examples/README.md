@@ -430,16 +430,15 @@ curl http://localhost:8080/metrics
 # Monitor in Grafana
 open http://localhost:3000
 
-# Enable GPU acceleration
-inferno gpu status
-inferno gpu enable
+# Verify GPU detection (acceleration is auto-enabled when a GPU is present)
+inferno gpu list
 ```
 
 #### 4. API Authentication
 
 ```bash
 # Generate new API key
-inferno security api-key create --user admin --name production
+inferno security api-key generate --user admin --name production
 
 # Test authentication
 curl -H "Authorization: Bearer NEW_API_KEY" \

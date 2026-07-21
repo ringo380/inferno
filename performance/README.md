@@ -298,20 +298,23 @@ request_processing:
 ### Quick Benchmark
 
 ```bash
-# Latency test (10 req/s, 5 min)
-inferno benchmark --scenario latency \
-  --request-rate 10 \
-  --duration 300
+# Latency test (100 iterations, 128 tokens each)
+inferno bench --model my-model \
+  --iterations 100 \
+  --tokens 128
 
-# Throughput test (unlimited, 5 min)
-inferno benchmark --scenario throughput \
-  --concurrency 100 \
-  --duration 300
+# Throughput test (100 concurrent clients, 5 min)
+inferno performance-benchmark stress \
+  --clients 100 \
+  --duration 300 \
+  --model my-model
 
-# Load ramp (10 to 1000 req/s)
-inferno benchmark --scenario load_ramp \
-  --initial-rate 10 \
-  --final-rate 1000
+# Heavy load to find the breaking point (200 clients, 2 req/s each)
+inferno performance-benchmark stress \
+  --clients 200 \
+  --rate 2.0 \
+  --duration 300 \
+  --model my-model
 ```
 
 ### Typical Performance
