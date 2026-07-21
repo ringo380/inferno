@@ -242,16 +242,15 @@ jobs:
         convert_help_to_md('generated_docs/cli_help.txt', 'docs/src/api-reference/cli.md', 'CLI Reference')
         EOFILE
 
+        # Generate the changelog into the book source BEFORE building so it is
+        # actually rendered into the HTML. Previously this ran in a separate step
+        # AFTER `mdbook build`, so the changelog page shipped as an empty stub.
+        cargo install git-cliff --locked
+        git-cliff --config .github/cliff.toml --output docs/src/appendices/changelog.md \
+          || echo "::warning::changelog generation failed; shipping empty stub"
+
         # Build the book
         cd docs && mdbook build
-
-    - name: Generate changelog
-      run: |
-        # Install git-cliff if not already present
-        cargo install git-cliff --locked
-
-        # Generate changelog
-        git-cliff --config .github/cliff.toml --output docs/src/appendices/changelog.md
 
     - name: Validate documentation
       run: |
@@ -293,7 +292,7 @@ jobs:
     name: Deploy Documentation
     runs-on: ubuntu-latest
     needs: build-docs
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     timeout-minutes: 10
 
     permissions:
@@ -310,7 +309,12 @@ jobs:
       uses: actions/download-artifact@v5
       with:
         name: documentation-${{ github.sha }}
-        path: docs
+        # The build job uploads paths rooted at the workspace (docs/book,
+        # docs/api, generated_docs), so the artifact restores those trees under
+        # this directory as artifacts/docs/… . Downloading into `docs` nested it
+        # to docs/docs/… and every copy below silently failed (green build, empty
+        # site). Restore into a dedicated dir and copy from the real location.
+        path: artifacts
 
     - name: Setup Pages
       uses: actions/configure-pages@v5
@@ -319,18 +323,30 @@ jobs:
 
     - name: Prepare pages content
       run: |
-        mkdir -p pages
+        set -euo pipefail
+        rm -rf pages
+        mkdir -p pages/guide pages/api
 
-        # Copy user guide
-        cp -r docs/book/* pages/ || mkdir -p pages
+        # mdBook user guide -> /guide, rustdoc -> /api. Fail loudly if the guide
+        # is absent: the whole point of this site is the generated content, and a
+        # silent empty deploy is exactly the failure this workflow used to hide.
+        if [ -d artifacts/docs/book ] && [ -n "$(ls -A artifacts/docs/book 2>/dev/null)" ]; then
+          cp -r artifacts/docs/book/. pages/guide/
+        else
+          echo "::error::mdBook user guide missing from artifact (artifacts/docs/book empty)"
+          exit 1
+        fi
 
-        # Copy API docs to /api subdirectory
-        mkdir -p pages/api
-        cp -r docs/api/* pages/api/ || true
+        if [ -d artifacts/docs/api ] && [ -n "$(ls -A artifacts/docs/api 2>/dev/null)" ]; then
+          cp -r artifacts/docs/api/. pages/api/
+        else
+          echo "::warning::rustdoc API docs missing from artifact (artifacts/docs/api empty)"
+        fi
 
-        # Create index.html if it doesn't exist
-        if [ ! -f "pages/index.html" ]; then
-          cat > pages/index.html << 'EOF'
+        # Landing hub, regenerated every deploy so its links stay correct. mdBook
+        # renders its entry point as guide/index.html (not book.html), which the
+        # old hard-coded ./book.html link got wrong.
+        cat > pages/index.html << 'EOF'
         <!DOCTYPE html>
         <html lang="en">
         <head>
@@ -347,7 +363,7 @@ jobs:
         <body>
             <h1>Inferno Documentation</h1>
             <div class="nav">
-                <a href="./book.html">User Guide</a>
+                <a href="./guide/index.html">User Guide</a>
                 <a href="./api/inferno/index.html">API Documentation</a>
                 <a href="https://github.com/ringo380/inferno">GitHub Repository</a>
             </div>
@@ -360,7 +376,6 @@ jobs:
         </body>
         </html>
         EOF
-        fi
 
     - name: Upload to GitHub Pages
       uses: actions/upload-pages-artifact@v4
