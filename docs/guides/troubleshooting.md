@@ -20,17 +20,16 @@ Start troubleshooting with these essential diagnostic commands:
 # System health check
 inferno --version
 inferno config show
-inferno gpu status
+inferno gpu list
 inferno models list
 
 # Server status
 curl http://localhost:8080/health
-inferno metrics show
+inferno metrics snapshot
 
 # Resource usage
-inferno cache status
-inferno memory analyze
-df -h $(inferno config get models_dir)
+inferno cache stats
+df -h ~/.local/share/inferno/models
 
 # Logs analysis
 tail -f ~/.local/share/inferno/logs/inferno.log
@@ -159,9 +158,10 @@ pkill inferno
 
 2. **Use different port:**
 ```bash
-inferno serve --port 8081
-# Or set in config
-inferno config set server.port 8081
+inferno serve --bind 127.0.0.1:8081
+# Or set the bind address in ~/.inferno.toml:
+#   [server]
+#   bind_address = "127.0.0.1:8081"
 ```
 
 3. **Check systemd service:**
@@ -196,8 +196,8 @@ find ~ -name "*.toml" -path "*inferno*"
 # Check TOML syntax online or use tools
 python3 -c "import toml; toml.load('~/.config/inferno/config.toml')"
 
-# Regenerate default config
-inferno config init --force
+# Regenerate the default config file
+inferno config init
 ```
 
 2. **Common TOML mistakes:**
@@ -233,12 +233,11 @@ Error downloading model: Connection timeout
 ping huggingface.co
 curl -I https://huggingface.co
 
-# Check repository configuration
-inferno repo list
-inferno repo test huggingface
+# Verify the model is reachable on HuggingFace
+inferno models search <query>
 
 # Check disk space
-df -h $(inferno config get models_dir)
+df -h ~/.local/share/inferno/models
 ```
 
 **Solutions:**
@@ -255,35 +254,36 @@ wget https://huggingface.co/gpt2/resolve/main/config.json
 echo "nameserver 8.8.8.8" | sudo tee -a /etc/resolv.conf
 ```
 
-2. **Repository authentication:**
+2. **Verify the model is available:**
 ```bash
-# Set Hugging Face token
-inferno repo auth huggingface --token your_hf_token
+# Search HuggingFace for the model
+inferno models search <query>
 
-# Test authentication
-inferno repo test huggingface
+# Retry the install once connectivity is confirmed
+inferno models install <model-id>
 ```
 
 3. **Disk space issues:**
 ```bash
 # Clean up space
 inferno cache clear
-inferno remove --unused
 
-# Change models directory
-inferno config set models_dir "/larger/disk/models"
+# Remove models you no longer need by deleting their files
+rm <models_dir>/<unused-model>.gguf
+
+# Change the models directory in ~/.inferno.toml:
+#   models_dir = "/larger/disk/models"
+# Or set it via an environment variable:
+export INFERNO_MODELS_DIR="/larger/disk/models"
 ```
 
-4. **Retry with different options:**
+4. **Retry the installation:**
 ```bash
-# Force retry
-inferno install model-name --retry --force
+# Reinstall from a HuggingFace repo ID
+inferno models install TheBloke/Llama-2-7B-GGUF
 
-# Use different repository
-inferno install model-name --repo ollama
-
-# Manual download
-inferno models download model-name --direct
+# Or install directly from an HTTPS URL
+inferno models install https://huggingface.co/gpt2/resolve/main/model.gguf
 ```
 
 ### Issue: Model Loading Failures
@@ -303,7 +303,6 @@ file /path/to/model.gguf
 
 # Check available memory
 free -h
-inferno memory status
 
 # Check model info
 inferno models info model-name
@@ -313,9 +312,9 @@ inferno models info model-name
 
 1. **Corrupted model files:**
 ```bash
-# Re-download model
-inferno remove model-name --purge
-inferno install model-name --verify
+# Re-download the model (delete the corrupted file, then reinstall)
+rm <models_dir>/model-name.gguf
+inferno models install model-name
 
 # Check file integrity
 inferno validate model-name --checksum
@@ -323,23 +322,21 @@ inferno validate model-name --checksum
 
 2. **Memory issues:**
 ```bash
-# Use smaller context size
-inferno config set backend_config.context_size 1024
+# Reduce memory use by editing ~/.inferno.toml:
+#   [backend_config]
+#   context_size = 1024      # smaller context window
+#   memory_mapping = true    # memory-map the model file
 
-# Enable memory mapping
-inferno config set backend_config.memory_mapping true
-
-# Use quantized model
-inferno install model-name-q4_0
+# Then use a quantized model
+inferno models install model-name-q4_0
 ```
 
 3. **Format issues:**
 ```bash
-# Convert to compatible format
-inferno convert model.pt model.gguf --format gguf
+# Convert to a compatible format
+inferno convert model model.pt model.gguf --format gguf
 
-# Check supported formats
-inferno models formats
+# Inferno supports GGUF and ONNX model formats
 ```
 
 ### Issue: Model Conversion Problems
@@ -360,33 +357,26 @@ inferno validate input_model.pt
 # Check disk space
 df -h /tmp/
 df -h $(pwd)
-
-# Check conversion status
-inferno convert status conversion-job-id
 ```
 
 **Solutions:**
 
 1. **Format compatibility:**
 ```bash
-# Check supported conversions
-inferno convert --list-formats
+# Supported target formats: gguf, onnx, safe-tensors, pytorch, tensor-flow
 
-# Use intermediate format
-inferno convert model.pt model.onnx --format onnx
-inferno convert model.onnx model.gguf --format gguf
+# Use an intermediate format
+inferno convert model model.pt model.onnx --format onnx
+inferno convert model model.onnx model.gguf --format gguf
 ```
 
 2. **Resource issues:**
 ```bash
-# Increase timeout
-inferno convert model.pt model.gguf --timeout 1800
+# Free up disk space, then retry the conversion
+df -h /tmp/ "$(pwd)"
 
-# Use more memory
-inferno convert model.pt model.gguf --memory 16GB
-
-# Convert in chunks
-inferno convert model.pt model.gguf --chunk-size 1GB
+# Reduce the working batch size during conversion
+inferno convert model model.pt model.gguf --format gguf --batch-size 1
 ```
 
 ## Performance Issues
@@ -401,14 +391,14 @@ inferno convert model.pt model.gguf --chunk-size 1GB
 **Diagnosis:**
 ```bash
 # Benchmark current performance
-inferno bench --model current-model --detailed
+inferno bench --model current-model --verbose
 
 # Check GPU usage
 nvidia-smi  # or rocm-smi for AMD
-inferno gpu status
+inferno gpu list
 
 # Profile inference
-inferno profile --model current-model --duration 60s
+inferno optimization profile --model current-model --detailed
 ```
 
 **Solutions:**
@@ -416,37 +406,42 @@ inferno profile --model current-model --duration 60s
 1. **Enable GPU acceleration:**
 ```bash
 # Check GPU availability
-inferno gpu status
-
-# Enable GPU
-inferno config set backend_config.gpu_enabled true
-
-# Verify GPU usage
-inferno run --model gpt2 --prompt "test" --verbose
+inferno gpu list
+```
+GPU acceleration (Metal on Apple Silicon) is auto-detected and enabled by default. To force it on or off, edit `~/.inferno.toml`:
+```toml
+[backend_config]
+gpu_enabled = true
+```
+```bash
+# Verify GPU usage by running a quick inference
+inferno run --model gpt2 --prompt "test"
 ```
 
 2. **Optimize model and settings:**
 ```bash
-# Use quantized model
-inferno install model-name-q4_0
-
-# Optimize batch size
-inferno config set backend_config.batch_size 64
-
-# Increase GPU layers
-inferno config set backend_config.gpu_layers 35
+# Use a quantized model
+inferno models install model-name-q4_0
+```
+Tune the backend in `~/.inferno.toml`:
+```toml
+[backend_config]
+batch_size = 64   # optimize batch size
+gpu_layers = 35   # layers to offload to the GPU
 ```
 
 3. **System-level optimizations:**
 ```bash
 # Set CPU governor to performance
 echo 'performance' | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor
+```
+Increase worker threads and enable caching in `~/.inferno.toml`:
+```toml
+[server]
+workers = 8
 
-# Increase worker threads
-inferno config set server.workers 8
-
-# Enable caching
-inferno config set cache.enabled true
+[cache]
+enabled = true
 ```
 
 ### Issue: High Memory Usage
@@ -463,37 +458,31 @@ Swap usage very high
 # Check memory usage
 free -h
 ps aux | grep inferno
-inferno memory analyze
 
 # Check model sizes
-inferno list --size
+inferno models list
 ```
 
 **Solutions:**
 
 1. **Reduce memory usage:**
+
+Use a smaller context size in `~/.inferno.toml`:
+```toml
+[backend_config]
+context_size = 2048
+```
 ```bash
-# Use smaller context size
-inferno config set backend_config.context_size 2048
-
-# Unload unused models
-inferno models unload --unused
-
-# Use quantized models
-inferno remove large-model-f16
-inferno install large-model-q4_0
+# Use quantized models (delete the full-precision file, then install the quantized build)
+rm <models_dir>/large-model-f16.gguf
+inferno models install large-model-q4_0
 ```
 
-2. **Optimize memory settings:**
-```bash
-# Enable memory mapping
-inferno config set backend_config.memory_mapping true
-
-# Reduce batch size
-inferno config set backend_config.batch_size 16
-
-# Enable lazy loading
-inferno config set models.lazy_loading true
+2. **Optimize memory settings** in `~/.inferno.toml`:
+```toml
+[backend_config]
+memory_mapping = true   # memory-map the model file
+batch_size = 16         # reduce batch size
 ```
 
 3. **System memory optimization:**
@@ -522,7 +511,6 @@ sudo swapon /swapfile
 ```bash
 # Check GPU status
 nvidia-smi
-inferno gpu status
 inferno gpu list
 
 # Check CUDA installation
@@ -530,7 +518,7 @@ nvcc --version
 python3 -c "import torch; print(torch.cuda.is_available())"
 
 # Check backend configuration
-inferno config get backend_config.gpu_enabled
+inferno config show | grep -i gpu
 ```
 
 **Solutions:**
@@ -552,15 +540,16 @@ sudo reboot
 ```
 
 2. **Inferno configuration:**
+
+Enable the GPU and set the number of offloaded layers in `~/.inferno.toml`:
+```toml
+[backend_config]
+gpu_enabled = true
+gpu_layers = 35
+```
 ```bash
-# Enable GPU in config
-inferno config set backend_config.gpu_enabled true
-
-# Set GPU layers
-inferno config set backend_config.gpu_layers 35
-
-# Check model compatibility
-inferno models info model-name --gpu-compatibility
+# Check the model details
+inferno models info model-name
 ```
 
 3. **Container GPU access:**
@@ -600,7 +589,7 @@ tail -f ~/.local/share/inferno/logs/inferno.log
 1. **Port conflicts:**
 ```bash
 # Use different port
-inferno serve --port 8081
+inferno serve --bind 127.0.0.1:8081
 
 # Kill conflicting process
 sudo kill $(lsof -t -i:8080)
@@ -608,12 +597,14 @@ sudo kill $(lsof -t -i:8080)
 
 2. **Configuration issues:**
 ```bash
-# Reset to defaults
-inferno config reset
-
-# Fix specific settings
-inferno config set server.bind_address "127.0.0.1"
-inferno config set server.port 8080
+# Regenerate the default config file
+inferno config init
+```
+Fix specific settings in `~/.inferno.toml`:
+```toml
+[server]
+bind_address = "127.0.0.1"
+port = 8080
 ```
 
 3. **Database issues:**
@@ -648,26 +639,28 @@ curl -v http://localhost:8080/v1/models
 
 1. **Authentication issues:**
 ```bash
-# Check if auth is enabled
-inferno config get security.auth_enabled
-
-# Disable auth for testing
-inferno config set security.auth_enabled false
-
-# Create new API key
-inferno security key create --name test-key
+# Check whether auth is enabled
+inferno config show | grep -i auth
+```
+Disable auth for testing in `~/.inferno.toml`:
+```toml
+[security]
+auth_enabled = false
+```
+```bash
+# Create a new API key
+inferno security api-key generate --user admin --name test-key
 ```
 
 2. **Rate limiting:**
 ```bash
 # Check rate limit settings
-inferno config get security.rate_limit
-
-# Increase rate limit
-inferno config set security.rate_limit 10000
-
-# Disable rate limiting temporarily
-inferno config set security.rate_limit 0
+inferno config show | grep -i rate_limit
+```
+Adjust the rate limit in `~/.inferno.toml` (set to 0 to disable):
+```toml
+[security]
+rate_limit = 10000
 ```
 
 3. **Request format issues:**
@@ -694,7 +687,7 @@ tail -f ~/.local/share/inferno/logs/access.log
 curl http://localhost:8080/metrics
 
 # Monitor real-time performance
-inferno monitor start --interval 5s
+inferno monitor watch --interval 5
 
 # Check active connections
 netstat -an | grep :8080 | wc -l
@@ -702,31 +695,32 @@ netstat -an | grep :8080 | wc -l
 
 **Solutions:**
 
-1. **Server configuration:**
-```bash
-# Increase worker threads
-inferno config set server.workers 16
-
-# Optimize connection handling
-inferno config set server.max_connections 2000
-inferno config set server.keep_alive_timeout 60
+1. **Server configuration** in `~/.inferno.toml`:
+```toml
+[server]
+workers = 16              # increase worker threads
+max_connections = 2000    # optimize connection handling
+keep_alive_timeout = 60
 ```
 
 2. **Model optimization:**
 ```bash
-# Pre-load popular models
-inferno cache warm --popular
+# Pre-load frequently used models
+inferno cache warmup --strategy usage-based
 
 # Use faster models
-inferno install gpt2-medium-q4_0  # Instead of full precision
+inferno models install gpt2-medium-q4_0  # Instead of full precision
 ```
 
 3. **Caching:**
-```bash
-# Enable response caching
-inferno config set response_cache.enabled true
-inferno config set response_cache.ttl 1800
 
+Enable response caching in `~/.inferno.toml`:
+```toml
+[response_cache]
+enabled = true
+ttl = 1800
+```
+```bash
 # Check cache hit rate
 inferno cache stats
 ```
@@ -884,16 +878,17 @@ echo "vm.max_map_count=262144" | sudo tee -a /etc/sysctl.conf
 sudo sysctl -p
 ```
 
-2. **Resource optimization:**
+2. **Resource optimization** in `~/.inferno.toml`:
+```toml
+[server]
+workers = 4                     # limit Inferno workers
+
+[backend_config]
+memory_pool_size = "8GB"        # optimize memory usage
+```
 ```bash
-# Limit Inferno workers
-inferno config set server.workers 4
-
-# Optimize memory usage
-inferno config set backend_config.memory_pool_size "8GB"
-
-# Enable memory monitoring
-inferno monitor memory --threshold 80 --action scale-down
+# Watch resource usage in real time
+inferno monitor watch
 ```
 
 ## Production Issues
@@ -967,14 +962,15 @@ curl http://alertmanager:9093/api/v1/alerts
 **Solutions:**
 
 1. **Metrics collection:**
+
+Enable Prometheus metrics in `~/.inferno.toml`:
+```toml
+[observability]
+prometheus_enabled = true
+metrics_port = 9090
+```
 ```bash
-# Enable metrics
-inferno config set observability.prometheus_enabled true
-
-# Check metrics port
-inferno config set observability.metrics_port 9090
-
-# Restart service
+# Restart service to apply
 sudo systemctl restart inferno
 ```
 
@@ -1014,11 +1010,8 @@ grep "2024-01-15" ~/.local/share/inferno/logs/inferno.log | grep ERROR
 ### Performance Profiling
 
 ```bash
-# CPU profiling
-inferno profile cpu --duration 60s --output cpu_profile.json
-
-# Memory profiling
-inferno profile memory --duration 60s --output mem_profile.json
+# Profile model inference (CPU/memory breakdown)
+inferno optimization profile --model current-model --detailed --format json
 
 # GPU profiling
 nvidia-smi dmon -s pucvmet -d 1
@@ -1061,12 +1054,12 @@ curl -s http://localhost:8080/health | jq '.' || echo "API not responding"
 
 # Model status
 echo "3. Model Status:"
-inferno models list --status
+inferno models list
 
 # Resource usage
 echo "4. Resource Usage:"
 echo "Memory: $(free -h | grep Mem | awk '{print $3"/"$2}')"
-echo "Disk: $(df -h $(inferno config get models_dir) | tail -1 | awk '{print $3"/"$2" ("$5" used)"}')"
+echo "Disk: $(df -h ~/.local/share/inferno/models | tail -1 | awk '{print $3"/"$2" ("$5" used)"}')"
 
 # GPU status
 echo "5. GPU Status:"
@@ -1078,7 +1071,7 @@ fi
 
 # Cache status
 echo "6. Cache Status:"
-inferno cache status
+inferno cache stats
 
 # Recent errors
 echo "7. Recent Errors:"
@@ -1107,7 +1100,7 @@ uname -a
 cat /etc/os-release
 
 # Configuration
-inferno config show --sanitized
+inferno config show
 
 # Logs (last 50 lines)
 tail -n 50 ~/.local/share/inferno/logs/inferno.log
@@ -1127,10 +1120,10 @@ export INFERNO_LOG_LEVEL=debug
 export RUST_BACKTRACE=full
 
 # Run with debug output
-inferno --verbose serve
+inferno serve
 
 # Or for specific commands
-inferno --debug models list
+inferno models list
 ```
 
 ## Prevention and Best Practices
@@ -1144,29 +1137,27 @@ inferno --debug models list
 # Clean up old logs
 find ~/.local/share/inferno/logs -name "*.log" -mtime +30 -delete
 
-# Clear old cache entries
-inferno cache cleanup --older-than 7d
-
-# Update models if needed
-inferno package upgrade --check
+# Clear the cache
+inferno cache clear
 
 # Verify model integrity
-inferno validate --all --quick
+inferno validate ~/.local/share/inferno/models
 
-# Generate health report
-inferno health report --output weekly_report.json
+# Generate performance report
+inferno monitor report --detailed
 ```
 
 ### Monitoring Setup
 
 ```bash
-# Set up basic monitoring
-inferno monitor start --metrics all --alerts
+# Watch performance in real time
+inferno monitor watch
 
-# Configure alerts
-inferno alerts create --metric cpu_usage --threshold 80 --action email
-inferno alerts create --metric memory_usage --threshold 90 --action email
-inferno alerts create --metric disk_usage --threshold 85 --action email
+# Configure monitoring thresholds (CPU and error-rate percentages, memory in MB)
+inferno monitor configure --max-cpu 80 --max-memory 8192 --max-error-rate 5
+
+# List active alerts once a threshold is breached
+inferno monitor alerts
 ```
 
 ### Backup Strategy
@@ -1180,11 +1171,8 @@ mkdir -p "$BACKUP_DIR"
 # Backup configuration
 cp -r ~/.config/inferno/ "$BACKUP_DIR/config/"
 
-# Backup models metadata (not the actual models)
-inferno list --format json > "$BACKUP_DIR/models_list.json"
-
-# Backup database
-inferno export database "$BACKUP_DIR/database.sql"
+# Backup the local model list (there is no CLI database export; state lives on disk)
+inferno models list > "$BACKUP_DIR/models_list.txt"
 
 echo "Backup completed: $BACKUP_DIR"
 ```

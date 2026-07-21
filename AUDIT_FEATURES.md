@@ -116,23 +116,20 @@ let events = logger.query_events(AuditQuery {
 
 ### CLI Usage
 ```bash
-# Enable audit with compression
-inferno audit config set compression_enabled=true
-inferno audit config set compression_method="Zstd"
+# Enable audit logging with compression
+inferno audit configure --enable true --compression true
 
-# Configure alerts
-inferno audit alerts webhook set-url "https://alerts.company.com"
-inferno audit alerts email configure --smtp smtp.company.com
-
-# Generate encryption key
-inferno audit encryption generate-key
+# Show current configuration
+inferno audit configure --show
 
 # Query events
-inferno audit query --severity Critical --limit 50
+inferno audit query --severities critical --limit 50
 
-# Export compressed/encrypted logs
-inferno audit export --format json --output audit_export.json
+# Export logs (OUTPUT is positional)
+inferno audit export audit_export.json --format json
 ```
+
+Encryption and alerting are configured via the config file (see the sections above), not through CLI subcommands.
 
 ## 🔐 Security Features
 
@@ -222,13 +219,10 @@ Rich Slack message with colored attachments, fields for key information, and act
 #### Compression Not Working
 ```bash
 # Check configuration
-inferno audit config show | grep compression
+inferno audit configure --show
 
 # Verify permissions
 ls -la ./logs/audit/
-
-# Test compression manually
-inferno audit test compression
 ```
 
 #### Encryption Key Issues
@@ -236,23 +230,14 @@ inferno audit test compression
 # Verify key format (should be 44 characters base64)
 echo $INFERNO_AUDIT_ENCRYPTION_KEY | wc -c
 
-# Test key validity
-inferno audit test encryption
-
-# Generate new key
-inferno audit encryption generate-key
+# Generate a new key
+export INFERNO_AUDIT_ENCRYPTION_KEY=$(openssl rand -base64 32)
 ```
 
 #### Alert Delivery Problems
 ```bash
 # Test webhook connectivity
 curl -X POST "https://your-webhook.com/test"
-
-# Check SMTP configuration
-inferno audit alerts email test
-
-# Verify Slack webhook
-inferno audit alerts slack test
 ```
 
 ### Debugging
@@ -277,34 +262,25 @@ inferno audit stats
 - **Event processing latency**: Monitor audit system performance
 - **Error rates**: Track failed audit operations
 
-### Health Checks
+### Integrity Checks
 ```bash
-# Check audit system health
-inferno audit health
-
-# Verify all components
-inferno audit verify
-
-# Test end-to-end functionality
-inferno audit test all
+# Validate log integrity (check for gaps and verify timestamps)
+inferno audit validate --check-gaps --verify-timestamps
 ```
 
 ## 🔄 Migration
 
 ### From Previous Versions
 1. **Backup existing logs**: `cp -r logs/audit logs/audit.backup`
-2. **Update configuration**: Add new compression/encryption settings
+2. **Update configuration**: Add new compression/encryption settings to the config file
 3. **Set environment variables**: Configure encryption keys
-4. **Test configuration**: `inferno audit verify`
+4. **Validate integrity**: `inferno audit validate`
 5. **Gradual rollout**: Enable features incrementally
 
-### Configuration Migration
+### Configuration Validation
 ```bash
-# Migrate old config to new format
-inferno audit config migrate --from v1.0 --to v2.0
-
-# Validate new configuration
-inferno audit config validate
+# Validate the config file
+inferno config validate
 ```
 
 ## 📚 Best Practices

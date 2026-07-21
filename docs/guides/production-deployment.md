@@ -121,7 +121,7 @@ This guide covers everything you need for a robust production deployment:
 
 ```dockerfile
 # Multi-stage build for optimal production image
-FROM rust:1.70-alpine AS builder
+FROM rust:1.85-alpine AS builder
 
 # Install build dependencies
 RUN apk add --no-cache \
@@ -829,22 +829,27 @@ spec:
 ### Authentication Setup
 
 ```bash
-# Initialize security system
-inferno security init --production
+# Initialize security system with default users
+inferno security init
 
-# Create service accounts
-inferno security user add api-service --role service --scopes "inference,models"
-inferno security user add monitoring --role readonly --scopes "metrics,health"
-inferno security user add admin --role admin --scopes "*"
+# Create service accounts (roles: admin, user, guest, service)
+inferno security user create --id api-service --username api-service --role service --permissions "inference,models"
+inferno security user create --id monitoring --username monitoring --role user --permissions "metrics,health"
+inferno security user create --id admin --username admin --role admin
 
-# Generate API keys
-inferno security key create --name production-api --user api-service --expires 365d
-inferno security key create --name monitoring-key --user monitoring --expires 30d
+# Generate API keys (--expires-in is in days)
+inferno security api-key generate --name production-api --user api-service --expires-in 365
+inferno security api-key generate --name monitoring-key --user monitoring --expires-in 30
+```
 
-# Configure JWT settings
-inferno config set security.jwt_expiry 24h
-inferno config set security.jwt_refresh_enabled true
-inferno config set security.jwt_issuer "inferno.yourcompany.com"
+JWT and other security settings are file-based. Add them to `~/.inferno.toml`
+(or the config file mounted into the container):
+
+```toml
+[security]
+jwt_expiry = "24h"
+jwt_refresh_enabled = true
+jwt_issuer = "inferno.yourcompany.com"
 ```
 
 ### Network Security
@@ -859,15 +864,20 @@ sudo ufw allow 443/tcp   # HTTPS
 sudo ufw allow from 10.0.0.0/8 to any port 9090  # Metrics (internal only)
 sudo ufw enable
 
-# Configure rate limiting
-inferno config set security.rate_limit 5000
-inferno config set security.burst_limit 1000
-inferno config set security.rate_limit_window "1m"
+# Allow internal networks through IP access control (one entry per rule)
+inferno security ip-control allow --ip 10.0.0.0/8
+inferno security ip-control allow --ip 172.16.0.0/12
+inferno security ip-control allow --ip 192.168.0.0/16
 
-# Enable IP filtering
-inferno security config --ip-whitelist "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
-inferno security config --block-tor true
-inferno security config --block-cloud-providers false
+# Review the active IP access rules
+inferno security ip-control list
+```
+
+Rate limiting is file-based. Set it in `~/.inferno.toml`:
+
+```toml
+[security]
+rate_limit = 5000
 ```
 
 ### TLS/SSL Configuration
@@ -882,25 +892,24 @@ openssl req -x509 -nodes -days 365 -newkey rsa:4096 \
   -out /etc/ssl/certs/inferno.crt \
   -subj "/C=US/ST=State/L=City/O=Organization/CN=api.yourcompany.com"
 
-# Configure Inferno for SSL
-inferno config set server.ssl_enabled true
-inferno config set server.ssl_cert "/etc/ssl/certs/inferno.crt"
-inferno config set server.ssl_key "/etc/ssl/private/inferno.key"
+# Configure Inferno for SSL by editing ~/.inferno.toml
+```
+
+```toml
+[server]
+ssl_enabled = true
+ssl_cert = "/etc/ssl/certs/inferno.crt"
+ssl_key = "/etc/ssl/private/inferno.key"
 ```
 
 ### Audit Logging
 
 ```bash
-# Enable comprehensive audit logging
-inferno audit enable --level full
-inferno audit config --retention 90d
-inferno audit config --compression gzip
-inferno audit config --encryption aes256
+# Enable comprehensive audit logging with 90-day retention and compression
+inferno audit configure --enable true --log-level all --retention-days 90 --compression true
 
-# Configure audit alerts
-inferno audit alerts --email security@yourcompany.com
-inferno audit alerts --webhook https://alerts.yourcompany.com/audit
-inferno audit alerts --slack-webhook https://hooks.slack.com/services/xxx
+# Inspect the current audit configuration
+inferno audit configure --show
 ```
 
 ## Monitoring and Observability
@@ -1146,20 +1155,21 @@ rsync -av --progress /data/inferno/models/ "$BACKUP_DIR/models/"
 echo "Backing up configuration..."
 cp -r /etc/inferno/ "$BACKUP_DIR/config/"
 
-# Backup database
-echo "Backing up database..."
-inferno admin export-db "$BACKUP_DIR/database.sql"
+# Note: there is no CLI database export; Inferno state is the models directory
+# and config files on disk, both captured above.
 
 # Backup metrics (last 7 days)
 echo "Backing up metrics..."
 prometheus_backup --retention 7d "$BACKUP_DIR/metrics/"
+
+# Save the local model list alongside the backup
+inferno models list > "$BACKUP_DIR/models_list.txt"
 
 # Create manifest
 cat > "$BACKUP_DIR/manifest.json" << EOF
 {
   "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
   "version": "$(inferno --version)",
-  "models": $(inferno list --format json),
   "config_hash": "$(find /etc/inferno -type f -exec sha256sum {} \; | sha256sum | cut -d' ' -f1)"
 }
 EOF
@@ -1211,13 +1221,12 @@ rsync -av "$RECOVERY_DIR"/*/models/ /data/inferno/models/
 echo "Restoring configuration..."
 cp -r "$RECOVERY_DIR"/*/config/* /etc/inferno/
 
-# Restore database
-echo "Restoring database..."
-inferno admin import-db "$RECOVERY_DIR"/*/database.sql
+# Note: there is no CLI database import; restoring the models directory and
+# config files above fully restores Inferno state.
 
 # Validate restoration
 echo "Validating restoration..."
-inferno validate --all
+inferno validate /data/inferno/models
 
 # Start services
 systemctl start inferno
@@ -1329,27 +1338,29 @@ filebeat -c /etc/filebeat/filebeat.yml
 
 ```bash
 # Identify memory usage
-inferno metrics show --filter memory
+inferno metrics prometheus | grep -i memory
 ps aux | grep inferno
 cat /proc/$(pgrep inferno)/status
 
-# Solutions
-inferno config set backend_config.context_size 2048
+# Solutions: reduce context size in ~/.inferno.toml, then restart, and clear the cache
+#   [backend_config]
+#   context_size = 2048
 inferno cache clear --force
-inferno models unload --unused
 ```
 
 #### High Latency
 
 ```bash
 # Diagnose latency
-inferno metrics show --filter latency
+inferno metrics prometheus | grep -i duration
 inferno bench --model current-model
 
-# Solutions
-inferno cache warm --popular
-inferno config set backend_config.batch_size 256
-inferno models optimize --quantization q4_0
+# Solutions: warm up frequently used models, raise the batch size, and quantize
+inferno cache warmup --strategy usage-based
+inferno convert quantize --quantization q4-0 model.gguf model-q4-0.gguf
+#   Raise batch_size in ~/.inferno.toml:
+#   [backend_config]
+#   batch_size = 256
 ```
 
 #### GPU Issues
@@ -1357,7 +1368,7 @@ inferno models optimize --quantization q4_0
 ```bash
 # Check GPU status
 nvidia-smi
-inferno gpu status
+inferno gpu list
 
 # Reset GPU
 sudo nvidia-smi --gpu-reset
@@ -1382,11 +1393,11 @@ curl -s http://localhost:8080/health | jq '.'
 
 # Model status
 echo "Model Status:"
-inferno models status --all
+inferno models list
 
 # Resource usage
 echo "Resource Usage:"
-inferno metrics show --format compact
+inferno metrics json
 
 # GPU status
 echo "GPU Status:"
@@ -1420,12 +1431,11 @@ kubectl patch deployment inferno -n inferno -p '{"spec":{"template":{"spec":{"co
 
 ```bash
 # Use quantized models for cost reduction
-inferno install llama-2-7b-chat-q4_0  # 4-bit quantization
-inferno remove llama-2-7b-chat-f16    # Remove full precision
+inferno models install llama-2-7b-chat-q4_0       # 4-bit quantization
+rm <models_dir>/llama-2-7b-chat-f16.gguf          # Remove full precision
 
-# Enable model sharing
-inferno config set cache.shared_models true
-inferno config set cache.model_sharing_enabled true
+# Keep frequently used models warm to avoid repeated load cost
+inferno cache configure --always-warm llama-2-7b-chat-q4_0
 ```
 
 This production deployment guide provides a comprehensive foundation for running Inferno at enterprise scale with high availability, security, and performance. Adjust the configurations based on your specific requirements and constraints.

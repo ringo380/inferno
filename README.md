@@ -4,7 +4,7 @@
 
 [![Build Status](https://github.com/ringo380/inferno/workflows/CI/badge.svg)](https://github.com/ringo380/inferno/actions)
 [![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](LICENSE)
-[![Rust Version](https://img.shields.io/badge/rust-1.70%2B-orange.svg)](https://rustlang.org)
+[![Rust Version](https://img.shields.io/badge/rust-1.85%2B-orange.svg)](https://rustlang.org)
 [![Docker](https://img.shields.io/badge/docker-ready-blue.svg)](https://hub.docker.com/r/inferno/inferno)
 
 Inferno is a **production-ready AI inference server** that runs entirely on your hardware. Think of it as your private ChatGPT that works offline, supports any model format, and gives you complete control over your AI infrastructure.
@@ -184,8 +184,8 @@ cargo build --release
 # Install globally (optional)
 cargo install --path .
 
-# Build desktop app (optional)
-cd desktop-app && npm install && npm run build
+# Build desktop app (optional) - the Tauri frontend lives in dashboard/
+./scripts/build-desktop.sh --release
 ```
 
 ### ⬆️ Upgrading
@@ -219,11 +219,11 @@ npm update @ringo380/inferno-desktop
 # Check version
 inferno --version
 
-# Verify GPU support
-inferno gpu status
+# Verify GPU support (lists detected GPUs)
+inferno gpu list
 
-# Run health check
-inferno doctor
+# List discovered models (verifies configuration)
+inferno models list
 ```
 
 ## 🚀 Quick Start
@@ -265,7 +265,7 @@ open /Applications/Inferno.app
 - ✅ **OpenAI Compatible**: Use existing ChatGPT client libraries
 - ✅ **REST API**: Standard HTTP endpoints for all operations
 - ✅ **WebSocket**: Real-time streaming and bidirectional communication
-- ✅ **CLI Interface**: 40+ commands for all AI/ML operations
+- ✅ **CLI Interface**: 28 top-level commands (each with subcommands) for all AI/ML operations
 - ✅ **Desktop App**: Cross-platform Tauri application
 
 ## 🏗️ Architecture
@@ -278,7 +278,7 @@ src/
 ├── lib.rs            # Library exports
 ├── config.rs         # Configuration management
 ├── backends/         # AI model execution backends
-├── cli/              # 40+ CLI command modules
+├── cli/              # CLI command modules (28 top-level commands)
 ├── api/              # HTTP/WebSocket APIs
 ├── batch/            # Batch processing system
 ├── models/           # Model discovery and metadata

@@ -70,8 +70,8 @@ docker run -p 8080:8080 \
 # Create directory structure
 mkdir -p inferno/{models,cache,config,logs}
 
-# Create configuration file
-cat > inferno/config/inferno.toml << EOF
+# Create configuration file (Inferno discovers it at ~/.config/inferno/config.toml)
+cat > inferno/config/config.toml << EOF
 models_dir = "/data/models"
 log_level = "info"
 
@@ -94,10 +94,10 @@ docker run -d \
   -p 8080:8080 \
   -v ./inferno/models:/data/models \
   -v ./inferno/cache:/data/cache \
-  -v ./inferno/config:/etc/inferno \
+  -v ./inferno/config:/root/.config/inferno \
   -v ./inferno/logs:/var/log/inferno \
   --restart unless-stopped \
-  ghcr.io/ringo380/inferno:latest serve --config /etc/inferno/inferno.toml
+  ghcr.io/ringo380/inferno:latest serve
 ```
 
 #### GPU-Enabled Docker
@@ -312,25 +312,25 @@ chmod 700 ~/.config/inferno
 
 ## First Model Installation
 
-### Using the Package Manager (Recommended)
+### Installing Models (Recommended)
 
-The package manager makes model installation effortless:
+`inferno models install` pulls models straight from a HuggingFace repository ID or a direct HTTPS URL:
 
 ```bash
 # Install a conversational model
-inferno install microsoft/DialoGPT-medium
+inferno models install microsoft/DialoGPT-medium
 
 # Install a coding assistant
-inferno install microsoft/codebert-base
+inferno models install microsoft/codebert-base
 
 # Install an embedding model
-inferno install sentence-transformers/all-MiniLM-L6-v2
+inferno models install sentence-transformers/all-MiniLM-L6-v2
 
-# Install from specific repository
-inferno install llama-2-7b --repo ollama
+# Install a quantized GGUF build
+inferno models install TheBloke/Llama-2-7B-Chat-GGUF
 
 # List installed models
-inferno list
+inferno models list
 ```
 
 ### Manual Model Management
@@ -338,13 +338,13 @@ inferno list
 For advanced users who prefer direct control:
 
 ```bash
-# Download models manually
-inferno models download microsoft/DialoGPT-medium
-inferno models download huggingface/CodeBERTa-small-v1
+# Install models manually
+inferno models install microsoft/DialoGPT-medium
+inferno models install huggingface/CodeBERTa-small-v1
 
 # Convert between formats
-inferno convert model.pt model.gguf --format gguf
-inferno convert model.gguf model.onnx --format onnx
+inferno convert model model.pt model.gguf --format gguf
+inferno convert model model.gguf model.onnx --format onnx
 
 # Validate model files
 inferno validate microsoft/DialoGPT-medium
@@ -355,25 +355,25 @@ inferno validate microsoft/DialoGPT-medium
 **For Beginners:**
 ```bash
 # Small, fast models for testing
-inferno install distilgpt2                    # 82MB, very fast
-inferno install microsoft/DialoGPT-small      # 117MB, good for chat
-inferno install sentence-transformers/all-MiniLM-L6-v2  # 90MB, embeddings
+inferno models install distilgpt2                    # 82MB, very fast
+inferno models install microsoft/DialoGPT-small      # 117MB, good for chat
+inferno models install sentence-transformers/all-MiniLM-L6-v2  # 90MB, embeddings
 ```
 
 **For General Use:**
 ```bash
 # Balanced performance and quality
-inferno install microsoft/DialoGPT-medium     # 345MB, better conversations
-inferno install microsoft/codebert-base       # 500MB, code understanding
-inferno install facebook/opt-1.3b             # 2.6GB, general language model
+inferno models install microsoft/DialoGPT-medium     # 345MB, better conversations
+inferno models install microsoft/codebert-base       # 500MB, code understanding
+inferno models install facebook/opt-1.3b             # 2.6GB, general language model
 ```
 
 **For Production:**
 ```bash
 # High-quality models (requires more resources)
-inferno install microsoft/DialoGPT-large      # 776MB, excellent conversations
-inferno install codellama/CodeLlama-7b-Instruct  # 3.8GB, advanced coding
-inferno install mistralai/Mistral-7B-v0.1     # 4.1GB, state-of-the-art
+inferno models install microsoft/DialoGPT-large      # 776MB, excellent conversations
+inferno models install codellama/CodeLlama-7b-Instruct  # 3.8GB, advanced coding
+inferno models install mistralai/Mistral-7B-v0.1     # 4.1GB, state-of-the-art
 ```
 
 ## First Inference
@@ -386,8 +386,8 @@ Test your setup with simple command-line inference:
 # Basic text generation
 inferno run --model DialoGPT-medium --prompt "Hello! How are you today?"
 
-# Interactive chat session
-inferno run --model DialoGPT-medium --interactive
+# Interactive chat session (terminal UI)
+inferno tui
 
 # File-based input/output
 echo "Explain quantum computing" > input.txt
@@ -426,13 +426,10 @@ inferno run --model codebert-base \
 # Basic server
 inferno serve
 
-# Production server with all features
+# Production server binding to all interfaces with a worker pool
 inferno serve \
   --bind 0.0.0.0:8080 \
-  --workers 8 \
-  --auth \
-  --metrics \
-  --cors
+  --workers 8
 ```
 
 ### Test API Access
@@ -474,30 +471,35 @@ The dashboard provides:
 
 ```bash
 # Check GPU availability
-inferno gpu status
-
-# Enable GPU in configuration
-inferno config set backend_config.gpu_enabled true
-
+inferno gpu list
+```
+GPU acceleration (Metal on Apple Silicon) is auto-detected and enabled by default. To force it in `~/.inferno.toml`:
+```toml
+[backend_config]
+gpu_enabled = true
+```
+```bash
 # Test GPU performance
-inferno bench --model DialoGPT-medium --gpu
+inferno bench --model DialoGPT-medium
 
-# Monitor GPU usage
-inferno monitor start --gpu
+# Monitor performance in real time
+inferno monitor watch
 ```
 
 #### Memory Optimization
 
+Configure memory settings in `~/.inferno.toml`:
+```toml
+[backend_config]
+context_size = 2048
+batch_size = 32
+```
 ```bash
-# Configure memory settings
-inferno config set backend_config.context_size 2048
-inferno config set backend_config.batch_size 32
+# Watch resource usage in real time
+inferno monitor watch
 
-# Enable memory monitoring
-inferno monitor start --memory
-
-# Check memory usage
-inferno cache status
+# Check cache usage
+inferno cache stats
 ```
 
 ### Model Optimization
@@ -505,11 +507,11 @@ inferno cache status
 #### Quantization
 
 ```bash
-# Convert to quantized format for speed
-inferno convert llama-7b.gguf llama-7b-q4.gguf --quantization q4_0
+# Quantize a model to reduce size and speed up inference
+inferno convert quantize --quantization q4-0 llama-7b.gguf llama-7b-q4.gguf
 
 # Install pre-quantized models
-inferno install llama-2-7b-chat-q4_0
+inferno models install TheBloke/Llama-2-7B-Chat-GGUF
 
 # Compare performance
 inferno bench --model llama-7b
@@ -518,17 +520,21 @@ inferno bench --model llama-7b-q4
 
 #### Caching Optimization
 
+Enable caching in `~/.inferno.toml`:
+```toml
+[cache]
+enabled = true
+max_size_gb = 20
+```
 ```bash
-# Enable response caching
-inferno config set cache.enabled true
-inferno config set cache.max_size_gb 20
+# Warm up the cache for a specific model
+inferno cache warmup DialoGPT-medium
 
-# Warm up cache with popular models
-inferno cache warm --model DialoGPT-medium
-inferno cache warm --popular
+# Or warm up based on recent usage
+inferno cache warmup --strategy usage-based
 
 # Monitor cache performance
-inferno cache status
+inferno cache stats
 ```
 
 ## Production Setup
@@ -540,29 +546,35 @@ inferno cache status
 inferno security init
 
 # Create API keys
-inferno security key create --name production-app
-inferno security key create --name monitoring --permissions metrics
-
-# Configure authentication
-inferno config set security.auth_enabled true
-inferno config set security.rate_limit 5000
-
+inferno security api-key generate --user admin --name production-app
+inferno security api-key generate --user admin --name monitoring --permissions metrics
+```
+Configure authentication in `~/.inferno.toml`:
+```toml
+[security]
+auth_enabled = true
+rate_limit = 5000
+```
+```bash
 # Enable audit logging
-inferno audit enable --encrypt
+inferno audit configure --enable true
 ```
 
 ### Monitoring Setup
 
 ```bash
-# Start observability stack
-inferno observability start
-
-# Configure Prometheus metrics
-inferno config set observability.prometheus_enabled true
-inferno config set observability.metrics_port 9090
-
-# Set up health monitoring
-inferno monitor start --interval 30s --alerts
+# Initialize the observability stack (Prometheus metrics)
+inferno observability init --prometheus
+```
+Configure Prometheus metrics in `~/.inferno.toml`:
+```toml
+[observability]
+prometheus_enabled = true
+metrics_port = 9090
+```
+```bash
+# Watch performance in real time (update every 30s)
+inferno monitor watch --interval 30
 ```
 
 ### Service Management
@@ -580,7 +592,9 @@ After=network.target
 Type=simple
 User=inferno
 WorkingDirectory=/opt/inferno
-ExecStart=/usr/local/bin/inferno serve --config /etc/inferno/config.toml
+# Config is read from the standard locations (e.g. /opt/inferno/.inferno.toml
+# or ~/.config/inferno/config.toml); set INFERNO_* env vars to override.
+ExecStart=/usr/local/bin/inferno serve
 Restart=always
 RestartSec=10
 
@@ -868,10 +882,10 @@ chmod +x /usr/local/bin/inferno
 ```bash
 # Solution: Check connectivity and retry
 ping huggingface.co
-inferno install microsoft/DialoGPT-medium --retry
+inferno models install microsoft/DialoGPT-medium
 
-# Or use manual download
-inferno models download microsoft/DialoGPT-medium --force
+# Or retry the install
+inferno models install microsoft/DialoGPT-medium
 ```
 
 **Issue**: "Insufficient disk space"
@@ -879,8 +893,10 @@ inferno models download microsoft/DialoGPT-medium --force
 # Solution: Check space and clean up
 df -h
 inferno cache clear
-inferno list --unused
-inferno remove unused-model
+inferno models list
+
+# Delete an unused model file manually to reclaim space
+rm ~/.local/share/inferno/models/unused-model.gguf
 ```
 
 #### Performance Issues
@@ -888,24 +904,24 @@ inferno remove unused-model
 **Issue**: "Slow inference"
 ```bash
 # Solution: Check GPU and optimize
-inferno gpu status
+inferno gpu list
 inferno bench --model your-model
 
-# Enable GPU if available
-inferno config set backend_config.gpu_enabled true
-
-# Use quantized model
-inferno install your-model-q4_0
+# Use a quantized model
+inferno models install TheBloke/Llama-2-7B-Chat-GGUF
 ```
+GPU acceleration is enabled by default; to force it, set `gpu_enabled = true` under `[backend_config]` in `~/.inferno.toml`.
 
 **Issue**: "Out of memory"
 ```bash
-# Solution: Reduce memory usage
-inferno config set backend_config.context_size 1024
-inferno config set backend_config.batch_size 16
-
-# Use smaller model
-inferno install distilgpt2
+# Use a smaller model
+inferno models install distilgpt2
+```
+Reduce memory usage in `~/.inferno.toml`:
+```toml
+[backend_config]
+context_size = 1024
+batch_size = 16
 ```
 
 #### API Issues
@@ -913,7 +929,7 @@ inferno install distilgpt2
 **Issue**: "Connection refused"
 ```bash
 # Solution: Check server status
-inferno serve --port 8081  # Try different port
+inferno serve --bind 127.0.0.1:8081  # Try different port
 netstat -tulpn | grep 8080  # Check if port is in use
 
 # Check firewall
@@ -923,13 +939,11 @@ sudo ufw allow 8080
 
 **Issue**: "Authentication failed"
 ```bash
-# Solution: Check API key
-inferno security key list
-inferno security key create --name test
-
-# Or disable auth for testing
-inferno config set security.auth_enabled false
+# Solution: Check API keys
+inferno security api-key list --user admin
+inferno security api-key generate --user admin --name test
 ```
+Or disable auth for testing by setting `auth_enabled = false` under `[security]` in `~/.inferno.toml`.
 
 ### Getting Help
 
@@ -937,7 +951,7 @@ inferno config set security.auth_enabled false
 
 ```bash
 # View application logs
-inferno config get log_level
+inferno config show | grep -i log_level
 tail -f ~/.local/share/inferno/logs/inferno.log
 
 # Enable debug logging
@@ -953,15 +967,15 @@ sudo journalctl -u inferno -f
 ```bash
 # System information
 inferno --version
-inferno gpu status
+inferno gpu list
 inferno config show
 
 # Model information
-inferno models list --detailed
-inferno cache status
+inferno models list
+inferno cache stats
 
 # Performance diagnostics
-inferno bench --all
+inferno bench --model your-model
 inferno monitor status
 ```
 

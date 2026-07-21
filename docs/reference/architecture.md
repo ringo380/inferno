@@ -548,7 +548,7 @@ pub struct ResourceScaler {
 
 ```dockerfile
 # Multi-stage build for optimal size
-FROM rust:1.70 as builder
+FROM rust:1.85 as builder
 WORKDIR /app
 COPY . .
 RUN cargo build --release

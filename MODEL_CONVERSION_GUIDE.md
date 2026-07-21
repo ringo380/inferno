@@ -223,8 +223,8 @@ ls -la input_model.pt
 # Validate converted model
 inferno validate output_model.onnx
 
-# Compare models before and after conversion
-inferno models compare original.gguf converted.onnx
+# Inspect the converted model's structure and metadata
+inferno convert analyze converted.onnx --detailed
 
 # Test inference with converted model
 inferno run --model converted.onnx --prompt "Test conversion"
@@ -340,31 +340,30 @@ print(f"Conversion completed: {job.output_path}")
 Converted models are automatically added to the model cache:
 
 ```bash
-# Enable persistent caching for converted models
-inferno cache persist --include-conversions
+# Warm the cache with the converted model
+inferno cache warmup converted_model.onnx
 
-# Warm cache with converted model
-inferno cache warm --model converted_model.onnx
+# Check cache status
+inferno cache stats
 ```
 
 ### Audit Logging
 All conversions are logged in the audit system:
 
 ```bash
-# View conversion audit logs
-inferno audit logs --filter conversion
+# Search conversion-related audit events
+inferno audit search conversion
 
-# Enable detailed conversion logging
-inferno audit enable --include-conversions --encryption
+# Enable audit logging
+inferno audit configure --enable true
 ```
 
 ### Batch Processing
-Schedule regular model conversions:
+Schedule regular model conversions with the OS scheduler. Inferno's `queue`
+system schedules inference jobs, not conversions, so use cron to run
+`inferno convert` on a schedule:
 
 ```bash
-# Create scheduled conversion job
-inferno batch-queue create \
-  --name "nightly_conversion" \
-  --schedule "0 2 * * *" \
-  --command "convert model /staging/model.pt /production/model.gguf --format gguf"
+# Add to crontab (crontab -e) to convert nightly at 2 AM
+0 2 * * * inferno convert model /staging/model.pt /production/model.gguf --format gguf
 ```

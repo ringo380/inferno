@@ -11,27 +11,27 @@ This comprehensive troubleshooting guide covers common issues and solutions for 
 export INFERNO_LOG_LEVEL=debug
 export RUST_BACKTRACE=1
 
-# Start with debug output
-inferno serve --log-level debug
+# Enable per-component tracing (Rust tracing filter)
+export RUST_LOG="inferno::backends=trace,inferno::cache=debug"
 
-# Enable tracing for specific components
-export INFERNO_TRACE_COMPONENTS="backends,cache,conversion"
+# Start the server with logging enabled
+inferno serve
 ```
 
 ### Check System Status
 
 ```bash
-# Comprehensive health check
-inferno health check --detailed
+# Observability component health check
+inferno observability health
 
-# System diagnostics
-inferno diagnostics --export diagnostics.json
+# Current monitoring status and metrics
+inferno monitor status
 
 # Verify configuration
-inferno config validate --verbose
+inferno config validate
 
-# Check resource usage
-inferno resources monitor --duration 30s
+# Watch performance in real-time (Ctrl-C to stop)
+inferno monitor watch
 ```
 
 ## GGUF Backend Issues
@@ -50,7 +50,7 @@ ls -la model.gguf
 sudo chown $USER:$USER model.gguf
 
 # Validate GGUF format
-inferno validate model.gguf --detailed
+inferno validate model.gguf --deep
 
 # Re-download model if corrupted
 wget -O model.gguf.new https://source/model.gguf
@@ -65,13 +65,15 @@ free -h
 
 # Reduce model size with quantization
 inferno convert model large-model.gguf small-model.gguf \
-  --format gguf --quantization q4_0
+  --format gguf --quantization q4-0
 
-# Enable memory mapping
-inferno config set backend_config.memory_map true
+# Enable memory mapping in ~/.inferno.toml:
+#   [backend_config]
+#   memory_map = true
 
-# Reduce context size
-inferno config set backend_config.context_size 2048
+# Reduce context size in ~/.inferno.toml:
+#   [backend_config]
+#   context_size = 2048
 ```
 
 **Issue**: `GPU memory allocation failed`
@@ -80,11 +82,14 @@ inferno config set backend_config.context_size 2048
 # Check GPU memory
 nvidia-smi
 
-# Reduce GPU allocation
-inferno config set backend_config.gpu_layers 20
+# Reduce GPU allocation in ~/.inferno.toml:
+#   [backend_config]
+#   gpu_layers = 20
 
-# Use CPU fallback
-inferno run --model model.gguf --cpu-only --prompt "test"
+# Disable GPU in ~/.inferno.toml to force CPU:
+#   [backend_config]
+#   gpu_enabled = false
+inferno run --model model.gguf --prompt "test"
 
 # Clear GPU memory
 nvidia-smi --gpu-reset
@@ -98,14 +103,16 @@ nvidia-smi --gpu-reset
 # Check CPU usage
 htop
 
-# Enable GPU acceleration
-inferno config set backend_config.gpu_enabled true
+# Enable GPU acceleration in ~/.inferno.toml:
+#   [backend_config]
+#   gpu_enabled = true
 
-# Optimize context size
-inferno benchmark context-size --model model.gguf
+# Profile the model to find bottlenecks
+inferno optimization profile --model model.gguf --detailed
 
-# Use larger batch size
-inferno config set backend_config.batch_size 64
+# Use a larger batch size in ~/.inferno.toml:
+#   [backend_config]
+#   batch_size = 64
 
 # Enable threading
 export OMP_NUM_THREADS=8
@@ -114,11 +121,8 @@ export OMP_NUM_THREADS=8
 **Issue**: `Tokenization errors`
 
 ```bash
-# Check tokenizer configuration
-inferno models info model.gguf --show-tokenizer
-
-# Use fallback tokenization
-inferno config set backend_config.fallback_tokenizer true
+# Check model details
+inferno models info model.gguf
 
 # Test with simple input
 inferno run --model model.gguf --prompt "Hello"
@@ -142,16 +146,14 @@ ls -la $ORT_LIB_LOCATION
 cargo clean
 ORT_STRATEGY=download cargo build --release --features onnx
 
-# Use specific provider
-inferno config set backend_config.execution_providers '["CPUExecutionProvider"]'
+# Set execution providers in ~/.inferno.toml:
+#   [backend_config]
+#   execution_providers = ["CPUExecutionProvider"]
 ```
 
 **Issue**: `GPU provider not available`
 
 ```bash
-# Check available providers
-inferno backends info onnx --providers
-
 # Test GPU availability
 nvidia-smi  # NVIDIA
 rocm-smi   # AMD
@@ -167,18 +169,15 @@ nvcc --version
 **Issue**: `Model format not supported`
 
 ```bash
-# Check ONNX model info
-inferno models info model.onnx --detailed
+# Analyze the ONNX model
+inferno convert analyze model.onnx --detailed
 
 # Validate ONNX format
 python -c "import onnx; onnx.checker.check_model('model.onnx')"
 
-# Convert to supported format
+# Convert to a compatible format
 inferno convert model model.onnx model_compatible.onnx \
-  --optimization balanced
-
-# Check opset version
-inferno models info model.onnx --opset
+  --format onnx --optimization balanced
 ```
 
 ### Model Loading Issues
@@ -187,16 +186,10 @@ inferno models info model.onnx --opset
 
 ```bash
 # Analyze model structure
-inferno models analyze model.onnx
+inferno convert analyze model.onnx --detailed
 
-# Check input requirements
-inferno models info model.onnx --inputs
-
-# Use dynamic shapes
-inferno config set backend_config.dynamic_shapes true
-
-# Reshape inputs
-inferno config set backend_config.input_shape '[1, -1]'
+# Validate the file
+inferno validate model.onnx --deep
 ```
 
 ## Model Conversion Issues
@@ -207,19 +200,19 @@ inferno config set backend_config.input_shape '[1, -1]'
 
 ```bash
 # Check source model format
-inferno validate source_model.pt --detailed
+inferno validate source_model.pt --deep
 
-# Try different optimization level
+# Try a different optimization level
 inferno convert model source.pt target.gguf \
-  --optimization fast
+  --format gguf --optimization basic
 
-# Use compatible intermediate format
+# Use a compatible intermediate format
 inferno convert model source.pt intermediate.onnx --format onnx
 inferno convert model intermediate.onnx target.gguf --format gguf
 
 # Check conversion logs
 inferno convert model source.pt target.gguf \
-  --format gguf --verbose 2>&1 | tee conversion.log
+  --format gguf 2>&1 | tee conversion.log
 ```
 
 **Issue**: `Out of memory during conversion`
@@ -230,11 +223,11 @@ watch -n 1 'free -h'
 
 # Reduce batch size
 inferno convert model source.pt target.gguf \
-  --batch-size 16
+  --format gguf --batch-size 16
 
 # Use quantization
 inferno convert model source.pt target.gguf \
-  --quantization q4_0
+  --format gguf --quantization q4-0
 
 # Close other applications
 sudo systemctl stop unnecessary-service
@@ -243,19 +236,16 @@ sudo systemctl stop unnecessary-service
 **Issue**: `Conversion takes too long`
 
 ```bash
-# Use faster optimization
+# Use a faster optimization level
 inferno convert model source.pt target.gguf \
-  --optimization fast
+  --format gguf --optimization basic
 
 # Skip optimization
 inferno convert model source.pt target.gguf \
-  --optimization none
+  --format gguf --optimization none
 
 # Run in background
-nohup inferno convert model source.pt target.gguf &
-
-# Monitor progress
-inferno conversion status job_id
+nohup inferno convert model source.pt target.gguf --format gguf &
 ```
 
 ### Conversion Quality Issues
@@ -263,21 +253,22 @@ inferno conversion status job_id
 **Issue**: `Converted model produces poor results`
 
 ```bash
-# Compare outputs
-inferno compare models original.pt converted.gguf \
-  --test-prompts test.txt
+# Compare outputs by running the same prompt through each model
+inferno run --model original.pt --prompt "test prompt" > original.txt
+inferno run --model converted.gguf --prompt "test prompt" > converted.txt
+diff original.txt converted.txt
 
 # Use higher precision
 inferno convert model source.pt target.gguf \
-  --precision fp16
+  --format gguf --precision float16
 
-# Disable quantization
+# Convert without quantization (omit --quantization)
 inferno convert model source.pt target.gguf \
-  --quantization none
+  --format gguf
 
 # Use conservative optimization
 inferno convert model source.pt target.gguf \
-  --optimization balanced
+  --format gguf --optimization balanced
 ```
 
 ## Caching Issues
@@ -287,37 +278,28 @@ inferno convert model source.pt target.gguf \
 **Issue**: `Low cache hit rate`
 
 ```bash
-# Analyze cache patterns
-inferno cache analyze --period 24h
+# Check cache statistics
+inferno cache stats
 
-# Check cache configuration
-inferno cache stats --detailed
+# Monitor cache usage in real-time
+inferno cache monitor --detailed
 
-# Increase cache size
-inferno config set cache.max_size_gb 20
+# Increase cache limits
+inferno cache configure --max-models 10 --max-memory-mb 20480
 
-# Adjust TTL
-inferno config set cache.ttl_hours 48
-
-# Enable response deduplication
-inferno config set cache.deduplication.enabled true
+# Adjust model TTL
+inferno cache configure --ttl-seconds 172800
 ```
 
 **Issue**: `Cache corruption detected`
 
 ```bash
-# Verify cache integrity
-inferno cache verify --detailed
+# Check cache status
+inferno cache stats
 
-# Repair corrupted entries
-inferno cache repair --auto-fix
-
-# Rebuild cache from backup
-inferno cache restore --source /backup/cache
-
-# Clear and rebuild
-inferno cache clear --all
-inferno cache warm --models /models/*.gguf
+# Clear and warm up the cache again
+inferno cache clear --force
+inferno cache warmup model-a model-b
 ```
 
 **Issue**: `Cache disk space issues`
@@ -326,15 +308,11 @@ inferno cache warm --models /models/*.gguf
 # Check disk usage
 df -h /var/cache/inferno
 
-# Clean old entries
-inferno cache cleanup --older-than 7d
+# Clear the cache
+inferno cache clear --force
 
-# Increase compression
-inferno config set cache.compression.algorithm zstd
-inferno config set cache.compression.level 9
-
-# Move cache to larger disk
-inferno cache migrate --destination /large-disk/cache
+# Reduce cache limits
+inferno cache configure --max-models 3 --max-memory-mb 4096
 ```
 
 ### Cache Persistence Issues
@@ -342,18 +320,15 @@ inferno cache migrate --destination /large-disk/cache
 **Issue**: `Cache not persisting across restarts`
 
 ```bash
-# Check cache configuration
-inferno config get cache
+# Check cache configuration and current state
+inferno cache stats
 
 # Verify write permissions
 ls -la /var/cache/inferno/
 sudo chown -R $USER:$USER /var/cache/inferno/
 
-# Enable persistent cache
-inferno config set cache.type persistent
-
-# Force sync
-inferno cache sync --force
+# Configure warmup so hot models reload on start
+inferno cache configure --warmup true --strategy usage-based
 ```
 
 ## Batch Processing Issues
@@ -366,32 +341,26 @@ inferno cache sync --force
 # Check cron service
 sudo systemctl status cron
 
-# Validate cron expressions
-inferno batch-queue validate-schedule "0 2 * * *"
+# Schedule a recurring job with a cron expression
+inferno queue schedule --name nightly \
+  --schedule-type cron --expression "0 2 * * *" \
+  --input-file jobs.jsonl --model my-model my-queue
 
-# Check job status
-inferno batch-queue list --status all
+# Check job status in a queue
+inferno queue list-jobs my-queue
 
-# Enable batch queue
-inferno batch-queue enable
-
-# Test manual execution
-inferno batch-queue run job_id --now
+# Inspect a specific job
+inferno queue job-status my-queue <job-id>
 ```
 
 **Issue**: `Jobs failing with resource limits`
 
 ```bash
-# Check resource usage
-inferno batch-queue resources --job job_id
+# Check queue metrics
+inferno queue metrics my-queue
 
-# Increase limits
-inferno batch-queue update job_id \
-  --cpu-limit 4.0 \
-  --memory-limit 8GB
-
-# Monitor during execution
-inferno batch-queue monitor job_id --real-time
+# Monitor queue activity during execution
+inferno queue monitor my-queue
 
 # Check system resources
 htop
@@ -403,20 +372,18 @@ iostat -x 1
 **Issue**: `Jobs stuck in queue`
 
 ```bash
-# Check queue status
-inferno batch-queue stats
+# Check queue metrics
+inferno queue metrics my-queue
 
-# Increase concurrent jobs
-inferno config set batch_queue.max_concurrent_jobs 10
+# Configure queue concurrency
+inferno queue configure --max-concurrent 10 my-queue
 
-# Clear stuck jobs
-inferno batch-queue clear --status stuck
+# Clear completed jobs
+inferno queue clear my-queue
 
-# Restart queue processor
-inferno batch-queue restart
-
-# Check dependencies
-inferno batch-queue dependencies job_id
+# Cancel or retry a specific job
+inferno queue cancel my-queue <job-id>
+inferno queue retry my-queue <job-id>
 ```
 
 ## Audit System Issues
@@ -426,11 +393,11 @@ inferno batch-queue dependencies job_id
 **Issue**: `Audit logs not being created`
 
 ```bash
-# Check audit status
-inferno audit status
+# Check audit statistics
+inferno audit stats
 
 # Enable audit logging
-inferno audit enable --encryption
+inferno audit configure --enable true
 
 # Verify permissions
 ls -la /var/log/inferno/audit/
@@ -439,24 +406,21 @@ sudo chown -R inferno:inferno /var/log/inferno/
 # Check disk space
 df -h /var/log
 
-# Test audit logging
-inferno audit test --write-test-entry
+# Write a test audit event
+inferno audit log --help
 ```
 
-**Issue**: `Audit encryption errors`
+**Issue**: `Audit configuration problems`
 
 ```bash
-# Check encryption key
-ls -la /secure/audit.key
+# Show current audit configuration
+inferno audit configure --show
 
-# Generate new key
-inferno audit generate-key --output /secure/audit.key.new
+# Set retention and compression
+inferno audit configure --retention-days 30 --compression true
 
-# Test encryption
-inferno audit test-encryption --key-file /secure/audit.key
-
-# Disable encryption temporarily
-inferno config set audit.encryption.enabled false
+# Validate audit log integrity
+inferno audit validate
 ```
 
 ### Alert Issues
@@ -464,61 +428,57 @@ inferno config set audit.encryption.enabled false
 **Issue**: `Alerts not being sent`
 
 ```bash
-# Test alert channels
-inferno audit test-alerts --channels email,slack
+# Test the alert system
+inferno monitor test-alerts
 
-# Check channel configuration
-inferno config get audit.alerts
+# View active alerts
+inferno monitor alerts
 
-# Verify network connectivity
+# Verify network connectivity to a webhook
 curl -I https://hooks.slack.com/services/...
 
 # Check email configuration
 telnet smtp.company.com 587
-
-# View alert logs
-inferno audit logs --filter alerts
 ```
 
-## Dashboard API Issues
+## HTTP API Issues
 
 ### API Connectivity Problems
 
-**Issue**: `Dashboard endpoints not responding`
+**Issue**: `API endpoints not responding`
 
 ```bash
-# Check server status
+# Check server health
 curl -I http://localhost:8080/health
 
-# Test dashboard endpoint
-curl http://localhost:8080/dashboard/stats
+# Check the metrics endpoint
+curl http://localhost:8080/metrics
 
-# Check authentication
-curl -H "Authorization: Bearer $API_KEY" \
-  http://localhost:8080/dashboard/stats
+# List available models via the OpenAI-compatible API
+curl http://localhost:8080/v1/models
 
-# Verify dashboard is enabled
-inferno config get dashboard.enabled
+# Check server status
+curl http://localhost:8080/v1/status
 
 # Check firewall rules
 sudo ufw status
 sudo iptables -L
 ```
 
-**Issue**: `WebSocket connections failing`
+**Issue**: `Streaming or WebSocket connections failing`
 
 ```bash
-# Test WebSocket endpoint
-wscat -c ws://localhost:8080/dashboard/ws
+# Test the streaming WebSocket endpoint
+wscat -c ws://localhost:8080/ws/stream
+
+# Or use SSE streaming on the chat endpoint
+curl -N http://localhost:8080/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"model":"my-model","messages":[{"role":"user","content":"hi"}],"stream":true}'
 
 # Check proxy configuration
 # Nginx: proxy_set_header Upgrade $http_upgrade;
 # Apache: ProxyPass ws://localhost:8080/
-
-# Verify WebSocket support
-curl -H "Upgrade: websocket" \
-     -H "Connection: Upgrade" \
-     http://localhost:8080/dashboard/ws
 ```
 
 ## Performance Issues
@@ -533,11 +493,13 @@ perf report
 # Check thread usage
 ps -eLf | grep inferno
 
-# Reduce concurrent requests
-inferno config set server.max_concurrent_requests 50
+# Reduce concurrent requests in ~/.inferno.toml:
+#   [server]
+#   max_concurrent_requests = 50
 
-# Optimize backend settings
-inferno config set backend_config.cpu_threads 4
+# Set CPU threads in ~/.inferno.toml:
+#   [backend_config]
+#   cpu_threads = 4
 
 # Use CPU affinity
 taskset -c 0-7 inferno serve
@@ -549,17 +511,14 @@ taskset -c 0-7 inferno serve
 # Monitor memory usage
 valgrind --tool=massif inferno serve
 
-# Reduce cache size
-inferno config set cache.max_size_gb 5
+# Reduce cache memory limit
+inferno cache configure --max-memory-mb 5120
 
-# Limit model loading
-inferno config set models.max_loaded_models 2
+# Profile inference memory usage over time
+inferno performance-benchmark memory-profile --model model.gguf --track
 
-# Enable garbage collection
-export RUST_GC_FREQUENCY=100
-
-# Check for memory leaks
-inferno diagnostics memory-leak --duration 300s
+# Enable full backtraces for debugging
+export RUST_BACKTRACE=full
 ```
 
 ### High Disk I/O
@@ -571,14 +530,11 @@ iotop
 # Use faster storage
 sudo mount -o remount,noatime /var/cache/inferno
 
-# Optimize cache settings
-inferno config set cache.sync_interval_seconds 300
-
 # Use RAM disk for temporary files
 sudo mount -t tmpfs -o size=2G tmpfs /tmp/inferno
 
 # Reduce log verbosity
-inferno config set log_level warn
+export INFERNO_LOG_LEVEL=warn
 ```
 
 ## Network Issues
@@ -591,14 +547,14 @@ inferno config set log_level warn
 # Check port availability
 sudo netstat -tulpn | grep 8080
 
-# Use different port
-inferno serve --port 8081
+# Use a different bind address/port
+inferno serve --bind 127.0.0.1:8081
 
 # Check firewall
 sudo ufw allow 8080
 sudo firewall-cmd --add-port=8080/tcp --permanent
 
-# Bind to specific interface
+# Bind to a specific interface
 inferno serve --bind 127.0.0.1:8080
 ```
 
@@ -614,15 +570,24 @@ openssl rsa -in key.pem -check
 # Test SSL connection
 openssl s_client -connect localhost:8443
 
-# Generate new certificate
+# Generate a new certificate
 openssl req -x509 -newkey rsa:4096 -keyout key.pem -out cert.pem -days 365 -nodes
-
-# Configure TLS
-inferno config set server.tls.cert_file cert.pem
-inferno config set server.tls.key_file key.pem
 ```
 
 ## GPU Issues
+
+### GPU Detection
+
+```bash
+# List detected GPUs
+inferno gpu list
+
+# Detailed info for a specific GPU (requires the GPU id)
+inferno gpu info 0 --capabilities
+
+# GPU health check
+inferno gpu health --detailed
+```
 
 ### NVIDIA GPU Problems
 
@@ -636,14 +601,10 @@ nvidia-smi
 python -c "import torch; torch.cuda.empty_cache()"
 
 # Reduce model size
-inferno convert model large.gguf small.gguf --quantization q4_0
-
-# Use CPU fallback
-inferno config set backend_config.gpu_fallback true
+inferno convert model large.gguf small.gguf --format gguf --quantization q4-0
 
 # Limit GPU memory
 export CUDA_VISIBLE_DEVICES=0
-export CUDA_MEM_FRACTION=0.8
 ```
 
 **Issue**: `CUDA driver version mismatch`
@@ -692,101 +653,67 @@ export PATH=$ROCM_PATH/bin:$PATH
 **Issue**: `API key authentication failing`
 
 ```bash
-# Verify API key format
-echo $API_KEY | base64 -d
+# List API keys for a user
+inferno security api-key list --user admin
 
-# Check key in database
-inferno security api-key list
-
-# Generate new API key
-inferno security api-key create --user admin --name test
+# Generate a new API key
+inferno security api-key generate --user admin --name test
 
 # Test authentication
 curl -H "Authorization: Bearer $API_KEY" \
-  http://localhost:8080/models
+  http://localhost:8080/v1/models
 
-# Check permissions
-inferno security user permissions admin
+# Test an API key
+inferno security api-key test --help
 ```
 
 **Issue**: `Rate limiting issues`
 
 ```bash
-# Check rate limits
-inferno security rate-limit show --user admin
+# Check rate limit status
+inferno security rate-limit status --identifier admin
 
 # Adjust limits
-inferno security rate-limit set \
-  --user admin \
-  --requests-per-minute 2000
+inferno security rate-limit set --user admin --per-minute 2000
 
-# Disable rate limiting temporarily
-inferno config set security.rate_limiting_enabled false
+# Reset rate limit counters
+inferno security rate-limit reset --help
 
-# Check current usage
-inferno security rate-limit stats
-```
-
-## Database Issues
-
-### Database Connectivity
-
-**Issue**: `Database connection failed`
-
-```bash
-# Check database status
-sudo systemctl status postgresql
-
-# Test connection
-psql -h localhost -U inferno -d inferno_db
-
-# Check connection pool
-inferno diagnostics database --pool-stats
-
-# Reset connection pool
-inferno database reset-pool
-
-# Migrate database
-inferno database migrate --up
+# Test rate limiting
+inferno security rate-limit test --help
 ```
 
 ## Distributed System Issues
 
 ### Worker Connectivity
 
-**Issue**: `Workers not connecting to coordinator`
+**Issue**: `Workers not connecting`
 
 ```bash
-# Check coordinator status
-inferno distributed coordinator status
+# Show worker statistics
+inferno distributed stats
 
-# Test worker connection
-inferno distributed worker test-connection coordinator:9090
+# Start distributed inference with a worker pool
+inferno distributed start --workers 4 --load-balancing
+
+# Test a single inference request against the pool
+inferno distributed test --model my-model --input "Hello, world!"
 
 # Check network connectivity
 telnet coordinator 9090
-
-# Verify certificates
-openssl s_client -connect coordinator:9090
-
-# Update worker configuration
-inferno config set distributed.coordinator_address coordinator:9090
 ```
 
 **Issue**: `Load balancing not working`
 
 ```bash
-# Check worker loads
-inferno distributed workers list --detailed
+# Show worker statistics
+inferno distributed stats
 
-# Monitor load distribution
-inferno distributed monitor --real-time
+# Restart the pool with load balancing enabled
+inferno distributed start --workers 4 --load-balancing --max-concurrent 8
 
-# Adjust load balancing
-inferno config set distributed.load_balancing_algorithm round_robin
-
-# Force rebalancing
-inferno distributed rebalance --force
+# Benchmark distributed inference performance
+inferno distributed benchmark --help
 ```
 
 ## Logging and Debugging
@@ -806,22 +733,17 @@ export MALLOC_CHECK_=2
 
 # Profile performance
 cargo flamegraph --bin inferno -- serve
-
-# Generate debug report
-inferno diagnostics generate-report --output debug_report.zip
 ```
 
 ### Log Analysis
 
 ```bash
-# Search logs for errors
+# Logs are written to stdout/stderr (and any file you redirect to).
+# If running under systemd, use journalctl:
+journalctl -u inferno -f
+
+# Search a log file for errors
 grep -i "error\|failed\|panic" /var/log/inferno/inferno.log
-
-# Analyze log patterns
-inferno logs analyze --pattern "inference.*latency" --period 24h
-
-# Export structured logs
-inferno logs export --format json --since 1h > logs.json
 
 # Monitor logs in real-time
 tail -f /var/log/inferno/inferno.log | grep -E "(ERROR|WARN|inference)"
@@ -832,17 +754,18 @@ tail -f /var/log/inferno/inferno.log | grep -E "(ERROR|WARN|inference)"
 ### Collect Debug Information
 
 ```bash
-# Generate comprehensive debug report
-inferno diagnostics collect-all --output debug_$(date +%Y%m%d).tar.gz
+# Capture system and GPU information
+inferno gpu list
+inferno config show
 
-# Include system information
-inferno diagnostics system-info --detailed
+# Profile inference performance
+inferno optimization profile --model model.gguf --detailed
 
-# Export configuration (sanitized)
-inferno config export --sanitize --output config_export.toml
+# Export configuration (redact secrets before sharing)
+inferno config show > config_export.toml
 
-# Generate performance profile
-inferno diagnostics performance-profile --duration 300s
+# Export a monitoring/metrics snapshot
+inferno metrics snapshot
 ```
 
 ### Support Channels
@@ -860,19 +783,12 @@ inferno diagnostics performance-profile --duration 300s
    cargo build --release
    ```
 
-2. **Check known issues**:
+2. **Run health checks**:
    ```bash
-   inferno known-issues --check
+   inferno observability health
+   inferno monitor status
    ```
 
-3. **Run diagnostics**:
-   ```bash
-   inferno diagnostics health-check --comprehensive
-   ```
+3. **Collect logs** (from stdout, your log file, or journalctl) and
 
-4. **Collect logs**:
-   ```bash
-   inferno logs export --since 24h --level error,warn
-   ```
-
-5. **Sanitize sensitive data** before sharing logs or configurations
+4. **Sanitize sensitive data** before sharing logs or configurations

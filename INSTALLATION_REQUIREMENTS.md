@@ -160,7 +160,7 @@ choco install -y vcredist140
 
 ## Rust Installation
 
-Inferno requires Rust 1.70 or later.
+Inferno requires Rust 1.85 or later.
 
 ```bash
 # Install Rust via rustup
@@ -421,7 +421,7 @@ docker run -d \
 
 ```dockerfile
 # Dockerfile
-FROM rust:1.75 as builder
+FROM rust:1.85 as builder
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
@@ -646,30 +646,24 @@ inferno --help
 # Validate configuration
 inferno config validate
 
-# Test backend functionality
-inferno backends test
+# List available models (confirms the models directory is readable)
+inferno models list
 
 # Check GPU availability
-inferno gpu info
-
-# Run health check
-inferno health check
+inferno gpu list
 ```
 
 ### Performance Testing
 
 ```bash
-# Benchmark system performance
-inferno benchmark system
+# Benchmark a model (default 10 iterations, 100 tokens)
+inferno bench --model test-model.gguf
 
-# Test model loading
-inferno benchmark model-loading --model test-model.gguf
+# Benchmark inference with a specific prompt and token count
+inferno bench --model test-model.gguf --prompt "Hello!" --tokens 200
 
-# Test inference performance
-inferno benchmark inference --model test-model.gguf --prompts test-prompts.txt
-
-# Stress test
-inferno benchmark stress --duration 60s --concurrent 10
+# Longer run with more iterations and JSON output for comparison
+inferno bench --model test-model.gguf --iterations 50 --output-json bench.json
 ```
 
 ## Troubleshooting

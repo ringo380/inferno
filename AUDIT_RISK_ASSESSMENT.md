@@ -50,25 +50,20 @@
 
 ### Phase 1: Immediate Rollback (5 minutes)
 ```bash
-# Disable all new features immediately
-inferno audit config set compression_enabled=false
-inferno audit config set encryption_enabled=false
-inferno audit config set alerting.enabled=false
+# Disable compression immediately
+inferno audit configure --compression false
 
-# Restart audit system
-systemctl restart inferno-audit
+# To disable encryption or alerting, edit the [audit] section of the
+# config file (~/.inferno.toml); changes take effect on the next run.
+
+# Or disable audit logging entirely
+inferno audit configure --enable false
 ```
 
 ### Phase 2: Data Recovery (15 minutes)
 ```bash
-# Decompress existing logs if needed
-find ./logs/audit -name "*.log" -exec inferno audit decompress {} \;
-
-# Decrypt existing logs if needed
-find ./logs/audit -name "*.log" -exec inferno audit decrypt {} \;
-
 # Verify data integrity
-inferno audit verify --all
+inferno audit validate --check-gaps --verify-timestamps
 ```
 
 ### Phase 3: Code Rollback (30 minutes)
@@ -85,11 +80,9 @@ cargo build --release --no-default-features
 
 ### Phase 4: Configuration Cleanup (10 minutes)
 ```bash
-# Remove new configuration options
-inferno audit config migrate --to-version 1.0
-
-# Update documentation
-./scripts/update-docs.sh --version 1.0
+# Remove the new options from the [audit] section of the config file
+# (~/.inferno.toml), then validate the result
+inferno config validate
 ```
 
 ## 🔍 Monitoring Checklist
@@ -128,14 +121,13 @@ inferno audit config migrate --to-version 1.0
 
 #### High CPU Usage from Compression
 ```bash
-# Reduce compression level
-inferno audit config set compression_level=3
+# Disable compression
+inferno audit configure --compression false
 
-# Switch to faster algorithm
-inferno audit config set compression_method="Gzip"
-
-# Increase batch size to reduce frequency
-inferno audit config set batch_size=2000
+# Or lower the compression level in the [audit] section of the
+# config file (~/.inferno.toml):
+#   [audit]
+#   compression_level = 3
 ```
 
 #### Alert Delivery Failures
@@ -143,24 +135,18 @@ inferno audit config set batch_size=2000
 # Check network connectivity
 curl -v "https://your-webhook-endpoint.com"
 
-# Test SMTP configuration
-inferno audit alerts email test
-
 # Verify credentials
 echo $INFERNO_SMTP_PASSWORD | wc -c
 ```
 
 #### Encryption Key Issues
 ```bash
-# Validate current key
-inferno audit encryption validate-key
-
-# Rotate to new key
-NEW_KEY=$(inferno audit encryption generate-key)
+# Rotate to a new key
+NEW_KEY=$(openssl rand -base64 32)
 export INFERNO_AUDIT_ENCRYPTION_KEY="$NEW_KEY"
 
-# Test encryption/decryption
-inferno audit encryption test
+# Verify key format (should be 44 characters base64)
+echo $INFERNO_AUDIT_ENCRYPTION_KEY | wc -c
 ```
 
 #### Storage Issues
@@ -169,10 +155,10 @@ inferno audit encryption test
 df -h ./logs/audit
 
 # Force cleanup of old files
-inferno audit cleanup --force --older-than 30d
+inferno audit cleanup --older-than-days 30 --force
 
 # Adjust retention policy
-inferno audit config set retention_days=7
+inferno audit configure --retention-days 7
 ```
 
 ## 📊 Success Metrics
@@ -219,14 +205,11 @@ inferno audit config set retention_days=7
 
 ### Emergency Procedures
 ```bash
-# Emergency disable all new features
-inferno audit emergency-disable
+# Disable audit logging immediately
+inferno audit configure --enable false
 
-# Emergency data recovery
-inferno audit emergency-recover --from-backup
-
-# Emergency rollback
-./scripts/emergency-rollback.sh --to-version stable
+# Validate existing logs
+inferno audit validate
 ```
 
 This risk assessment ensures that the audit system implementation is robust, secure, and can be safely deployed with minimal risk to the production environment.

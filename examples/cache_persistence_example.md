@@ -87,17 +87,30 @@ The cache system creates the following files:
 
 ## CLI Usage
 
+Configuration is file-based. Enable cache persistence by editing the `[cache]`
+section of your config file (`.inferno.toml` in the current directory, or
+`~/.inferno.toml`):
+
+```toml
+# ~/.inferno.toml
+[cache]
+persist_cache = true
+cache_dir = "~/.cache/inferno"
+```
+
+Cache runtime settings (model limits, TTL, warmup) can also be adjusted with
+`inferno cache configure`:
+
 ```bash
-# Enable cache persistence
-inferno config set cache.persist_cache true
-inferno config set cache.cache_dir ~/.cache/inferno
+# Configure cache limits and warmup
+inferno cache configure --max-models 10 --ttl-seconds 3600 --warmup true
 
 # View cache statistics
 inferno cache stats
 
-# Manually save cache
-inferno cache save
-
 # Clear cache
 inferno cache clear
 ```
+
+The cache is saved automatically (periodically and on shutdown), so there is no
+manual save command.

@@ -1,4 +1,4 @@
-# Inferno v0.8.0 Deployment Guide
+# Inferno v0.10.6 Deployment Guide
 
 ## Overview
 
@@ -42,7 +42,7 @@ docker-compose ps
 mkdir -p data/{models,cache,queue,logs,prometheus}
 
 # Build production image
-docker buildx build --platform linux/amd64,linux/arm64 -t inferno:0.8.0 .
+docker buildx build --platform linux/amd64,linux/arm64 -t inferno:0.10.6 .
 
 # Run with production configuration (3 replicas + LB + monitoring)
 docker-compose -f docker-compose.prod.yml up -d
@@ -119,7 +119,7 @@ Docker health checks are configured:
 
 ```dockerfile
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
+    CMD curl -f http://localhost:8080/health || exit 1
 ```
 
 - **Interval**: Check every 30 seconds
@@ -179,7 +179,7 @@ deploy:
 
 | Port | Service | Purpose |
 |------|---------|---------|
-| 8000 | API | Main inference API |
+| 8080 | API | Main inference API |
 | 9090 | Prometheus | Metrics collection |
 | 80 | Nginx (Prod) | HTTP load balancer |
 | 443 | Nginx (Prod) | HTTPS load balancer |
@@ -234,7 +234,7 @@ docker volume inspect inferno_models
 docker inspect --format='{{.State.Health.Status}}' inferno
 
 # Test health endpoint
-curl http://localhost:8000/health
+curl http://localhost:8080/health
 
 # View logs
 docker logs inferno
@@ -297,7 +297,7 @@ docker-compose logs inferno
 docker images inferno
 
 # Verify no port conflicts
-docker ps | grep 8000
+docker ps | grep 8080
 
 # Try building again
 docker-compose build --no-cache
@@ -320,13 +320,13 @@ docker-compose restart inferno
 
 ```bash
 # Test health endpoint manually
-docker exec inferno curl http://localhost:8000/health
+docker exec inferno curl http://localhost:8080/health
 
 # View detailed container health
 docker inspect inferno | grep -A 10 Health
 
-# Check if port 8000 is accessible
-docker exec inferno netstat -tlnp | grep 8000
+# Check if port 8080 is accessible
+docker exec inferno netstat -tlnp | grep 8080
 ```
 
 ### Slow inference
@@ -335,8 +335,8 @@ docker exec inferno netstat -tlnp | grep 8000
 # Check resource usage
 docker stats inferno
 
-# Monitor queue
-docker exec inferno curl http://localhost:8000/metrics/queue/status
+# Inspect metrics (queue depth, request counts, latency) as JSON
+docker exec inferno curl http://localhost:8080/metrics/json
 
 # Check logs for errors
 docker-compose logs inferno | grep -i error
@@ -461,5 +461,5 @@ docker system prune -a
 
 ---
 
-**Last Updated**: 2024-Q4
-**Inferno Version**: v0.8.0
+**Last Updated**: 2026-07
+**Inferno Version**: v0.10.6

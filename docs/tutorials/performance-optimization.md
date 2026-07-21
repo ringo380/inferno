@@ -1,6 +1,6 @@
 # ⚡ Performance Optimization Tutorial
 
-Transform your Inferno deployment from good to blazing fast with proven optimization techniques. Achieve 10x performance improvements through hardware acceleration, model optimization, and intelligent caching.
+Transform your Inferno deployment from good to blazing fast with proven optimization techniques. Achieve large performance improvements through hardware acceleration, model optimization, and intelligent caching.
 
 ## Overview
 
@@ -17,26 +17,43 @@ This comprehensive tutorial covers every aspect of Inferno performance optimizat
 **Time Required**: 45-60 minutes
 **Skill Level**: Intermediate to Advanced
 
+## Configuration Model
+
+Inferno reads configuration from `.inferno.toml` (project), `~/.inferno.toml` (user), or
+`~/.config/inferno/config.toml` (global), with environment variables (prefixed `INFERNO_`) and
+CLI arguments taking precedence. There is no `inferno config set` command - edit the config file
+directly. Useful commands:
+
+```bash
+inferno config show       # Print the effective configuration
+inferno config init       # Generate a default config file
+inferno config validate   # Validate the config file
+```
+
 ## Quick Performance Wins
 
 Start with these high-impact optimizations for immediate results:
 
 ### 1. Enable GPU Acceleration (5 minutes)
 
+On Apple Silicon, Metal GPU acceleration is auto-detected and enabled by default. On NVIDIA/AMD
+set `gpu_enabled = true` in `.inferno.toml`:
+
+```toml
+# .inferno.toml
+[backend_config]
+gpu_enabled = true
+```
+
 ```bash
-# Check GPU availability
-inferno gpu status
+# Check detected GPUs
+inferno gpu list
 
-# Enable GPU acceleration
-inferno config set backend_config.gpu_enabled true
+# Run inference (uses the GPU automatically when enabled)
+inferno run --model gpt2 --prompt "test"
 
-# Verify GPU usage
-inferno run --model gpt2 --prompt "test" --verbose
-# Look for "Using GPU: NVIDIA GeForce RTX 4090" in output
-
-# Benchmark improvement
-inferno bench --model gpt2 --cpu-only  # Baseline
-inferno bench --model gpt2 --gpu       # GPU accelerated
+# Benchmark
+inferno bench --model gpt2
 ```
 
 **Expected Improvement**: 3-10x faster inference
@@ -44,28 +61,31 @@ inferno bench --model gpt2 --gpu       # GPU accelerated
 ### 2. Use Quantized Models (5 minutes)
 
 ```bash
-# Install quantized version of your model
-inferno install llama-2-7b-chat-q4_0  # 4-bit quantization
-inferno remove llama-2-7b-chat-f16    # Remove full precision
+# Install a quantized GGUF from HuggingFace (pick a specific file with --file)
+inferno models install TheBloke/Llama-2-7B-Chat-GGUF --file llama-2-7b-chat.Q4_0.gguf
 
-# Compare performance
-inferno bench --model llama-2-7b-chat-f16   # Full precision
-inferno bench --model llama-2-7b-chat-q4_0  # Quantized
+# Compare performance against another quantization
+inferno bench --model llama-2-7b-chat.Q4_0.gguf
 
-# Quality comparison (if needed)
-inferno run --model llama-2-7b-chat-f16 --prompt "Explain AI"
-inferno run --model llama-2-7b-chat-q4_0 --prompt "Explain AI"
+# Quality check
+inferno run --model llama-2-7b-chat.Q4_0.gguf --prompt "Explain AI"
 ```
+
+To remove a model, delete the file from your models directory manually, e.g.
+`rm ~/models/llama-2-7b-chat.f16.gguf`. There is no CLI remove/uninstall command.
 
 **Expected Improvement**: 2-4x faster, 75% less memory
 
 ### 3. Enable Response Caching (2 minutes)
 
-```bash
-# Enable and configure caching
-inferno config set cache.enabled true
-inferno config set cache.max_size_gb 20
+```toml
+# .inferno.toml
+[cache]
+enabled = true
+max_size_gb = 20
+```
 
+```bash
 # Test cache performance
 time inferno run --model gpt2 --prompt "What is AI?"  # First run
 time inferno run --model gpt2 --prompt "What is AI?"  # Cached run
@@ -115,8 +135,9 @@ rocm-smi
 #### Apple Silicon Optimization
 
 ```bash
-# Enable Metal Performance Shaders
-export PYTORCH_ENABLE_MPS_FALLBACK=1
+# Metal GPU acceleration is auto-detected and enabled by default on Apple Silicon.
+# Confirm the GPU is detected:
+inferno gpu list
 
 # Monitor GPU usage
 sudo powermetrics --samplers gpu_power -n 1
@@ -125,7 +146,7 @@ sudo powermetrics --samplers gpu_power -n 1
 ### GPU Configuration
 
 ```toml
-# inferno.toml - GPU optimization
+# .inferno.toml - GPU optimization
 [backend_config]
 gpu_enabled = true
 gpu_layers = 35          # Number of layers to run on GPU
@@ -141,19 +162,26 @@ allow_mixed_precision = true # Use mixed precision for speed
 
 ### Multi-GPU Configuration
 
+Set the parallelism in `.inferno.toml`:
+
+```toml
+# .inferno.toml
+[backend_config]
+tensor_parallel_size = 4   # 4 GPUs
+gpu_memory_fraction = 0.8  # Conservative memory usage
+```
+
 ```bash
 # Check available GPUs
 inferno gpu list
 
-# Configure multi-GPU inference
-inferno config set backend_config.tensor_parallel_size 4  # 4 GPUs
-inferno config set backend_config.gpu_memory_fraction 0.8 # Conservative memory usage
-
-# Test multi-GPU performance
-inferno bench --model llama-2-70b --multi-gpu
+# Benchmark
+inferno bench --model llama-2-70b
 
 # Monitor GPU utilization
 watch -n 1 nvidia-smi
+# or, using Inferno's own monitor:
+inferno gpu monitor
 ```
 
 ## Model Optimization
@@ -162,7 +190,7 @@ watch -n 1 nvidia-smi
 
 Quantization reduces model precision to improve speed and reduce memory usage:
 
-#### Available Quantization Types
+#### Quantization Types
 
 | Type | Precision | Speed | Memory | Quality |
 |------|-----------|-------|--------|---------|
@@ -171,47 +199,46 @@ Quantization reduces model precision to improve speed and reduce memory usage:
 | **q8_0** | 8-bit | 2x | 25% | 98% |
 | **q5_1** | 5-bit | 3x | 16% | 95% |
 | **q4_0** | 4-bit | 4x | 12.5% | 90% |
-| **q2_k** | 2-bit | 6x | 6.25% | 70% |
+
+Conversion targets supported by `inferno convert`: `q4-0`, `q4-1`, `q5-0`, `q5-1`, `q8-0`,
+`f16`, `f32`, `int8`, `int16`.
 
 #### Quantization Examples
 
 ```bash
-# Convert existing model to different quantizations
-inferno convert llama-2-7b-f16.gguf llama-2-7b-q4_0.gguf --quantization q4_0
-inferno convert llama-2-7b-f16.gguf llama-2-7b-q8_0.gguf --quantization q8_0
+# Convert an existing model to a different quantization
+inferno convert quantize --quantization q4-0 llama-2-7b-f16.gguf llama-2-7b-q4_0.gguf
+inferno convert quantize --quantization q8-0 llama-2-7b-f16.gguf llama-2-7b-q8_0.gguf
 
-# Install pre-quantized models
-inferno install microsoft/DialoGPT-medium-q4_0
-inferno install codellama/CodeLlama-7b-Instruct-q8_0
+# Install a pre-quantized GGUF from HuggingFace
+inferno models install TheBloke/CodeLlama-7B-Instruct-GGUF --file codellama-7b-instruct.Q8_0.gguf
 
 # Batch quantize multiple models
-models=("gpt2" "bert-base" "microsoft/DialoGPT-medium")
-for model in "${models[@]}"; do
-    inferno convert "$model" "${model}-q4_0" --quantization q4_0
+for model in gpt2 bert-base dialogpt-medium; do
+    inferno convert quantize --quantization q4-0 "${model}.gguf" "${model}-q4_0.gguf"
 done
 
 # Compare quantization impact
-inferno bench --model llama-2-7b-f16   # Baseline
-inferno bench --model llama-2-7b-q8_0  # High quality
-inferno bench --model llama-2-7b-q4_0  # Balanced
-inferno bench --model llama-2-7b-q2_k  # Maximum speed
+inferno bench --model llama-2-7b-f16.gguf   # Baseline
+inferno bench --model llama-2-7b-q8_0.gguf  # High quality
+inferno bench --model llama-2-7b-q4_0.gguf  # Balanced
 ```
 
-#### Custom Quantization
+#### Advanced Conversion Options
 
 ```bash
-# Advanced quantization options
-inferno convert model.gguf model-optimized.gguf \
-  --quantization q4_0 \
+# Convert with a target format and optimization level
+inferno convert model \
+  --format gguf \
+  --quantization q4-0 \
   --optimization aggressive \
-  --target-platform gpu \
-  --preserve-layers "attention,feedforward"
+  model.safetensors model-optimized.gguf
 
-# Quantization with calibration data
-inferno convert model.gguf model-calibrated.gguf \
-  --quantization q4_0 \
-  --calibration-data calibration.jsonl \
-  --calibration-samples 1000
+# Target a specific precision
+inferno convert model \
+  --format gguf \
+  --precision float16 \
+  model.safetensors model-fp16.gguf
 ```
 
 ### Model Pruning
@@ -219,19 +246,15 @@ inferno convert model.gguf model-calibrated.gguf \
 Remove unnecessary model weights for faster inference:
 
 ```bash
-# Structural pruning (remove entire neurons/layers)
-inferno optimization prune llama-2-7b --ratio 0.2 --structured
-inferno optimization prune bert-base --heads 8 --layers 10
+# Prune to a target sparsity, preserving an accuracy threshold
+inferno optimization prune --input llama-2-7b.gguf --output llama-2-7b-pruned.gguf --sparsity 0.3
+inferno optimization prune --input gpt2.gguf --output gpt2-pruned.gguf --sparsity 0.5 --accuracy-threshold 0.9
 
-# Magnitude-based pruning (remove low-importance weights)
-inferno optimization prune gpt2 --ratio 0.3 --magnitude
-inferno optimization prune model --sparsity 0.5 --gradual
-
-# Knowledge distillation (train smaller model from larger one)
+# Knowledge distillation (train a smaller student model from a larger teacher)
 inferno optimization distill \
-  --teacher llama-2-70b \
-  --student llama-2-7b \
-  --training-data training.jsonl
+  --teacher llama-2-70b.gguf \
+  --student llama-2-7b.gguf \
+  --output llama-2-7b-distilled.gguf
 ```
 
 ### Model Format Optimization
@@ -240,17 +263,20 @@ Choose the optimal format for your use case:
 
 ```bash
 # Convert to GGUF for CPU inference
-inferno convert model.pt model.gguf --format gguf --optimization cpu
+inferno convert model --format gguf --optimization balanced model.pt model.gguf
 
 # Convert to ONNX for cross-platform deployment
-inferno convert model.pt model.onnx --format onnx --optimization balanced
+inferno convert model --format onnx --optimization balanced model.pt model.onnx
 
-# Optimize for specific hardware
-inferno convert model.gguf model-gpu.onnx \
+# Optimize for GPU with half precision
+inferno convert model \
   --format onnx \
-  --optimization gpu \
-  --target-device cuda \
-  --fp16
+  --optimization aggressive \
+  --precision float16 \
+  model.gguf model-gpu.onnx
+
+# Graph-level optimizations
+inferno convert optimize --merge-ops --constant-folding --operator-fusion model.gguf model-opt.gguf
 ```
 
 ## Caching Optimization
@@ -258,7 +284,7 @@ inferno convert model.gguf model-gpu.onnx \
 ### Multi-Tier Caching Strategy
 
 ```toml
-# inferno.toml - Advanced caching configuration
+# .inferno.toml - Advanced caching configuration
 [cache]
 enabled = true
 max_size_gb = 50
@@ -288,19 +314,18 @@ similarity_threshold = 0.95
 ### Cache Warming Strategies
 
 ```bash
-# Pre-load popular models
-inferno cache warm --popular --top 10
+# Warm the cache using a strategy
+inferno cache warmup --strategy usage-based
 
 # Warm specific models
-inferno cache warm microsoft/DialoGPT-medium gpt2 bert-base
+inferno cache warmup gpt2.gguf bert-base.gguf dialogpt-medium.gguf
 
 # Scheduled cache warming
 cat > warm_cache.sh << 'EOF'
 #!/bin/bash
 # Run daily at 2 AM
-models=("gpt2" "microsoft/DialoGPT-medium" "bert-base")
-for model in "${models[@]}"; do
-    inferno cache warm "$model"
+for model in gpt2.gguf dialogpt-medium.gguf bert-base.gguf; do
+    inferno cache warmup "$model"
 done
 EOF
 
@@ -308,45 +333,31 @@ EOF
 echo "0 2 * * * /path/to/warm_cache.sh" | crontab -
 ```
 
-### Intelligent Cache Management
+### Cache Monitoring
 
 ```bash
-# Cache analytics and optimization
-inferno cache stats                    # Show cache hit rates
-inferno cache analyze                  # Analyze cache performance
-inferno cache optimize                 # Automatic optimization
+# Cache analytics
+inferno cache stats      # Show cache hit rates and status
+inferno cache monitor    # Real-time cache usage
+inferno cache benchmark  # Benchmark cache performance
 
-# Cache partitioning by model
-inferno cache partition --model gpt2 --size 4GB
-inferno cache partition --model llama-2-7b --size 8GB
-
-# Cache prefetching based on patterns
-inferno cache config --prefetch-enabled true
-inferno cache config --prefetch-lookahead 3
-inferno cache config --prefetch-threshold 0.8
+# Clear the cache when needed
+inferno cache clear            # Clear the model cache
+inferno cache clear --force    # Clear even always-warm models
 ```
 
-### Response Cache Optimization
+### Response Cache
 
-```bash
-# Enable response caching with deduplication
-inferno config set response_cache.enabled true
-inferno config set response_cache.deduplication true
-inferno config set response_cache.compression true
+Response caching and deduplication are configured in `.inferno.toml`:
 
-# Configure cache invalidation
-inferno config set response_cache.ttl 1800  # 30 minutes
-inferno config set response_cache.max_entries 100000
-
-# Cache warming with common queries
-cat > common_queries.jsonl << 'EOF'
-{"prompt": "What is artificial intelligence?"}
-{"prompt": "Explain machine learning"}
-{"prompt": "How does deep learning work?"}
-{"prompt": "Write a Python function"}
-EOF
-
-inferno cache warm-responses --queries common_queries.jsonl --model gpt2
+```toml
+# .inferno.toml
+[response_cache]
+enabled = true
+deduplication = true
+compression = true
+ttl = 1800          # 30 minutes
+max_entries = 100000
 ```
 
 ## System-Level Optimization
@@ -378,13 +389,22 @@ sudo mount -t hugetlbfs hugetlbfs /mnt/hugepages
 echo 1 | sudo tee /proc/sys/vm/swappiness  # Minimize swap usage
 echo 1 | sudo tee /proc/sys/vm/vfs_cache_pressure  # Reduce cache pressure
 
-# Memory management settings
-inferno config set backend_config.memory_pool_size "32GB"
-inferno config set backend_config.memory_mapping true
-inferno config set backend_config.lazy_loading true
-
 # Monitor memory usage
 watch -n 1 'ps aux | grep inferno | head -1; free -h'
+
+# Inspect and defragment Inferno's memory pools
+inferno optimization memory status
+inferno optimization memory defragment
+```
+
+Memory management settings live in `.inferno.toml`:
+
+```toml
+# .inferno.toml
+[backend_config]
+memory_pool_size = "32GB"
+memory_mapping = true
+lazy_loading = true
 ```
 
 ### I/O Optimization
@@ -399,10 +419,16 @@ echo noop | sudo tee /sys/block/nvme0n1/queue/scheduler
 
 # Optimize file system
 sudo mount -o remount,noatime,nodiratime /fast-ssd
+```
 
-# Configure Inferno for fast I/O
-inferno config set models_dir "/fast-ssd/inferno/models"
-inferno config set cache.disk.location "/fast-ssd/inferno/cache"
+Point Inferno at the fast storage in `.inferno.toml`:
+
+```toml
+# .inferno.toml
+models_dir = "/fast-ssd/inferno/models"
+
+[cache.disk]
+location = "/fast-ssd/inferno/cache"
 ```
 
 ### Network Optimization
@@ -414,36 +440,44 @@ echo 'net.core.wmem_max = 268435456' | sudo tee -a /etc/sysctl.conf
 echo 'net.ipv4.tcp_rmem = 4096 87380 268435456' | sudo tee -a /etc/sysctl.conf
 echo 'net.ipv4.tcp_wmem = 4096 65536 268435456' | sudo tee -a /etc/sysctl.conf
 sudo sysctl -p
+```
 
-# Configure connection pooling
-inferno config set server.max_connections 2000
-inferno config set server.keep_alive_timeout 30
-inferno config set server.connection_pool_size 100
+Server connection settings live in `.inferno.toml`:
+
+```toml
+# .inferno.toml
+[server]
+max_connections = 2000
+keep_alive_timeout = 30
+connection_pool_size = 100
 ```
 
 ## Application-Level Optimization
 
 ### Batch Processing Optimization
 
+```toml
+# .inferno.toml - batching
+[backend_config]
+batch_size = 128            # For GPU (use 32 for CPU)
+prefill_batch_size = 256
+dynamic_batching = true
+max_batch_delay_ms = 50
+batch_timeout_ms = 100
+```
+
 ```bash
-# Optimize batch sizes for throughput
-inferno config set backend_config.batch_size 128      # For GPU
-inferno config set backend_config.batch_size 32       # For CPU
-inferno config set backend_config.prefill_batch_size 256
+# Benchmark throughput
+inferno bench --model llama-2-7b
 
-# Dynamic batching
-inferno config set backend_config.dynamic_batching true
-inferno config set backend_config.max_batch_delay_ms 50
-inferno config set backend_config.batch_timeout_ms 100
-
-# Test batch performance
-inferno bench --model llama-2-7b --batch-size 64 --concurrent 8
+# Tune dynamic batching interactively
+inferno optimization batch --help
 ```
 
 ### Async Processing Optimization
 
 ```toml
-# inferno.toml - Async optimization
+# .inferno.toml - Async optimization
 [server]
 workers = 16              # 2x CPU cores
 async_workers = 32        # 4x CPU cores
@@ -458,92 +492,82 @@ async_timeout_ms = 30000
 
 ### Model Loading Optimization
 
-```bash
-# Parallel model loading
-inferno config set models.parallel_loading true
-inferno config set models.loading_threads 4
+Models are loaded on demand at inference time. Tune loading behavior in `.inferno.toml`:
 
-# Model preloading
-inferno config set models.preload_popular true
-inferno config set models.preload_count 5
-
-# Lazy loading optimization
-inferno config set models.lazy_loading true
-inferno config set models.unload_threshold 0.8  # Unload at 80% memory
+```toml
+# .inferno.toml
+[backend_config]
+memory_mapping = true
+lazy_loading = true
 ```
 
 ## Distributed Performance
 
-### Multi-Node Scaling
+### Multi-Worker Serving
 
 ```bash
-# Set up distributed cluster
-inferno distributed cluster init --master-node
+# Start the HTTP server with distributed worker pools
+inferno serve --distributed --workers 8
 
-# Add worker nodes
-inferno distributed worker start --master-url http://master:8080
+# Or run a standalone distributed inference server
+inferno distributed start --workers 8 --load-balancing --preload-model llama-2-7b.gguf
 
-# Configure load balancing
-inferno distributed balance --strategy weighted
-inferno distributed balance --weights "node1:3,node2:2,node3:1"
+# Inspect worker statistics
+inferno distributed stats
 
-# Test distributed performance
-inferno bench --distributed --nodes 3 --model llama-2-7b
+# Benchmark distributed throughput
+inferno distributed benchmark --model llama-2-7b.gguf --concurrent 10 --requests 5
 ```
 
-### Model Sharding
+### GPU Parallelism
 
-```bash
-# Shard large models across multiple GPUs
-inferno distributed shard llama-2-70b \
-  --tensor-parallel 4 \
-  --pipeline-parallel 2 \
-  --nodes 2
+Configure tensor/pipeline parallelism in `.inferno.toml`:
 
-# Optimize communication
-inferno config set distributed.communication_backend "nccl"
-inferno config set distributed.compression true
+```toml
+# .inferno.toml
+[backend_config]
+tensor_parallel_size = 4
+pipeline_parallel_size = 2
 ```
 
 ## Benchmarking and Monitoring
 
-### Comprehensive Benchmarking
+### Benchmarking
 
 ```bash
 # Basic performance benchmark
 inferno bench --model gpt2
 
-# Detailed benchmark with metrics
+# Benchmark with more iterations and JSON output for tracking
 inferno bench --model llama-2-7b \
   --iterations 100 \
-  --concurrent 8 \
-  --detailed \
-  --output benchmark_results.json
+  --tokens 128 \
+  --output-json benchmark_results.json
 
-# Memory benchmark
-inferno bench --model llama-2-7b --memory --profile
-
-# GPU benchmark
-inferno bench --model llama-2-7b --gpu --temperature
+# Memory profiling
+inferno performance-benchmark memory-profile --model llama-2-7b --cycles 50 --track
 
 # Stress test
-inferno bench --model gpt2 --stress --duration 300s
+inferno performance-benchmark stress --model gpt2 --duration 300 --clients 10
 ```
 
 ### Performance Monitoring
 
 ```bash
-# Real-time performance monitoring
-inferno monitor start --metrics all --interval 5s
+# Real-time monitoring
+inferno monitor watch --interval 5
+
+# Monitoring dashboard (HTTP)
+inferno monitor dashboard --port 3000
 
 # Performance profiling
-inferno profile --model llama-2-7b --duration 60s --output profile.json
+inferno optimization profile --model llama-2-7b --detailed --format json
 
-# Continuous monitoring setup
+# Periodic metric snapshots
 cat > monitor.sh << 'EOF'
 #!/bin/bash
 while true; do
-    inferno metrics snapshot --output "metrics_$(date +%s).json"
+    inferno metrics snapshot --pretty > "metrics_$(date +%s).json"
     sleep 60
 done
 EOF
@@ -552,108 +576,100 @@ EOF
 ### Performance Baselines
 
 ```bash
-# Establish performance baselines
-inferno bench --all --baseline --output baselines.json
+# Establish a performance baseline
+inferno performance-benchmark baseline --output performance_baseline --duration 30
 
-# Compare against baseline
-inferno bench --model gpt2 --compare baselines.json
+# Run a benchmark that produces current results
+inferno performance-benchmark benchmark --output benchmark_results
 
-# Regression testing
-inferno test performance --baseline baselines.json --threshold 0.05
+# Compare current results against the baseline (regression testing)
+inferno performance-benchmark compare \
+  --current benchmark_results/results.json \
+  --baseline performance_baseline/results.json \
+  --threshold 5.0 \
+  --report
 ```
 
 ## Advanced Optimization Techniques
 
-### Custom CUDA Kernels
+### Precision and Mixed-Precision
 
-For maximum performance with NVIDIA GPUs:
-
-```bash
-# Enable custom CUDA kernels
-inferno config set backend_config.custom_kernels true
-inferno config set backend_config.kernel_optimization "aggressive"
-
-# Flash Attention optimization
-inferno config set backend_config.flash_attention true
-inferno config set backend_config.flash_attention_v2 true
-```
-
-### Model Compilation
-
-```bash
-# Compile models for target hardware
-inferno compile llama-2-7b --target cuda --optimization O3
-inferno compile gpt2 --target cpu --optimization O2
-
-# Ahead-of-time compilation
-inferno compile --all --target auto --cache
+```toml
+# .inferno.toml
+[backend_config]
+mixed_precision = true
+fp16 = true
+allow_mixed_precision = true
 ```
 
 ### Memory Optimization Techniques
 
 ```bash
-# Gradient checkpointing (for fine-tuning)
-inferno config set training.gradient_checkpointing true
+# Inspect memory status and trigger defragmentation
+inferno optimization memory status
+inferno optimization memory defragment
 
-# Mixed precision training/inference
-inferno config set backend_config.mixed_precision true
-inferno config set backend_config.fp16 true
-
-# Memory defragmentation
-inferno memory defrag --schedule daily
-inferno memory gc --aggressive
+# Apply a comprehensive optimization pass to a model
+inferno optimization optimize --help
 ```
 
 ## Real-World Optimization Examples
 
 ### Example 1: High-Throughput Chat Service
 
+```toml
+# .inferno.toml - chat service handling many concurrent users
+[server]
+workers = 32
+max_connections = 5000
+
+[backend_config]
+batch_size = 256
+
+[cache]
+enabled = true
+max_size_gb = 64
+
+[response_cache]
+enabled = true
+ttl = 1800
+```
+
 ```bash
-# Configuration for chat service handling 1000+ concurrent users
-inferno config set server.workers 32
-inferno config set server.max_connections 5000
-inferno config set backend_config.batch_size 256
-inferno config set cache.enabled true
-inferno config set cache.max_size_gb 64
+# Use a quantized model for speed
+inferno models install TheBloke/Llama-2-7B-Chat-GGUF --file llama-2-7b-chat.Q4_0.gguf
 
-# Use quantized models for speed
-inferno install microsoft/DialoGPT-large-q4_0
-
-# Enable response caching for common queries
-inferno config set response_cache.enabled true
-inferno config set response_cache.ttl 1800
-
-# Result: 500ms -> 50ms average latency, 10x throughput increase
+# Serve with worker pools
+inferno serve --distributed --workers 32
 ```
 
 ### Example 2: Code Generation Service
 
 ```bash
-# Optimize for code generation workloads
-inferno install codellama/CodeLlama-7b-Instruct-q8_0  # High quality for code
-inferno config set backend_config.context_size 8192   # Longer context for code
-inferno config set backend_config.temperature 0.1     # Lower temperature for code
-
-# Enable specialized caching for code patterns
-inferno cache config --code-aware true
-inferno cache warm-code-patterns --languages python,javascript,rust
-
-# Result: 2s -> 200ms generation time, 90% cache hit rate
+# High-quality quantization for code
+inferno models install TheBloke/CodeLlama-7B-Instruct-GGUF --file codellama-7b-instruct.Q8_0.gguf
 ```
 
-### Example 3: Multi-Modal Processing
+```toml
+# .inferno.toml
+[backend_config]
+context_size = 8192   # Longer context for code
+temperature = 0.1     # Lower temperature for deterministic code
+```
 
 ```bash
-# Optimize for vision + text processing
-inferno install clip-vit-large-patch14
-inferno config set backend_config.multi_modal true
-inferno config set backend_config.vision_batch_size 64
+# Warm the cache before serving
+inferno cache warmup codellama-7b-instruct.Q8_0.gguf
+```
 
-# GPU optimization for vision models
-inferno config set backend_config.tensor_parallel_size 2
-inferno config set backend_config.vision_gpu_layers 24
+### Example 3: Image and Audio Input
 
-# Result: 5s -> 500ms for image + text processing
+Inferno's `run` command accepts non-text input types:
+
+```bash
+# Run inference on an image or audio file
+inferno run --model llava-model.gguf --input-type image --input photo.png
+inferno run --model whisper-model.gguf --input-type audio --input clip.wav
 ```
 
 ## Performance Troubleshooting
@@ -663,42 +679,61 @@ inferno config set backend_config.vision_gpu_layers 24
 #### Slow Model Loading
 
 ```bash
-# Diagnose
-inferno models benchmark-loading --all
+# Diagnose with a benchmark
+inferno bench --model llama-2-7b
 
-# Solutions
-inferno config set models.parallel_loading true
-inferno config set models.memory_mapping true
-inferno cache warm --all
+# Warm the cache
+inferno cache warmup --strategy usage-based
 
 # Move models to faster storage
 sudo mv /slow-disk/models/* /fast-ssd/models/
+```
+
+Enable memory mapping in `.inferno.toml`:
+
+```toml
+# .inferno.toml
+[backend_config]
+memory_mapping = true
 ```
 
 #### High Memory Usage
 
 ```bash
 # Diagnose
-inferno memory analyze --detailed
+inferno optimization memory status
 ps aux | grep inferno
 
-# Solutions
-inferno config set backend_config.context_size 2048  # Reduce context
-inferno models unload --unused  # Unload unused models
-inferno cache clear --old       # Clear old cache entries
+# Clear old cache entries
+inferno cache clear
+
+# Reduce the model's memory footprint by lowering context size in .inferno.toml
 ```
+
+```toml
+# .inferno.toml
+[backend_config]
+context_size = 2048
+```
+
+Models are loaded on demand and released automatically - there is no manual unload command.
 
 #### GPU Underutilization
 
 ```bash
 # Diagnose
 nvidia-smi dmon -s pucvmet -d 1
-inferno gpu analyze
+inferno gpu monitor
 
-# Solutions
-inferno config set backend_config.batch_size 128     # Increase batch size
-inferno config set backend_config.gpu_layers 35      # More layers on GPU
-inferno config set backend_config.tensor_parallel_size 2  # Multi-GPU
+# Increase batch size and GPU layers in .inferno.toml
+```
+
+```toml
+# .inferno.toml
+[backend_config]
+batch_size = 128
+gpu_layers = 35
+tensor_parallel_size = 2
 ```
 
 #### Network Bottlenecks
@@ -706,12 +741,16 @@ inferno config set backend_config.tensor_parallel_size 2  # Multi-GPU
 ```bash
 # Diagnose
 iftop -i eth0
-inferno network analyze
+```
 
-# Solutions
-inferno config set server.connection_pool_size 200
-inferno config set server.keep_alive_timeout 60
-inferno config set server.compression true
+Tune server connection settings in `.inferno.toml`:
+
+```toml
+# .inferno.toml
+[server]
+connection_pool_size = 200
+keep_alive_timeout = 60
+compression = true
 ```
 
 ### Performance Debugging
@@ -719,12 +758,10 @@ inferno config set server.compression true
 ```bash
 # Enable detailed logging
 export INFERNO_LOG_LEVEL=debug
-inferno serve --verbose
+export INFERNO_LOG_FORMAT=json
+inferno serve
 
-# Profiling mode
-inferno serve --profile --profile-output /tmp/profile.json
-
-# Memory debugging
+# Memory debugging with valgrind
 valgrind --tool=massif inferno serve
 ```
 
@@ -740,19 +777,24 @@ valgrind --tool=massif inferno serve
 | **Cache Hit Rate** | >80% | >95% | >70% | <50% |
 | **Memory Efficiency** | <16GB | <8GB | <32GB | >64GB |
 
-### Monitoring Dashboard
+### Monitoring and Alerts
 
 ```bash
-# Set up performance dashboard
-inferno dashboard performance --bind 0.0.0.0:3001
+# Start the monitoring dashboard
+inferno monitor dashboard --port 3001
 
-# Custom metrics
-inferno metrics define custom_latency --type histogram
-inferno metrics define cache_efficiency --type gauge
+# Configure alert thresholds
+inferno monitor configure \
+  --max-response-time 500 \
+  --min-throughput 100 \
+  --max-error-rate 5 \
+  --min-cache-hit-rate 70
 
-# Alerts
-inferno alerts create --metric latency --threshold 500ms --action email
-inferno alerts create --metric gpu_utilization --threshold 50% --action slack
+# List active alerts
+inferno monitor alerts
+
+# Generate a performance report
+inferno monitor report --hours 24 --detailed --recommendations
 ```
 
 ## Best Practices Summary
@@ -766,12 +808,12 @@ inferno alerts create --metric gpu_utilization --threshold 50% --action slack
 ### Model Optimization
 1. **Use quantized models** (q4_0 or q8_0) for best speed/quality balance
 2. **Convert to optimal formats** (GGUF for CPU, ONNX for cross-platform)
-3. **Enable model compilation** for target hardware
+3. **Apply graph optimizations** with `inferno convert optimize`
 4. **Implement model pruning** for specialized use cases
 
 ### Caching Strategy
 1. **Enable multi-tier caching** with memory and disk layers
-2. **Implement cache warming** for popular models and queries
+2. **Implement cache warming** for popular models
 3. **Use response deduplication** for repeated queries
 4. **Monitor cache hit rates** and optimize accordingly
 
@@ -803,4 +845,4 @@ Now that you've optimized your Inferno deployment:
 
 ---
 
-**🚀 Congratulations!** You've transformed your Inferno deployment into a high-performance AI infrastructure. Your optimizations should deliver significant improvements in speed, throughput, and resource efficiency. Continue monitoring and fine-tuning based on your specific workload patterns.
+**🚀 You've transformed your Inferno deployment into a high-performance AI infrastructure.** Continue monitoring and fine-tuning based on your specific workload patterns.

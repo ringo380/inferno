@@ -320,7 +320,7 @@ Export metrics to external systems:
 
 ```bash
 # Export to Prometheus format
-inferno metrics export --format prometheus > metrics.txt
+inferno metrics prometheus > metrics.txt
 
 # Integration with monitoring dashboard
 inferno performance-benchmark monitor \

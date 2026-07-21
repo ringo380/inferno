@@ -359,11 +359,11 @@ optimization:
 Measure end-to-end response time
 
 ```bash
-# Run latency benchmark (10 req/s, 5 minutes)
-inferno benchmark --scenario latency \
-  --request-rate 10 \
-  --duration 300 \
-  --output latency-results.json
+# Measure per-request latency (100 iterations, 128 tokens each)
+inferno bench --model my-model \
+  --iterations 100 \
+  --tokens 128 \
+  --output-json latency-results.json
 ```
 
 **Metrics:**
@@ -377,11 +377,11 @@ inferno benchmark --scenario latency \
 Find maximum requests per second
 
 ```bash
-# Run throughput benchmark (unlimited rate, 5 minutes)
-inferno benchmark --scenario throughput \
-  --concurrency 100 \
+# Stress test with 100 concurrent clients for 5 minutes
+inferno performance-benchmark stress \
+  --clients 100 \
   --duration 300 \
-  --output throughput-results.json
+  --model my-model
 ```
 
 **Metrics:**
@@ -395,12 +395,12 @@ inferno benchmark --scenario throughput \
 Test breaking point under increasing load
 
 ```bash
-# Ramp from 10 to 1000 req/s
-inferno benchmark --scenario load_ramp \
-  --initial-rate 10 \
-  --final-rate 1000 \
-  --ramp-duration 300 \
-  --output load-ramp-results.json
+# Drive heavy load to find the breaking point (200 clients, 2 req/s each)
+inferno performance-benchmark stress \
+  --clients 200 \
+  --rate 2.0 \
+  --duration 300 \
+  --model my-model
 ```
 
 **Metrics:**

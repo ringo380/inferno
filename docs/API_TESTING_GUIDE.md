@@ -156,7 +156,7 @@ RUST_LOG=debug cargo test --test feature_integration_tests -- --nocapture
 #### 1. List Available Models
 
 ```bash
-curl http://localhost:8000/v1/models
+curl http://localhost:8080/v1/models
 ```
 
 Expected response:
@@ -177,7 +177,7 @@ Expected response:
 #### 2. Simple Chat Completion
 
 ```bash
-curl http://localhost:8000/v1/chat/completions \
+curl http://localhost:8080/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
     "model": "llama-7b",
@@ -188,7 +188,7 @@ curl http://localhost:8000/v1/chat/completions \
 #### 3. Streaming Chat
 
 ```bash
-curl http://localhost:8000/v1/chat/completions \
+curl http://localhost:8080/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
     "model": "llama-7b",
@@ -200,7 +200,7 @@ curl http://localhost:8000/v1/chat/completions \
 #### 4. Embeddings
 
 ```bash
-curl http://localhost:8000/v1/embeddings \
+curl http://localhost:8080/v1/embeddings \
   -H "Content-Type: application/json" \
   -d '{
     "model": "text-embedding-ada-002",
@@ -211,7 +211,7 @@ curl http://localhost:8000/v1/embeddings \
 #### 5. Error Scenario - Invalid Temperature
 
 ```bash
-curl http://localhost:8000/v1/chat/completions \
+curl http://localhost:8080/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
     "model": "llama-7b",
@@ -227,7 +227,7 @@ Expected response: 400 Bad Request with validation error
 ```python
 import requests
 
-BASE_URL = "http://localhost:8000/v1"
+BASE_URL = "http://localhost:8080/v1"
 
 # Chat Completion
 response = requests.post(
@@ -270,7 +270,7 @@ print(f"Embedding dimension: {len(embedding)}")
 ### Test Using JavaScript/Node.js
 
 ```javascript
-const BASE_URL = "http://localhost:8000/v1";
+const BASE_URL = "http://localhost:8080/v1";
 
 // Chat Completion
 const response = await fetch(`${BASE_URL}/chat/completions`, {
@@ -317,7 +317,7 @@ while (true) {
 2. Open Postman
 3. Click "Import" → Select the JSON file
 4. Configure environment variable:
-   - Set `base_url` to `http://localhost:8000/v1`
+   - Set `base_url` to `http://localhost:8080/v1`
 
 ### Using Postman CLI
 
@@ -342,7 +342,7 @@ newman run docs/Inferno_API_Postman.json \
 
 | Variable | Value | Usage |
 |----------|-------|-------|
-| `base_url` | `http://localhost:8000/v1` | Base URL for all requests |
+| `base_url` | `http://localhost:8080/v1` | Base URL for all requests |
 | `model` | `llama-7b` | Default model |
 | `embedding_model` | `text-embedding-ada-002` | Embedding model |
 
@@ -364,7 +364,7 @@ pm.environment.set("request_id", "req_" + Math.random().toString(36).substr(2, 9
 
 ```bash
 # Test response time for chat completions
-time curl -X POST http://localhost:8000/v1/chat/completions \
+time curl -X POST http://localhost:8080/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{"model":"llama-7b","messages":[{"role":"user","content":"Hello"}]}'
 ```
@@ -374,7 +374,7 @@ time curl -X POST http://localhost:8000/v1/chat/completions \
 ```bash
 # Test 100 sequential requests
 for i in {1..100}; do
-  curl -s -X POST http://localhost:8000/v1/chat/completions \
+  curl -s -X POST http://localhost:8080/v1/chat/completions \
     -H "Content-Type: application/json" \
     -d '{"model":"llama-7b","messages":[{"role":"user","content":"Hi"}]}' > /dev/null
   echo "Request $i completed"
@@ -385,7 +385,7 @@ done
 
 ```bash
 # Test streaming throughput
-curl -X POST http://localhost:8000/v1/chat/completions \
+curl -X POST http://localhost:8080/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{"model":"llama-7b","messages":[{"role":"user","content":"Write 1000 words"}],"stream":true}' \
   | wc -l
@@ -401,7 +401,7 @@ curl -X POST http://localhost:8000/v1/chat/completions \
 # Install ab (comes with Apache)
 ab -n 100 -c 10 -p request.json \
   -T application/json \
-  http://localhost:8000/v1/chat/completions
+  http://localhost:8080/v1/chat/completions
 ```
 
 ### Using wrk
@@ -411,7 +411,7 @@ ab -n 100 -c 10 -p request.json \
 
 wrk -t4 -c100 -d30s \
   --script=test.lua \
-  http://localhost:8000/v1/models
+  http://localhost:8080/v1/models
 ```
 
 **test.lua:**
@@ -449,7 +449,7 @@ export let options = {
 
 export default function() {
   let response = http.post(
-    'http://localhost:8000/v1/chat/completions',
+    'http://localhost:8080/v1/chat/completions',
     JSON.stringify({
       model: 'llama-7b',
       messages: [{ role: 'user', content: 'Hello' }]

@@ -174,37 +174,37 @@ This document describes the implementation of the missing batch queue features i
 ### Basic Queue Operations
 ```bash
 # List all queues
-inferno batch-queue list-queues --detailed
+inferno queue list-queues
 
 # Monitor specific queue
-inferno batch-queue monitor queue-id --detailed --interval 2
+inferno queue monitor my-queue
 
 # Get queue metrics
-inferno batch-queue metrics queue-id --format json --historical
+inferno queue metrics my-queue
 ```
 
 ### Job Management
 ```bash
-# Follow job progress
-inferno batch-queue job-status queue-id job-id --follow --progress
+# Show job status
+inferno queue job-status my-queue job-123
 
 # Retry failed job
-inferno batch-queue retry queue-id job-id
+inferno queue retry my-queue job-123
 
 # Cancel running job
-inferno batch-queue cancel queue-id job-id --force
+inferno queue cancel my-queue job-123
 ```
 
 ### Maintenance Operations
 ```bash
 # Pause queue
-inferno batch-queue pause queue-id
+inferno queue pause my-queue
 
 # Clear completed jobs
-inferno batch-queue clear queue-id --include-failed
+inferno queue clear my-queue
 
 # Export queue data
-inferno batch-queue export queue-id --export-type all --output queue-backup.json
+inferno queue export --output queue-backup.json my-queue
 ```
 
 ## Implementation Notes

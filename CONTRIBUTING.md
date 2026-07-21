@@ -32,7 +32,7 @@ Thank you for your interest in contributing to Inferno! This guide will help you
 ## 🛠️ Development Setup
 
 ### Prerequisites
-- **Rust 1.70+**: Install via [rustup](https://rustup.rs/)
+- **Rust 1.85+**: Install via [rustup](https://rustup.rs/)
 - **Git**: For version control
 - **Docker** (optional): For testing containerized deployments
 
