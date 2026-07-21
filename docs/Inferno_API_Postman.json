@@ -312,48 +312,69 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{base_url}}/health",
-              "host": ["{{base_url}}"],
+              "raw": "http://localhost:8080/health",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8080",
               "path": ["health"]
             }
           },
           "response": []
         },
         {
-          "name": "Queue Status",
+          "name": "Metrics (Prometheus)",
           "request": {
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{base_url}}/metrics/queue/status",
-              "host": ["{{base_url}}"],
-              "path": ["metrics", "queue", "status"]
+              "raw": "http://localhost:8080/metrics",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8080",
+              "path": ["metrics"]
             }
           },
           "response": []
         },
         {
-          "name": "Recent Profiles",
+          "name": "Metrics (JSON)",
           "request": {
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{base_url}}/metrics/profiles/recent",
-              "host": ["{{base_url}}"],
-              "path": ["metrics", "profiles", "recent"]
+              "raw": "http://localhost:8080/metrics/json",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8080",
+              "path": ["metrics", "json"]
             }
           },
           "response": []
         },
         {
-          "name": "Profile Statistics",
+          "name": "Metrics Snapshot",
           "request": {
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{base_url}}/metrics/profiles/stats",
+              "raw": "http://localhost:8080/metrics/snapshot",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8080",
+              "path": ["metrics", "snapshot"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Server Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/status",
               "host": ["{{base_url}}"],
-              "path": ["metrics", "profiles", "stats"]
+              "path": ["status"]
             }
           },
           "response": []

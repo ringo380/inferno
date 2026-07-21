@@ -60,30 +60,38 @@ curl -H "Authorization: Bearer YOUR_API_KEY" \
 
 ## API Endpoints
 
-### Base Endpoints
+These are the endpoints the server actually implements (source of truth:
+`src/cli/serve.rs` route table and `src/api/`).
+
+### OpenAI-compatible Endpoints
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/models` | List available models |
-| POST | `/chat/completions` | Chat completion |
-| POST | `/completions` | Text completion |
-| POST | `/embeddings` | Generate embeddings |
+| GET | `/v1/models` | List available models |
+| POST | `/v1/chat/completions` | Chat completion |
+| POST | `/v1/completions` | Text completion |
+| POST | `/v1/embeddings` | Generate embeddings |
 
-### Streaming Endpoints
+### Streaming
 
-| Protocol | Endpoint | Description |
-|----------|----------|-------------|
-| WebSocket | `/ws/stream` | WebSocket streaming |
-| SSE | `/stream/sse` | Server-Sent Events streaming |
+Streaming uses the standard OpenAI mechanism: set `"stream": true` in a
+`POST /v1/chat/completions` (or `/v1/completions`) body to receive a
+`text/event-stream` of incremental `data:` chunks terminated by `data: [DONE]`.
+For a bidirectional socket, connect to the `/ws/stream` WebSocket.
 
-### Profiling & Monitoring Endpoints
+### Operational Endpoints
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/metrics/profiles/recent` | Recent inference profiles |
-| GET | `/metrics/profiles/stats` | Aggregated statistics |
-| GET | `/metrics/queue/status` | Queue status |
 | GET | `/health` | Health check |
+| GET | `/` | Server info (root) |
+| GET | `/metrics` | Prometheus-format metrics |
+| GET | `/metrics/json` | Metrics as JSON |
+| GET | `/metrics/snapshot` | Point-in-time metrics snapshot |
+| GET | `/v1/status` | Server status |
+| GET | `/v1/upgrade/status` | Current upgrade status |
+| POST | `/v1/upgrade/check` | Check for available upgrades |
+| POST | `/v1/upgrade/install` | Install an available upgrade |
 
 ---
 

@@ -335,8 +335,8 @@ docker exec inferno netstat -tlnp | grep 8080
 # Check resource usage
 docker stats inferno
 
-# Monitor queue
-docker exec inferno curl http://localhost:8080/metrics/queue/status
+# Inspect metrics (queue depth, request counts, latency) as JSON
+docker exec inferno curl http://localhost:8080/metrics/json
 
 # Check logs for errors
 docker-compose logs inferno | grep -i error

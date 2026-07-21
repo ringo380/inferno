@@ -80,7 +80,7 @@ See [API Reference](./api-reference.md) for the HTTP endpoints.
 
 ```bash
 inferno gpu list                    # List detected GPUs
-inferno gpu info                    # Detailed GPU information
+inferno gpu info <GPU_ID>           # Detailed info for a specific GPU
 inferno gpu monitor                 # Live GPU usage
 inferno gpu health                  # GPU health check
 ```
