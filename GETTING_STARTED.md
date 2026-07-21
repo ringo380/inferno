@@ -24,7 +24,7 @@ Welcome to Inferno! This guide will help you get up and running with the Inferno
 - **GPU** (Optional): NVIDIA CUDA, AMD ROCm, or Apple Metal for acceleration
 
 ### Software Dependencies
-- **Rust**: 1.70+ (for building from source)
+- **Rust**: 1.85+ (for building from source)
 - **Docker**: 20.10+ (for containerized deployment)
 - **curl**: For testing API endpoints
 
@@ -458,8 +458,8 @@ fi
 
 3. **GPU Acceleration**
    ```bash
-   inferno gpu enable
-   inferno gpu status
+   # GPU acceleration is auto-detected and enabled by default; list detected GPUs:
+   inferno gpu list
    ```
 
 4. **A/B Testing**

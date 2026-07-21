@@ -20,7 +20,7 @@ Start troubleshooting with these essential diagnostic commands:
 # System health check
 inferno --version
 inferno config show
-inferno gpu status
+inferno gpu list
 inferno models list
 
 # Server status
@@ -405,7 +405,7 @@ inferno bench --model current-model --detailed
 
 # Check GPU usage
 nvidia-smi  # or rocm-smi for AMD
-inferno gpu status
+inferno gpu list
 
 # Profile inference
 inferno profile --model current-model --duration 60s
@@ -416,7 +416,7 @@ inferno profile --model current-model --duration 60s
 1. **Enable GPU acceleration:**
 ```bash
 # Check GPU availability
-inferno gpu status
+inferno gpu list
 
 # Enable GPU
 inferno config set backend_config.gpu_enabled true
@@ -522,7 +522,7 @@ sudo swapon /swapfile
 ```bash
 # Check GPU status
 nvidia-smi
-inferno gpu status
+inferno gpu list
 inferno gpu list
 
 # Check CUDA installation

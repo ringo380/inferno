@@ -474,7 +474,7 @@ The dashboard provides:
 
 ```bash
 # Check GPU availability
-inferno gpu status
+inferno gpu list
 
 # Enable GPU in configuration
 inferno config set backend_config.gpu_enabled true
@@ -888,7 +888,7 @@ inferno remove unused-model
 **Issue**: "Slow inference"
 ```bash
 # Solution: Check GPU and optimize
-inferno gpu status
+inferno gpu list
 inferno bench --model your-model
 
 # Enable GPU if available
@@ -953,7 +953,7 @@ sudo journalctl -u inferno -f
 ```bash
 # System information
 inferno --version
-inferno gpu status
+inferno gpu list
 inferno config show
 
 # Model information

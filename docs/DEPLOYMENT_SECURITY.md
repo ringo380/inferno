@@ -35,7 +35,7 @@ This guide covers secure deployment practices for Inferno in production environm
 ### Secure Dockerfile
 
 ```dockerfile
-FROM rust:1.75-slim AS builder
+FROM rust:1.85-slim AS builder
 WORKDIR /app
 COPY . .
 RUN cargo build --release

@@ -25,7 +25,7 @@ Start with these high-impact optimizations for immediate results:
 
 ```bash
 # Check GPU availability
-inferno gpu status
+inferno gpu list
 
 # Enable GPU acceleration
 inferno config set backend_config.gpu_enabled true

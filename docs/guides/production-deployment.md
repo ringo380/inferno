@@ -121,7 +121,7 @@ This guide covers everything you need for a robust production deployment:
 
 ```dockerfile
 # Multi-stage build for optimal production image
-FROM rust:1.70-alpine AS builder
+FROM rust:1.85-alpine AS builder
 
 # Install build dependencies
 RUN apk add --no-cache \
@@ -1357,7 +1357,7 @@ inferno models optimize --quantization q4_0
 ```bash
 # Check GPU status
 nvidia-smi
-inferno gpu status
+inferno gpu list
 
 # Reset GPU
 sudo nvidia-smi --gpu-reset

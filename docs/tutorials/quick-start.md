@@ -31,7 +31,7 @@ docker run -p 8080:8080 -v ./models:/data/models inferno:latest serve
 ### Option B: Build from Source
 
 ```bash
-# Clone and build (requires Rust 1.70+)
+# Clone and build (requires Rust 1.85+)
 git clone https://github.com/ringo380/inferno.git
 cd inferno
 cargo build --release

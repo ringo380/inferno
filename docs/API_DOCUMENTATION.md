@@ -28,7 +28,7 @@ Inferno is a drop-in replacement for OpenAI's API that runs inference locally on
 ### Base URL
 
 ```
-http://localhost:8000/v1
+http://localhost:8080/v1
 ```
 
 ### API Version
@@ -53,7 +53,7 @@ Inferno currently operates with optional API keys for backwards compatibility. F
 
 ```bash
 curl -H "Authorization: Bearer YOUR_API_KEY" \
-  http://localhost:8000/v1/chat/completions
+  http://localhost:8080/v1/chat/completions
 ```
 
 ---
@@ -392,7 +392,7 @@ Real-time streaming via WebSocket connections with flow control.
 ### Connection
 
 ```
-ws://localhost:8000/ws/stream
+ws://localhost:8080/ws/stream
 ```
 
 ### Message Format
@@ -471,24 +471,28 @@ Accept-Encoding: gzip, deflate, br
 | deflate | `deflate` | 2.0-3.0x |
 | brotli | `br` | 3.0-4.0x |
 
-### Server-Sent Events
+### Server-Sent Events (OpenAI-compatible streaming)
 
-Alternative to WebSocket streaming using HTTP Server-Sent Events.
+Streaming is delivered via the standard OpenAI-compatible mechanism: set
+`"stream": true` in a `POST /v1/chat/completions` (or `/v1/completions`) request
+body. The response is `text/event-stream` with incremental `data:` chunks,
+terminated by `data: [DONE]`. (For a bidirectional socket, use the
+`/ws/stream` WebSocket instead.)
 
 ```
-GET /v1/stream/sse?model=llama-7b&prompt=...
+POST /v1/chat/completions
+{"model":"llama-7b","messages":[{"role":"user","content":"Hi"}],"stream":true}
 ```
 
 Response format:
 ```
-event: token
-data: {"token":"Hello","index":0}
+data: {"choices":[{"delta":{"content":"Hello"},"index":0}]}
 
-event: token
-data: {"token":" ","index":1}
+data: {"choices":[{"delta":{"content":" "},"index":0}]}
 
-event: complete
-data: {"total_tokens":45,"finish_reason":"stop"}
+data: {"choices":[{"delta":{},"finish_reason":"stop","index":0}]}
+
+data: [DONE]
 ```
 
 ### Token Batching
@@ -590,7 +594,7 @@ X-RateLimit-Reset-Tokens: 1694812500
 ### Example 1: Simple Chat Completion
 
 ```bash
-curl http://localhost:8000/v1/chat/completions \
+curl http://localhost:8080/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
     "model": "llama-7b",
@@ -603,7 +607,7 @@ curl http://localhost:8000/v1/chat/completions \
 ### Example 2: Streaming Chat Completion
 
 ```bash
-curl http://localhost:8000/v1/chat/completions \
+curl http://localhost:8080/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
     "model": "llama-7b",
@@ -617,7 +621,7 @@ curl http://localhost:8000/v1/chat/completions \
 ### Example 3: Embeddings with Multiple Inputs
 
 ```bash
-curl http://localhost:8000/v1/embeddings \
+curl http://localhost:8080/v1/embeddings \
   -H "Content-Type: application/json" \
   -d '{
     "model": "text-embedding-ada-002",
@@ -632,7 +636,7 @@ curl http://localhost:8000/v1/embeddings \
 ### Example 4: List Models
 
 ```bash
-curl http://localhost:8000/v1/models
+curl http://localhost:8080/v1/models
 ```
 
 ### Example 5: Python Client
@@ -642,7 +646,7 @@ import requests
 
 # Chat Completion
 response = requests.post(
-    "http://localhost:8000/v1/chat/completions",
+    "http://localhost:8080/v1/chat/completions",
     json={
         "model": "llama-7b",
         "messages": [{"role": "user", "content": "Hello"}],
@@ -655,7 +659,7 @@ print(result["choices"][0]["message"]["content"])
 
 # Streaming
 response = requests.post(
-    "http://localhost:8000/v1/chat/completions",
+    "http://localhost:8080/v1/chat/completions",
     json={
         "model": "llama-7b",
         "messages": [{"role": "user", "content": "Write a poem"}],
@@ -672,7 +676,7 @@ for line in response.iter_lines():
 ### Example 6: JavaScript/Node.js
 
 ```javascript
-const response = await fetch("http://localhost:8000/v1/chat/completions", {
+const response = await fetch("http://localhost:8080/v1/chat/completions", {
   method: "POST",
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify({
@@ -705,7 +709,7 @@ Inferno aims for maximum compatibility with OpenAI's API. This matrix shows the 
 | Stop Sequences | ✅ Supported | Multiple sequences |
 | Penalties | ✅ Supported | Presence & frequency |
 | System Prompts | ✅ Supported | Via message role |
-| Function Calling | ⏳ Planned | v0.9.0 |
+| Function Calling | ⏳ Planned | Not yet implemented |
 
 ### Completions
 
@@ -713,9 +717,9 @@ Inferno aims for maximum compatibility with OpenAI's API. This matrix shows the 
 |---------|--------|-------|
 | Text completion | ✅ Supported | Full compatibility |
 | Streaming | ✅ Supported | Server-Sent Events |
-| Logprobs | ⏳ Planned | v0.9.0 |
+| Logprobs | ⏳ Planned | Not yet implemented |
 | Echo | ✅ Supported | Returns prompt |
-| Best of | ⏳ Planned | v0.9.0 |
+| Best of | ⏳ Planned | Not yet implemented |
 
 ### Embeddings
 
@@ -724,7 +728,7 @@ Inferno aims for maximum compatibility with OpenAI's API. This matrix shows the 
 | Single input | ✅ Supported | Full compatibility |
 | Batch inputs | ✅ Supported | Up to 100 inputs |
 | Dimensions | ✅ Supported | 1536 default |
-| Encoding format | ⏳ Planned | v0.9.0 |
+| Encoding format | ⏳ Planned | Not yet implemented |
 
 ### Models
 
@@ -756,6 +760,6 @@ For issues, feature requests, or feedback:
 
 ---
 
-**Last Updated:** 2024-Q4
+**Last Updated:** 2026-07
 **API Version:** 2023-06-01 (OpenAI compatible)
-**Inferno Version:** v0.8.0
+**Inferno Version:** v0.10.6

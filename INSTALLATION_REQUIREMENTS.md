@@ -160,7 +160,7 @@ choco install -y vcredist140
 
 ## Rust Installation
 
-Inferno requires Rust 1.70 or later.
+Inferno requires Rust 1.85 or later.
 
 ```bash
 # Install Rust via rustup
@@ -421,7 +421,7 @@ docker run -d \
 
 ```dockerfile
 # Dockerfile
-FROM rust:1.75 as builder
+FROM rust:1.85 as builder
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
