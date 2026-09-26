@@ -72,6 +72,10 @@ jobs:
       if: matrix.os == 'ubuntu-latest'  # Only run on Linux for now
       run: cargo test --test integration_tests --features "gguf,onnx"
 
+    - name: Compile every integration suite
+      if: matrix.os == 'ubuntu-latest'
+      run: bash scripts/integration-suites.sh
+
     - name: Run doctests
       run: cargo test --doc
 

@@ -2,339 +2,352 @@
 use assert_cmd::Command;
 use predicates::prelude::*;
 use std::fs;
-use std::process::{Command as StdCommand, Stdio};
-use std::time::Duration;
+use std::path::Path;
 use tempfile::tempdir;
-use tokio::time::sleep;
+
+/// Minimal GGUF header the validator accepts: magic, version 3 (little-endian),
+/// zero tensors, zero metadata entries, then whatever payload the caller wants.
+fn write_stub_gguf(path: &Path, payload: &[u8]) {
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(b"GGUF");
+    bytes.extend_from_slice(&3u32.to_le_bytes());
+    bytes.extend_from_slice(&0u64.to_le_bytes());
+    bytes.extend_from_slice(&0u64.to_le_bytes());
+    bytes.extend_from_slice(payload);
+    fs::write(path, bytes).unwrap();
+}
+
+/// A CLI invocation pinned to a scratch directory. Some subcommands write
+/// relative to the working directory (audit keeps `./audit_logs`), so every
+/// test runs inside its own temp dir with its own models and cache dirs.
+fn inferno(cwd: &Path, models_dir: &Path, cache_dir: &Path) -> Command {
+    let mut cmd = Command::cargo_bin("inferno").unwrap();
+    cmd.current_dir(cwd)
+        .env("INFERNO_MODELS_DIR", models_dir)
+        .env("INFERNO_CACHE_DIR", cache_dir);
+    cmd
+}
+
+/// Pull the id out of `version create`'s "Version ID: <uuid>" line.
+fn version_id_from(stdout: &[u8]) -> String {
+    let text = String::from_utf8_lossy(stdout);
+    let line = text
+        .lines()
+        .find(|l| l.contains("Version ID: "))
+        .unwrap_or_else(|| panic!("no Version ID line in output:\n{}", text));
+    line.split("Version ID: ")
+        .nth(1)
+        .and_then(|rest| rest.split_whitespace().next())
+        .unwrap()
+        .to_string()
+}
 
 /// Test complete model lifecycle: discovery, validation, caching, inference
-#[tokio::test]
-async fn test_complete_model_lifecycle() {
+#[test]
+fn test_complete_model_lifecycle() {
     let temp_dir = tempdir().unwrap();
     let models_dir = temp_dir.path().join("models");
     let cache_dir = temp_dir.path().join("cache");
     fs::create_dir_all(&models_dir).unwrap();
     fs::create_dir_all(&cache_dir).unwrap();
 
-    // Create a mock model
     let model_path = models_dir.join("test-model.gguf");
-    fs::write(
-        &model_path,
-        b"GGUF\x00\x00\x00\x01test model data for lifecycle test",
-    )
-    .unwrap();
+    write_stub_gguf(&model_path, b"test model data for lifecycle test");
 
     // Step 1: Model discovery
-    let mut cmd = Command::cargo_bin("inferno").unwrap();
-    cmd.arg("models")
+    inferno(temp_dir.path(), &models_dir, &cache_dir)
+        .arg("models")
         .arg("list")
-        .env("INFERNO_MODELS_DIR", models_dir.to_str().unwrap())
-        .env("INFERNO_CACHE_DIR", cache_dir.to_str().unwrap());
-
-    cmd.assert()
+        .assert()
         .success()
         .stdout(predicate::str::contains("test-model.gguf"));
 
     // Step 2: Model validation
-    let mut cmd = Command::cargo_bin("inferno").unwrap();
-    cmd.arg("validate")
-        .arg(model_path.to_str().unwrap())
-        .env("INFERNO_MODELS_DIR", models_dir.to_str().unwrap());
-
-    cmd.assert()
+    inferno(temp_dir.path(), &models_dir, &cache_dir)
+        .arg("validate")
+        .arg(&model_path)
+        .assert()
         .success()
         .stdout(predicate::str::contains("All validations passed"));
 
     // Step 3: Cache warm-up
-    let mut cmd = Command::cargo_bin("inferno").unwrap();
-    cmd.arg("cache")
+    inferno(temp_dir.path(), &models_dir, &cache_dir)
+        .arg("cache")
         .arg("warmup")
-        .arg("--model")
         .arg("test-model.gguf")
-        .env("INFERNO_MODELS_DIR", models_dir.to_str().unwrap())
-        .env("INFERNO_CACHE_DIR", cache_dir.to_str().unwrap());
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Warmup completed"));
 
-    cmd.assert().success().stdout(predicate::str::contains(
-        "Model cache functionality is not yet implemented",
-    ));
+    // Step 4: Cache statistics
+    inferno(temp_dir.path(), &models_dir, &cache_dir)
+        .arg("cache")
+        .arg("stats")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Model Cache Statistics"));
 
-    // Step 4: Cache status check
-    let mut cmd = Command::cargo_bin("inferno").unwrap();
-    cmd.arg("cache")
-        .arg("status")
-        .env("INFERNO_CACHE_DIR", cache_dir.to_str().unwrap());
-
-    cmd.assert().success().stdout(predicate::str::contains(
-        "Model cache functionality is not yet implemented",
-    ));
-
-    // Step 5: Inference attempt
-    let mut cmd = Command::cargo_bin("inferno").unwrap();
-    cmd.arg("run")
+    // Step 5: Inference attempt. The stub has no tensors, so the backend must
+    // refuse it cleanly rather than crash.
+    inferno(temp_dir.path(), &models_dir, &cache_dir)
+        .arg("run")
         .arg("--model")
         .arg("test-model.gguf")
         .arg("--prompt")
         .arg("Hello, world!")
-        .env("INFERNO_MODELS_DIR", models_dir.to_str().unwrap())
-        .env("INFERNO_CACHE_DIR", cache_dir.to_str().unwrap());
-
-    cmd.assert()
-        .failure() // Expected to fail since we don't have real backends
-        .stderr(predicate::str::contains("not found").or(predicate::str::contains("failed")));
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("Error"));
 }
 
 /// Test batch processing workflow
-#[tokio::test]
-async fn test_batch_processing_workflow() {
+#[test]
+fn test_batch_processing_workflow() {
     let temp_dir = tempdir().unwrap();
     let models_dir = temp_dir.path().join("models");
+    let cache_dir = temp_dir.path().join("cache");
     let input_dir = temp_dir.path().join("input");
     let output_dir = temp_dir.path().join("output");
-
     fs::create_dir_all(&models_dir).unwrap();
     fs::create_dir_all(&input_dir).unwrap();
     fs::create_dir_all(&output_dir).unwrap();
 
-    // Create mock model and input files
-    let model_path = models_dir.join("batch-model.gguf");
-    fs::write(&model_path, b"GGUF\x00\x00\x00\x01batch test model").unwrap();
+    write_stub_gguf(&models_dir.join("batch-model.gguf"), b"batch test model");
 
+    // JSONL inputs carry the text in a `content` field.
     let input_file = input_dir.join("inputs.jsonl");
-    let test_inputs = vec![
-        r#"{"prompt": "Hello, world!"}"#,
-        r#"{"prompt": "How are you?"}"#,
-        r#"{"prompt": "What is AI?"}"#,
+    let test_inputs = [
+        r#"{"content": "Hello, world!"}"#,
+        r#"{"content": "How are you?"}"#,
+        r#"{"content": "What is AI?"}"#,
     ];
     fs::write(&input_file, test_inputs.join("\n")).unwrap();
 
-    // Step 1: Validate batch input format
-    let mut cmd = Command::cargo_bin("inferno").unwrap();
-    cmd.arg("batch")
+    // Step 1: Validate batch input format. The count is reported through the
+    // info log, so pin the log settings the assertion depends on.
+    inferno(temp_dir.path(), &models_dir, &cache_dir)
+        .env("INFERNO_LOG_LEVEL", "info")
+        .env("INFERNO_LOG_FORMAT", "pretty")
+        .arg("batch")
         .arg("--model")
         .arg("batch-model.gguf")
         .arg("--input")
-        .arg(input_file.to_str().unwrap())
+        .arg(&input_file)
         .arg("--output")
-        .arg(output_dir.to_str().unwrap())
+        .arg(output_dir.join("results.jsonl"))
         .arg("--dry-run")
-        .env("INFERNO_MODELS_DIR", models_dir.to_str().unwrap());
-
-    cmd.assert()
+        .assert()
         .success()
-        .stdout(predicate::str::contains("3 inputs").or(predicate::str::contains("batch")));
+        .stdout(predicate::str::contains("parsed 3 inputs"));
 
-    // Step 2: Run batch processing
-    let mut cmd = Command::cargo_bin("inferno").unwrap();
-    cmd.arg("batch")
+    // Step 2: A JSONL line without `content` is rejected up front.
+    let legacy_file = input_dir.join("prompt-only.jsonl");
+    fs::write(&legacy_file, r#"{"prompt": "Hello, world!"}"#).unwrap();
+
+    inferno(temp_dir.path(), &models_dir, &cache_dir)
+        .arg("batch")
         .arg("--model")
         .arg("batch-model.gguf")
         .arg("--input")
-        .arg(input_file.to_str().unwrap())
+        .arg(&legacy_file)
         .arg("--output")
-        .arg(output_dir.to_str().unwrap())
-        .arg("--max-concurrent")
-        .arg("2")
-        .env("INFERNO_MODELS_DIR", models_dir.to_str().unwrap());
+        .arg(output_dir.join("unused.jsonl"))
+        .arg("--dry-run")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("No content field"));
 
-    // This may fail due to mock backends, but should show progress
-    let result = cmd.assert();
-    // Accept either success or failure, but ensure it doesn't panic
-    result.code(predicate::in_iter(vec![0, 1]));
+    // Step 3: Run batch processing. The stub model cannot load, so either a
+    // clean success or a clean failure is acceptable; a crash is not.
+    inferno(temp_dir.path(), &models_dir, &cache_dir)
+        .arg("batch")
+        .arg("--model")
+        .arg("batch-model.gguf")
+        .arg("--input")
+        .arg(&input_file)
+        .arg("--output")
+        .arg(output_dir.join("results.jsonl"))
+        .arg("--concurrency")
+        .arg("2")
+        .assert()
+        .code(predicate::in_iter(vec![0, 1]));
 }
 
 /// Test advanced queue management workflow
-#[tokio::test]
-async fn test_queue_management_workflow() {
+#[test]
+fn test_queue_management_workflow() {
     let temp_dir = tempdir().unwrap();
     let models_dir = temp_dir.path().join("models");
+    let cache_dir = temp_dir.path().join("cache");
     fs::create_dir_all(&models_dir).unwrap();
 
-    // Create mock model
-    let model_path = models_dir.join("queue-model.gguf");
-    fs::write(&model_path, b"GGUF\x00\x00\x00\x01queue test model").unwrap();
+    write_stub_gguf(&models_dir.join("queue-model.gguf"), b"queue test model");
 
     // Step 1: Create job queue
-    let mut cmd = Command::cargo_bin("inferno").unwrap();
-    cmd.arg("queue")
+    inferno(temp_dir.path(), &models_dir, &cache_dir)
+        .arg("queue")
         .arg("create")
         .arg("--name")
         .arg("test-processing-queue")
         .arg("--max-concurrent")
         .arg("3")
-        .arg("--priority-enabled");
-
-    cmd.assert().success().stdout(predicate::str::contains(
-        "Job queue management functionality is not yet implemented",
-    ));
-
-    // Step 2: List queues
-    let mut cmd = Command::cargo_bin("inferno").unwrap();
-    cmd.arg("queue").arg("list-queues");
-
-    cmd.assert()
+        .arg("test-processing-queue")
+        .assert()
         .success()
-        .stdout(predicate::str::contains("No job queues found"));
+        .stdout(predicate::str::contains("created successfully"));
 
-    // Step 3: Submit jobs to queue
+    // Step 2: List queues, table and JSON
+    inferno(temp_dir.path(), &models_dir, &cache_dir)
+        .arg("queue")
+        .arg("list-queues")
+        .assert()
+        .success();
+
+    inferno(temp_dir.path(), &models_dir, &cache_dir)
+        .arg("queue")
+        .arg("list-queues")
+        .arg("--format")
+        .arg("json")
+        .assert()
+        .success();
+
+    // Step 3: Submitting to a queue that was never created is rejected
     let input_file = temp_dir.path().join("queue_input.txt");
     fs::write(&input_file, "Test input for queue processing").unwrap();
 
-    let mut cmd = Command::cargo_bin("inferno").unwrap();
-    cmd.arg("queue")
+    inferno(temp_dir.path(), &models_dir, &cache_dir)
+        .arg("queue")
         .arg("submit")
-        .arg("--queue-id")
-        .arg("test-processing-queue")
+        .arg("--name")
+        .arg("first-job")
         .arg("--input-file")
-        .arg(input_file.to_str().unwrap())
+        .arg(&input_file)
         .arg("--model")
         .arg("queue-model.gguf")
         .arg("--priority")
         .arg("high")
-        .env("INFERNO_MODELS_DIR", models_dir.to_str().unwrap());
-
-    cmd.assert().success().stdout(predicate::str::contains(
-        "Job queue management functionality is not yet implemented",
-    ));
-
-    // Step 4: Monitor queue status
-    let mut cmd = Command::cargo_bin("inferno").unwrap();
-    cmd.arg("queue")
-        .arg("status")
-        .arg("--queue-id")
-        .arg("test-processing-queue");
-
-    cmd.assert().success().stdout(predicate::str::contains(
-        "Job queue management functionality is not yet implemented",
-    ));
+        .arg("no-such-queue")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("not found"));
 }
 
 /// Test model versioning and deployment workflow
-#[tokio::test]
-async fn test_versioning_and_deployment_workflow() {
+#[test]
+fn test_versioning_and_deployment_workflow() {
     let temp_dir = tempdir().unwrap();
     let models_dir = temp_dir.path().join("models");
+    let cache_dir = temp_dir.path().join("cache");
     fs::create_dir_all(&models_dir).unwrap();
 
-    // Create multiple model versions
     let model_v1 = models_dir.join("chat-model-v1.gguf");
     let model_v2 = models_dir.join("chat-model-v2.gguf");
+    write_stub_gguf(&model_v1, b"chat model version 1.0");
+    write_stub_gguf(&model_v2, b"chat model version 2.0 with improvements");
 
-    fs::write(&model_v1, b"GGUF\x00\x00\x00\x01chat model version 1.0").unwrap();
-    fs::write(
-        &model_v2,
-        b"GGUF\x00\x00\x00\x01chat model version 2.0 with improvements",
-    )
-    .unwrap();
+    let create = |version: &str, description: &str, file: &Path| -> String {
+        let output = inferno(temp_dir.path(), &models_dir, &cache_dir)
+            .arg("version")
+            .arg("create")
+            .arg("--model-type")
+            .arg("llm")
+            .arg("--architecture")
+            .arg("transformer")
+            .arg("--framework")
+            .arg("llama.cpp")
+            .arg("--framework-version")
+            .arg("1.0")
+            .arg("--format")
+            .arg("gguf")
+            .arg("--created-by")
+            .arg("e2e-test")
+            .arg("--version")
+            .arg(version)
+            .arg("--description")
+            .arg(description)
+            .arg("chat-model")
+            .arg(file)
+            .assert()
+            .success()
+            .stdout(predicate::str::contains(
+                "Model version created successfully",
+            ))
+            .get_output()
+            .clone();
+        version_id_from(&output.stdout)
+    };
 
-    // Step 1: Register model versions
-    let mut cmd = Command::cargo_bin("inferno").unwrap();
-    cmd.arg("version")
-        .arg("create")
-        .arg("--model")
-        .arg("chat-model")
-        .arg("--version")
-        .arg("1.0.0")
-        .arg("--file")
-        .arg(model_v1.to_str().unwrap())
-        .arg("--description")
-        .arg("Initial release");
-
-    cmd.assert().success().stdout(predicate::str::contains(
-        "Model versioning functionality is not yet implemented",
-    ));
-
-    let mut cmd = Command::cargo_bin("inferno").unwrap();
-    cmd.arg("version")
-        .arg("create")
-        .arg("--model")
-        .arg("chat-model")
-        .arg("--version")
-        .arg("2.0.0")
-        .arg("--file")
-        .arg(model_v2.to_str().unwrap())
-        .arg("--description")
-        .arg("Performance improvements");
-
-    cmd.assert().success().stdout(predicate::str::contains(
-        "Model versioning functionality is not yet implemented",
-    ));
+    // Step 1: Register two versions
+    let v1 = create("1.0.0", "Initial release", &model_v1);
+    let v2 = create("2.0.0", "Performance improvements", &model_v2);
+    assert_ne!(v1, v2);
+    assert!(models_dir.join("versions").join("registry.json").exists());
 
     // Step 2: List versions
-    let mut cmd = Command::cargo_bin("inferno").unwrap();
-    cmd.arg("version")
+    inferno(temp_dir.path(), &models_dir, &cache_dir)
+        .arg("version")
         .arg("list")
-        .arg("--model")
-        .arg("chat-model");
-
-    cmd.assert().success().stdout(predicate::str::contains(
-        "Model versioning functionality is not yet implemented",
-    ));
+        .arg("chat-model")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("1.0.0").and(predicate::str::contains("2.0.0")));
 
     // Step 3: Promote to staging
-    let mut cmd = Command::cargo_bin("inferno").unwrap();
-    cmd.arg("version")
+    inferno(temp_dir.path(), &models_dir, &cache_dir)
+        .arg("version")
         .arg("promote")
-        .arg("--version-id")
-        .arg("chat-model-2.0.0")
-        .arg("--target")
-        .arg("staging");
-
-    cmd.assert().success().stdout(predicate::str::contains(
-        "Model versioning functionality is not yet implemented",
-    ));
+        .arg("--promoted-by")
+        .arg("e2e-test")
+        .arg("chat-model")
+        .arg(&v2)
+        .arg("staging")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("promoted successfully"));
 
     // Step 4: Deploy to production
-    let mut cmd = Command::cargo_bin("inferno").unwrap();
-    cmd.arg("version")
+    inferno(temp_dir.path(), &models_dir, &cache_dir)
+        .arg("version")
         .arg("deploy")
-        .arg("--version-id")
-        .arg("chat-model-2.0.0")
-        .arg("--target")
-        .arg("production");
-
-    cmd.assert().success().stdout(predicate::str::contains(
-        "Model versioning functionality is not yet implemented",
-    ));
+        .arg("chat-model")
+        .arg(&v2)
+        .arg("production")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("deployed successfully"));
 
     // Step 5: Compare versions
-    let mut cmd = Command::cargo_bin("inferno").unwrap();
-    cmd.arg("version")
+    inferno(temp_dir.path(), &models_dir, &cache_dir)
+        .arg("version")
         .arg("compare")
-        .arg("--version1")
-        .arg("chat-model-1.0.0")
-        .arg("--version2")
-        .arg("chat-model-2.0.0");
-
-    cmd.assert().success().stdout(predicate::str::contains(
-        "Model versioning functionality is not yet implemented",
-    ));
+        .arg("chat-model")
+        .arg(&v1)
+        .arg(&v2)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("1.0.0").and(predicate::str::contains("2.0.0")));
 }
 
 /// Test A/B testing workflow
-#[tokio::test]
-async fn test_ab_testing_workflow() {
+#[test]
+fn test_ab_testing_workflow() {
     let temp_dir = tempdir().unwrap();
     let models_dir = temp_dir.path().join("models");
+    let cache_dir = temp_dir.path().join("cache");
     fs::create_dir_all(&models_dir).unwrap();
 
-    // Create control and treatment models
-    let control_model = models_dir.join("control-model.gguf");
-    let treatment_model = models_dir.join("treatment-model.gguf");
-
-    fs::write(
-        &control_model,
-        b"GGUF\x00\x00\x00\x01control model baseline",
-    )
-    .unwrap();
-    fs::write(
-        &treatment_model,
-        b"GGUF\x00\x00\x00\x01treatment model experimental",
-    )
-    .unwrap();
+    write_stub_gguf(
+        &models_dir.join("control-model.gguf"),
+        b"control model baseline",
+    );
+    write_stub_gguf(
+        &models_dir.join("treatment-model.gguf"),
+        b"treatment model experimental",
+    );
 
     // Step 1: Start A/B test
-    let mut cmd = Command::cargo_bin("inferno").unwrap();
-    cmd.arg("ab-test")
+    inferno(temp_dir.path(), &models_dir, &cache_dir)
+        .arg("ab-test")
         .arg("start")
         .arg("--name")
         .arg("performance-comparison")
@@ -342,338 +355,291 @@ async fn test_ab_testing_workflow() {
         .arg("control-model.gguf")
         .arg("--treatment-model")
         .arg("treatment-model.gguf")
-        .env("INFERNO_MODELS_DIR", models_dir.to_str().unwrap());
-
-    cmd.assert()
+        .assert()
         .success()
-        .stdout(predicate::str::contains("Would start A/B test"));
+        .stdout(
+            predicate::str::contains("Control Model: control-model.gguf").and(
+                predicate::str::contains("Treatment Model: treatment-model.gguf"),
+            ),
+        );
 
-    // Step 2: List active tests
-    let mut cmd = Command::cargo_bin("inferno").unwrap();
-    cmd.arg("ab-test").arg("list");
+    // Step 2: Control and treatment must differ
+    inferno(temp_dir.path(), &models_dir, &cache_dir)
+        .arg("ab-test")
+        .arg("start")
+        .arg("--name")
+        .arg("same-model")
+        .arg("--control-model")
+        .arg("control-model.gguf")
+        .arg("--treatment-model")
+        .arg("control-model.gguf")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("must be different"));
 
-    cmd.assert()
+    // Step 3: List tests
+    inferno(temp_dir.path(), &models_dir, &cache_dir)
+        .arg("ab-test")
+        .arg("list")
+        .assert()
         .success()
-        .stdout(predicate::str::contains("Would list all A/B tests"));
+        .stdout(predicate::str::contains("A/B Tests"));
 
-    // Step 3: Check test status
-    let mut cmd = Command::cargo_bin("inferno").unwrap();
-    cmd.arg("ab-test")
+    // Step 4: Check test status
+    inferno(temp_dir.path(), &models_dir, &cache_dir)
+        .arg("ab-test")
         .arg("status")
-        .arg("performance-comparison");
-
-    cmd.assert()
+        .arg("performance-comparison")
+        .assert()
         .success()
-        .stdout(predicate::str::contains("Would show status for A/B test"));
+        .stdout(predicate::str::contains("Name: performance-comparison"));
 
-    // Step 4: Stop test
-    let mut cmd = Command::cargo_bin("inferno").unwrap();
-    cmd.arg("ab-test").arg("stop").arg("performance-comparison");
-
-    cmd.assert()
+    // Step 5: Stop test
+    inferno(temp_dir.path(), &models_dir, &cache_dir)
+        .arg("ab-test")
+        .arg("stop")
+        .arg("performance-comparison")
+        .assert()
         .success()
-        .stdout(predicate::str::contains("Would stop A/B test"));
+        .stdout(predicate::str::contains("Stopping A/B Test"));
 }
 
 /// Test monitoring and alerting workflow
-#[tokio::test]
-async fn test_monitoring_workflow() {
+#[test]
+fn test_monitoring_workflow() {
+    let temp_dir = tempdir().unwrap();
+    let models_dir = temp_dir.path().join("models");
+    let cache_dir = temp_dir.path().join("cache");
+    fs::create_dir_all(&models_dir).unwrap();
+
     // Step 1: Check monitoring status
-    let mut cmd = Command::cargo_bin("inferno").unwrap();
-    cmd.arg("monitor").arg("status");
+    inferno(temp_dir.path(), &models_dir, &cache_dir)
+        .arg("monitor")
+        .arg("status")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Monitoring System Status"));
 
-    cmd.assert().success().stdout(predicate::str::contains(
-        "Real-time monitoring functionality is not yet implemented",
-    ));
+    // Step 2: List active alerts
+    inferno(temp_dir.path(), &models_dir, &cache_dir)
+        .arg("monitor")
+        .arg("alerts")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Active Alerts"));
 
-    // Step 2: Start monitoring with custom thresholds
-    let mut cmd = Command::cargo_bin("inferno").unwrap();
-    cmd.arg("monitor")
-        .arg("start")
-        .arg("--cpu-threshold")
-        .arg("80")
-        .arg("--memory-threshold")
-        .arg("90")
-        .arg("--interval")
-        .arg("5");
-
-    cmd.assert().success().stdout(predicate::str::contains(
-        "Real-time monitoring functionality is not yet implemented",
-    ));
-
-    // Step 3: List active alerts
-    let mut cmd = Command::cargo_bin("inferno").unwrap();
-    cmd.arg("monitor").arg("alerts");
-
-    cmd.assert().success().stdout(predicate::str::contains(
-        "Real-time monitoring functionality is not yet implemented",
-    ));
-
-    // Step 4: Show metrics dashboard
-    let mut cmd = Command::cargo_bin("inferno").unwrap();
-    cmd.arg("monitor")
-        .arg("dashboard")
-        .arg("--port")
-        .arg("3000");
-
-    cmd.assert().success().stdout(predicate::str::contains(
-        "Real-time monitoring functionality is not yet implemented",
-    ));
+    // Step 3: Filtered alert listing
+    inferno(temp_dir.path(), &models_dir, &cache_dir)
+        .arg("monitor")
+        .arg("alerts")
+        .arg("--severity")
+        .arg("critical")
+        .arg("--limit")
+        .arg("5")
+        .assert()
+        .success();
 }
 
 /// Test audit and compliance workflow
-#[tokio::test]
-async fn test_audit_workflow() {
+#[test]
+fn test_audit_workflow() {
     let temp_dir = tempdir().unwrap();
+    let models_dir = temp_dir.path().join("models");
+    let cache_dir = temp_dir.path().join("cache");
+    fs::create_dir_all(&models_dir).unwrap();
 
-    // Step 1: Query recent audit events
-    let mut cmd = Command::cargo_bin("inferno").unwrap();
-    cmd.arg("audit")
+    // Step 1: Query recent audit events (fresh directory, so none yet)
+    inferno(temp_dir.path(), &models_dir, &cache_dir)
+        .arg("audit")
         .arg("query")
         .arg("--limit")
         .arg("50")
-        .arg("--since")
-        .arg("1h");
-
-    cmd.assert().success().stdout(predicate::str::contains(
-        "Audit logging functionality is not yet implemented",
-    ));
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("event"));
 
     // Step 2: Search for specific events
-    let mut cmd = Command::cargo_bin("inferno").unwrap();
-    cmd.arg("audit")
+    inferno(temp_dir.path(), &models_dir, &cache_dir)
+        .arg("audit")
         .arg("search")
-        .arg("--event-type")
         .arg("model_loaded")
-        .arg("--actor")
-        .arg("test-user");
-
-    cmd.assert().success().stdout(predicate::str::contains(
-        "Audit logging functionality is not yet implemented",
-    ));
+        .assert()
+        .success();
 
     // Step 3: Export audit logs
     let export_file = temp_dir.path().join("audit_export.json");
-    let mut cmd = Command::cargo_bin("inferno").unwrap();
-    cmd.arg("audit")
+    inferno(temp_dir.path(), &models_dir, &cache_dir)
+        .arg("audit")
         .arg("export")
         .arg("--format")
         .arg("json")
-        .arg("--output")
-        .arg(export_file.to_str().unwrap())
-        .arg("--since")
-        .arg("24h");
+        .arg(&export_file)
+        .assert()
+        .success();
+    assert!(export_file.exists());
 
-    cmd.assert().success().stdout(predicate::str::contains(
-        "Audit logging functionality is not yet implemented",
-    ));
-
-    // Step 4: Monitor live audit events
-    let mut cmd = Command::cargo_bin("inferno").unwrap();
-    cmd.arg("audit")
-        .arg("monitor")
-        .arg("--follow")
-        .arg("--filter")
-        .arg("severity:warning");
-
-    cmd.assert().success().stdout(predicate::str::contains(
-        "Audit logging functionality is not yet implemented",
-    ));
+    // Step 4: Statistics
+    inferno(temp_dir.path(), &models_dir, &cache_dir)
+        .arg("audit")
+        .arg("stats")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Audit Statistics"));
 }
 
-/// Test GPU management workflow
-#[tokio::test]
-async fn test_gpu_workflow() {
-    // Step 1: List available GPUs
-    let mut cmd = Command::cargo_bin("inferno").unwrap();
-    cmd.arg("gpu").arg("list");
+/// Test GPU management workflow. Must pass on machines with no GPU at all.
+#[test]
+fn test_gpu_workflow() {
+    let temp_dir = tempdir().unwrap();
+    let models_dir = temp_dir.path().join("models");
+    let cache_dir = temp_dir.path().join("cache");
+    fs::create_dir_all(&models_dir).unwrap();
 
-    cmd.assert().success().stdout(predicate::str::contains(
-        "GPU management functionality is not yet implemented",
-    ));
+    // Step 1: List available GPUs, either a table or an empty-result notice
+    inferno(temp_dir.path(), &models_dir, &cache_dir)
+        .arg("gpu")
+        .arg("list")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("ID").or(predicate::str::contains("No GPUs found")));
 
-    // Step 2: Monitor GPU usage
-    let mut cmd = Command::cargo_bin("inferno").unwrap();
-    cmd.arg("gpu")
-        .arg("monitor")
-        .arg("--interval")
-        .arg("2")
-        .arg("--duration")
-        .arg("10");
+    inferno(temp_dir.path(), &models_dir, &cache_dir)
+        .arg("gpu")
+        .arg("list")
+        .arg("--format")
+        .arg("json")
+        .assert()
+        .success();
 
-    cmd.assert().success().stdout(predicate::str::contains(
-        "GPU management functionality is not yet implemented",
-    ));
+    // Step 2: List allocations
+    inferno(temp_dir.path(), &models_dir, &cache_dir)
+        .arg("gpu")
+        .arg("allocations")
+        .assert()
+        .success();
 
     // Step 3: Benchmark GPU performance
-    let mut cmd = Command::cargo_bin("inferno").unwrap();
-    cmd.arg("gpu")
+    inferno(temp_dir.path(), &models_dir, &cache_dir)
+        .arg("gpu")
         .arg("benchmark")
-        .arg("--gpu-id")
         .arg("0")
         .arg("--iterations")
-        .arg("100");
-
-    cmd.assert().success().stdout(predicate::str::contains(
-        "GPU management functionality is not yet implemented",
-    ));
-
-    // Step 4: Allocate GPU memory
-    let mut cmd = Command::cargo_bin("inferno").unwrap();
-    cmd.arg("gpu")
-        .arg("allocate")
-        .arg("--gpu-id")
-        .arg("0")
-        .arg("--memory")
-        .arg("1024");
-
-    cmd.assert().success().stdout(predicate::str::contains(
-        "GPU management functionality is not yet implemented",
-    ));
+        .arg("1")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Benchmark"));
 }
 
 /// Test distributed processing workflow
-#[tokio::test]
-async fn test_distributed_workflow() {
-    // Step 1: Check distributed system status
-    let mut cmd = Command::cargo_bin("inferno").unwrap();
-    cmd.arg("distributed").arg("status");
+#[test]
+fn test_distributed_workflow() {
+    let temp_dir = tempdir().unwrap();
+    let models_dir = temp_dir.path().join("models");
+    let cache_dir = temp_dir.path().join("cache");
+    fs::create_dir_all(&models_dir).unwrap();
 
-    cmd.assert().success().stdout(predicate::str::contains(
-        "Distributed processing functionality is not yet implemented",
-    ));
+    write_stub_gguf(
+        &models_dir.join("dist-model.gguf"),
+        b"distributed test model",
+    );
 
-    // Step 2: Start coordinator
-    let mut cmd = Command::cargo_bin("inferno").unwrap();
-    cmd.arg("distributed")
-        .arg("coordinator")
-        .arg("--port")
-        .arg("8080")
-        .arg("--max-workers")
-        .arg("10");
+    // Step 1: Show the distributed configuration
+    inferno(temp_dir.path(), &models_dir, &cache_dir)
+        .arg("distributed")
+        .arg("stats")
+        .assert()
+        .success()
+        .stdout(
+            predicate::str::contains("Distributed Configuration")
+                .and(predicate::str::contains("worker_count")),
+        );
 
-    cmd.assert().success().stdout(predicate::str::contains(
-        "Distributed processing functionality is not yet implemented",
-    ));
-
-    // Step 3: Register worker nodes
-    let mut cmd = Command::cargo_bin("inferno").unwrap();
-    cmd.arg("distributed")
-        .arg("worker")
-        .arg("--coordinator")
-        .arg("127.0.0.1:8080")
-        .arg("--port")
-        .arg("8081")
-        .arg("--capabilities")
-        .arg("gguf,onnx");
-
-    cmd.assert().success().stdout(predicate::str::contains(
-        "Distributed processing functionality is not yet implemented",
-    ));
-
-    // Step 4: List registered workers
-    let mut cmd = Command::cargo_bin("inferno").unwrap();
-    cmd.arg("distributed").arg("workers");
-
-    cmd.assert().success().stdout(predicate::str::contains(
-        "Distributed processing functionality is not yet implemented",
-    ));
+    // Step 2: A test request against an unloadable model fails cleanly
+    inferno(temp_dir.path(), &models_dir, &cache_dir)
+        .arg("distributed")
+        .arg("test")
+        .arg("--model")
+        .arg("dist-model.gguf")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("Error"));
 }
 
 /// Test metrics and observability workflow
-#[tokio::test]
-async fn test_metrics_workflow() {
+#[test]
+fn test_metrics_workflow() {
     let temp_dir = tempdir().unwrap();
+    let models_dir = temp_dir.path().join("models");
+    let cache_dir = temp_dir.path().join("cache");
+    fs::create_dir_all(&models_dir).unwrap();
 
-    // Step 1: Show current metrics
-    let mut cmd = Command::cargo_bin("inferno").unwrap();
-    cmd.arg("metrics").arg("show");
+    // Step 1: JSON metrics
+    inferno(temp_dir.path(), &models_dir, &cache_dir)
+        .arg("metrics")
+        .arg("json")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("inference_metrics"));
 
-    cmd.assert().success().stdout(predicate::str::contains(
-        "Metrics functionality is not yet implemented",
-    ));
-
-    // Step 2: Export metrics in Prometheus format
-    let metrics_file = temp_dir.path().join("metrics.prom");
-    let mut cmd = Command::cargo_bin("inferno").unwrap();
-    cmd.arg("metrics")
-        .arg("export")
-        .arg("--format")
+    // Step 2: Prometheus exposition format
+    inferno(temp_dir.path(), &models_dir, &cache_dir)
+        .arg("metrics")
         .arg("prometheus")
-        .arg("--output")
-        .arg(metrics_file.to_str().unwrap());
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "# TYPE inferno_inference_requests_total counter",
+        ));
 
-    cmd.assert().success().stdout(predicate::str::contains(
-        "Metrics functionality is not yet implemented",
-    ));
-
-    // Step 3: Start metrics server
-    let mut cmd = Command::cargo_bin("inferno").unwrap();
-    cmd.arg("metrics")
-        .arg("serve")
-        .arg("--port")
-        .arg("9090")
-        .arg("--interval")
-        .arg("15");
-
-    cmd.assert().success().stdout(predicate::str::contains(
-        "Metrics functionality is not yet implemented",
-    ));
-
-    // Step 4: Reset metrics
-    let mut cmd = Command::cargo_bin("inferno").unwrap();
-    cmd.arg("metrics").arg("reset");
-
-    cmd.assert().success().stdout(predicate::str::contains(
-        "Metrics functionality is not yet implemented",
-    ));
+    // Step 3: Pretty snapshot
+    inferno(temp_dir.path(), &models_dir, &cache_dir)
+        .arg("metrics")
+        .arg("snapshot")
+        .arg("--pretty")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("\"total_requests\""));
 }
 
 /// Test configuration management across all features
-#[tokio::test]
-async fn test_configuration_workflow() {
+#[test]
+fn test_configuration_workflow() {
     let temp_dir = tempdir().unwrap();
+    let models_dir = temp_dir.path().join("models");
+    let cache_dir = temp_dir.path().join("cache");
+    fs::create_dir_all(&models_dir).unwrap();
     let config_file = temp_dir.path().join("inferno_config.toml");
 
     // Step 1: Show current configuration
-    let mut cmd = Command::cargo_bin("inferno").unwrap();
-    cmd.arg("config").arg("show");
+    inferno(temp_dir.path(), &models_dir, &cache_dir)
+        .arg("config")
+        .arg("show")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("models_dir"));
 
-    cmd.assert().success().stdout(
-        predicate::str::contains("models_dir").or(predicate::str::contains("Configuration")),
-    );
+    // Step 2: Write a configuration file
+    inferno(temp_dir.path(), &models_dir, &cache_dir)
+        .arg("config")
+        .arg("init")
+        .arg("--path")
+        .arg(&config_file)
+        .assert()
+        .success();
 
-    // Step 2: Set configuration values
-    let mut cmd = Command::cargo_bin("inferno").unwrap();
-    cmd.arg("config")
-        .arg("set")
-        .arg("models_dir")
-        .arg(temp_dir.path().join("models").to_str().unwrap());
-
-    cmd.assert().success();
-
-    // Step 3: Export configuration
-    let mut cmd = Command::cargo_bin("inferno").unwrap();
-    cmd.arg("config")
-        .arg("export")
-        .arg("--output")
-        .arg(config_file.to_str().unwrap());
-
-    cmd.assert().success();
-
-    // Verify config file was created
     assert!(config_file.exists());
     let config_content = fs::read_to_string(&config_file).unwrap();
     assert!(config_content.contains("models_dir"));
 
-    // Step 4: Validate configuration
-    let mut cmd = Command::cargo_bin("inferno").unwrap();
-    cmd.arg("config")
+    // Step 3: Validate it
+    inferno(temp_dir.path(), &models_dir, &cache_dir)
+        .arg("config")
         .arg("validate")
-        .arg("--file")
-        .arg(config_file.to_str().unwrap());
-
-    cmd.assert().success();
+        .arg("--path")
+        .arg(&config_file)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Configuration is valid"));
 }
 
 /// Test error recovery and resilience
@@ -739,8 +705,7 @@ async fn test_server_workflow() {
     fs::create_dir_all(&models_dir).unwrap();
 
     // Create mock model for server
-    let model_path = models_dir.join("server-model.gguf");
-    fs::write(&model_path, b"GGUF\x00\x00\x00\x01server test model").unwrap();
+    write_stub_gguf(&models_dir.join("server-model.gguf"), b"server test model");
 
     // Test server help
     let mut cmd = Command::cargo_bin("inferno").unwrap();
