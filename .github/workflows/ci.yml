@@ -173,6 +173,9 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y libglib2.0-dev cmake clang libclang-dev
 
+    - name: Install nightly for tarpaulin doctests
+      run: rustup toolchain install nightly --profile minimal
+
     - name: Run coverage
       run: cargo tarpaulin --config tarpaulin.toml --out xml
 
