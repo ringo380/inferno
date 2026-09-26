@@ -25,10 +25,6 @@ path = "src/lib.rs"
 name = "inferno"
 path = "src/main.rs"
 
-[[bin]]
-name = "generate_icons"
-path = "src/bin/generate_icons.rs"
-
 # REMOVED: Deprecated Tauri v1 binary (inferno_app)
 # Tauri v2 desktop app is now in dashboard/src-tauri/
 # See: dashboard/src-tauri/src/main.rs for the new implementation

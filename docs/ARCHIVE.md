@@ -354,9 +354,8 @@ git show archive/enterprise-surface-v0.10.7:src/cli/multimodal.rs > src/cli/mult
 - Per the #44 rule, fabricated output is a delete signal.
 
 **What was kept:** nothing from the module. The genuine media code it pretended to use
-already lives elsewhere and is untouched: the `image` crate in `src/io/mod.rs` and
-`src/icon_generator.rs`, and the `hound` crate (real audio feature extraction) in
-`src/io/mod.rs`.
+already lives elsewhere and is untouched: the `image` crate in `src/io/mod.rs`, and
+the `hound` crate (real audio feature extraction) in `src/io/mod.rs`.
 
 **Where functionality lives now:** nothing in-tree replaces it; Inferno remains a
 text-only model runner.
@@ -452,3 +451,111 @@ git show archive/enterprise-surface-v0.10.7:src/deployment.rs   # full pre-salva
 `kube`/Helm integration) that actually applies manifests and reports true status - at
 which point the apply path is built fresh against that client, not revived from the
 sleep-and-log stub. The generation half stands on its own and needs nothing.
+
+---
+
+## Uncompiled root modules (removed 2026-09, issue #42)
+
+Four files under `src/` were never declared with `mod` anywhere in the crate, so
+rustc never compiled them. They were files on disk, not code in the product: appending
+invalid Rust to any of them and running `cargo build --lib` still produced a clean build.
+Removing them changes nothing about the binary. All four are preserved at the archive tag.
+
+### `api_documentation` (2,174 lines)
+
+**What it was:** an OpenAPI/API-documentation subsystem (`src/api_documentation.rs`)
+defining configuration types, an `ApiDocumentation` document model, and traits for
+source scanning, schema extraction, example generation, validation, publishing, CDN
+upload, audit logging, and notifications.
+
+**Recover:**
+
+```
+git show archive/enterprise-surface-v0.10.7:src/api_documentation.rs > src/api_documentation.rs
+```
+
+**Why archived:**
+- It had no consumer, no CLI command, no `Commands` variant, and no module declaration.
+  Nothing in the crate could reach it.
+- The executable parts were stubs: validation, publishing, analytics, and feedback were
+  each marked `// Mock ... - would implement actual ... logic`, and the only trait
+  implementation was a `MockAuditLogger`. No code path wrote a document to disk.
+- It is the most plausible "come back to this" candidate in the epic, which is why it is
+  archived rather than deleted.
+
+**Where functionality lives now:** the HTTP API is documented by hand in
+`docs/API_DOCUMENTATION.md` and `docs/reference/api-reference.md`.
+
+**What would have to be true to want it back:** a decision to generate the OpenAPI
+document from the `src/api` router rather than maintain it by hand - at which point a
+generator would be built against the real axum routes, using this file's type model as
+a starting point if it still fits.
+
+### `ab_testing` and `ab_testing_config` (824 + 38 lines)
+
+**What it was:** an `ABTestingManager` (`src/ab_testing.rs`) that created, started,
+paused, and stopped A/B tests and canary deployments between two model variants,
+recorded per-variant request metrics, and ran a periodic monitoring loop; plus its
+configuration types (`src/ab_testing_config.rs`: `ABTestingConfig`,
+`TrafficRampStrategy`).
+
+**Recover:**
+
+```
+git show archive/enterprise-surface-v0.10.7:src/ab_testing.rs > src/ab_testing.rs
+git show archive/enterprise-surface-v0.10.7:src/ab_testing_config.rs > src/ab_testing_config.rs
+```
+
+**Why archived:**
+- Neither file was declared as a module. The shipped `inferno ab-test` command
+  (`src/cli/ab_testing.rs`) is a separate, self-contained placeholder that prints
+  "A/B testing functionality is not yet fully implemented" and never referenced this
+  manager.
+- The request bookkeeping (counts, error rate, running average latency) was real, but
+  the analysis that decides a test's outcome was not: the "statistical analysis" used a
+  fixed confidence interval of effect size plus or minus 0.05, a p-value of 0.01 or 0.5
+  chosen by a threshold, and a hardcoded statistical power of 0.8, all under a comment
+  reading "in real implementation, use proper statistical tests".
+- It validated model ids through `ModelManager::resolve_model`, so it was wired to real
+  types, which is why it is archived rather than deleted.
+
+**Where functionality lives now:** nothing in-tree runs A/B tests. The `inferno ab-test`
+command remains as a placeholder surface and is a candidate for the same treatment.
+
+**What would have to be true to want it back:** a real consumer that routes live
+inference traffic between variants, and a genuine significance test in place of the
+placeholder analysis.
+
+### `icon_generator` and the `generate_icons` binary (180 + 10 lines)
+
+**What it was:** `src/icon_generator.rs`, a small `image`-crate routine that drew a
+flame icon at several sizes into an `icons/` directory, and `src/bin/generate_icons.rs`,
+a `[[bin]]` target intended to call it.
+
+**Recover:**
+
+```
+git show archive/enterprise-surface-v0.10.7:src/icon_generator.rs > src/icon_generator.rs
+git show archive/enterprise-surface-v0.10.7:src/bin/generate_icons.rs > src/bin/generate_icons.rs
+```
+
+Restoring the binary also needs its `[[bin]]` stanza back in `Cargo.toml`
+(`name = "generate_icons"`, `path = "src/bin/generate_icons.rs"`).
+
+**Why removed:**
+- The module was never declared, and the binary's only reference to it was a
+  commented-out import under a `// TODO: Implement icon_generator module`. The binary
+  compiled and shipped, but its `main` printed "Generating Inferno AI Runner app
+  icons..." followed by "Icon generation complete!" while generating nothing. Per the
+  #44 rule, output that reports work it did not do is a delete signal.
+- The app icons it was meant to produce already exist: `generate_simple_icons.py` at the
+  repo root draws the same palette with Pillow, and its output is checked in under
+  `dashboard/src-tauri/icons/`, which is what `tauri.conf.json` points at.
+- The `image` crate stays; `src/io/mod.rs` is a real consumer.
+
+**Where functionality lives now:** `generate_simple_icons.py` and the checked-in
+`dashboard/src-tauri/icons/`.
+
+**What would have to be true to want it back:** a wish to generate icons from Rust
+instead of Python, at which point the module would be declared and the binary would
+actually call it.
