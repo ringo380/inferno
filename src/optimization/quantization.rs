@@ -324,7 +324,7 @@ impl ModelQuantizer {
         let mut quantized = Vec::with_capacity(data.len() / 2);
 
         // Convert FP32 to FP16
-        for chunk in data.chunks_exact(4) {
+        for chunk in data.as_chunks::<4>().0 {
             let fp32_bits = u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
             let fp32_value = f32::from_bits(fp32_bits);
 
@@ -348,7 +348,7 @@ impl ModelQuantizer {
         // Convert FP32 to INT8 with calibration
         let (scale, zero_point) = self.calculate_quantization_params(data).await?;
 
-        for chunk in data.chunks_exact(4) {
+        for chunk in data.as_chunks::<4>().0 {
             let fp32_bits = u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
             let fp32_value = f32::from_bits(fp32_bits);
 
@@ -371,7 +371,7 @@ impl ModelQuantizer {
         // Convert FP32 to INT4 with calibration
         let (scale, zero_point) = self.calculate_quantization_params(data).await?;
 
-        for chunk in data.chunks_exact(8) {
+        for chunk in data.as_chunks::<8>().0 {
             // Process 2 FP32 values at once
             let fp32_1 =
                 f32::from_bits(u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]));
@@ -394,7 +394,7 @@ impl ModelQuantizer {
         let mut values = Vec::new();
 
         // Extract FP32 values
-        for chunk in data.chunks_exact(4) {
+        for chunk in data.as_chunks::<4>().0 {
             let fp32_bits = u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
             let fp32_value = f32::from_bits(fp32_bits);
             values.push(fp32_value);

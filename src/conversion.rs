@@ -2044,7 +2044,7 @@ impl ModelConverter {
             }
             GgmlType::F16 => {
                 // Convert from float16 to float32
-                for chunk in data.chunks_exact(2) {
+                for chunk in data.as_chunks::<2>().0 {
                     let f16_val = f16::from_le_bytes([chunk[0], chunk[1]]);
                     let f32_val = f16_val.to_f32();
                     float_data.extend_from_slice(&f32_val.to_le_bytes());
@@ -2098,7 +2098,7 @@ impl ModelConverter {
             (TensorElementDataType::Float32, GgmlType::F32) => Ok(data.to_vec()),
             (TensorElementDataType::Float32, GgmlType::F16) => {
                 let mut f16_data = Vec::new();
-                for chunk in data.chunks_exact(4) {
+                for chunk in data.as_chunks::<4>().0 {
                     let f32_val = f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
                     let f16_val = f16::from_f32(f32_val);
                     f16_data.extend_from_slice(&f16_val.to_le_bytes());
@@ -2336,7 +2336,9 @@ impl ModelConverter {
                         if !tensor.data.is_empty() {
                             let float_data = tensor
                                 .data
-                                .chunks_exact(4)
+                                .as_chunks::<4>()
+                                .0
+                                .iter()
                                 .map(|chunk| {
                                     f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]])
                                 })
@@ -2352,7 +2354,7 @@ impl ModelConverter {
                         tensor.dtype = TensorElementDataType::Float16;
                         if !tensor.data.is_empty() {
                             let mut f16_data = Vec::new();
-                            for chunk in tensor.data.chunks_exact(4) {
+                            for chunk in tensor.data.as_chunks::<4>().0 {
                                 let f32_val =
                                     f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
                                 let f16_val = f16::from_f32(f32_val);
@@ -2432,7 +2434,7 @@ impl ModelConverter {
         match (source_type, target_type) {
             (GgmlType::F32, GgmlType::F16) => {
                 let mut result = Vec::new();
-                for chunk in data.chunks_exact(4) {
+                for chunk in data.as_chunks::<4>().0 {
                     let f32_val = f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
                     let f16_val = f16::from_f32(f32_val);
                     result.extend_from_slice(&f16_val.to_le_bytes());
@@ -2446,7 +2448,7 @@ impl ModelConverter {
             (GgmlType::F16, GgmlType::Q4_0) => {
                 // First convert F16 to F32, then to Q4_0
                 let mut f32_data = Vec::new();
-                for chunk in data.chunks_exact(2) {
+                for chunk in data.as_chunks::<2>().0 {
                     let f16_val = f16::from_le_bytes([chunk[0], chunk[1]]);
                     let f32_val = f16_val.to_f32();
                     f32_data.extend_from_slice(&f32_val.to_le_bytes());
