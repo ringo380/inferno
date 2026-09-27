@@ -27,6 +27,7 @@ async fn main() -> Result<()> {
             }
             // For actual parsing errors, add helpful suggestions
             eprintln!("{}", e);
+            EnhancedCliParser::print_alias_note(&e);
             eprintln!("\n💡 For help with commands, try:");
             eprintln!("   inferno --help");
             eprintln!("   inferno [command] --help");
