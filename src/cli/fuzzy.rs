@@ -32,20 +32,15 @@ impl FuzzyMatcher {
     }
 
     fn initialize_commands(&mut self) {
-        // Main commands
-        self.commands.extend(vec![
-            "run".to_string(),
-            "batch".to_string(),
-            "serve".to_string(),
-            "models".to_string(),
-            "metrics".to_string(),
-            "bench".to_string(),
-            "validate".to_string(),
-            "config".to_string(),
-            "cache".to_string(),
-            "convert".to_string(),
-            "tui".to_string(),
-        ]);
+        // Take the command names from the clap definition itself, so this list
+        // cannot drift from `Commands` again (a hardcoded copy once knew 11 of
+        // 28 commands and flagged the other 17 as unknown before every run).
+        use clap::CommandFactory;
+        self.commands.extend(
+            crate::cli::Cli::command()
+                .get_subcommands()
+                .map(|command| command.get_name().to_string()),
+        );
     }
 
     fn initialize_aliases(&mut self) {
@@ -413,6 +408,22 @@ mod tests {
         assert_eq!(
             matcher.validate_command("xyz123"),
             CommandValidation::Invalid
+        );
+    }
+
+    #[test]
+    fn every_clap_subcommand_is_a_known_command() {
+        use clap::CommandFactory;
+        let matcher = FuzzyMatcher::new();
+        let missing: Vec<String> = crate::cli::Cli::command()
+            .get_subcommands()
+            .map(|c| c.get_name().to_string())
+            .filter(|name| matcher.validate_command(name) != CommandValidation::Valid)
+            .collect();
+        assert!(
+            missing.is_empty(),
+            "fuzzy matcher does not know these clap subcommands: {:?}",
+            missing
         );
     }
 
