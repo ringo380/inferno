@@ -102,27 +102,11 @@ else
     print_status 1 "Fast tests"
 fi
 
-# Run all integration tests explicitly (these are disabled by default)
-INTEGRATION_TESTS=(
-    "integration_tests"
-    "feature_integration_tests"
-    "end_to_end_tests"
-    "audit_system_integration_tests"
-    "backend_integration_tests"
-    "batch_processing_integration_tests"
-    "batch_queue_integration_tests"
-    "cache_persistence_integration_tests"
-    "conversion_integration_tests"
-    "cross_component_integration_tests"
-    "performance_stress_tests"
-    "platform_integration"
-    "error_size_analysis"
-    "metrics_thread_safety"
-)
-
-# BackendType::Gguf and ::Onnx are feature-gated, so the suites that name them
-# fail to compile without these. Matches the features used by CI.
-INTEGRATION_FEATURES="gguf,onnx"
+# Run all integration tests explicitly (these are disabled by default). The
+# suite list and feature set live in scripts/integration-suites.sh so this run
+# and CI's compile-only check cannot drift apart.
+# shellcheck source=scripts/integration-suites.sh
+source "$(dirname "${BASH_SOURCE[0]}")/scripts/integration-suites.sh"
 
 # Cap each suite so one hung test cannot block the whole run. timeout is stock
 # on Linux and ships via coreutils on macOS; run uncapped when it is absent.

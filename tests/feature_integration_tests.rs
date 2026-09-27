@@ -107,7 +107,9 @@ fn test_gpu_list_command() {
 fn test_gpu_monitor_command() {
     // `gpu monitor` is a live watcher: it loops until interrupted and never
     // exits on its own. Cap it so a stuck watcher cannot block the suite, and
-    // assert it reached the monitor loop before being killed.
+    // assert it reached the monitor loop before being killed. The kill itself
+    // is not asserted: on Unix it leaves no exit code, on Windows it leaves
+    // exit code 1, so `interrupted()` can never pass on both.
     let mut cmd = Command::cargo_bin("inferno").unwrap();
     cmd.arg("gpu")
         .arg("monitor")
@@ -116,7 +118,6 @@ fn test_gpu_monitor_command() {
         .timeout(Duration::from_secs(10));
 
     cmd.assert()
-        .interrupted()
         .stdout(predicate::str::contains("Monitoring GPUs"));
 }
 
