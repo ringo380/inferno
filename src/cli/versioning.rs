@@ -1,3 +1,4 @@
+use super::models::format_size;
 use crate::{
     config::Config,
     versioning::{
@@ -8,7 +9,7 @@ use crate::{
 use anyhow::{Result, anyhow};
 use clap::{Args, Subcommand, ValueEnum};
 use serde_json;
-use std::{collections::HashMap, path::PathBuf};
+use std::{collections::HashMap, path::PathBuf, time::SystemTime};
 
 #[derive(Args)]
 pub struct VersioningArgs {
@@ -435,10 +436,10 @@ pub async fn execute(args: VersioningArgs, _config: &Config) -> Result<()> {
             println!("Version ID: {}", version.id);
             println!("Version: {}", version.version);
             println!("Status: {:?}", version.status);
-            println!("Created: {:?}", version.created_at);
+            println!("Created: {}", format_time(version.created_at));
             println!("Created by: {}", version.created_by);
             println!("File path: {:?}", version.file_path);
-            println!("Size: {} bytes", version.size_bytes);
+            println!("Size: {}", format_size(version.size_bytes));
             println!("Checksum: {}", version.checksum);
 
             if let Some(desc) = &version.description {
@@ -482,7 +483,7 @@ pub async fn execute(args: VersioningArgs, _config: &Config) -> Result<()> {
                     println!("\nActive Deployments:");
                     for deployment in version_deployments {
                         println!("  Environment: {}", deployment.environment);
-                        println!("  Deployed: {:?}", deployment.deployed_at);
+                        println!("  Deployed: {}", format_time(deployment.deployed_at));
                         println!("  Health: {:?}", deployment.health_status);
                     }
                 }
@@ -663,8 +664,16 @@ pub async fn execute(args: VersioningArgs, _config: &Config) -> Result<()> {
 
             println!("Version 1: {} | Version 2: {}", v1.version, v2.version);
             println!("Status: {:?} | {:?}", v1.status, v2.status);
-            println!("Created: {:?} | {:?}", v1.created_at, v2.created_at);
-            println!("Size: {} bytes | {} bytes", v1.size_bytes, v2.size_bytes);
+            println!(
+                "Created: {} | {}",
+                format_time(v1.created_at),
+                format_time(v2.created_at)
+            );
+            println!(
+                "Size: {} | {}",
+                format_size(v1.size_bytes),
+                format_size(v2.size_bytes)
+            );
 
             if metadata {
                 println!("\nMetadata Comparison:");
@@ -759,8 +768,8 @@ pub async fn execute(args: VersioningArgs, _config: &Config) -> Result<()> {
                 OutputFormat::Table => {
                     println!("Model Registry Information:");
                     println!("{:-<40}", "");
-                    println!("Created: {:?}", registry_info.created_at);
-                    println!("Last Updated: {:?}", registry_info.last_updated);
+                    println!("Created: {}", format_time(registry_info.created_at));
+                    println!("Last Updated: {}", format_time(registry_info.last_updated));
                     println!("Registry Version: {}", registry_info.version);
                     println!("Total Models: {}", registry_info.total_models);
                     println!("Total Versions: {}", registry_info.total_versions);
@@ -799,12 +808,16 @@ fn display_versions(versions: &[ModelVersion], detailed: bool, format: OutputFor
             if detailed {
                 for version in versions {
                     println!(
-                        "ID: {} | Version: {} | Status: {:?} | Created: {:?}",
-                        version.id, version.version, version.status, version.created_at
+                        "ID: {} | Version: {} | Status: {:?} | Created: {}",
+                        version.id,
+                        version.version,
+                        version.status,
+                        format_time(version.created_at)
                     );
                     println!(
-                        "  File: {:?} | Size: {} bytes",
-                        version.file_path, version.size_bytes
+                        "  File: {:?} | Size: {}",
+                        version.file_path,
+                        format_size(version.size_bytes)
                     );
                     println!(
                         "  Framework: {} {} | Format: {}",
@@ -828,8 +841,8 @@ fn display_versions(versions: &[ModelVersion], detailed: bool, format: OutputFor
                         "{:<8} {:<12} {:<12} {:<20}",
                         version.version,
                         format!("{:?}", version.status),
-                        format!("{}MB", version.size_bytes / 1024 / 1024),
-                        format!("{:?}", version.created_at)
+                        format_size(version.size_bytes),
+                        format_time(version.created_at)
                     );
                 }
             }
@@ -858,7 +871,7 @@ fn display_rollback_history(history: &[RollbackRecord], format: OutputFormat) {
                     &record.from_version[..8],
                     &record.to_version[..8],
                     format!("{:?}", record.status),
-                    format!("{:?}", record.triggered_at)
+                    format_time(record.triggered_at)
                 );
             }
         }
@@ -886,7 +899,7 @@ fn display_deployments(deployments: &[&ActiveDeployment], format: OutputFormat) 
                     &deployment.version_id[..8],
                     deployment.environment,
                     format!("{:?}", deployment.health_status),
-                    format!("{:?}", deployment.deployed_at)
+                    format_time(deployment.deployed_at)
                 );
             }
         }
@@ -902,6 +915,19 @@ fn display_deployments(deployments: &[&ActiveDeployment], format: OutputFormat) 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::{Duration, UNIX_EPOCH};
+
+    #[test]
+    fn format_time_is_a_date_not_debug_output() {
+        let t = UNIX_EPOCH + Duration::from_secs(1_700_000_000);
+        assert_eq!(format_time(t), "2023-11-14 22:13");
+    }
+
+    #[test]
+    fn format_size_keeps_small_files_visible() {
+        assert_eq!(format_size(174), "174.0 B");
+        assert_eq!(format_size(3 * 1024 * 1024), "3.0 MB");
+    }
 
     #[test]
     fn test_version_status_arg_conversion() {
@@ -1272,4 +1298,12 @@ mod tests {
                 .contains("Version ID cannot be empty")
         );
     }
+}
+
+/// Render a registry timestamp the same way `models list` renders its Modified
+/// column, instead of `SystemTime`'s platform-dependent Debug output.
+fn format_time(time: SystemTime) -> String {
+    chrono::DateTime::<chrono::Utc>::from(time)
+        .format("%Y-%m-%d %H:%M")
+        .to_string()
 }

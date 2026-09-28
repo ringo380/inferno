@@ -290,7 +290,15 @@ fn test_versioning_and_deployment_workflow() {
         .arg("chat-model")
         .assert()
         .success()
-        .stdout(predicate::str::contains("1.0.0").and(predicate::str::contains("2.0.0")));
+        .stdout(
+            predicate::str::contains("1.0.0")
+                .and(predicate::str::contains("2.0.0"))
+                // Created column is a date, not SystemTime's Debug output (#83)
+                .and(predicate::str::is_match(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}").unwrap())
+                .and(predicate::str::contains("SystemTime").not())
+                // Size column keeps a small stub visible instead of rounding to 0MB
+                .and(predicate::str::contains("0MB").not()),
+        );
 
     // Step 3: Promote to staging
     inferno(temp_dir.path(), &models_dir, &cache_dir)

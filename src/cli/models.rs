@@ -591,7 +591,7 @@ fn mb(bytes: u64) -> f64 {
 
 // ── Formatting helpers ────────────────────────────────────────────────────────
 
-fn format_size(bytes: u64) -> String {
+pub(crate) fn format_size(bytes: u64) -> String {
     const UNITS: &[&str] = &["B", "KB", "MB", "GB", "TB"];
     let mut size = bytes as f64;
     let mut unit_index = 0;
