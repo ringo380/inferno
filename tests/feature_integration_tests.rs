@@ -54,8 +54,14 @@ fn test_queue_cli_integration() {
 
 #[test]
 fn test_queue_list_empty() {
+    // Queue state persists under the models directory (#81), so point it at an
+    // empty tempdir instead of whatever the checkout's .inferno.toml names.
+    let temp_dir = tempdir().unwrap();
     let mut cmd = Command::cargo_bin("inferno").unwrap();
-    cmd.arg("queue").arg("list-queues");
+    cmd.arg("queue")
+        .arg("list-queues")
+        .current_dir(temp_dir.path())
+        .env("INFERNO_MODELS_DIR", temp_dir.path().join("models"));
 
     cmd.assert()
         .success()
@@ -64,6 +70,9 @@ fn test_queue_list_empty() {
 
 #[test]
 fn test_queue_create_command() {
+    // `queue create` writes <models_dir>/queues/<id>.json, so keep it in a tempdir.
+    let temp_dir = tempdir().unwrap();
+    let models_dir = temp_dir.path().join("models");
     let mut cmd = Command::cargo_bin("inferno").unwrap();
     cmd.arg("queue")
         .arg("create")
@@ -71,7 +80,9 @@ fn test_queue_create_command() {
         .arg("test-queue")
         .arg("--max-concurrent")
         .arg("5")
-        .arg("test-queue-id");
+        .arg("test-queue-id")
+        .current_dir(temp_dir.path())
+        .env("INFERNO_MODELS_DIR", &models_dir);
 
     cmd.assert()
         .success()
@@ -79,6 +90,13 @@ fn test_queue_create_command() {
             "Queue 'test-queue-id' created successfully",
         ))
         .stdout(predicate::str::contains("Max concurrent jobs: 5"));
+
+    assert!(
+        models_dir
+            .join("queues")
+            .join("test-queue-id.json")
+            .exists()
+    );
 }
 
 /// Test GPU Management Feature Integration
