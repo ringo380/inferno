@@ -159,7 +159,6 @@ src/
 - `npm run start` - Start production server
 - `npm run lint` - Run ESLint
 - `npm run test` - Run Jest tests
-- `npm run storybook` - Start Storybook development
 
 ### Testing
 
