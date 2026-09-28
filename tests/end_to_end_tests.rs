@@ -215,21 +215,98 @@ fn test_queue_management_workflow() {
     let input_file = temp_dir.path().join("queue_input.txt");
     fs::write(&input_file, "Test input for queue processing").unwrap();
 
-    inferno(temp_dir.path(), &models_dir, &cache_dir)
-        .arg("queue")
-        .arg("submit")
-        .arg("--name")
-        .arg("first-job")
-        .arg("--input-file")
-        .arg(&input_file)
-        .arg("--model")
-        .arg("queue-model.gguf")
-        .arg("--priority")
-        .arg("high")
-        .arg("no-such-queue")
+    let submit = |queue: &str| {
+        let mut cmd = inferno(temp_dir.path(), &models_dir, &cache_dir);
+        cmd.arg("queue")
+            .arg("submit")
+            .arg("--name")
+            .arg("first-job")
+            .arg("--input-file")
+            .arg(&input_file)
+            .arg("--model")
+            .arg("queue-model.gguf")
+            .arg("--priority")
+            .arg("high")
+            .arg(queue);
+        cmd
+    };
+
+    submit("no-such-queue")
         .assert()
         .failure()
         .stderr(predicate::str::contains("not found"));
+
+    // Step 4: The queue created in step 1 is still there in a new process (#81)
+    inferno(temp_dir.path(), &models_dir, &cache_dir)
+        .arg("queue")
+        .arg("list-queues")
+        .assert()
+        .success()
+        .stdout(
+            predicate::str::contains("test-processing-queue")
+                .and(predicate::str::contains("No queues found").not()),
+        );
+    assert!(
+        models_dir
+            .join("queues")
+            .join("test-processing-queue.json")
+            .exists(),
+        "queue state file should be written under the models directory"
+    );
+
+    // Step 5: Submit to it, then read the job back from later invocations
+    let output = submit("test-processing-queue")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("submitted successfully with ID:"))
+        .get_output()
+        .clone();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let job_id = stdout
+        .lines()
+        .find_map(|l| l.split("with ID: ").nth(1))
+        .expect("submit prints the job id")
+        .trim()
+        .to_string();
+
+    inferno(temp_dir.path(), &models_dir, &cache_dir)
+        .arg("queue")
+        .arg("list-jobs")
+        .arg("test-processing-queue")
+        .assert()
+        .success()
+        .stdout(
+            predicate::str::contains(&job_id)
+                .and(predicate::str::contains("first-job"))
+                .and(predicate::str::contains("Queued")),
+        );
+
+    inferno(temp_dir.path(), &models_dir, &cache_dir)
+        .arg("queue")
+        .arg("job-status")
+        .arg("test-processing-queue")
+        .arg(&job_id)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(&job_id).and(predicate::str::contains("Queued")));
+
+    // Step 6: Cancelling it in one process is visible in the next
+    inferno(temp_dir.path(), &models_dir, &cache_dir)
+        .arg("queue")
+        .arg("cancel")
+        .arg("--force")
+        .arg("test-processing-queue")
+        .arg(&job_id)
+        .assert()
+        .success();
+
+    inferno(temp_dir.path(), &models_dir, &cache_dir)
+        .arg("queue")
+        .arg("list-jobs")
+        .arg("test-processing-queue")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(&job_id).not());
 }
 
 /// Test model versioning and deployment workflow

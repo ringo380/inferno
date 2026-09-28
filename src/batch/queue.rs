@@ -417,7 +417,8 @@ pub struct JobQueueManager {
     metrics_collector: Option<Arc<MetricsCollector>>,
     shutdown_tx: Option<mpsc::Sender<()>>,
     resource_monitor: Arc<Mutex<ResourceMonitor>>,
-    data_dir: PathBuf,
+    /// Directory the queues are persisted to. `None` keeps everything in memory.
+    data_dir: Option<PathBuf>,
 }
 
 impl JobQueue {
@@ -445,12 +446,9 @@ impl JobQueue {
 }
 
 impl JobQueueManager {
+    /// An in-memory manager. Nothing is written to disk and nothing survives
+    /// the process; use [`JobQueueManager::with_storage`] for that.
     pub fn new(config: JobQueueConfig) -> Self {
-        let data_dir = dirs::data_dir()
-            .unwrap_or_else(|| PathBuf::from("."))
-            .join("inferno")
-            .join("batch_queues");
-
         Self {
             config,
             queues: Arc::new(RwLock::new(HashMap::new())),
@@ -459,8 +457,61 @@ impl JobQueueManager {
             metrics_collector: None,
             shutdown_tx: None,
             resource_monitor: Arc::new(Mutex::new(ResourceMonitor::new())),
-            data_dir,
+            data_dir: None,
         }
+    }
+
+    /// A manager whose queues live in `data_dir`, one `<queue_id>.json` per
+    /// queue. Every queue already stored there is loaded, and every mutation
+    /// is written back before it returns, so the state survives across
+    /// processes (the CLI runs one subcommand per process).
+    pub async fn with_storage(config: JobQueueConfig, data_dir: PathBuf) -> Result<Self> {
+        fs::create_dir_all(&data_dir).await.map_err(|e| {
+            anyhow::anyhow!(
+                "Failed to create queue storage {}: {}",
+                data_dir.display(),
+                e
+            )
+        })?;
+        let mut manager = Self::new(config);
+        manager.data_dir = Some(data_dir);
+        manager.load_queues().await?;
+        Ok(manager)
+    }
+
+    /// Where this manager persists its queues, if anywhere.
+    pub fn storage_dir(&self) -> Option<&PathBuf> {
+        self.data_dir.as_ref()
+    }
+
+    async fn load_queues(&self) -> Result<()> {
+        let Some(dir) = &self.data_dir else {
+            return Ok(());
+        };
+        let mut entries = fs::read_dir(dir).await?;
+        let mut queues = self.queues.write().await;
+        while let Some(entry) = entries.next_entry().await? {
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) != Some("json") {
+                continue;
+            }
+            let raw = fs::read_to_string(&path).await?;
+            let persisted: PersistedQueue = serde_json::from_str(&raw).map_err(|e| {
+                anyhow::anyhow!("Queue file {} is not readable: {}", path.display(), e)
+            })?;
+            let queue = JobQueue::from_persisted(persisted);
+            debug!("Loaded queue '{}' from {}", queue.id, path.display());
+            queues.insert(queue.id.clone(), queue);
+        }
+        Ok(())
+    }
+
+    /// Write one queue to storage; a no-op for an in-memory manager.
+    async fn persist(&self, queue_id: &str) -> Result<()> {
+        if self.data_dir.is_some() {
+            self.save_queue(queue_id).await?;
+        }
+        Ok(())
     }
 
     pub async fn create_queue(
@@ -468,6 +519,19 @@ impl JobQueueManager {
         queue_id: String,
         name: String,
         description: String,
+    ) -> Result<()> {
+        let config = self.config.clone();
+        self.create_queue_with_config(queue_id, name, description, config)
+            .await
+    }
+
+    /// Create a queue with its own limits instead of the manager defaults.
+    pub async fn create_queue_with_config(
+        &self,
+        queue_id: String,
+        name: String,
+        description: String,
+        config: JobQueueConfig,
     ) -> Result<()> {
         let mut queues = self.queues.write().await;
 
@@ -482,7 +546,7 @@ impl JobQueueManager {
             id: queue_id.clone(),
             name,
             description,
-            config: self.config.clone(),
+            config,
             jobs: Arc::new(RwLock::new(VecDeque::new())),
             active_jobs: Arc::new(RwLock::new(HashMap::new())),
             completed_jobs: Arc::new(RwLock::new(Vec::new())),
@@ -498,19 +562,13 @@ impl JobQueueManager {
         // Release the write lock before saving
         drop(queues);
 
-        // Save the queue to persistent storage
-        if let Err(e) = self.save_queue(&queue_id).await {
-            warn!(
-                "Failed to save queue '{}' to persistent storage: {}",
-                queue_id, e
-            );
-        }
+        self.persist(&queue_id).await?;
 
         info!("Created job queue: {}", queue_id);
         Ok(())
     }
 
-    pub async fn submit_job(&self, queue_id: &str, mut job: BatchJob) -> Result<String> {
+    async fn submit_job_inner(&self, queue_id: &str, mut job: BatchJob) -> Result<String> {
         // Get a clone of the queue (Arc) and drop the read lock immediately to avoid deadlock
         let queue = {
             let queues = self.queues.read().await;
@@ -785,7 +843,7 @@ impl JobQueueManager {
         Ok(())
     }
 
-    pub async fn stop_queue(&self, queue_id: &str, drain: bool) -> Result<()> {
+    async fn stop_queue_inner(&self, queue_id: &str, drain: bool) -> Result<()> {
         let mut queues = self.queues.write().await;
         let queue = queues
             .get_mut(queue_id)
@@ -914,7 +972,7 @@ impl JobQueueManager {
         Ok(job_infos)
     }
 
-    pub async fn cancel_job(&self, queue_id: &str, job_id: &str) -> Result<()> {
+    async fn cancel_job_inner(&self, queue_id: &str, job_id: &str) -> Result<()> {
         let queues = self.queues.read().await;
         let queue = queues
             .get(queue_id)
@@ -1010,7 +1068,7 @@ impl JobQueueManager {
         }
     }
 
-    pub async fn retry_job(&self, queue_id: &str, job_id: &str, force: bool) -> Result<()> {
+    async fn retry_job_inner(&self, queue_id: &str, job_id: &str, force: bool) -> Result<()> {
         let queues = self.queues.read().await;
         let queue = queues
             .get(queue_id)
@@ -1085,7 +1143,7 @@ impl JobQueueManager {
         Ok(jobs.into_iter().take(limit).collect())
     }
 
-    pub async fn pause_queue(&self, queue_id: &str) -> Result<()> {
+    async fn pause_queue_inner(&self, queue_id: &str) -> Result<()> {
         let mut queues = self.queues.write().await;
         if let Some(queue) = queues.get_mut(queue_id) {
             queue.status = QueueStatus::Paused;
@@ -1096,7 +1154,7 @@ impl JobQueueManager {
         }
     }
 
-    pub async fn resume_queue(&self, queue_id: &str) -> Result<()> {
+    async fn resume_queue_inner(&self, queue_id: &str) -> Result<()> {
         let mut queues = self.queues.write().await;
         if let Some(queue) = queues.get_mut(queue_id) {
             queue.status = QueueStatus::Running;
@@ -1107,7 +1165,7 @@ impl JobQueueManager {
         }
     }
 
-    pub async fn clear_queue(&self, queue_id: &str, include_failed: bool) -> Result<usize> {
+    async fn clear_queue_inner(&self, queue_id: &str, include_failed: bool) -> Result<usize> {
         let queues = self.queues.read().await;
         let queue = queues
             .get(queue_id)
@@ -1246,18 +1304,131 @@ pub struct JobResult {
 }
 
 impl JobQueueManager {
-    /// Save a specific queue after changes
-    pub async fn save_queue(&self, queue_id: &str) -> Result<()> {
-        let queues = self.queues.read().await;
-        if let Some(queue) = queues.get(queue_id) {
-            let queue_file = self.data_dir.join(format!("{}.json", queue_id));
-            let serializable_queue = queue.to_serializable().await;
-            let json_data = serde_json::to_string_pretty(&serializable_queue)?;
+    pub async fn submit_job(&self, queue_id: &str, job: BatchJob) -> Result<String> {
+        let job_id = self.submit_job_inner(queue_id, job).await?;
+        self.persist(queue_id).await?;
+        Ok(job_id)
+    }
 
-            fs::write(&queue_file, json_data).await?;
-            debug!("Saved queue '{}' to persistent storage", queue_id);
-        }
+    pub async fn stop_queue(&self, queue_id: &str, drain: bool) -> Result<()> {
+        self.stop_queue_inner(queue_id, drain).await?;
+        self.persist(queue_id).await
+    }
+
+    pub async fn cancel_job(&self, queue_id: &str, job_id: &str) -> Result<()> {
+        self.cancel_job_inner(queue_id, job_id).await?;
+        self.persist(queue_id).await
+    }
+
+    pub async fn retry_job(&self, queue_id: &str, job_id: &str, force: bool) -> Result<()> {
+        self.retry_job_inner(queue_id, job_id, force).await?;
+        self.persist(queue_id).await
+    }
+
+    pub async fn pause_queue(&self, queue_id: &str) -> Result<()> {
+        self.pause_queue_inner(queue_id).await?;
+        self.persist(queue_id).await
+    }
+
+    pub async fn resume_queue(&self, queue_id: &str) -> Result<()> {
+        self.resume_queue_inner(queue_id).await?;
+        self.persist(queue_id).await
+    }
+
+    pub async fn clear_queue(&self, queue_id: &str, include_failed: bool) -> Result<usize> {
+        let cleared = self.clear_queue_inner(queue_id, include_failed).await?;
+        self.persist(queue_id).await?;
+        Ok(cleared)
+    }
+
+    /// Write a specific queue to storage. Fails for an in-memory manager.
+    pub async fn save_queue(&self, queue_id: &str) -> Result<()> {
+        let dir = self
+            .data_dir
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("Queue manager has no storage directory"))?;
+        let queues = self.queues.read().await;
+        let Some(queue) = queues.get(queue_id) else {
+            return Ok(());
+        };
+        let persisted = queue.to_persisted().await;
+        drop(queues);
+
+        fs::create_dir_all(dir).await?;
+        let queue_file = dir.join(format!("{}.json", queue_id));
+        let json_data = serde_json::to_string_pretty(&persisted)?;
+        fs::write(&queue_file, json_data)
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to write {}: {}", queue_file.display(), e))?;
+        debug!("Saved queue '{}' to {}", queue_id, queue_file.display());
         Ok(())
+    }
+}
+
+/// On-disk form of a queue: everything needed to rebuild it in a new process.
+/// Jobs that were running when the state was written go back to the front of
+/// the queue on load, since the worker that held them is gone.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PersistedQueue {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+    pub config: JobQueueConfig,
+    pub status: QueueStatus,
+    pub created_at: SystemTime,
+    pub last_activity: SystemTime,
+    pub metrics: QueueMetrics,
+    #[serde(default)]
+    pub queued_jobs: Vec<BatchJob>,
+    #[serde(default)]
+    pub interrupted_jobs: Vec<BatchJob>,
+    #[serde(default)]
+    pub completed_jobs: Vec<CompletedJob>,
+    #[serde(default)]
+    pub failed_jobs: Vec<FailedJob>,
+}
+
+impl JobQueue {
+    pub async fn to_persisted(&self) -> PersistedQueue {
+        PersistedQueue {
+            id: self.id.clone(),
+            name: self.name.clone(),
+            description: self.description.clone(),
+            config: self.config.clone(),
+            status: self.status.clone(),
+            created_at: self.created_at,
+            last_activity: self.last_activity,
+            metrics: self.metrics.clone(),
+            queued_jobs: self.jobs.read().await.iter().cloned().collect(),
+            interrupted_jobs: self
+                .active_jobs
+                .read()
+                .await
+                .values()
+                .map(|active| active.job.clone())
+                .collect(),
+            completed_jobs: self.completed_jobs.read().await.clone(),
+            failed_jobs: self.failed_jobs.read().await.clone(),
+        }
+    }
+
+    pub fn from_persisted(p: PersistedQueue) -> Self {
+        let mut jobs: VecDeque<BatchJob> = p.interrupted_jobs.into_iter().collect();
+        jobs.extend(p.queued_jobs);
+        JobQueue {
+            id: p.id,
+            name: p.name,
+            description: p.description,
+            config: p.config,
+            jobs: Arc::new(RwLock::new(jobs)),
+            active_jobs: Arc::new(RwLock::new(HashMap::new())),
+            completed_jobs: Arc::new(RwLock::new(p.completed_jobs)),
+            failed_jobs: Arc::new(RwLock::new(p.failed_jobs)),
+            metrics: p.metrics,
+            status: p.status,
+            created_at: p.created_at,
+            last_activity: p.last_activity,
+        }
     }
 }
 
@@ -1873,6 +2044,144 @@ mod tests {
 
         let result = manager.submit_job("test-queue", job).await;
         assert!(result.is_ok());
+    }
+
+    fn sample_job(id: &str) -> BatchJob {
+        BatchJob {
+            id: id.to_string(),
+            name: format!("job {}", id),
+            description: None,
+            priority: JobPriority::High,
+            inputs: vec![BatchInput {
+                id: "input-1".to_string(),
+                content: "test input".to_string(),
+                metadata: None,
+            }],
+            inference_params: InferenceParams::default(),
+            model_name: "test-model".to_string(),
+            batch_config: BatchConfig::default(),
+            schedule: None,
+            dependencies: vec![],
+            resource_requirements: ResourceRequirements::default(),
+            timeout_minutes: Some(30),
+            retry_count: 0,
+            max_retries: 3,
+            retry_config: RetryConfig::default(),
+            created_at: SystemTime::now(),
+            scheduled_at: None,
+            tags: HashMap::new(),
+            metadata: HashMap::new(),
+        }
+    }
+
+    #[tokio::test]
+    async fn in_memory_manager_writes_nothing() {
+        let dir = tempfile::tempdir().unwrap();
+        let before = std::fs::read_dir(dir.path()).unwrap().count();
+        let manager = JobQueueManager::new(JobQueueConfig::default());
+        manager
+            .create_queue("q".to_string(), "Q".to_string(), String::new())
+            .await
+            .unwrap();
+        manager.submit_job("q", sample_job("j1")).await.unwrap();
+        assert!(manager.storage_dir().is_none());
+        assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), before);
+        assert!(manager.save_queue("q").await.is_err());
+    }
+
+    #[tokio::test]
+    async fn stored_queues_survive_a_new_manager() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = dir.path().join("queues");
+
+        let mut config = JobQueueConfig::default();
+        config.max_concurrent_jobs = 7;
+        let manager = JobQueueManager::with_storage(JobQueueConfig::default(), store.clone())
+            .await
+            .unwrap();
+        manager
+            .create_queue_with_config("q".to_string(), "Q".to_string(), String::new(), config)
+            .await
+            .unwrap();
+        let j1 = manager.submit_job("q", sample_job("j1")).await.unwrap();
+        let j2 = manager.submit_job("q", sample_job("j2")).await.unwrap();
+        manager.cancel_job("q", &j2).await.unwrap();
+        manager.pause_queue("q").await.unwrap();
+        assert!(store.join("q.json").exists());
+        drop(manager);
+
+        let reopened = JobQueueManager::with_storage(JobQueueConfig::default(), store)
+            .await
+            .unwrap();
+        let queues = reopened.list_all_queues().await.unwrap();
+        assert_eq!(queues.len(), 1);
+        assert_eq!(queues[0].id, "q");
+        assert_eq!(queues[0].config.max_concurrent_jobs, 7);
+        assert!(matches!(queues[0].status, QueueStatus::Paused));
+
+        let jobs = reopened.list_jobs("q", None).await.unwrap();
+        assert_eq!(jobs.len(), 1, "cancelled job must not come back");
+        assert_eq!(jobs[0].id, j1);
+        assert!(matches!(jobs[0].status, JobStatus::Queued));
+        assert!(matches!(jobs[0].priority, JobPriority::High));
+
+        // Creating the same id again is refused because it was loaded
+        assert!(
+            reopened
+                .create_queue("q".to_string(), "Q".to_string(), String::new())
+                .await
+                .is_err()
+        );
+    }
+
+    #[tokio::test]
+    async fn interrupted_jobs_are_requeued_on_load() {
+        let dir = tempfile::tempdir().unwrap();
+        let manager =
+            JobQueueManager::with_storage(JobQueueConfig::default(), dir.path().to_path_buf())
+                .await
+                .unwrap();
+        manager
+            .create_queue("q".to_string(), "Q".to_string(), String::new())
+            .await
+            .unwrap();
+        // Simulate a job that was running when the process died.
+        {
+            let queues = manager.queues.read().await;
+            let queue = queues.get("q").unwrap();
+            queue.active_jobs.write().await.insert(
+                "running".to_string(),
+                ActiveJob {
+                    job: sample_job("running"),
+                    started_at: SystemTime::now(),
+                    worker_id: "w0".to_string(),
+                    progress: JobProgress {
+                        total_items: 1,
+                        completed_items: 0,
+                        failed_items: 0,
+                        current_item_index: 0,
+                        estimated_completion_time: None,
+                        current_rate_items_per_second: 0.0,
+                        average_item_duration_ms: 0.0,
+                        bytes_processed: 0,
+                        phase: JobPhase::Processing,
+                    },
+                    current_attempt: 1,
+                    pid: None,
+                    partial_results: vec![],
+                },
+            );
+        }
+        manager.save_queue("q").await.unwrap();
+
+        let reopened =
+            JobQueueManager::with_storage(JobQueueConfig::default(), dir.path().to_path_buf())
+                .await
+                .unwrap();
+        let jobs = reopened.list_jobs("q", None).await.unwrap();
+        assert_eq!(jobs.len(), 1);
+        assert_eq!(jobs[0].id, "running");
+        assert!(matches!(jobs[0].status, JobStatus::Queued));
     }
 
     #[tokio::test]

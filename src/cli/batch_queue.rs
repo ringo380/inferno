@@ -416,8 +416,15 @@ fn validate_queue_id(queue_id: &str) -> Result<()> {
     Ok(())
 }
 
-pub async fn execute(args: BatchQueueArgs, _config: &Config) -> Result<()> {
-    let manager = JobQueueManager::new(JobQueueConfig::default());
+/// Queue state lives beside the version registry, under the models directory,
+/// so it survives from one `inferno queue` invocation to the next.
+pub fn queue_storage_dir(config: &Config) -> PathBuf {
+    config.models_dir.join("queues")
+}
+
+pub async fn execute(args: BatchQueueArgs, config: &Config) -> Result<()> {
+    let manager =
+        JobQueueManager::with_storage(JobQueueConfig::default(), queue_storage_dir(config)).await?;
 
     match args.command {
         BatchQueueCommand::Create {
@@ -437,10 +444,11 @@ pub async fn execute(args: BatchQueueArgs, _config: &Config) -> Result<()> {
             queue_config.max_queue_size = max_size;
 
             manager
-                .create_queue(
+                .create_queue_with_config(
                     queue_id.clone(),
                     name,
                     description.unwrap_or_else(|| "Batch processing queue".to_string()),
+                    queue_config,
                 )
                 .await?;
 
