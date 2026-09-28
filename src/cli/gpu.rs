@@ -48,7 +48,7 @@ pub enum GpuCommand {
         history: bool,
     },
 
-    #[command(about = "Test GPU functionality")]
+    #[command(about = "Test GPU functionality (not implemented yet)")]
     Test {
         #[arg(help = "GPU ID (optional - tests all if not specified)")]
         gpu_id: Option<u32>,
@@ -58,7 +58,7 @@ pub enum GpuCommand {
         duration: u64,
     },
 
-    #[command(about = "Benchmark GPU performance")]
+    #[command(about = "Benchmark GPU performance (not implemented yet)")]
     Benchmark {
         #[arg(help = "GPU ID")]
         gpu_id: u32,
@@ -378,19 +378,22 @@ pub async fn execute(args: GpuArgs, _config: &Config) -> Result<()> {
             test_type,
             duration,
         } => {
-            if let Some(id) = gpu_id {
-                println!(
-                    "Testing GPU {} with {:?} test for {} seconds...",
-                    id, test_type, duration
-                );
-                run_gpu_test(id, test_type, duration).await?;
-            } else {
-                let gpus = manager.get_available_gpus().await;
-                for gpu in gpus {
-                    println!("Testing GPU {} with {:?} test...", gpu.id, test_type);
-                    run_gpu_test(gpu.id, test_type.clone(), duration).await?;
+            let target = match gpu_id {
+                Some(id) => format!("GPU {}", require_gpu(&manager, id).await?.id),
+                None => {
+                    if manager.get_available_gpus().await.is_empty() {
+                        anyhow::bail!("No GPUs detected; run `inferno gpu list` to check");
+                    }
+                    "all detected GPUs".to_string()
                 }
-            }
+            };
+            anyhow::bail!(
+                "GPU testing is not implemented yet: no {:?} test ({}s) can run on {}, \
+                 so there is no result to report",
+                test_type,
+                duration,
+                target
+            );
         }
 
         GpuCommand::Benchmark {
@@ -399,11 +402,16 @@ pub async fn execute(args: GpuArgs, _config: &Config) -> Result<()> {
             iterations,
             memory_size,
         } => {
-            println!(
-                "Benchmarking GPU {} with {:?} benchmark...",
-                gpu_id, bench_type
+            let gpu = require_gpu(&manager, gpu_id).await?;
+            anyhow::bail!(
+                "GPU benchmarking is not implemented yet: no {:?} workload \
+                 ({} iterations, {}MB) runs on GPU {} ({}), so there are no results to report",
+                bench_type,
+                iterations,
+                memory_size,
+                gpu.id,
+                gpu.name
             );
-            run_gpu_benchmark(gpu_id, bench_type, iterations, memory_size).await?;
         }
 
         GpuCommand::Allocations {
@@ -845,53 +853,15 @@ fn display_health_status(status: &HashMap<u32, GpuStatus>, format: OutputFormat,
     }
 }
 
-async fn run_gpu_test(gpu_id: u32, test_type: TestType, duration: u64) -> Result<()> {
-    // Mock GPU test implementation
-    println!(
-        "Running {:?} test on GPU {} for {} seconds...",
-        test_type, gpu_id, duration
-    );
-
-    for i in 1..=duration {
-        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-        if i % 5 == 0 {
-            println!("Test progress: {}/{} seconds", i, duration);
-        }
-    }
-
-    println!("Test completed successfully");
-    println!("Results: GPU {} passed {:?} test", gpu_id, test_type);
-    Ok(())
-}
-
-async fn run_gpu_benchmark(
-    gpu_id: u32,
-    bench_type: BenchmarkType,
-    iterations: u32,
-    memory_size: u64,
-) -> Result<()> {
-    // Mock GPU benchmark implementation
-    println!(
-        "Running {:?} benchmark on GPU {} ({} iterations, {}MB)...",
-        bench_type, gpu_id, iterations, memory_size
-    );
-
-    for i in 1..=iterations {
-        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-        if i % 20 == 0 {
-            println!("Benchmark progress: {}/{} iterations", i, iterations);
-        }
-    }
-
-    // Mock results
-    println!("Benchmark completed!");
-    println!("Results:");
-    println!("  Compute Performance: 12.5 TFLOPS");
-    println!("  Memory Bandwidth: 900 GB/s");
-    println!("  Average Temperature: 72°C");
-    println!("  Power Consumption: 245W");
-
-    Ok(())
+/// Look up a detected GPU by id, failing the way `gpu allocate` does for an
+/// id that is not there instead of carrying on as if it were.
+async fn require_gpu(manager: &GpuManager, gpu_id: u32) -> Result<crate::gpu::GpuInfo> {
+    manager.get_gpu_info(gpu_id).await.ok_or_else(|| {
+        anyhow::anyhow!(
+            "GPU {} not found; run `inferno gpu list` to see detected GPUs",
+            gpu_id
+        )
+    })
 }
 
 /// Validates GPU allocation parameters

@@ -603,7 +603,22 @@ fn test_gpu_workflow() {
         .assert()
         .success();
 
-    // Step 3: Benchmark GPU performance
+    // Step 3: Benchmark and test do not run a workload yet, so they must fail
+    // rather than print figures (#82). An unknown id is refused outright.
+    for sub in ["benchmark", "test"] {
+        inferno(temp_dir.path(), &models_dir, &cache_dir)
+            .arg("gpu")
+            .arg(sub)
+            .arg("99")
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains("GPU 99 not found"))
+            .stdout(predicate::str::contains("TFLOPS").not())
+            .stdout(predicate::str::contains("passed").not());
+    }
+
+    // A real id (if this machine has one) gets the not-implemented error; a
+    // machine without GPUs gets not-found. Either way nothing is reported.
     inferno(temp_dir.path(), &models_dir, &cache_dir)
         .arg("gpu")
         .arg("benchmark")
@@ -611,8 +626,12 @@ fn test_gpu_workflow() {
         .arg("--iterations")
         .arg("1")
         .assert()
-        .success()
-        .stdout(predicate::str::contains("Benchmark"));
+        .failure()
+        .stderr(
+            predicate::str::contains("not implemented yet")
+                .or(predicate::str::contains("GPU 0 not found")),
+        )
+        .stdout(predicate::str::contains("TFLOPS").not());
 }
 
 /// Test distributed processing workflow
