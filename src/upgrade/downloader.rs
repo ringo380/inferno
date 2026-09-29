@@ -379,32 +379,16 @@ impl UpdateDownloader {
         {
             use std::ffi::CString;
             use std::mem;
-            use std::os::raw::{c_char, c_ulong};
-
-            #[repr(C)]
-            struct Statvfs {
-                f_bsize: c_ulong,
-                f_frsize: c_ulong,
-                f_blocks: c_ulong,
-                f_bfree: c_ulong,
-                f_bavail: c_ulong,
-                f_files: c_ulong,
-                f_ffree: c_ulong,
-                f_favail: c_ulong,
-                f_fsid: c_ulong,
-                f_flag: c_ulong,
-                f_namemax: c_ulong,
-            }
-
-            // SAFETY: FFI declaration for POSIX statvfs function
-            unsafe extern "C" {
-                fn statvfs(path: *const c_char, buf: *mut Statvfs) -> i32;
-            }
 
             let path = CString::new(self.download_dir.to_string_lossy().as_ref()).unwrap();
-            let mut stat: Statvfs = unsafe { mem::zeroed() };
+            // Use libc's struct: its size and field widths differ per platform
+            // (glibc pads it, macOS uses 32-bit block counts), and a
+            // hand-written layout lets statvfs write past the buffer.
+            // SAFETY: `path` is a valid C string and `stat` is a properly
+            // sized, writable libc::statvfs.
+            let mut stat: libc::statvfs = unsafe { mem::zeroed() };
 
-            if unsafe { statvfs(path.as_ptr(), &mut stat) } == 0 {
+            if unsafe { libc::statvfs(path.as_ptr(), &mut stat) } == 0 {
                 // Use saturating_mul to avoid overflow panic in debug mode
                 #[allow(clippy::unnecessary_cast)] // Types vary by platform
                 let available_bytes = (stat.f_bavail as u64).saturating_mul(stat.f_frsize as u64);
@@ -485,5 +469,23 @@ mod tests {
         let result = downloader.check_disk_space(1024 * 1024);
         // This should generally pass on development machines
         assert!(result.is_ok());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_disk_space_check_reports_real_free_space() {
+        let temp_dir = TempDir::new().unwrap();
+        let config = UpgradeConfig {
+            download_dir: temp_dir.path().to_path_buf(),
+            ..UpgradeConfig::default()
+        };
+        let downloader = UpdateDownloader::new(&config).unwrap();
+
+        match downloader.check_disk_space(u64::MAX) {
+            Err(UpgradeError::InsufficientDiskSpace { available, .. }) => {
+                assert!(available > 0, "statvfs reported no free space")
+            }
+            other => panic!("expected InsufficientDiskSpace, got {:?}", other),
+        }
     }
 }
