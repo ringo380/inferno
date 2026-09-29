@@ -303,7 +303,7 @@ export function Header() {
                 ) : searchQuery.length > 0 ? (
                   <div className="p-4 text-center">
                     <div className="text-sm text-muted-foreground">
-                      No results found for "{searchQuery}"
+                      No results found for &quot;{searchQuery}&quot;
                     </div>
                     <div className="text-xs text-muted-foreground mt-1">
                       Try searching for models, batch jobs, or settings
@@ -461,7 +461,7 @@ export function Header() {
                       <Bell className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
                       <p className="text-sm text-muted-foreground">No notifications</p>
                       <p className="text-xs text-muted-foreground mt-1">
-                        You're all caught up!
+                        You&apos;re all caught up!
                       </p>
                     </div>
                   )}

@@ -1,0 +1,40 @@
+name: Dashboard
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'dashboard/**'
+      - '!dashboard/src-tauri/**'
+      - 'scripts/dashboard-gate.sh'
+      - '.github/workflows/dashboard.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'dashboard/**'
+      - '!dashboard/src-tauri/**'
+      - 'scripts/dashboard-gate.sh'
+      - '.github/workflows/dashboard.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    name: Install, lint and build
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Node
+      uses: actions/setup-node@v4
+      with:
+        node-version: '22'
+        cache: 'npm'
+        cache-dependency-path: dashboard/package-lock.json
+
+    - name: Run dashboard gate
+      run: bash scripts/dashboard-gate.sh
