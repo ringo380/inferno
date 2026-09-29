@@ -7,7 +7,10 @@ use std::{
     sync::Arc,
     time::{Duration, SystemTime},
 };
-use tokio::{sync::RwLock, time::interval};
+use tokio::{
+    sync::RwLock,
+    time::{Instant, interval_at},
+};
 use tracing::{debug, info, warn};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -134,8 +137,9 @@ pub struct GpuMetrics {
     pub timestamp: SystemTime,
     pub memory_utilization_percent: f32,
     pub gpu_utilization_percent: f32,
-    pub temperature_celsius: f32,
-    pub power_usage_watts: f32,
+    /// `None` when the device does not report it (nvidia-smi prints `[N/A]`).
+    pub temperature_celsius: Option<f32>,
+    pub power_usage_watts: Option<f32>,
     pub memory_throughput_gbps: Option<f32>,
     pub compute_throughput_tflops: Option<f32>,
 }
@@ -446,24 +450,17 @@ impl GpuManager {
         let monitoring_active = self.monitoring_active.clone();
         let interval_duration = Duration::from_secs(self.config.monitoring_interval_seconds);
 
+        // Take the first sample now so one-shot commands (`gpu metrics`,
+        // `gpu export`) have something to show before the process exits.
+        Self::sample_gpus(&gpus, &metrics_history).await;
+
         tokio::spawn(async move {
-            let mut interval_timer = interval(interval_duration);
+            let mut interval_timer =
+                interval_at(Instant::now() + interval_duration, interval_duration);
 
             while monitoring_active.load(std::sync::atomic::Ordering::SeqCst) {
                 interval_timer.tick().await;
-
-                let gpu_store = gpus.read().await;
-                for gpu_info in gpu_store.values() {
-                    // Update GPU metrics
-                    if let Ok(metrics) = Self::collect_gpu_metrics(gpu_info.id).await {
-                        let mut history = metrics_history.write().await;
-                        history.push(metrics);
-
-                        // Keep only recent metrics (last hour)
-                        let cutoff = SystemTime::now() - Duration::from_secs(3600);
-                        history.retain(|m| m.timestamp > cutoff);
-                    }
-                }
+                Self::sample_gpus(&gpus, &metrics_history).await;
             }
 
             info!("GPU monitoring stopped");
@@ -473,19 +470,49 @@ impl GpuManager {
         Ok(())
     }
 
-    async fn collect_gpu_metrics(gpu_id: u32) -> Result<GpuMetrics> {
-        // This would collect real-time metrics from the GPU
-        // For now, return mock data
-        Ok(GpuMetrics {
-            gpu_id,
-            timestamp: SystemTime::now(),
-            memory_utilization_percent: 0.0,
-            gpu_utilization_percent: 0.0,
-            temperature_celsius: 65.0,
-            power_usage_watts: 150.0,
-            memory_throughput_gbps: Some(500.0),
-            compute_throughput_tflops: Some(10.0),
-        })
+    async fn sample_gpus(
+        gpus: &RwLock<HashMap<u32, GpuInfo>>,
+        metrics_history: &RwLock<Vec<GpuMetrics>>,
+    ) {
+        let gpu_store = gpus.read().await;
+        for gpu_info in gpu_store.values() {
+            match Self::collect_gpu_metrics(gpu_info) {
+                Ok(metrics) => {
+                    let mut history = metrics_history.write().await;
+                    history.push(metrics);
+
+                    // Keep only recent metrics (last hour)
+                    let cutoff = SystemTime::now() - Duration::from_secs(3600);
+                    history.retain(|m| m.timestamp > cutoff);
+                }
+                Err(e) => debug!("No metrics for GPU {}: {}", gpu_info.id, e),
+            }
+        }
+    }
+
+    /// Reads live metrics for one GPU. Only NVIDIA has a source today
+    /// (nvidia-smi); other vendors return an error so nothing is recorded
+    /// rather than a made-up reading.
+    fn collect_gpu_metrics(gpu: &GpuInfo) -> Result<GpuMetrics> {
+        match gpu.vendor {
+            GpuVendor::Nvidia => {
+                let output = Command::new("nvidia-smi")
+                    .arg(format!("--id={}", gpu.id))
+                    .args([
+                        "--query-gpu=utilization.gpu,memory.used,memory.total,temperature.gpu,power.draw",
+                        "--format=csv,noheader,nounits",
+                    ])
+                    .output()?;
+                if !output.status.success() {
+                    anyhow::bail!(
+                        "nvidia-smi failed: {}",
+                        String::from_utf8_lossy(&output.stderr).trim()
+                    );
+                }
+                parse_nvidia_metrics(gpu.id, &String::from_utf8_lossy(&output.stdout))
+            }
+            ref vendor => anyhow::bail!("no metrics source for {:?} GPUs", vendor),
+        }
     }
 
     pub async fn get_available_gpus(&self) -> Vec<GpuInfo> {
@@ -913,9 +940,74 @@ impl GpuManager {
     }
 }
 
+/// Parses one line of `nvidia-smi --query-gpu=utilization.gpu,memory.used,
+/// memory.total,temperature.gpu,power.draw --format=csv,noheader,nounits`.
+/// Mem% is the share of device memory in use, matching the `Mem: used/total`
+/// status line. Temperature and power are `None` when reported as `[N/A]`.
+fn parse_nvidia_metrics(gpu_id: u32, stdout: &str) -> Result<GpuMetrics> {
+    let line = stdout
+        .lines()
+        .next()
+        .ok_or_else(|| anyhow::anyhow!("nvidia-smi returned no output"))?;
+    let fields: Vec<&str> = line.split(',').map(|s| s.trim()).collect();
+    if fields.len() != 5 {
+        anyhow::bail!("unexpected nvidia-smi output: {}", line);
+    }
+
+    let number = |i: usize, name: &str| -> Result<f32> {
+        fields[i]
+            .parse()
+            .map_err(|_| anyhow::anyhow!("unreadable {} from nvidia-smi: {}", name, fields[i]))
+    };
+    let gpu_utilization_percent = number(0, "utilization")?;
+    let memory_used = number(1, "memory.used")?;
+    let memory_total = number(2, "memory.total")?;
+    if memory_total <= 0.0 {
+        anyhow::bail!("nvidia-smi reported zero total memory");
+    }
+
+    Ok(GpuMetrics {
+        gpu_id,
+        timestamp: SystemTime::now(),
+        memory_utilization_percent: memory_used / memory_total * 100.0,
+        gpu_utilization_percent,
+        temperature_celsius: fields[3].parse().ok(),
+        power_usage_watts: fields[4].parse().ok(),
+        memory_throughput_gbps: None,
+        compute_throughput_tflops: None,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn nvidia_metrics_come_from_the_query_line() {
+        let m = parse_nvidia_metrics(0, "7, 5939, 16303, 48, 50.77\n").unwrap();
+        assert_eq!(m.gpu_id, 0);
+        assert_eq!(m.gpu_utilization_percent, 7.0);
+        assert!((m.memory_utilization_percent - 36.43).abs() < 0.01);
+        assert_eq!(m.temperature_celsius, Some(48.0));
+        assert_eq!(m.power_usage_watts, Some(50.77));
+        assert_eq!(m.memory_throughput_gbps, None);
+        assert_eq!(m.compute_throughput_tflops, None);
+    }
+
+    #[test]
+    fn nvidia_metrics_leave_unreported_fields_empty() {
+        let m = parse_nvidia_metrics(1, "0, 0, 8192, [N/A], [N/A]").unwrap();
+        assert_eq!(m.temperature_celsius, None);
+        assert_eq!(m.power_usage_watts, None);
+    }
+
+    #[test]
+    fn nvidia_metrics_reject_unreadable_output() {
+        assert!(parse_nvidia_metrics(0, "").is_err());
+        assert!(parse_nvidia_metrics(0, "7, 5939, 16303").is_err());
+        assert!(parse_nvidia_metrics(0, "[N/A], 5939, 16303, 48, 50").is_err());
+        assert!(parse_nvidia_metrics(0, "7, 0, 0, 48, 50").is_err());
+    }
 
     #[test]
     fn test_compute_capability() {

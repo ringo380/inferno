@@ -347,6 +347,12 @@ pub async fn execute(args: GpuArgs, _config: &Config) -> Result<()> {
                 // Clear screen
                 print!("\x1B[2J\x1B[1;1H");
 
+                // The status line reads GpuInfo, which is otherwise only
+                // filled in once at startup.
+                if let Err(e) = manager.refresh_gpu_info().await {
+                    tracing::debug!("GPU refresh failed: {}", e);
+                }
+
                 if let Some(id) = gpu_id {
                     if let Some(gpu) = manager.get_gpu_info(id).await {
                         display_gpu_status(&gpu);
@@ -361,10 +367,10 @@ pub async fn execute(args: GpuArgs, _config: &Config) -> Result<()> {
 
                 if history {
                     let metrics = manager.get_gpu_metrics(gpu_id).await;
-                    let recent_metrics: Vec<_> = metrics.into_iter().take(5).collect();
+                    let recent_metrics = &metrics[metrics.len().saturating_sub(5)..];
                     if !recent_metrics.is_empty() {
                         println!("Recent Metrics:");
-                        display_metrics(&recent_metrics, OutputFormat::Table);
+                        display_metrics(recent_metrics, OutputFormat::Table);
                     }
                 }
 
@@ -778,19 +784,19 @@ fn display_metrics(metrics: &[crate::gpu::GpuMetrics], format: OutputFormat) {
     match format {
         OutputFormat::Table => {
             println!(
-                "{:<4} {:<12} {:<8} {:<8} {:<8} {:<8}",
-                "GPU", "Time", "GPU%", "Mem%", "Temp°C", "Power W"
+                "{:<4} {:<21} {:<8} {:<8} {:<8} {:<8}",
+                "GPU", "Time (UTC)", "GPU%", "Mem%", "Temp°C", "Power W"
             );
-            println!("{:-<60}", "");
+            println!("{:-<64}", "");
             for metric in metrics {
                 println!(
-                    "{:<4} {:<12} {:<8} {:<8} {:<8} {:<8}",
+                    "{:<4} {:<21} {:<8} {:<8} {:<8} {:<8}",
                     metric.gpu_id,
-                    format!("{:?}", metric.timestamp),
+                    format_sample_time(metric.timestamp),
                     format!("{:.1}", metric.gpu_utilization_percent),
                     format!("{:.1}", metric.memory_utilization_percent),
-                    format!("{:.1}", metric.temperature_celsius),
-                    format!("{:.1}", metric.power_usage_watts)
+                    format_reading(metric.temperature_celsius),
+                    format_reading(metric.power_usage_watts)
                 );
             }
         }
@@ -801,6 +807,18 @@ fn display_metrics(metrics: &[crate::gpu::GpuMetrics], format: OutputFormat) {
             println!("Format {:?} not yet implemented", format);
         }
     }
+}
+
+/// Same date format as the rest of the CLI, with seconds, since samples
+/// arrive a few seconds apart.
+fn format_sample_time(time: std::time::SystemTime) -> String {
+    chrono::DateTime::<chrono::Utc>::from(time)
+        .format("%Y-%m-%d %H:%M:%S")
+        .to_string()
+}
+
+fn format_reading(value: Option<f32>) -> String {
+    value.map_or_else(|| "-".to_string(), |v| format!("{:.1}", v))
 }
 
 fn display_allocations(
@@ -885,6 +903,14 @@ pub fn validate_allocation_params(memory_mb: u64, model_name: &str) -> Result<()
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn metric_rows_show_a_date_and_blank_missing_readings() {
+        let t = std::time::UNIX_EPOCH + std::time::Duration::from_secs(1_700_000_007);
+        assert_eq!(format_sample_time(t), "2023-11-14 22:13:27");
+        assert_eq!(format_reading(Some(50.77)), "50.8");
+        assert_eq!(format_reading(None), "-");
+    }
 
     #[test]
     fn test_validate_allocation_zero_memory() {
