@@ -8,6 +8,10 @@ on:
       - 'Cargo.toml'
       - 'Cargo.lock'
       - 'build.rs'
+      - 'tests/**'
+      - 'benches/**'
+      - 'examples/**'
+      - 'scripts/integration-suites.sh'
       - '.github/workflows/ci.yml'
   pull_request:
     branches: [ main ]
@@ -16,6 +20,10 @@ on:
       - 'Cargo.toml'
       - 'Cargo.lock'
       - 'build.rs'
+      - 'tests/**'
+      - 'benches/**'
+      - 'examples/**'
+      - 'scripts/integration-suites.sh'
       - '.github/workflows/ci.yml'
 
 concurrency:
