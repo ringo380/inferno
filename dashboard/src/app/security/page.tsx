@@ -585,7 +585,7 @@ export default function SecurityPage() {
           <DialogHeader>
             <DialogTitle>API Key Created Successfully</DialogTitle>
             <DialogDescription>
-              Copy this key now - it won't be shown again!
+              Copy this key now - it won&apos;t be shown again!
             </DialogDescription>
           </DialogHeader>
           {createdKey && (
@@ -619,7 +619,7 @@ export default function SecurityPage() {
           )}
           <DialogFooter>
             <Button onClick={() => setCreatedKey(null)}>
-              I've Saved the Key
+              I&apos;ve Saved the Key
             </Button>
           </DialogFooter>
         </DialogContent>
