@@ -143,7 +143,7 @@ impl App {
                 Constraint::Min(0),    // Main content
                 Constraint::Length(3), // Status bar
             ])
-            .split(f.size());
+            .split(f.area());
 
         // Header
         self.draw_header(f, main_chunks[0]);
@@ -537,7 +537,7 @@ impl App {
     }
 
     fn draw_help_overlay(&self, f: &mut Frame) {
-        let area = centered_rect(60, 70, f.size());
+        let area = centered_rect(60, 70, f.area());
 
         f.render_widget(Clear, area);
 
@@ -1073,7 +1073,7 @@ impl App {
     }
 
     fn draw_upgrade_notification(&self, f: &mut Frame) {
-        let area = centered_rect(60, 40, f.size());
+        let area = centered_rect(60, 40, f.area());
 
         // Clear the background
         f.render_widget(Clear, area);
@@ -1176,4 +1176,79 @@ fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
             Constraint::Percentage((100 - percent_x) / 2),
         ])
         .split(popup_layout[1])[1]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ratatui::{Terminal, backend::TestBackend};
+
+    fn test_app(models_dir: &std::path::Path) -> App {
+        App {
+            config: Config::default(),
+            model_manager: ModelManager::new(models_dir),
+            models: Vec::new(),
+            selected_model: None,
+            model_list_state: ListState::default(),
+            backend: None,
+            loaded_model: None,
+            state: AppState::ModelSelection,
+            input_buffer: String::new(),
+            output_buffer: String::new(),
+            logs: VecDeque::new(),
+            show_help: false,
+            inference_stats: InferenceStats::default(),
+            loading_progress: 0.0,
+            streaming_tokens: Vec::new(),
+            stream_receiver: None,
+            inference_start_time: None,
+            upgrade_manager: None,
+            upgrade_status: UpgradeStatus::UpToDate,
+            upgrade_events: VecDeque::new(),
+            upgrade_event_receiver: None,
+            show_upgrade_notification: false,
+        }
+    }
+
+    fn render(app: &mut App) -> String {
+        let mut terminal = Terminal::new(TestBackend::new(100, 30)).unwrap();
+        terminal.draw(|f| app.draw(f)).unwrap();
+        let buffer = terminal.backend().buffer();
+        buffer
+            .content()
+            .chunks(buffer.area.width as usize)
+            .map(|row| row.iter().map(|c| c.symbol()).collect::<String>())
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    #[test]
+    fn draws_every_state_and_overlay() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut app = test_app(dir.path());
+
+        for state in [
+            AppState::ModelSelection,
+            AppState::Loading,
+            AppState::InputPrompt,
+            AppState::Running,
+            AppState::ViewingOutput,
+            AppState::Help,
+            AppState::UpgradeManagement,
+        ] {
+            app.state = state;
+            assert!(render(&mut app).contains("Inferno AI/ML Runner"));
+        }
+
+        app.show_help = true;
+        assert!(render(&mut app).contains("Inferno TUI Help"));
+        app.show_help = false;
+
+        app.show_upgrade_notification = true;
+        app.upgrade_status = UpgradeStatus::Failed {
+            error: "disk full".to_string(),
+            recovery_available: false,
+        };
+        assert!(render(&mut app).contains("disk full"));
+    }
 }
