@@ -124,7 +124,7 @@ csv = "1.3"
 zip = "0.6"
 
 # Random number generation for resilience patterns
-rand = "0.9"
+rand = "0.10"
 
 # Human-readable time formatting
 humantime = "2.1"

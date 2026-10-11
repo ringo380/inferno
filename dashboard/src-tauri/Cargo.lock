@@ -228,7 +228,7 @@ dependencies = [
  "enumflags2",
  "futures-channel",
  "futures-util",
- "rand 0.9.4",
+ "rand 0.9.5",
  "raw-window-handle",
  "serde",
  "serde_repr",
@@ -2879,7 +2879,7 @@ dependencies = [
  "libc",
  "log",
  "num_cpus",
- "rand 0.9.4",
+ "rand 0.9.5",
  "reqwest 0.12.23",
  "serde",
  "serde_json",
@@ -3338,7 +3338,7 @@ dependencies = [
  "num_cpus",
  "r2d2",
  "r2d2_sqlite",
- "rand 0.9.4",
+ "rand 0.10.2",
  "ratatui",
  "regex",
  "reqwest 0.12.23",
@@ -3389,7 +3389,7 @@ dependencies = [
  "num_cpus",
  "r2d2",
  "r2d2_sqlite",
- "rand 0.9.4",
+ "rand 0.10.2",
  "reqwest 0.12.23",
  "rfd 0.14.1",
  "rusqlite",
@@ -5676,9 +5676,9 @@ dependencies = [
 
 [[package]]
 name = "rand"
-version = "0.9.4"
+version = "0.9.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "44c5af06bb1b7d3216d91932aed5265164bf384dc89cd6ba05cf59a35f5f76ea"
+checksum = "b9ef1d0d795eb7d84685bca4f72f3649f064e6641543d3a8c415898726a57b41"
 dependencies = [
  "rand_chacha 0.9.0",
  "rand_core 0.9.3",
@@ -7393,7 +7393,7 @@ checksum = "d2fbc86b929b5376ab84b25c060f966d146b2fbd59b6af8264027b343c82c219"
 dependencies = [
  "log",
  "notify-rust",
- "rand 0.9.4",
+ "rand 0.9.5",
  "serde",
  "serde_json",
  "serde_repr",
@@ -8485,7 +8485,7 @@ dependencies = [
  "atomic",
  "getrandom 0.3.3",
  "js-sys",
- "rand 0.9.4",
+ "rand 0.9.5",
  "serde",
  "wasm-bindgen",
 ]
@@ -9572,9 +9572,9 @@ dependencies = [
 
 [[package]]
 name = "xxhash-rust"
-version = "0.8.15"
+version = "0.8.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fdd20c5420375476fbd4394763288da7eb0cc0b8c11deed431a91562af7335d3"
+checksum = "550a2b930b62486a393c52d5c3b84bff264b28aa437ed64694d31e93b1757af7"
 
 [[package]]
 name = "yansi"
