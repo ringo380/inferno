@@ -45,8 +45,8 @@ tokio = { version = "1.0", features = ["full"] }
 futures = "0.3"
 
 # TUI
-ratatui = "0.24"
-crossterm = "0.27"
+ratatui = "0.30"
+crossterm = "0.29"
 
 # Logging and tracing
 tracing = "0.1"
